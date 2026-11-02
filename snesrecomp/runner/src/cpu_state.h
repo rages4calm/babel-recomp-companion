@@ -415,13 +415,18 @@ uint16 cpu_read16(CpuState *cpu, uint8 bank, uint16 addr);
 void   cpu_write8 (CpuState *cpu, uint8 bank, uint16 addr, uint8  v);
 void   cpu_write16(CpuState *cpu, uint8 bank, uint16 addr, uint16 v);
 
-/* Region-paced AOT bus (2026-08-31): the AOT emitter charges block const
- * cycles minus data transfers, and paces each data/stack/pointer access
- * here at its region speed so master_cycles matches the LLE per-transfer
- * model exactly. Only generated (AOT) code calls the _paced forms; the
+/* Region-paced AOT bus: opt-in region-paced emission accounts for fetch and
+ * internal clocks separately, and uses these helpers for supported data/stack
+ * accesses. Unsupported instructions retain interpreter ownership. Default
+ * aggregate emission does not call them. Only AOT calls the _paced forms; the
  * interpreter's bridge shims use the plain accessors (they account
  * transfers themselves). */
 uint32_t  cpu_region_speed(uint32_t adr);
+/* Opt-in paced emission credits only its own instruction clocks. The bridge
+ * installs this nullable hook to share its existing rollback-safe APU credit;
+ * refresh, DMA and interpreted instructions must not call this helper. */
+extern void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);
+void cpu_add_aot_master_cycles(CpuState *cpu, uint64 clocks);
 /* SNESRECOMP_WLOG_ADDR hook for direct-WRAM stores that bypass cpu_write8/16
  * (DMA A-bus writes in snes_write, WMDATA $2180). wa = g_ram offset. */
 void wlog_addr_note_direct(uint32_t wa, uint8_t v, const char *via);
@@ -764,6 +769,7 @@ RecompReturn interp_tier_dispatch_bank_miss(CpuState *cpu, uint32 addr_pc24,
 #define RECOMP_RETURN_LLE_UNWIND_BASE 0x40000000
 int interp_bridge_in_lle_scheduler(void);
 int interp_bridge_lle_master_deadline_reached(const CpuState *cpu);
+int interp_bridge_lle_unwind_pending(void);
 RecompReturn interp_bridge_lle_yield_unwind(CpuState *cpu, uint32 resume_pc24);
 uint32 interp_bridge_lle_resume_pc(void);
 void interp_bridge_set_lle_bounce_exclusions(const uint32 *targets,

@@ -2349,8 +2349,8 @@ def _emit_call(op: Call) -> List[str]:
         ]
     if op.long:
         # JSL: PB save/restore wraps the switch. The propagation
-        # block sits AFTER the PB restore so the caller's PB is
-        # correct on the SKIP_N return path.
+        # block sits AFTER the ordinary PB restore. A pending LLE unwind
+        # preserves the live resume bank instead of restoring an ancestor.
         lines = ["{"]
         lines += _emit_return_frame_push(op)
         body = [

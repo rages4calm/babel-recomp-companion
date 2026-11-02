@@ -631,6 +631,22 @@ static uint64_t s_lle_master_deadline = 0;
  * owning interpreter's guest call chain. */
 static int      s_interp_bridge_depth = 0;
 static int      s_interp_bounce_owner_depth = 0;
+/* Region-paced AOT reports each actual instruction-clock increment once.
+ * Queue it beside interpreted instruction credit; elapsed bounce spans also
+ * contain nested interpretation/refresh/DMA and cannot safely be re-credited.
+ * The existing bridge rollback state already owns this pending accumulator. */
+static void bridge_aot_credit_master(CpuState *cpu, uint64 clocks) {
+    (void)cpu;
+    if (!s_interp_bridge_depth || !g_snes) return;
+#ifdef SNES_COSIM
+    if (cosim_apu_shared_clock()) return;
+#endif
+    if (interp_bridge_use_absolute_apu_timeline(
+            rtl_apu_frame_timeline_active(), cart_has_sa1(g_snes->cart),
+            rtl_apu_extended_frame_timing() &&
+            g_snes->apu && g_snes->apu->portTimeValid)) return;
+    s_apu_pending_master += clocks;
+}
 /* Count of AOT bodies entered through the paired ABI. Exposed so a host
  * can tell a genuinely-compiled run from one that quietly interpreted
  * everything -- without it, a wall-clock tier comparison is unreadable. */
@@ -917,6 +933,7 @@ static int bridge_cooperative_yield(CpuState *cpu, const Interp816 *in,
     return 1;
 }
 uint32 interp_bridge_lle_resume_pc(void) { return s_lle_resume_pc24; }
+int interp_bridge_lle_unwind_pending(void) { return s_lle_unwind_active; }
 void interp_bridge_set_lle_resume_pc(uint32_t pc) {
     lle_resume_set(pc, INTERP_RESUME_SITE_EXTERNAL, 0);
 }
@@ -3270,6 +3287,7 @@ static int interp_bridge_run_ex2(CpuState *cpu, uint32_t entry_pc24,
                                  int reset_cap_on_bounce,
                                  const uint32_t *stop_pcs, int n_stop,
                                  int stop_on_rti) {
+    g_cpu_aot_master_credit_hook = bridge_aot_credit_master;
     int _saved = g_interp_apu_driving;
 #ifdef SNES_COSIM
     /* Shared APU clock: leave the flag clear so interpreted HW touches pace
