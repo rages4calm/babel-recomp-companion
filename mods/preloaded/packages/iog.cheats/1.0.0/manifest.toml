@@ -84,3 +84,24 @@ step = 1
 [[plugin]]
 feature = "stats"
 id = "iog.cheat.stats"
+
+[[feature]]
+id = "room_rewards"
+name = "Room-clear rewards"
+description = "Multiply newly earned stock room-clear stat rewards. HP capped at 40; strength and defense at 99. Does not multiply loaded progress or affect movement. Local achievements are ineligible for the rest of a session after any cheat is enabled. Disabled during Stats Boost, New Game+, randomizer or Apocalypse Gaia."
+group = "Cheats"
+default_enabled = false
+
+[[option]]
+feature = "room_rewards"
+id = "multiplier"
+label = "Room-clear reward multiplier (1x is original)"
+type = "integer"
+default = 1
+min = 1
+max = 8
+step = 1
+
+[[plugin]]
+feature = "room_rewards"
+id = "iog.cheat.room_rewards"

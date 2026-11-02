@@ -59,19 +59,20 @@ In-game shortcuts remain Babel's: **Esc / LT+R3** settings, **I / LT+L3** compan
 **F11 / LT+Start** states, **Tab / LT+RT** fast forward. LT means the left trigger
 (ZL on Nintendo, L2 on PlayStation). Default SNES keys and full shortcuts remain
 documented in the upstream README. This batch does not reimplement full remapping,
-ROM import, mod management, live achievements or Resume. **Soundtrack** in the
+ROM import, the full mod browser, live achievements or Resume. **Cheats and Mods**
+provides selected native controls, including 1x–8x room-clear rewards; see
+[controls and limits](../docs/CHEATS-AND-MODS.md). **Soundtrack** in the
 sidebar opens the optional-music window: download in your browser, import a
 ZIP/folder, inspect verified installed packs, then select imported or original
 audio for the next game launch. It uses Babel's native mod selection.
 
-## Optional music investigation
+## Optional music
 
 EarthBound's `Companion/MsuDownloader.cs` already provides HTTPS sources, bounded
 size checks, per-file checksums, retries, cancellation and temporary-file commit.
 Its soundtrack catalog and URLs are EarthBound-specific and cannot safely be
-reused for Gaia. A later Gaia importer should reuse that pattern with a reviewed
-Gaia catalog and licensing/provenance. This edition now includes that Gaia
-hash catalog and a bounded, cancellable local importer. The Download button
+reused for Gaia. This edition has its own reviewed Gaia hash catalog, credited
+sources and a bounded, cancellable local importer. The Download button
 opens the source provider in the browser; it does not perform an unverified
 background transfer. Music bytes are never bundled. See
 [MSU-1 setup and credits](../docs/MSU1.md). Babel's original SNES fallback remains

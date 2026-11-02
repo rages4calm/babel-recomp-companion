@@ -1,7 +1,9 @@
 # CompanionAchievements foundation
 
 This batch adds a **tested observation foundation, not enabled gameplay
-achievement tracking**. Babel's RetroAchievements integration remains intact.
+achievement tracking**. Babel's RetroAchievements sources and credits are
+preserved; account/service support is compiled out in this edition. See
+[the service policy and build boundary](RETROACHIEVEMENTS.md).
 No current game frame calls this observer, no achievement profile is written,
 and no browser, toast or sound has been wired into Gaia yet.
 

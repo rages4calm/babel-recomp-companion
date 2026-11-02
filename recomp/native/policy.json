@@ -1,0 +1,12 @@
+{
+  "schema": "gaia native batch policy v1",
+  "rom_sha256": "32adc048fd89228a4310c03df243e83de7d436cdb2460b4cc83ade20d359b2bd",
+  "mapper": "hirom",
+  "guard_ranges": [
+    {"start": "008000", "end_exclusive": "008014", "reason": "Architectural vector trampolines; reset and interrupt delivery remain interpreted."},
+    {"start": "0082DE", "end_exclusive": "008387", "reason": "Known NMI AOT stack leak and nested COP/RTI ownership; keep all internal labels interpreted."},
+    {"start": "028000", "end_exclusive": "028191", "reason": "Boot/vblank polling including $82804D/$828051 requires per-instruction deadlines."},
+    {"start": "03C5FF", "end_exclusive": "03CA00", "reason": "Babel patches actor/OAM culling operands in memory for widescreen; compiled immediates would become stale."}
+  ],
+  "qualification": "Generation creates private replay candidates. Only matched execution at identical guest points can qualify a native path."
+}

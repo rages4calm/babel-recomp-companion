@@ -17,6 +17,7 @@
 
 #include "iog_i18n.h"
 #include "iog_randomizer.h"
+#include "iog_cheat_rates.h"
 
 int IogHoldAdvanceGet(void);
 void IogHoldAdvanceSet(int v);
@@ -100,6 +101,9 @@ int IogCheatGet(int which);
 void IogCheatSet(int which, int on);
 static int CheatGet(void *ud) { return IogCheatGet((int)(intptr_t)ud); }
 static void CheatSet(void *ud, int v) { IogCheatSet((int)(intptr_t)ud, v != 0); }
+static const char *const kRewardRates[]={"ORIGINAL (1X)","2X","3X","4X","5X","6X","7X","8X"};
+static int RewardRateGet(void *ud) { (void)ud;return IogRoomRewardMultiplierGet()-1; }
+static void RewardRateSet(void *ud,int value) { (void)ud;IogRoomRewardMultiplierSet(value+1); }
 
 /* ---- the in-game menus in the game's language -------------------------------
  * English is the source; Spanish while the game runs in Spanish. */
@@ -118,6 +122,7 @@ static const char *const kEs[][2] = {
     {"FAST", "RÁPIDO"}, {"MSU-1 SOUNDTRACK", "BANDA SONORA MSU-1"},
     {"CHEATS (ACHIEVEMENTS OFF)", "TRUCOS (SIN LOGROS)"}, {"INFINITE HP", "VIDA INFINITA"},
     {"DP 99", "DP 99"}, {"STATS BOOST", "MEJORA DE ESTADÍSTICAS"}, {"ALL 50 RED JEWELS", "LAS 50 JOYAS ROJAS"}, {"GAME COMPLETED", "JUEGO COMPLETADO"},
+    {"ROOM-CLEAR REWARDS", "PREMIOS POR SALA"}, {"ORIGINAL (1X)", "ORIGINAL (1X)"},
 };
 
 static const char *Translate(const char *en)
@@ -135,8 +140,10 @@ void SnesRa_SetBlocked(const char *why);
 static void ActJewels(void *ud)
 {
     (void)ud;
-    if (IogInventoryAllRedJewels() >= 0)
+    if (IogInventoryAllRedJewels() >= 0) {
+        IogCheatsMarkUsed();
         SnesRa_SetBlocked("cheats are on");
+    }
 }
 
 int IogCompletionPercent(void);
@@ -214,6 +221,12 @@ void IogSettingsInstall(void)
         it.ud = (void *)(intptr_t)i;
         snes_settings_menu_add(&it);
     }
+    memset(&it,0,sizeof it);
+    it.kind=kSnesSetting_Choice;
+    it.label="ROOM-CLEAR REWARDS";
+    it.choices=kRewardRates;it.count=8;
+    it.get=RewardRateGet;it.set=RewardRateSet;
+    snes_settings_menu_add(&it);
     memset(&it, 0, sizeof(it));
     it.kind = kSnesSetting_Action;
     it.label = "ALL 50 RED JEWELS";

@@ -7,11 +7,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>illusion-of-gaia.Companion</AssemblyName>
+    <ApplicationIcon>../res/branding/gaia-launcher.ico</ApplicationIcon>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="tests/**/*.cs" />
     <EmbeddedResource Include="soundtrack-catalog.json" LogicalName="soundtrack-catalog.json" />
+    <EmbeddedResource Include="../res/branding/gaia-launcher.ico" LogicalName="Gaia.Companion.Icon" />
     <PackageReference Include="Companion.Launcher.Core" Version="[0.2.0]" />
     <PackageReference Include="Companion.Launcher.Windows" Version="[0.2.0]" />
   </ItemGroup>
