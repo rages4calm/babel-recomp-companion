@@ -8,6 +8,10 @@ not a continuous campaign. Interpreter fallback remains available.
 
 ## Selected source and build
 
+- Tested source: [`1ea3ab4`](https://github.com/rages4calm/babel-recomp-companion/commit/1ea3ab4a46af8a5d39f8ab991990c88b36fd31d5).
+- The confirmed duplicate RDNMI ownership bug and ROM-free core reproducer are
+  reported in [SNESRecomp #242](https://github.com/RetroPortingToolKit/snesrecomp/issues/242).
+  Results also extend the existing [timing discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6589796017).
 - Executable SHA-256: `fa3a25028b72443f7998bc6da6a31c845f03adc4444e95ca51525f607db7ea7f`.
 - Private graph: `.local/batch-001/native-004/expanded-v2/`; manifest SHA-256
   `5322a4e3f86935b45184bad90fb01026338680287f76bf1ed84d011e9aa6af7f`.

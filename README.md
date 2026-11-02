@@ -42,10 +42,11 @@ This is bounded route evidence, not a fully native game or completed campaign.
   independent decodes and identity-matched reuse of earlier checks.
   [Current native batch and limits](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
-  Confirmed analyzer bug [#239](https://github.com/RetroPortingToolKit/snesrecomp/issues/239)
-  and default indirect bank-carry bug [#240](https://github.com/RetroPortingToolKit/snesrecomp/issues/240)
+  Confirmed analyzer bug [#239](https://github.com/RetroPortingToolKit/snesrecomp/issues/239),
+  default indirect bank-carry bug [#240](https://github.com/RetroPortingToolKit/snesrecomp/issues/240)
+  and duplicate vblank ownership bug [#242](https://github.com/RetroPortingToolKit/snesrecomp/issues/242)
   are reported upstream. The tested timing work is added to the existing
-  [#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6588298236).
+  [#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6589796017).
 - **Evidence:** [baseline audit](docs/BASELINE-AUDIT.md),
   [current handoff](HANDOFF.md), [launcher build/use](companion/README.md),
   [achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md).

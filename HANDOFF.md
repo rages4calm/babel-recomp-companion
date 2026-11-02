@@ -20,12 +20,17 @@ The teleport prerequisite was an undismissed scene-title input loop. Source
 request context and real Dark Space prerequisites are now recorded; assistance
 does not count as earned story progression.
 
-Earlier batch-003 source is published at `bf826a377ff608fd4c524ba0e67b315c9c4fe4ee`.
+Tested batch-004 source is published at
+[`1ea3ab4`](https://github.com/rages4calm/babel-recomp-companion/commit/1ea3ab4a46af8a5d39f8ab991990c88b36fd31d5).
+The combat input/vblank ownership bug is reported as
+[upstream #242](https://github.com/RetroPortingToolKit/snesrecomp/issues/242),
+with the ROM-free actual-core reproducer. Earlier batch-003 source is published
+at `bf826a377ff608fd4c524ba0e67b315c9c4fe4ee`.
 Default v2 indirect bank-carry mismatch is reported as
 [upstream #240](https://github.com/RetroPortingToolKit/snesrecomp/issues/240),
 with a ROM-free reproducer; this is separate from the tested opt-in pointer
 recipe. Current timing results extend the existing
-[#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6588298236).
+[#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6589796017).
 No release was created.
 
 ## Current source and decisions
@@ -36,6 +41,9 @@ No release was created.
 - Latest SNESRecomp main checked and integrated: `66eebe6ae415b4fb2607a22e5b12352f612e1bdf`.
   A three-way preservation audit retained Babel's game-specific changes;
   `framework_pins.txt` also records the matching nested-library versions.
+  Newly opened upstream [PR #241](https://github.com/RetroPortingToolKit/snesrecomp/pull/241)
+  changes APU/DSP/DMA timing but is unmerged and was not adopted in this batch;
+  integration needs a delta inventory and fresh qualification after review.
   The pinned Babel UI has two appended seed-compatibility fields; Gaia uses
   its existing in-game settings overlay, with the new Mode 7 control migrated.
 - CompanionLauncher 0.2.0 packages are pinned; the game adapter preserves native
