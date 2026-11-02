@@ -311,6 +311,7 @@ uint32_t audio_trace_copy_snaps(uint64_t first_idx, uint32_t max,
 #define AUDIO_TRACE_PORT_RING (1u << 16)
 typedef struct AudioTracePortEvent {
   uint64_t sample_idx;   /* native-sample clock */
+  uint64_t apu_cycle;    /* SPC events: executed APU portClock; UINT64_MAX if unavailable */
   uint32_t frame;        /* snes_frame_counter */
   uint16_t vpos, hpos;   /* beam position when it happened */
   uint8_t  type;         /* AUDIO_TRACE_EV_CPU_PORT_WRITE .. _APPLY */
@@ -322,6 +323,10 @@ typedef struct AudioTracePortEvent {
  * the trace has no other link to the PPU. */
 typedef void AudioTraceBeamProbe(uint16_t *vpos, uint16_t *hpos);
 void audio_trace_set_beam_probe(AudioTraceBeamProbe *probe);
+/* Capture at the SPC event itself, not at export/CPU catch-up time. This is
+ * an executed APU-cycle clock, not a mapped CPU master-clock timestamp. */
+typedef uint64_t AudioTraceSpcClockProbe(void);
+void audio_trace_set_spc_clock_probe(AudioTraceSpcClockProbe *probe);
 /* Copy port events [first_idx, first_idx+max); returns count copied and the
  * oldest index still held through *oldest. *total gets the count ever seen. */
 uint32_t audio_trace_copy_port_events(uint64_t first_idx, uint32_t max,

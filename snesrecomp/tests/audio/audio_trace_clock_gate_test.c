@@ -20,7 +20,8 @@ uint64_t audio_trace_test_wall_ms(void) {
 
 FILE *audio_trace_test_fopen(const char *path, const char *mode) {
   g_fopen_calls++;
-  if (getenv("SNESRECOMP_AUDIO_TRACE_TEST_FOPEN_FAIL"))
+  const char *fail_open = getenv("SNESRECOMP_AUDIO_TRACE_TEST_FOPEN_FAIL");
+  if (fail_open && fail_open[0] && strcmp(fail_open, "0") != 0)
     return NULL;
   return fopen(path, mode);
 }

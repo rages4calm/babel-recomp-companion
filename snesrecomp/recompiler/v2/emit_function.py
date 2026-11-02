@@ -2243,6 +2243,8 @@ def emit_function(rom: bytes, bank: int, start: int,
         # across a frame boundary. Every CFG block starts at an architectural
         # instruction boundary, so it is safe to unwind here and resume this
         # exact PC through the owning interpreter after host events run.
+        if region_paced:
+            src.append('    cpu_aot_instruction_boundary(cpu);')
         src.append(
             f'    if (interp_bridge_lle_master_deadline_reached(cpu)) {{')
         src.append('      RecompStackPopYield();')
@@ -2287,6 +2289,12 @@ def emit_function(rom: bytes, bank: int, start: int,
                 src.append(f'    return interp_tier_dispatch_tail(cpu, {_transfer_target_expr(block_pc24, False)}, '
                            f'0x{block_pc24:06X}u, _entry_s, _hrv); /* unmodeled region-paced instruction */')
                 continue
+            _pointer_fallback = (
+                f'RecompStackPop(); return interp_tier_dispatch_tail(cpu, '
+                f'{_transfer_target_expr(block_pc24, False)}, '
+                f'0x{block_pc24:06X}u, _entry_s, _hrv);')
+            for _prefix_line in _paced_plan[2]:
+                src.append('    ' + _prefix_line.replace('@FALLBACK@', _pointer_fallback))
             _guard = mmio_guard(_insn)
             if _guard:
                 src.append(f'    if ({_guard}) {{ RecompStackPop();')

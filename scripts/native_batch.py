@@ -12,6 +12,7 @@ import argparse
 from collections import Counter
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -166,23 +167,56 @@ def guards(policy: dict) -> tuple[set[int], list[tuple[int, int, str]]]:
 
 def read_profiles(paths: list[Path], rom_sha256: str) -> dict:
     """The official generator validates full profiles; this only records bounded provenance/costs."""
-    profile_records = []; count = Counter(); costs = Counter()
+    profile_records = []; count = Counter(); costs = Counter(); capture_identity = None
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError(f"Duplicate profile JSON key: {key}")
+            result[key] = value
+        return result
+    def finite_float(value):
+        result = float(value)
+        if not math.isfinite(result):
+            raise ValueError("Non-finite profile JSON number")
+        return result
+    def invalid_constant(value):
+        raise ValueError(f"Non-finite profile JSON constant: {value}")
     for path in paths:
-        data = path.read_bytes(); record = json.loads(data)
-        if record.get("schema") != "snesrecomp tier2 coverage v2":
+        data = path.read_bytes()
+        record = json.loads(data, object_pairs_hook=pairs, parse_float=finite_float,
+                            parse_constant=invalid_constant)
+        if not isinstance(record, dict) or record.get("schema") != "snesrecomp tier2 coverage v2":
             raise ValueError("Use complete v2 capture.json profiles; do not relabel legacy or partial records.")
+        if record.get("checkpoint_complete") is not True:
+            raise ValueError("Profile must be an explicitly complete v2 checkpoint")
         identity = record.get("identity", {})
-        if identity.get("rom_sha256") != rom_sha256 or identity.get("mapper") != "hirom" or identity.get("module_id") != "main":
+        if not isinstance(identity, dict) or identity.get("rom_sha256") != rom_sha256 or identity.get("mapper") != "hirom" or identity.get("module_id") != "main":
             raise ValueError("Profile ROM/mapper/module does not match this stock Gaia batch")
         if not record.get("capture_id") or not identity.get("build_digest"):
             raise ValueError("Profile must retain its actual capture and executable identity")
-        for key in ("overflowed_tuples", "dropped_costs", "cost_overflow", "journal_write_failures"):
-            if record.get(key, 0):
+        current_identity = tuple(identity.get(key) for key in
+                                 ("rom_sha256", "module_id", "mapper", "program_digest", "build_digest", "generation_digest"))
+        if capture_identity is not None and current_identity != capture_identity:
+            raise ValueError("Cannot aggregate profile costs from different program/build identities")
+        capture_identity = current_identity
+        for key in ("overflowed_tuples", "dropped_cost_samples", "ram_routines_overflow", "journal_write_failures"):
+            if type(record.get(key)) is not int or record[key] != 0:
                 raise ValueError(f"Profile reports {key}; investigate it rather than treating it as complete")
+        # Refuse historical aliases too; they must not hide an explicit loss
+        # value in a hand-authored checkpoint alongside the actual v2 fields.
+        for key in ("dropped_costs", "cost_overflow"):
+            if key in record and (type(record[key]) is not int or record[key] != 0):
+                raise ValueError(f"Profile reports {key}; investigate it rather than treating it as complete")
+        for key in ("discoveries", "costs", "ram_routines"):
+            if not isinstance(record.get(key, []), list):
+                raise ValueError(f"Profile {key} must be an array")
         profile_records.append({"path": str(path), "sha256": digest(data), "capture_id": record["capture_id"], "identity": identity})
         count["transfer_rows"] += len(record.get("discoveries", []))
         count["cost_rows"] += len(record.get("costs", []))
         for row in record.get("costs", []):
+            if not isinstance(row, dict) or type(row.get("guest_cycles")) is not int or row["guest_cycles"] < 0:
+                raise ValueError("Profile cost guest_cycles must be a nonnegative integer")
             pc = row["target_pc24"]
             pc = pc if isinstance(pc, int) else int(pc, 0)
             costs[(pc, row.get("entry_mx"), row.get("emulation"))] += int(row.get("guest_cycles", 0))
@@ -191,8 +225,25 @@ def read_profiles(paths: list[Path], rom_sha256: str) -> dict:
                               for (pc, mx, e), n in costs.most_common(24)]}
 
 
+def read_historical_profiles(paths: list[Path], rom_sha256: str) -> list[dict]:
+    """Retain each historical checkpoint independently, never combine its costs.
+
+    The SDK's historical-root path unions analysis seeds and exclusions only;
+    missing older program metadata remains explicit rather than being rebound.
+    """
+    result = []
+    for path in paths:
+        evidence = read_profiles([path], rom_sha256)
+        identity = evidence["captures"][0]["identity"]
+        result.append({"profile": evidence,
+                       "program_identity_status": "recorded" if identity.get("program_digest") else "legacy_metadata_missing_program_digest",
+                       "evidence_scope": "Historical analysis seeds/exclusions only; costs apply only to this original checkpoint, not the current build."})
+    return result
+
+
 def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profile_only: bool,
-            max_insns: int = 1024, max_nodes: int = 12000, instruction_blocks: bool = False, region_paced: bool = False) -> dict:
+            max_insns: int = 1024, max_nodes: int = 12000, instruction_blocks: bool = False, region_paced: bool = False,
+            historical_profiles: list[Path] | None = None) -> dict:
     if max_insns <= 0 or max_nodes <= 0 or (region_paced and not instruction_blocks):
         raise ValueError("Positive analysis limits and instruction-blocks for region-paced emission are required")
     policy = json.loads(POLICY.read_text(encoding="utf-8")); blocked, ranges = guards(policy)
@@ -201,14 +252,16 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
         image = image[512:]
     if len(image) != 2097152 or digest(image) != policy["rom_sha256"]:
         raise ValueError("The ROM does not match the supported unmodified USA image")
+    evidence = read_profiles(profiles, policy["rom_sha256"])
+    historical = read_historical_profiles(historical_profiles or [], policy["rom_sha256"])
     source = ROOT / "recomp"; prepared = work / "cfg"
     existing_receipt = work / "prepare-receipt.json"
     if existing_receipt.is_file():
         previous = json.loads(existing_receipt.read_text(encoding="utf-8"))
         current = {p.name: digest(p.read_bytes()) for p in source.glob("bank*.cfg")}
         current.update({name: digest((source / name).read_bytes()) for name in ("symbols.toml", "disassembly-layout.json") if (source / name).is_file()})
-        evidence = read_profiles(profiles, policy["rom_sha256"])
         if (previous["source_cfg_sha256"] != current or previous["profiles"] != evidence or
+            previous.get("historical_profiles", []) != historical or
             previous["all_width_hypotheses"] != all_widths or previous["cfg_roots"] != (not profile_only) or
             bool(previous.get("instruction_blocks")) != instruction_blocks or
             bool(previous.get("region_paced")) != region_paced or
@@ -236,7 +289,6 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
         path = source / name
         if path.is_file():
             raw = path.read_bytes(); (prepared / name).write_bytes(raw); inputs[name] = digest(raw); outputs[name] = digest(raw)
-    evidence = read_profiles(profiles, policy["rom_sha256"])
     command = [sys.executable, str(ROOT / "snesrecomp/snesrecomp_cli.py"), "generate", "--rom", str(rom),
                "--cfg-dir", str(prepared), "--out-dir", str(work / "generated"),
                "--funcs-h", str(prepared / "funcs.h"), "--project-root", str(ROOT),
@@ -250,6 +302,8 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
         command.append("--cfg-roots")
     for profile in profiles:
         command.extend(("--profile-manifest", str(profile)))
+    for profile in historical_profiles or []:
+        command.extend(("--historical-profile-manifest", str(profile)))
     receipt = {"schema": "gaia native batch preparation v1", "rom_sha256": policy["rom_sha256"],
                "policy_sha256": digest(POLICY.read_bytes()), "framework_pins_sha256": digest((ROOT / "framework_pins.txt").read_bytes()),
                "declared_functions": declarations, "cfg_roots": not profile_only, "all_width_hypotheses": all_widths,
@@ -258,6 +312,8 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
                "guarded_addresses_with_aliases": len(blocked), "source_cfg_sha256": inputs,
                "prepared_cfg_sha256": outputs, "profiles": evidence, "generation_command": command,
                "evidence_scope": "Private analysis/generation candidates; no native execution qualification."}
+    if historical:
+        receipt["historical_profiles"] = historical
     (work / "prepare-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     return receipt
 
@@ -302,6 +358,8 @@ def main() -> int:
     parser.add_argument("--rom", type=Path, default=ROOT / "Illusion of Gaia (USA).sfc")
     parser.add_argument("--work", type=Path, default=DEFAULT_WORK)
     parser.add_argument("--profile", type=Path, action="append", default=[])
+    parser.add_argument("--historical-profile", type=Path, action="append", default=[],
+                        help="Retain a historical checkpoint's analysis seeds/exclusions with separate original identity and cost provenance (repeatable)")
     parser.add_argument("--all-widths", action="store_true", help="Analyze all four M/X hypotheses at every existing declared entry")
     parser.add_argument("--profile-only", action="store_true", help="Use architectural/profile roots without bulk cfg roots")
     parser.add_argument("--memory-mib", type=int, default=4096, help="Limit the generation child tree to this committed-memory budget (default 4096 MiB)")
@@ -316,7 +374,8 @@ def main() -> int:
     if args.region_paced and not args.instruction_blocks:
         parser.error("--region-paced requires --instruction-blocks")
     work = private_path(args.work); work.mkdir(parents=True, exist_ok=True)
-    receipt = prepare(args.rom.resolve(), work, [p.resolve() for p in args.profile], args.all_widths, args.profile_only, args.max_insns, args.max_nodes, args.instruction_blocks, args.region_paced)
+    receipt = prepare(args.rom.resolve(), work, [p.resolve() for p in args.profile], args.all_widths, args.profile_only, args.max_insns, args.max_nodes, args.instruction_blocks, args.region_paced,
+                      [p.resolve() for p in args.historical_profile])
     print(json.dumps({"work": str(work), "declared_functions": receipt["declared_functions"],
                       "guarded_addresses_with_aliases": receipt["guarded_addresses_with_aliases"],
                       "profile_counts": receipt["profiles"]["counts"]}))

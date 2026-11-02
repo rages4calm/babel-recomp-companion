@@ -769,6 +769,12 @@ void cpu_write16(CpuState *cpu, uint8 bank, uint16 addr, uint16 v) {
  * The 16-bit forms charge both bytes at their own regions (they can straddle
  * a region boundary, e.g. $00:1FFF->$00:2000). */
 void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks) = NULL;
+void (*g_cpu_aot_instruction_boundary_hook)(CpuState *cpu) = NULL;
+
+void cpu_aot_instruction_boundary(CpuState *cpu) {
+    if (g_cpu_aot_instruction_boundary_hook)
+        g_cpu_aot_instruction_boundary_hook(cpu);
+}
 
 void cpu_add_aot_master_cycles(CpuState *cpu, uint64 clocks) {
     cpu->master_cycles += clocks;

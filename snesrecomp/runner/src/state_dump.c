@@ -171,26 +171,36 @@ static int write_apu_events(const char *dir, const char *tag) {
   };
   FILE *f = open_out(dir, tag, ".apu.tsv", "w");
   if (!f) return -1;
+  FILE *clock = open_out(dir, tag, ".apu-clock.tsv", "w");
+  if (!clock) { fclose(f); return -1; }
   AudioTracePortEvent *events = (AudioTracePortEvent *)malloc(
       sizeof(*events) * AUDIO_TRACE_PORT_RING);
   if (!events) {
     fprintf(stderr, "state_dump: cannot allocate audio-port snapshot\n");
     fclose(f);
+    fclose(clock);
     return -1;
   }
   uint32_t count = audio_trace_copy_port_events(0, AUDIO_TRACE_PORT_RING,
                                                 events, NULL, NULL);
   fprintf(f, "# frame\tscanline\thclock\tevent\tport\tvalue\tsample\n");
+  fprintf(clock, "# frame\tscanline\thclock\tevent\tport\tvalue\tsample\tapu_cycle\n");
   for (uint32_t i = 0; i < count; ++i) {
     const AudioTracePortEvent *e = &events[i];
     fprintf(f, "%u\t%u\t%u\t%s\t%u\t%02X\t%llu\n", e->frame,
             e->vpos, e->hpos,
             e->type < sizeof(kName) / sizeof(kName[0]) ? kName[e->type] : "?",
             e->port, e->val, (unsigned long long)e->sample_idx);
+    fprintf(clock, "%u\t%u\t%u\t%s\t%u\t%02X\t%llu\t%llu\n", e->frame,
+            e->vpos, e->hpos,
+            e->type < sizeof(kName) / sizeof(kName[0]) ? kName[e->type] : "?",
+            e->port, e->val, (unsigned long long)e->sample_idx,
+            (unsigned long long)e->apu_cycle);
   }
   free(events);
-  int rc = ferror(f) ? -1 : 0;
+  int rc = ferror(f) || ferror(clock) ? -1 : 0;
   if (fclose(f) != 0) rc = -1;
+  if (fclose(clock) != 0) rc = -1;
   return rc;
 }
 

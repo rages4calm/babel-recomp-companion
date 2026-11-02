@@ -25,6 +25,19 @@ def test_generate_defaults_and_explicit_cli_limits():
     assert explicit.instruction_blocks
 
 
+def test_public_historical_profiles_reach_generation(monkeypatch):
+    from types import SimpleNamespace
+    parser = argparse.ArgumentParser()
+    sdk_generate.add_generate_parser(parser.add_subparsers(dest="command"))
+    args = parser.parse_args(["generate", "--rom", "fixture", "--cfg-dir", "cfg", "--out-dir", "gen",
+                              "--historical-profile-manifest", "old-one.json",
+                              "--historical-profile-manifest", "old-two.json"])
+    calls = []
+    monkeypatch.setattr(sdk_generate, "generate", lambda **options: calls.append(options))
+    assert sdk_generate.generate_command(args, SimpleNamespace()) == sdk_generate.EXIT_OK
+    assert calls[0]["historical_profile_manifests"] == [pathlib.Path("old-one.json").resolve(), pathlib.Path("old-two.json").resolve()]
+
+
 def test_limits_reach_emitter_and_result(tmp_path, monkeypatch):
     cfg = tmp_path / "recomp"
     cfg.mkdir()

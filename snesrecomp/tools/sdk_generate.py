@@ -364,6 +364,10 @@ def generate_command(args: argparse.Namespace, progress: ProgressReporter) -> in
                 _resolve_under(project_root, m)
                 for m in getattr(args, "profile_manifest", []) or []
             ],
+            historical_profile_manifests=[
+                _resolve_under(project_root, m)
+                for m in getattr(args, "historical_profile_manifest", []) or []
+            ],
             legacy_profile_rom_sha256=getattr(args, "legacy_profile_rom_sha256", None),
             analysis_backend=args.analysis_backend,
             max_insns=getattr(args, "max_insns", 4096),
@@ -442,6 +446,10 @@ def add_generate_parser(subparsers) -> None:
         default=[],
         help="tier-2 coverage manifest to seed optional AOT roots from "
              "(repeatable); clean call landings only, bails excluded",
+    )
+    generate_parser.add_argument(
+        "--historical-profile-manifest", action="append", default=[],
+        help="validate a prior-build checkpoint separately and retain its analysis seeds (repeatable)",
     )
     generate_parser.add_argument(
         "--legacy-profile-rom-sha256",

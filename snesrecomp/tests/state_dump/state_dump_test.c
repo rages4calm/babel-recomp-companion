@@ -11,9 +11,10 @@
 #include "ppu_dma_trace.h"
 #include "snes/ppu.h"
 #include "snes/snes.h"
+#include "snes/apu.h"
 #include "snes/superfx.h"
 
-static int fail_alloc, fail_open, fail_write, fail_close, inject_event;
+static int fail_alloc, fail_open, fail_clock_open, fail_write, fail_close, inject_event;
 static int allocations, releases, closes, lock_depth;
 static void *snapshot;
 static void *test_malloc(size_t size) {
@@ -30,7 +31,7 @@ static void test_free(void *pointer) {
   free(pointer);
 }
 static FILE *test_fopen(const char *path, const char *mode) {
-  return fail_open ? NULL : fopen(path, mode);
+  return fail_open || (fail_clock_open && strstr(path,".apu-clock.tsv")) ? NULL : fopen(path, mode);
 }
 static int test_ferror(FILE *file) { return fail_write || ferror(file); }
 static int test_fclose(FILE *file) {
@@ -73,6 +74,9 @@ CpuState g_cpu;
 uint8_t g_snesrecomp_last_hdmaen;
 uint8_t g_snes_ppu_dbg_layer_mask;
 int snes_frame_counter;
+/* This fixture has no live machine; reaching APU serialization is a bug. */
+void apu_saveload(Apu *apu, SaveLoadInfo *sli) { (void)apu; (void)sli; abort(); }
+void apu_port_sched_save(const Apu *apu, ApuPortSched *out) { (void)apu; (void)out; abort(); }
 void RtlApuLock(void) { assert(lock_depth==0);++lock_depth; }
 void RtlApuUnlock(void) { assert(lock_depth==1);--lock_depth; }
 int ppu_wlog_collect(uint32_t frame, PpuWlogEntry *out, int cap, int *lost) {
@@ -87,13 +91,17 @@ static void beam(uint16_t *vpos, uint16_t *hpos) {
   *hpos=(uint16_t)(snes_frame_counter*4%1364);
 }
 static void check_rows(const char *path, unsigned first, unsigned count) {
+  int with_clock = strstr(path,".apu-clock.tsv") != NULL;
   FILE *file=fopen(path,"r");assert(file);
   char line[256];assert(fgets(line,sizeof(line),file));
-  assert(strcmp(line,"# frame\tscanline\thclock\tevent\tport\tvalue\tsample\n")==0);
+  assert(strcmp(line,with_clock
+    ? "# frame\tscanline\thclock\tevent\tport\tvalue\tsample\tapu_cycle\n"
+    : "# frame\tscanline\thclock\tevent\tport\tvalue\tsample\n")==0);
   for(unsigned row=0;row<count;++row) {
-    unsigned frame,scanline,hclock,port,value;unsigned long long sample;char event[16];
+    unsigned frame,scanline,hclock,port,value;unsigned long long sample,clock=0;char event[16];
     assert(fgets(line,sizeof(line),file));
-    assert(sscanf(line,"%u\t%u\t%u\t%15s\t%u\t%x\t%llu",&frame,&scanline,&hclock,event,&port,&value,&sample)==7);
+    assert(sscanf(line,"%u\t%u\t%u\t%15s\t%u\t%x\t%llu\t%llu",&frame,&scanline,&hclock,event,&port,&value,&sample,&clock)==(with_clock ? 8 : 7));
+    assert(clock==0); /* These are CPU rows, not SPC event clocks. */
     unsigned expected=first+row;
     assert(frame==expected && scanline==expected%262 && hclock==expected*4%1364);
     assert(strcmp(event,"cpu_wr")==0 && port==(expected&3) && value==(expected&255) && sample==0);
@@ -103,7 +111,8 @@ static void check_rows(const char *path, unsigned first, unsigned count) {
 int main(void) {
   assert(write_apu_events("","empty")==0);
   check_rows("empty.apu.tsv",0,0);
-  assert(allocations==1 && releases==1 && !snapshot && closes==1);
+  check_rows("empty.apu-clock.tsv",0,0);
+  assert(allocations==1 && releases==1 && !snapshot && closes==2);
   audio_trace_set_beam_probe(beam);
   RtlApuLock();
   for(unsigned i=0;i<AUDIO_TRACE_PORT_RING+17;++i) {
@@ -114,16 +123,19 @@ int main(void) {
   inject_event=1;
   assert(write_apu_events("","wrapped")==0 && !inject_event);
   check_rows("wrapped.apu.tsv",17,AUDIO_TRACE_PORT_RING);
+  check_rows("wrapped.apu-clock.tsv",17,AUDIO_TRACE_PORT_RING);
   assert(allocations==2 && releases==2 && !snapshot && !lock_depth);
 
   fail_open=1;assert(write_apu_events("","open-failure")==-1);fail_open=0;
-  assert(allocations==2 && releases==2 && closes==2);
+  assert(allocations==2 && releases==2 && closes==4);
   fail_alloc=1;assert(write_apu_events("","alloc-failure")==-1);fail_alloc=0;
-  assert(allocations==3 && releases==2 && !snapshot && closes==3);
+  assert(allocations==3 && releases==2 && !snapshot && closes==6);
   fail_write=1;assert(write_apu_events("","write-failure")==-1);fail_write=0;
-  assert(allocations==4 && releases==3 && !snapshot && closes==4);
+  assert(allocations==4 && releases==3 && !snapshot && closes==8);
   fail_close=1;assert(write_apu_events("","close-failure")==-1);fail_close=0;
-  assert(allocations==5 && releases==4 && !snapshot && closes==5);
+  assert(allocations==5 && releases==4 && !snapshot && closes==10);
+  fail_clock_open=1;assert(write_apu_events("","clock-open-failure")==-1);fail_clock_open=0;
+  assert(allocations==5 && releases==4 && closes==11);
   fail_alloc=1;assert(snes_state_dump("","public-oom",NULL,0,0,0,0)==-1);fail_alloc=0;
   assert(!snapshot && allocations==6 && releases==4 && !lock_depth);
   uint64_t total=0;audio_trace_copy_port_events(0,0,NULL,NULL,&total);
@@ -131,7 +143,9 @@ int main(void) {
   const char *files[]={"empty.apu.tsv","wrapped.apu.tsv","alloc-failure.apu.tsv",
     "write-failure.apu.tsv","close-failure.apu.tsv","public-oom.wram.bin",
     "public-oom.regs.json","public-oom.ppuw.tsv","public-oom.dma.tsv",
-    "public-oom.apu.tsv","public-oom.info.json"};
+    "public-oom.apu.tsv","public-oom.info.json","empty.apu-clock.tsv","wrapped.apu-clock.tsv",
+    "alloc-failure.apu-clock.tsv","write-failure.apu-clock.tsv","close-failure.apu-clock.tsv",
+    "public-oom.apu-clock.tsv","clock-open-failure.apu.tsv"};
   for(unsigned i=0;i<sizeof(files)/sizeof(files[0]);++i)remove(files[i]);
   puts("Scene export: empty/full wrapped snapshot, producer advancement, allocation/open/write/close failure and cleanup pass");
   return 0;

@@ -59,22 +59,26 @@ def _c_function(source, name):
     return source[start:end] + "\n"
 
 
-def test_executed_native_pacing_matches_interpreter_bus_costs(tmp_path):
+def run_region_cases(tmp_path, cases=None, *, extra_main="", extra_emitted="", check_read_counts=False):
     import test_hle_func_seam as seam
     compiler = seam._compiler()
     if not compiler:
         pytest.skip("C compiler required")
     runtime = (REPO / "runner/src/cpu_state.c").read_text()
     paced = "void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);\n"
+    paced += "void (*g_cpu_aot_instruction_boundary_hook)(CpuState *cpu);\n"
     paced += "\n".join(_c_function(runtime, name) for name in (
-        "cpu_add_aot_master_cycles", "cpu_region_speed", "cpu_read8_paced", "cpu_read16_paced",
+        "cpu_aot_instruction_boundary", "cpu_add_aot_master_cycles", "cpu_region_speed", "cpu_read8_paced", "cpu_read16_paced",
         "cpu_write8_paced", "cpu_write16_paced"))
     harness = seam._HARNESS.split("/* The C helpers.")[0]
     harness = harness.replace("return g_ram[addr];", "return cpu->open_bus = g_ram[addr];")
     harness = harness.replace("g_ram[addr] = v;", "g_ram[addr] = v; cpu->open_bus = v;")
-    harness = "static unsigned g_mmio_reads;\n" + harness
+    harness = harness.replace("g_ram[addr]", "g_ram[(bank == 0x7f ? 0x10000u : 0u) + addr]")
+    harness = "static unsigned g_mmio_reads, g_probe_reads[0x40];\n" + harness
     harness = harness.replace(_c_function(harness, "interp_tier_dispatch_tail"), "")
     harness = harness.replace("(void)cpu; (void)bank; return cpu->open_bus",
+        "if (bank == 0 && addr >= 0x100 && addr < 0x120) g_probe_reads[addr-0x100]++; "
+        "if (bank == 0 && addr >= 0x200 && addr < 0x220) g_probe_reads[addr-0x200+0x20]++; "
         "if ((bank & 0x7f) < 0x40 && addr >= 0x2000 && addr < 0x6000) g_mmio_reads++; return cpu->open_bus")
     extra = r'''
 #include "snes/interp816.h"
@@ -102,17 +106,20 @@ static void reference_write(void *opaque, uint32_t address, uint8_t value) {
   cpu_write8(opaque, address >> 16, (uint16)address, value);
 }
 static uint8 expected_ram[sizeof g_ram];
+static unsigned expected_reads[0x40];
 static void prepare(CpuState *cpu, const uint8_t *code, unsigned length,
                     int m, int x, int fast) {
   memset(cpu, 0, sizeof *cpu); memset(g_ram, 0, sizeof g_ram);
   memcpy(g_ram + 0x8000, code, length);
   g_ram[0x0100] = 0x56; g_ram[0x0101] = 0x78;
+  g_ram[0x10000] = 0xAB; g_ram[0x10001] = 0xCD; g_ram[0x10002] = 0xEF;
   cpu->ram = g_ram; cpu->S = 0x01FF; cpu->A = 0x1234;
   cpu->X = 1; cpu->Y = 2; cpu->D = 0; cpu->DB = 0x7E;
   cpu->P = (m ? 0x20 : 0) | (x ? 0x10 : 0); cpu_p_to_mirrors(cpu);
   cpu->PB = fast ? 0x80 : 0; g_memsel = fast;
   g_other_exits = 0; g_tc_valid = 0; g_recomp_stack_top = 0; g_mmio_reads = 0; g_balanced_calls = 0;
   credited_master = 0; g_cpu_aot_master_credit_hook = record_credit;
+  memset(g_probe_reads, 0, sizeof g_probe_reads);
   cpu_push_jsr_return_frame(cpu);
 }
 static int check(const char *name, RecompReturn (*fn)(CpuState *),
@@ -120,6 +127,7 @@ static int check(const char *name, RecompReturn (*fn)(CpuState *),
   CpuState native, memory;
   prepare(&native, code, len, m, x, fast); native.D = dp;
   fn(&native); cpu_mirrors_to_p(&native); memcpy(expected_ram, g_ram, sizeof g_ram);
+  memcpy(expected_reads, g_probe_reads, sizeof g_probe_reads);
   if (credited_master != native.master_cycles) {
     fprintf(stderr, "%s native credit missing/doubled\n", name); return 1;
   }
@@ -140,7 +148,8 @@ static int check(const char *name, RecompReturn (*fn)(CpuState *),
       native.A != ref.a || native.X != ref.x || native.Y != ref.y ||
       native.S != ref.sp || native.D != ref.dp || native.DB != ref.db ||
       native.P != interp816_getFlags(&ref) || native.open_bus != memory.open_bus ||
-      credited_master || memcmp(expected_ram, g_ram, sizeof g_ram)) {
+      credited_master || memcmp(expected_ram, g_ram, sizeof g_ram) ||
+      (CHECK_READ_COUNTS && memcmp(expected_reads, g_probe_reads, sizeof g_probe_reads))) {
     fprintf(stderr, "%s failed: cycles %llu/%llu master %llu/%llu S %04x/%04x P %02x/%02x bus %02x/%02x\n", name,
       (unsigned long long)native.cycles, (unsigned long long)cycles,
       (unsigned long long)native.master_cycles, (unsigned long long)master,
@@ -150,7 +159,7 @@ static int check(const char *name, RecompReturn (*fn)(CpuState *),
   return 0;
 }
 '''
-    cases = [
+    cases = cases if cases is not None else [
         ("Immediate", "A9 05 EA 60", 1, 1, 0),
         ("Wide", "A9 34 12 EA 60", 0, 0, 0),
         ("Dp", "A5 00 85 04 60", 1, 1, 0x100),
@@ -173,13 +182,14 @@ static int check(const char *name, RecompReturn (*fn)(CpuState *),
     emitted = "".join(f"RecompReturn bank_00_{pc:04X}_M{m}X{x}(CpuState *cpu);\n"
                       for pc in (0x8010, 0x8020) for m in (0, 1) for x in (0, 1))
     emitted += "".join(_emit(code, name, m, x, callee_exit_mx=exits) for name, code, m, x, dp in cases)
-    for name, code, m, x, dp in cases[-2:]:
+    for name, code, m, x, dp in (case for case in cases if case[0] in {"DirectCall", "LongCall"}):
         rom = make_lorom_bank0({0x8000: bytes.fromhex(code)})
         for m in (0, 1):
             for x in (0, 1):
                 pc = 0x8010 if name == "DirectCall" else 0x8020
                 emitted += emit_function(rom, 0, pc, m, x, instruction_blocks=True, region_paced=True)
     emitted += _emit("AD 40 21 60", "Mmio") + _emit("A5 00 60", "DpMmio")
+    emitted += extra_emitted
     bridge = (REPO / "runner/src/snes/interp_bridge.c").read_text()
     # Compile the actual owner-aware tail helper, rather than a stub that
     # would conceal accidentally starting a new nested interpreter frame.
@@ -243,20 +253,21 @@ int cosim_apu_shared_clock(void) { return shared_on; }
     cpu_add_aot_master_cycles(&cpu, 6); /* existing SA-1 absolute clock */
     if (s_apu_pending_master) fails++;
     sa1_on = 0; extended_on = 1; apu.portTimeValid = 1;
-    cpu_add_aot_master_cycles(&cpu, 6); /* mapped extended absolute clock */
-    if (s_apu_pending_master) fails++;
+    cpu_add_aot_master_cycles(&cpu, 6); /* absolute mode still schedules sync */
+    if (s_apu_pending_master != 6) fails++;
     timeline_on = 0; cpu_add_aot_master_cycles(&cpu, 7);
-    if (s_apu_pending_master != 7) fails++;
+    if (s_apu_pending_master != 13) fails++;
     shared_on = 1; cpu_add_aot_master_cycles(&cpu, 8);
-    if (s_apu_pending_master != 7) fails++;
+    if (s_apu_pending_master != 13) fails++;
     g_cpu_aot_master_credit_hook = NULL;
     uint64 before = cpu.master_cycles; cpu_add_aot_master_cycles(&cpu, 9);
-    if (cpu.master_cycles != before + 9 || s_apu_pending_master != 7) fails++;
+    if (cpu.master_cycles != before + 9 || s_apu_pending_master != 13) fails++;
   }
 ''']
-    main += ['if (!fails) puts("34 synthetic native/interpreter timing cases passed"); return fails != 0; }']
+    main += [extra_main]
+    main += [f'if (!fails) puts("{len(cases) * 2} synthetic native/interpreter timing cases passed"); return fails != 0; }}']
     c_file = tmp_path / "region.c"
-    c_file.write_text(harness + paced + extra + tail_helpers + credit_fixture + emitted + "\n".join(main))
+    c_file.write_text(f"#define CHECK_READ_COUNTS {int(check_read_counts)}\n" + harness + paced + extra + tail_helpers + credit_fixture + emitted + "\n".join(main))
     exe = tmp_path / ("region.exe" if os.name == "nt" else "region")
     build = subprocess.run([compiler, "-std=c11", "-O1", "-I", str(REPO / "runner/src"),
                             str(c_file), str(REPO / "runner/src/snes/interp816.c"), "-o", str(exe)],
@@ -264,4 +275,8 @@ int cosim_apu_shared_clock(void) { return shared_on; }
     assert build.returncode == 0, build.stdout + build.stderr
     run = subprocess.run([str(exe)], capture_output=True, text=True)
     assert run.returncode == 0, run.stdout + run.stderr
-    assert "34 synthetic" in run.stdout
+    assert f"{len(cases) * 2} synthetic" in run.stdout
+
+
+def test_executed_native_pacing_matches_interpreter_bus_costs(tmp_path):
+    run_region_cases(tmp_path)

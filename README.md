@@ -10,7 +10,9 @@ The original author's credit, support link and full acknowledgments remain below
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. A private mixed-native
 batch now passes a 6,000-frame classroom/South Cape comparison in 4:3 and 16:9,
-with **6.26% / 6.32% native CPU cycles** and retained interpreter fallback.
+with **13.42% / 14.02% native CPU cycles** and retained interpreter fallback.
+The next batch also passes 23 assisted area visits, inventory checks, and original
+Freedan/Shadow transformations with returns to their starting areas.
 This is bounded route evidence, not a fully native game or completed campaign.
 
 - **CompanionLauncher:** Windows adapter using the shared 0.2.0 shell, verified
@@ -34,8 +36,10 @@ This is bounded route evidence, not a fully native game or completed campaign.
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
 - **Framework:** updated to SNESRecomp `66eebe6`, latest main checked November 2,
   2026, with Babel-specific integration changes preserved. RomAtlas independently
-  checked 4,096 observed cartridge boundaries using the method retained by Lagoon.
-  [Native batch evidence and remaining timing work](docs/NATIVE-BATCH.md).
+  checked 8,192 area instruction boundaries, including 4,888 new independent
+  decodes, using the method retained by Lagoon.
+  [Current native batch and limits](docs/NATIVE-BATCH-003.md),
+  [earlier timing evidence](docs/NATIVE-BATCH.md).
   Confirmed analyzer bug [#239](https://github.com/RetroPortingToolKit/snesrecomp/issues/239)
   and matching timing findings on [#205](https://github.com/RetroPortingToolKit/snesrecomp/issues/205)
   are reported upstream.
