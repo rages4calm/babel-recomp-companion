@@ -18,6 +18,9 @@
  *   <tag>.ppuw.tsv                 the frame's PPU register write journal
  *   <tag>.apu.tsv                  CPU<->SPC port traffic still in the always-on
  *                                  port ring (audio_trace.h)
+ *   <tag>.apu-state.bin            existing pointer-free APU/SPC/DSP save
+ *                                  regions, including the native PCM ring
+ *   <tag>.apu-scheduler.bin        pointer-free port queue and guest clock
  *   <tag>.info.json                frame, sizes, layer mask
  *
  * Observer only: reads guest state, never changes it. Returns 0 on success.

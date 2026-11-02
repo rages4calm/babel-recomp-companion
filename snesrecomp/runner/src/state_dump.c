@@ -9,6 +9,7 @@
 #include "cpu_state.h"
 #include "ppu_dma_trace.h"
 #include "snes/cart.h"
+#include "snes/apu.h"
 #include "snes/dma.h"
 #include "snes/ppu.h"
 #include "snes/snes.h"
@@ -193,6 +194,45 @@ static int write_apu_events(const char *dir, const char *tag) {
   return rc;
 }
 
+typedef struct ApuDumpWriter {
+  SaveLoadInfo stream;
+  uint8_t *data;
+  size_t used, capacity;
+  int failed;
+} ApuDumpWriter;
+
+static void copy_apu_state(SaveLoadInfo *stream, void *data, size_t size) {
+  ApuDumpWriter *writer = (ApuDumpWriter *)stream;
+  if (size > writer->capacity - writer->used) {
+    writer->failed = 1;
+    return;
+  }
+  memcpy(writer->data + writer->used, data, size);
+  writer->used += size;
+}
+
+/* Preserve the actual SPC/DSP state and PCM ring, independently of the beam
+ * position at which batched SPC event logging happened. The existing save
+ * regions exclude host pointers. Copy under the audio lock; write afterwards. */
+static int write_apu_state(const char *dir, const char *tag) {
+  if (!g_snes || !g_snes->apu) return 0;
+  ApuDumpWriter writer = {0};
+  writer.capacity = sizeof(Apu) + sizeof(Dsp) + sizeof(Spc);
+  writer.data = (uint8_t *)malloc(writer.capacity);
+  if (!writer.data) return -1;
+  writer.stream.func = copy_apu_state;
+  ApuPortSched scheduler;
+  memset(&scheduler, 0, sizeof(scheduler));
+  RtlApuLock();
+  apu_saveload(g_snes->apu, &writer.stream);
+  apu_port_sched_save(g_snes->apu, &scheduler);
+  RtlApuUnlock();
+  int rc = writer.failed ? -1 : write_blob(dir, tag, ".apu-state.bin", writer.data, writer.used);
+  rc |= write_blob(dir, tag, ".apu-scheduler.bin", &scheduler, sizeof(scheduler));
+  free(writer.data);
+  return rc;
+}
+
 int snes_state_dump(const char *dir, const char *tag, const uint8_t *pixels,
                     int pitch_bytes, int x0, int height, uint32_t frame) {
   int rc = 0;
@@ -232,6 +272,7 @@ int snes_state_dump(const char *dir, const char *tag, const uint8_t *pixels,
   }
 
   rc |= write_apu_events(dir, tag);
+  rc |= write_apu_state(dir, tag);
 
   FILE *f = open_out(dir, tag, ".info.json", "w");
   if (f) {

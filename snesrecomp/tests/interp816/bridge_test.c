@@ -30,6 +30,7 @@
 #include "snes_cycles.h"
 
 CpuState g_cpu;
+void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);
 
 #define MEMSZ 0x1000000u
 static uint8_t *RAM;
