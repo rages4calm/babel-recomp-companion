@@ -21,6 +21,34 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+
+/* Optional host PCM routing. Called when selecting a track, under the APU
+ * lock; do not call MSU APIs from the callback. Write the full PCM filename
+ * and return true, or return false for missing-track/SPC fallback. A NULL
+ * callback restores ordinary <base>-<N>.pcm lookup. Registration survives
+ * chip resets; it does not change the .msu data channel or enable the chip. */
+typedef bool (*Msu1TrackResolver)(void *context, const char *base, uint16_t track,
+                                  char *path, size_t capacity);
+void msu1_set_track_resolver(Msu1TrackResolver resolver, void *context);
+
+/* Opt-in host playback bookmark, not guest/canonical simulation state.
+ * Fixed little-endian image: no pointers, paths or PCM samples. Restore the
+ * host resolver context first. Reopens through the current resolver, retaining
+ * local music preferences; false means invalid image, disabled MSU or missing
+ * audio. Invalid images are rejected before modifying playback. The data
+ * channel is independent. Calls acquire the APU lock; do not use in rollback.
+ * Image v1: magic MSUP[4], version[1], flags[1] (selected=1, playing=2,
+ * repeat=4, error=8), volume[1], pending track low byte[1], track LE16,
+ * reserved zero[6], consumed source frames LE64, fractional phase IEEE64 LE.
+ * Callers may inspect flags after validating the image. */
+enum { MSU1_PLAYBACK_STATE_SIZE = 32 };
+void msu1_capture_playback(uint8_t out[MSU1_PLAYBACK_STATE_SIZE]);
+bool msu1_playback_state_valid(const uint8_t state[MSU1_PLAYBACK_STATE_SIZE]);
+bool msu1_restore_playback(const uint8_t state[MSU1_PLAYBACK_STATE_SIZE]);
+/* Reposition the selected local recording by elapsed 44.1kHz source frames.
+ * Useful when a shared state came from a peer using native music. */
+bool msu1_seek_playback(uint64_t source_frames);
 
 /* Read the SNESRECOMP_MSU1 environment variable and arm the chip.
  *

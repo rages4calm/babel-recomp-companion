@@ -27,14 +27,17 @@
 extern "C" {
 #endif
 
-/* Seal span covers the deepest resim span a host can issue; matches the
- * frame-commit validation cadence + slack used by the reference host. */
-#define RNET_RB_SEAL_MAX_SPAN 128u
-/* Peer-seal completion is a uint64_t bitmask — tip-extend cannot grow the
- * sealed span past this even when seal_max_span is larger. Hosts must
- * tip-hold-commit and open a fresh episode when extend would exceed it. */
+/* Every sealed row needs a bit in the uint64_t peer-completion mask.
+ * Hosts must split larger replay windows into separate episodes. */
 #define RNET_RB_PEER_SEAL_MASK_BITS 64u
+#define RNET_RB_SEAL_MAX_SPAN RNET_RB_PEER_SEAL_MASK_BITS
 #define RNET_RB_MAX_SLOTS 8
+/* Rows per RB_SEAL_ROWS datagram. The send path truncates a larger chunk to
+ * this and the receiver credits only what arrived, so a host that chunks at
+ * more than this posts a partial span and waits forever for the rest.
+ * Public so a host never has to carry its own copy of the number (the SNES
+ * host did, with a comment saying so). */
+#define RNET_RB_SEAL_ROWS_CHUNK_MAX 24u
 /* Tip episode: target - load at or below this may skip the ready-ACK RTT
  * (digests still compared). Sized for tip-extend re-replay after TipHold. */
 #define RNET_RB_LIGHT_TIP_MAX_DEPTH 16u
@@ -91,8 +94,11 @@ typedef struct RNetRbCorrection
 
 /* Opaque per-slot input row the library seals and replays. The library never
  * interprets the payload beyond the stick-replace contract view.
- * analog: host pad type (0 = digital / poll 0x41, 1 = DualShock / 0x73).
- * Carried on the seal wire in RNetRbWireFrame.source (was always 0). */
+ * analog: host pad type (0 = digital / poll 0x41, 1 = DualShock / 0x73,
+ * 2 = JogCon / 0xE3, 3 = NeGcon / 0x23). The library treats it as an opaque
+ * byte: carried unchanged through input history and on the seal wire in
+ * RNetRbWireFrame.source (was always 0). The host decides what stick_x /
+ * stick_y mean for each type (e.g. NeGcon twist and L pressure). */
 typedef struct RNetRbFrame
 {
     uint32_t tick;
@@ -102,6 +108,12 @@ typedef struct RNetRbFrame
     uint8_t is_predicted;
     uint8_t is_valid;
     uint8_t analog;
+    /* The rest of the presented pad (host-defined, opaque like stick_x/y):
+     * e.g. DualShock right stick, NeGcon analog I / II. Carried through input
+     * history, invention and the seal wire (wire version 2), so a replayed
+     * row is the whole pad every peer simulated. */
+    uint8_t rx;
+    uint8_t ry;
 } RNetRbFrame;
 
 typedef struct RNetRbEvent
@@ -116,9 +128,16 @@ typedef struct RNetRbEvent
 } RNetRbEvent;
 
 /*
- * Host callbacks. save/load/advance/digest are required; the gates mirror the
+ * Host callbacks. rnet_rb_create refuses a vtable without load_state,
+ * advance_sim or get_input_row. The core itself calls ONLY get_input_row:
+ * save_state, load_state, advance_sim, state_digest and hash_confirm_through
+ * are for the host's (or the episode driver's, rb_driver.h) own replay loop
+ * and are never invoked from inside the library. The stick gates mirror the
  * input contract and may be NULL (portable defaults). All runs on the host's
  * thread; the library does not spawn work.
+ *
+ * (This comment used to say save/load/advance/digest were required and
+ * implied the library drove them; it never did.)
  */
 typedef struct RNetRollbackVTable
 {
@@ -164,9 +183,9 @@ typedef struct RNetRbConfig
     uint32_t delay;            /* committed input delay D */
     uint32_t seal_max_span;    /* <= RNET_RB_SEAL_MAX_SPAN; 0 = default */
     /* Active seats in this match (1..RNET_RB_MAX_SLOTS). Peer-seal completion
-     * only waits on slots in [0, slot_count) excluding local_slot -- so an
-     * observer, whose local_slot is outside that range, waits on all of them.
-     * 0 => 2. */
+     * only waits on OCCUPIED slots in [0, slot_count) excluding local_slot
+     * (see occupied_mask) -- so an observer, whose local_slot is outside that
+     * range, waits on all of them. 0 => 2. */
     uint32_t slot_count;
     /* TipHold quiet window after POST match (0 = finalize immediately;
      * RNET_RB_TIP_RUNWAY_DEFAULT recommended for digital hosts). Also the
@@ -183,6 +202,16 @@ typedef struct RNetRbConfig
      * library default of 16 silently loses the light-tip fast path and pays
      * a second RTT it didn't need to. Clamped like tip_runway (max 32). */
     uint32_t light_tip_max_depth;
+    /* Bit i = seat i is occupied by a real peer (same meaning as
+     * RNetConfig.occupied_mask). 0 = every seat in [0, slot_count) (legacy).
+     * A sparse room (e.g. seats 0+2 of 4) must clear the empty bits: nobody
+     * sends SEAL_ROWS for an empty seat, so peer-seal completion that waits on
+     * one never completes. An empty seat's rows are sealed from the host's
+     * get_input_row like a wire-confirmed remote row -- the host must answer
+     * with the deterministic value every peer synthesizes for that seat
+     * (RNetSession: a zero sample). Appended last so a zero-initialised
+     * config keeps the old behaviour. */
+    uint32_t occupied_mask;
 } RNetRbConfig;
 
 /* Lifecycle. */
@@ -230,6 +259,9 @@ uint8_t rnet_rb_recommend_light_tip(const RNetRbSession *s);
  * peer notice) identifies a mismatch; the library takes the phase to
  * SealInputs. The host then drives sealing and peer exchange, advancing the
  * FSM with set_phase as its transport confirms baseline/replay/verify.
+ * set_phase VALIDATES NOTHING -- any phase may follow any other. The episode
+ * driver (rb_driver.h) is the maintained caller; prefer it to driving this by
+ * hand.
  */
 void rnet_rb_begin_episode(RNetRbSession *s, const RNetRbCorrection *corr);
 void rnet_rb_set_phase(RNetRbSession *s, RNetRbPhase phase);
@@ -279,8 +311,13 @@ RNetInputContractDecision rnet_rb_decide_stick_replace(RNetRbSession *s,
 /* Sealed input table. Local-authority rows seal from the host's input history;
  * peer-authority rows arrive via apply_peer_seal_rows. The sealed table is the
  * sole replay read set. */
-/* begin_tick..target_tick inclusive — pass load_tick (not only mismatch) so
- * Replay can publish sealed pads for every resim quantum. */
+/* begin_tick..target_tick inclusive. Pass the LOAD tick, not the mismatch:
+ * the replay publishes a sealed row for every tick it re-runs, and
+ * load..mismatch-1 are among them. Only active seats [0, slot_count) are
+ * filled. Invalid or oversized ranges (more than seal_max_span, itself at
+ * most RNET_RB_PEER_SEAL_MASK_BITS) clear the seal without changing the
+ * correction target; check inputs_sealed before replay. Valid calls replace
+ * the previous seal. */
 void rnet_rb_seal_inputs(RNetRbSession *s, uint32_t begin_tick, uint32_t target_tick,
                          int32_t correction_slot);
 uint8_t rnet_rb_inputs_sealed(const RNetRbSession *s);
@@ -302,6 +339,9 @@ uint8_t rnet_rb_apply_peer_seal_rows(RNetRbSession *s, uint32_t epoch_id, uint32
                                      const RNetRbFrame *rows, uint32_t row_count);
 uint8_t rnet_rb_peer_seal_rows_complete(const RNetRbSession *s, int32_t slot);
 uint8_t rnet_rb_all_peer_seal_rows_complete(const RNetRbSession *s);
+/* Seats whose seal rows this session waits on: every occupied seat in
+ * [0, slot_count) except local_slot (bit i = seat i). */
+uint32_t rnet_rb_expected_peer_mask(const RNetRbSession *s);
 uint8_t rnet_rb_export_seal_rows_chunk(const RNetRbSession *s, int32_t slot, uint32_t row_begin,
                                        uint32_t max_rows, RNetRbFrame *out_frames,
                                        uint32_t *out_row_count);

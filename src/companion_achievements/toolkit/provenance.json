@@ -1,0 +1,13 @@
+{
+  "source": "https://github.com/rages4calm/companion-achievements",
+  "commit": "6617dc00e4af43035b08fdb6ef0e4fbd67246514",
+  "toolkitVersion": "0.3.0",
+  "coreVersion": "0.1.0",
+  "files": {
+    "companion_achievements.c": "e634b4cfdbe41f269a4b0cd21c269377af7389ff7a10e5c3a277d6453a672047",
+    "companion_achievement_presentation.c": "6a1cb3205c0ebd7b77bc41616ac72b7e92701d3025f7a5b62e63dba7e9252aa6",
+    "companion_achievements.h": "d3325dbc0cc475c40751b491ea2ff53974586e80c1fb83312d3492ee0fbfc4d3",
+    "companion_achievement_presentation.h": "1e3d09299303f736a6200afa86c97aba945ac69bc666a1f4c3919ab66ce2e6cc",
+    "LICENSE": "82b02f59ce281ca7507fe08b4148cbb4c8ec6d0c6acaff5987f2af68efd71dec"
+  }
+}

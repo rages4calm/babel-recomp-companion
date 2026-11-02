@@ -21,6 +21,13 @@
 #define SNESRECOMP_SPC_DIAGNOSTICS SNESRECOMP_TRACE
 #endif
 
+#ifndef SNESRECOMP_APU_NATIVE
+#define SNESRECOMP_APU_NATIVE 0
+#endif
+#if SNESRECOMP_APU_NATIVE != 0 && SNESRECOMP_APU_NATIVE != 1
+#error SNESRECOMP_APU_NATIVE must be 0 or 1
+#endif
+
 static const uint8_t bootRom[0x40] = {
   0xcd, 0xef, 0xbd, 0xe8, 0x00, 0xc6, 0x1d, 0xd0, 0xfc, 0x8f, 0xaa, 0xf4, 0x8f, 0xbb, 0xf5, 0x78,
   0xcc, 0xf4, 0xd0, 0xfb, 0x2f, 0x19, 0xeb, 0xf4, 0xd0, 0xfc, 0x7e, 0xf4, 0xd0, 0x0b, 0xe4, 0xf5,
@@ -170,9 +177,14 @@ static void apu_drainPortQueue(Apu* apu) {
 
 bool apu_runUntilPortQueueEmpty(Apu* apu, uint32_t max_cycles) {
   while (apu->portQHead != apu->portQTail) {
-    if (max_cycles-- == 0)
-      return false;
-    apu_cycle(apu);
+    if (!max_cycles) return false;
+    const ApuPortWrite *write =
+        &apu->portQueue[apu->portQHead & (APU_PORT_QUEUE_LEN - 1u)];
+    uint64_t distance = write->target_cycle > apu->portClock
+        ? write->target_cycle - apu->portClock : 0;
+    uint32_t span = distance >= max_cycles ? max_cycles : (uint32_t)distance + 1u;
+    apu_runCycles(apu, span);
+    max_cycles -= span;
   }
   return true;
 }
@@ -198,25 +210,11 @@ bool apu_runToGuestCycle(Apu* apu, uint64_t guest_cycle,
     }
     if (apu->portClock >= target && !due_event)
       return true;
-    /* Cycles before the next queued port write falls due (or the target):
-     * draining the queue is a no-op for them, so they run back to back. */
-    uint64_t until = target;
-    if (apu->portQHead != apu->portQTail) {
-      const uint64_t e =
-          apu->portQueue[apu->portQHead & (APU_PORT_QUEUE_LEN - 1)].target_cycle;
-      if (e < until) until = e;
-    }
-    if (until > apu->portClock + 1) {
-      uint64_t n = until - apu->portClock;
-      if (n > max_cycles) n = max_cycles;
-      if (n == 0) return false;
-      max_cycles -= (uint32_t)n;
-      while (n--) apu_cycle_body(apu);
-      continue;
-    }
-    if (max_cycles-- == 0)
-      return false;
-    apu_cycle(apu);
+    if (!max_cycles) return false;
+    uint64_t distance = target > apu->portClock ? target - apu->portClock : 1u;
+    uint32_t span = distance > max_cycles ? max_cycles : (uint32_t)distance;
+    apu_runCycles(apu, span);
+    max_cycles -= span;
   }
 }
 
@@ -333,6 +331,22 @@ static inline void apu_cycle_body(Apu* apu) {
 void apu_cycle(Apu* apu) {
   apu_drainPortQueue(apu);
   apu_cycle_body(apu);
+}
+
+#if SNESRECOMP_APU_NATIVE
+#include "apu_native.inc"
+#endif
+
+void apu_runCycles(Apu* apu, uint32_t clocks) {
+#if SNESRECOMP_APU_NATIVE
+  apu_runCycles_native(apu, clocks);
+#else
+  while (clocks--) apu_cycle(apu);
+#endif
+}
+
+const char *apu_time_implementation(void) {
+  return SNESRECOMP_APU_NATIVE ? "NATIVE" : "LLE";
 }
 
 uint8_t apu_cpuRead(Apu* apu, uint16_t adr) {

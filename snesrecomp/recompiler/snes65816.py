@@ -13,6 +13,7 @@ from typing import Optional, List
 
 ROM_MAP_LOROM = 'lorom'
 ROM_MAP_HIROM = 'hirom'
+ROM_MAP_SA1 = 'sa1'
 ROM_MAP_SDD1_EXLOROM = 'sdd1_exlorom'
 SDD1_MMC_DEFAULT_PAGES = (0, 1, 2, 3)
 _active_rom_mapping = ROM_MAP_LOROM
@@ -24,6 +25,18 @@ _active_rom_mapping = ROM_MAP_LOROM
 # RelocRegion + reintroduces the v1 process-global registry (v2 dropped it).
 # Each tuple: (ram_bank, ram_addr, length, rom_off_base).
 _reloc_regions: List[tuple] = []
+_rom_image_size: Optional[int] = None
+
+
+def set_rom_image_size(size: Optional[int]) -> None:
+    """Keep appended RAM captures out of the cartridge address space."""
+    global _rom_image_size
+    _rom_image_size = size
+
+
+def is_materialized_rom_address(bank: int, pc: int, offset: int) -> bool:
+    return (_rom_image_size is None or offset < _rom_image_size
+            or _reloc_lookup(bank, pc) is not None)
 
 
 def register_reloc_region(ram_bank: int, ram_addr: int, length: int,
@@ -34,6 +47,7 @@ def register_reloc_region(ram_bank: int, ram_addr: int, length: int,
 
 def clear_reloc_regions() -> None:
     _reloc_regions.clear()
+    set_rom_image_size(None)
 
 
 def _reloc_lookup(bank: int, addr: int) -> Optional[int]:
@@ -77,6 +91,8 @@ def detect_rom_mapping(data: bytes) -> str:
     LoROM. Star Ocean is a 6 MiB S-DD1 ExLoROM cart whose banks $C0-$FF are
     exposed by the S-DD1 MMC using reset pages 0, 1, 2, 3.
     """
+    if len(data) >= 0x8000 and data[0x7FD5] == 0x23 and data[0x7FD6] in (0x34, 0x35):
+        return ROM_MAP_SA1
     lorom_score = _header_score(data, 0x7FC0, 0)
     hirom_score = _header_score(data, 0xFFC0, 1)
     if hirom_score > lorom_score:
@@ -88,7 +104,7 @@ def detect_rom_mapping(data: bytes) -> str:
 
 def set_rom_mapping(mapping: str) -> None:
     global _active_rom_mapping
-    if mapping not in (ROM_MAP_LOROM, ROM_MAP_HIROM, ROM_MAP_SDD1_EXLOROM):
+    if mapping not in (ROM_MAP_LOROM, ROM_MAP_HIROM, ROM_MAP_SDD1_EXLOROM, ROM_MAP_SA1):
         raise ValueError(f"unsupported ROM mapping: {mapping}")
     _active_rom_mapping = mapping
 
@@ -122,6 +138,11 @@ def rom_offset(bank: int, addr: int) -> int:
         return reloc
     assert bank not in (0x7E, 0x7F), (
         f"address ${bank:02X}:{addr:04X} is WRAM, not ROM")
+    if _active_rom_mapping == ROM_MAP_SA1:
+        if bank >= 0xC0:
+            return ((bank - 0xC0) << 16) | addr
+        assert bank & 0x7F < 0x40 and addr >= 0x8000, "not a SA-1 ROM window"
+        return (0x200000 if bank & 0x80 else 0) | ((bank & 0x3F) << 15) | (addr & 0x7FFF)
     if _active_rom_mapping == ROM_MAP_SDD1_EXLOROM:
         if 0xC0 <= bank <= 0xFF:
             page = SDD1_MMC_DEFAULT_PAGES[(bank >> 4) & 3]
@@ -144,6 +165,8 @@ def is_rom_address(bank: int, addr: int) -> bool:
         return True
     if bank in (0x7E, 0x7F):
         return False
+    if _active_rom_mapping == ROM_MAP_SA1:
+        return bank >= 0xC0 or ((bank & 0x7F) < 0x40 and addr >= 0x8000)
     if _active_rom_mapping == ROM_MAP_SDD1_EXLOROM:
         if 0xC0 <= bank <= 0xFF:
             return True
@@ -152,6 +175,39 @@ def is_rom_address(bank: int, addr: int) -> bool:
         canonical_bank = bank & 0x7F
         return canonical_bank >= 0x40 or addr >= 0x8000
     return addr >= 0x8000 and ((bank & 0xFF) < 0x40 or bank >= 0x80)
+
+
+def rom_bank_mirror(bank: int):
+    """Execution-compatible XOR-80 bank pair, not every physical ROM alias.
+
+    HiROM's low and full banks share upper-half bytes, but a short transfer
+    below $8000 observes different memory. They must be analyzed separately.
+    """
+    if _active_rom_mapping == ROM_MAP_HIROM:
+        return bank ^ 0x80 if bank not in (0x7E, 0x7F, 0xFE, 0xFF) else None
+    if _active_rom_mapping != ROM_MAP_SA1 and (bank < 0x40 or 0x80 <= bank < 0xC0):
+        return bank ^ 0x80
+    return None
+
+
+def rom_bank_aliases(bank: int, addr: int) -> tuple[int, ...]:
+    """Physical reset-map ROM aliases, ordered with the requested bank first.
+
+    This is evidence/configuration identity, not permission to substitute an
+    analyzed body or its inferred exit modes in another execution bank.
+    """
+    bank, addr = bank & 0xFF, addr & 0xFFFF
+    if not is_rom_address(bank, addr) or _reloc_lookup(bank, addr) is not None:
+        return ()
+    if _active_rom_mapping == ROM_MAP_HIROM:
+        candidates = [(bank & 0x3F) | high for high in (0, 0x40, 0x80, 0xC0)]
+    else:
+        mirror = rom_bank_mirror(bank)
+        candidates = [bank] if mirror is None else [bank, mirror]
+    offset = rom_offset(bank, addr)
+    return (bank, *sorted(b for b in set(candidates) if b != bank
+                         and is_rom_address(b, addr)
+                         and rom_offset(b, addr) == offset))
 
 
 def vector_table_offset(data: bytes) -> int:
@@ -183,17 +239,19 @@ MODE_STR = {
 class Insn:
     __slots__ = ('addr', 'opcode', 'mnem', 'mode', 'operand', 'length',
                  'dispatch_entries', 'dispatch_kind', 'dispatch_idx_reg',
-                 'dispatch_table_bases', 'm_flag', 'x_flag', 'dispatch_terminal',
+                 'dispatch_table_bases', 'dispatch_index_bias',
+                 'm_flag', 'x_flag', 'dispatch_terminal',
                  'dispatch_call', 'dispatch_pushed_call',
                  'dispatch_pushed_call_frame_size',
                  'dispatch_return_pc', 'dispatch_return_m', 'dispatch_return_x',
                   'dispatch_local_goto', 'dispatch_runtime',
                   'dispatch_pointer_match', 'dispatch_popped_call_frame',
-                  'dispatch_stack_pointer', 'dispatch_forced_m',
+                  'dispatch_stack_pointer', 'dispatch_hle_tail_entries',
+                  'dispatch_forced_m',
                   'dispatch_forced_x', 'dispatch_consumed_stack_bytes',
                   'dispatch_configured_stack_bytes',
                   'const_z_fold_unconditional', 'const_z_fold_dead_pc24',
-                  'data_region_exec', 'terminal_jsr', 'noreturn_jsr')
+                  'data_region_exec', 'terminal_jsr', 'noreturn_jsr', 'brk_rti')
 
     def __init__(self, addr, opcode, mnem, mode, operand, length):
         self.addr = addr
@@ -212,6 +270,11 @@ class Insn:
         # came from static table base(s). len >= 2 means parallel byte tables,
         # where the index register is already a logical entry index.
         self.dispatch_table_bases = ()
+        # Byte distance from this instruction's operand to entry 0 of the
+        # dispatch table. Normally 0 (`JSR ($tbl,X)` with the table at $tbl);
+        # non-zero where the cfg data_region overlay proves the table starts
+        # after the operand byte, so the selector is a biased byte offset.
+        self.dispatch_index_bias = 0
         self.dispatch_terminal = False
         # Pointer-sourced CALL idiom (PEA <ret>; JMP (ptr)): non-terminal
         # indirect call that falls through to the next block. See cfg_loader
@@ -243,6 +306,9 @@ class Insn:
         # handler.
         self.dispatch_popped_call_frame = False
         self.dispatch_stack_pointer = False
+        # Local computed-goto targets that are hle_func/hle_spc_upload
+        # boundaries: emitted as tail transfers to the HLE stub.
+        self.dispatch_hle_tail_entries = frozenset()
         self.dispatch_forced_m = 1
         self.dispatch_forced_x = 1
         self.dispatch_consumed_stack_bytes = 0
@@ -256,6 +322,7 @@ class Insn:
         # distinct from terminal_jsr: the target does not consume its frame as
         # inline data, and the exceptional target remains an LLE safety path.
         self.noreturn_jsr = False
+        self.brk_rti = False
         self.m_flag = 1
         self.x_flag = 1
         # Constant-Z branch fold: when set on a BEQ/BNE, the preceding

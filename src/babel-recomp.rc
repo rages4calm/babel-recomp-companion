@@ -2,8 +2,8 @@
 #include <winver.h>
 1 ICON "../res/icon.ico"
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 1,0,0,0
-PRODUCTVERSION 1,0,0,0
+FILEVERSION 0,1,0,1
+PRODUCTVERSION 0,1,0,1
 FILEOS VOS_NT_WINDOWS32
 FILETYPE VFT_APP
 BEGIN
@@ -11,14 +11,14 @@ BEGIN
   BEGIN
     BLOCK "040904B0"
     BEGIN
-      VALUE "CompanyName", "mr0ta"
-      VALUE "FileDescription", "Babel Recomp - Illusion of Gaia"
-      VALUE "FileVersion", "1.0"
+      VALUE "CompanyName", "mr0ta; Companion edition by Carl Prewitt Jr."
+      VALUE "FileDescription", "Illusion of Gaia Companion - based on Babel Recomp"
+      VALUE "FileVersion", "0.1.0-dev.1"
       VALUE "InternalName", "babel-recomp"
-      VALUE "LegalCopyright", "mr0ta"
+      VALUE "LegalCopyright", "Babel Recomp: mr0ta; Companion additions: Carl Prewitt Jr."
       VALUE "OriginalFilename", "babel-recomp.exe"
-      VALUE "ProductName", "Babel Recomp"
-      VALUE "ProductVersion", "1.0"
+      VALUE "ProductName", "Illusion of Gaia Companion"
+      VALUE "ProductVersion", "0.1.0-dev.1"
     END
   END
   BLOCK "VarFileInfo"

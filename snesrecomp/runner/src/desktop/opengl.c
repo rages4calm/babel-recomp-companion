@@ -43,6 +43,12 @@
 #include "config.h"
 #include "display_aspect.h"
 #include "present_filter.h"
+#include "hd_gpu.h"
+#if SNESRECOMP_SDL3
+#define DeleteGlContext SDL_GL_DestroyContext
+#else
+#define DeleteGlContext SDL_GL_DeleteContext
+#endif
 
 #define CODE(...) #__VA_ARGS__
 
@@ -150,6 +156,15 @@ static unsigned int BuildFilterProgram(unsigned int vs, const char *head, const 
 }
 static GlTextureWithSize g_texture;
 static GlslShader *g_glsl_shader;
+static SnesHdGpu *g_hd_gpu;
+static bool g_hd_tried;
+static const SnesHdFrame *g_hd_frame;
+static const uint32_t *g_hd_overlay;
+static size_t g_hd_overlay_pitch;
+void snesrecomp_opengl_set_hd(const SnesHdFrame *frame,
+                            const uint32_t *overlay, size_t pitch) {
+  g_hd_frame = frame; g_hd_overlay = overlay; g_hd_overlay_pitch = pitch;
+}
 static bool g_want_screenshot;
 static double g_screenshot_flash_start_time = -1.0;
 static const double kScreenshotFlashSeconds = 0.15;
@@ -205,10 +220,22 @@ static void MaybeGpuScreenshot(int w, int h) {
 /* -1 = decide from config at init. A host that paces presentation itself
  * (an FPS cap, a simulation/presentation split) sets 0 so the swap does not
  * also block; one that wants the driver to pace it sets 1. */
-static int g_vsync_override = -1;
+/* -1 is a legal interval (adaptive), so "did the host say anything?" needs
+ * its own flag rather than a sentinel value. */
+static int g_vsync_override;
+static bool g_vsync_set;
+static void (*g_compute_viewport)(int, int, int, int, SnesDisplayViewport *);
 
-void snesrecomp_opengl_set_vsync(int enable) {
-  g_vsync_override = enable ? 1 : 0;
+void snesrecomp_opengl_set_viewport(void (*compute)(int, int, int, int,
+                                                   SnesDisplayViewport *)) {
+  g_compute_viewport = compute;
+}
+
+/* interval: 0 immediate, 1 wait for the panel, -1 late-swap-tearing
+ * ("Adaptive"). Stored as-is; OpenGLRenderer_Init applies it. */
+void snesrecomp_opengl_set_vsync(int interval) {
+  g_vsync_override = interval;
+  g_vsync_set = true;
 }
 
 static void GL_APIENTRY MessageCallback(GLenum source,
@@ -253,24 +280,63 @@ static void SetFrameSwizzle(void) {
 static GLenum UploadFormat(void) { return g_gles ? GL_RGBA : GL_BGRA; }
 static GLenum UploadType(void) { return g_gles ? GL_UNSIGNED_BYTE : GL_UNSIGNED_INT_8_8_8_8_REV; }
 
+static SDL_GLContext g_context;
+/* The shader path that is loaded (or that failed to load), so Reconfigure
+ * reloads only when the setting actually changed. */
+static char g_shader_path[1024];
+static bool g_shader_resolved;
+
+static void ApplySwapInterval(void) {
+  int interval = g_vsync_set ? g_vsync_override
+                             : (g_config.disable_frame_delay ? 0 : 1);
+  /* Not every driver has EXT_swap_control_tear; fall back to an ordinary
+   * wait rather than to immediate, which is what the player did not ask
+   * for. SDL2 returns 0 on success, SDL3 returns true. */
+#if SNESRECOMP_SDL3
+  bool ok = SDL_GL_SetSwapInterval(interval);
+#else
+  bool ok = SDL_GL_SetSwapInterval(interval) == 0;
+#endif
+  if (!ok && interval < 0) SDL_GL_SetSwapInterval(1);
+}
+
+static void LoadShaderFromConfig(void) {
+  const char *want = g_config.shader ? g_config.shader : "";
+  if (g_shader_resolved && strcmp(want, g_shader_path) == 0)
+    return;
+  if (g_glsl_shader) {
+    GlslShader_Destroy(g_glsl_shader);
+    g_glsl_shader = NULL;
+  }
+  snprintf(g_shader_path, sizeof(g_shader_path), "%s", want);
+  g_shader_resolved = true;
+  if (want[0])
+    g_glsl_shader = GlslShader_CreateFromFile(want);
+}
+
 static bool OpenGLRenderer_Init(SDL_Window *window) {
   g_window = window;
-  SDL_GLContext context = SDL_GL_CreateContext(window);
-  if (!context) {
-    fprintf(stderr, "[gl] cannot create an OpenGL%s context: %s\n",
-            g_gles ? " ES 3.0" : " 3.3", SDL_GetError());
-    return false;
+  if (!g_gles) {
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
   }
+  g_context = SDL_GL_CreateContext(window);
+  if (!g_context && !g_gles) {
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    g_context = SDL_GL_CreateContext(window);
+  }
+  if (!g_context) return false;
 
-  SDL_GL_SetSwapInterval(g_vsync_override >= 0
-                             ? g_vsync_override
-                             : (g_config.disable_frame_delay ? 0 : 1));
+  ApplySwapInterval();
   ogl_LoadFunctions();
 
   fprintf(stderr, "[gl] context: %s (%s)\n", (const char *)glGetString(GL_VERSION),
           (const char *)glGetString(GL_RENDERER));
-  if (!g_gles && !ogl_IsVersionGEQ(3, 3))
-    Die("You need OpenGL 3.3");
+  if (!g_gles && !ogl_IsVersionGEQ(3, 3)) {
+    DeleteGlContext(g_context); g_context = NULL;
+    return false;
+  }
 
   if (kDebugFlag && !g_gles) {
     glEnable(GL_DEBUG_OUTPUT);
@@ -395,17 +461,30 @@ static bool OpenGLRenderer_Init(SDL_Window *window) {
   g_sharp_program = BuildFilterProgram(vs, head, kSharpFs);
   g_smooth_program = BuildFilterProgram(vs, head, kSmoothFs);
 
-  if (g_config.shader) {
-    GlslShader_SetGles(g_gles);
-    g_glsl_shader = GlslShader_CreateFromFile(g_config.shader);
-    if (!g_glsl_shader)
-      fprintf(stderr, "[gl] shader preset '%s' failed to load; plain presentation\n", g_config.shader);
-  }
+  GlslShader_SetGles(g_gles);
+  LoadShaderFromConfig();
 
   return true;
 }
 
+/* After another GL context was current (the in-game launcher's), or a
+ * presentation setting changed under the live window. Filtering and aspect
+ * are read every frame and need nothing here. */
+static void OpenGLRenderer_Reconfigure(void) {
+  if (g_context) SDL_GL_MakeCurrent(g_window, g_context);
+  ApplySwapInterval();
+  LoadShaderFromConfig();
+}
+
 static void OpenGLRenderer_Destroy(void) {
+  SnesHdGpuDestroy(g_hd_gpu); g_hd_gpu = NULL; g_hd_tried = false;
+  if (g_glsl_shader) GlslShader_Destroy(g_glsl_shader);
+  g_glsl_shader = NULL; g_shader_resolved = false;
+  glDeleteTextures(1, &g_texture.gl_texture); memset(&g_texture, 0, sizeof(g_texture));
+  glDeleteProgram(g_program); glDeleteProgram(g_flash_program);
+  glDeleteVertexArrays(1, &g_VAO);
+  free(g_screen_buffer); g_screen_buffer = NULL; g_screen_buffer_size = 0;
+  DeleteGlContext(g_context); g_context = NULL;
 }
 
 static void OpenGLRenderer_GetOutputSize(int *width, int *height) {
@@ -538,6 +617,7 @@ static void DrawTouchPad(int drawable_w, int drawable_h) {
 #endif
 
 static void OpenGLRenderer_BeginDraw(int width, int height, uint8 **pixels, int *pitch) {
+  g_hd_frame = NULL; g_hd_overlay = NULL; g_hd_overlay_pitch = 0;
   size_t size = (size_t)width * (size_t)height;
 
   if (size > g_screen_buffer_size) {
@@ -566,14 +646,33 @@ static void OpenGLRenderer_EndDraw(void) {
       (g_config.ignore_aspect_ratio && !g_present_square_pixels) || g_present_square_pixels == 2,
       false, &viewport);
 
-  glBindTexture(GL_TEXTURE_2D, g_texture.gl_texture);
-  SetFrameSwizzle();
+  if (g_compute_viewport)
+    g_compute_viewport(g_draw_width, g_draw_height, drawable_width, drawable_height, &viewport);
+
+  GlTextureWithSize image = g_texture;
+  SnesHdGpuImage hd_image;
+  bool enhanced = false;
+  if (g_hd_frame && g_config.mode7.enabled) {
+    if (!g_hd_tried) { g_hd_gpu = SnesHdGpuCreate(); g_hd_tried = true; }
+    enhanced = SnesHdGpuRender(g_hd_gpu, g_hd_frame, g_config.mode7.scale,
+        (unsigned)viewport.width, (unsigned)viewport.height,
+        !g_config.linear_filtering && !g_glsl_shader, 128u * 1024u * 1024u,
+        (const uint32_t *)g_screen_buffer, g_draw_width * 4,
+        g_hd_overlay, g_hd_overlay_pitch, &hd_image);
+    if (enhanced) image = (GlTextureWithSize){hd_image.texture, hd_image.width, hd_image.height};
+  }
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, enhanced ? image.gl_texture : g_texture.gl_texture);
+  if (!enhanced) {
+    SetFrameSwizzle();
   if (g_draw_width == g_texture.width && g_draw_height == g_texture.height) {
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, g_draw_width, g_draw_height, UploadFormat(), UploadType(), g_screen_buffer);
   } else {
     g_texture.width = g_draw_width;
     g_texture.height = g_draw_height;
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, g_draw_width, g_draw_height, 0, UploadFormat(), UploadType(), g_screen_buffer);
+  }
+    image = g_texture;
   }
 
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -603,7 +702,7 @@ static void OpenGLRenderer_EndDraw(void) {
     glBindVertexArray(g_VAO);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   } else {
-    GlslShader_Render(g_glsl_shader, &g_texture, viewport.x, viewport.y,
+    GlslShader_Render(g_glsl_shader, &image, viewport.x, viewport.y,
                       viewport.width, viewport.height);
   }
 
@@ -631,6 +730,7 @@ static const struct RendererFuncs kOpenGLRendererFuncs = {
   &OpenGLRenderer_GetOutputSize,
   &OpenGLRenderer_BeginDraw,
   &OpenGLRenderer_EndDraw,
+  &OpenGLRenderer_Reconfigure,
 };
 
 static bool g_core_attempt;   /* asked for desktop GL in place of the configured ES */

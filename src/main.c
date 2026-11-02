@@ -30,6 +30,7 @@
 #include "iog_widescreen.h"
 #include "iog_inventory.h"
 #include "iog_i18n.h"
+#include "iog_build_info.h"
 #include "snes_osd.h"
 #include <stdio.h>
 #include "snesrecomp_rom_identity.h"  /* generated from rom_identity.txt */
@@ -110,7 +111,7 @@ static void IogAfterRunFrame(const SnesDesktopHostFrameStats *st) { (void)st; Io
 
 static const SnesDesktopHostGame kGameHost = {
     .display_name        = "Illusion Of Gaia Usa",
-    .window_title        = "Babel Recomp",
+    .window_title        = "Illusion of Gaia Companion - Babel Recomp",
     .region              = SNESRECOMP_ROM_REGION,
     .rom_file            = SNESRECOMP_ROM_FILE,
     .expected_sha256_hex = SNESRECOMP_ROM_EXPECTED_SHA256,
@@ -145,5 +146,6 @@ static const SnesDesktopHostGame kGameHost = {
 #endif
 int main(int argc, char **argv)
 {
+    fprintf(stderr, "%s\n", IOG_EXECUTION_ID);
     return snesrecomp_desktop_main(&kGameHost, argc, argv);
 }

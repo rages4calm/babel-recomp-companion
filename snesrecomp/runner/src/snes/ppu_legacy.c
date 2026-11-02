@@ -6,6 +6,13 @@
 #include "snes.h"
 #include "snes_regs.h"
 
+#ifndef SNESRECOMP_LEGACY_MODE7_NATIVE
+#define SNESRECOMP_LEGACY_MODE7_NATIVE 0
+#endif
+#if SNESRECOMP_LEGACY_MODE7_NATIVE
+#include "ppu_mode7_line.h"
+#endif
+
 static void ppu_render_pixel(Ppu *ppu, int x, int y);
 static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
                              int *r, int *g, int *b);
@@ -69,6 +76,12 @@ void ppu_draw_whole_line_legacy(Ppu *ppu, int line) {
   // actual line
   if (PPU_mode(ppu) == 7)
     ppu_prepare_mode7(ppu, line);
+#if SNESRECOMP_LEGACY_MODE7_NATIVE
+  if (PPU_mode(ppu) == 7) {
+    ppu_draw_mode7_line_native(ppu, line);
+    return;
+  }
+#endif
   int left = -ppu->extraLeftCur;
   int right = 256 + ppu->extraRightCur;
   for (int x = left; x < right; x++) {
@@ -201,7 +214,9 @@ static int ppu_resolve_pixel(Ppu *ppu, int x, int y, bool sub,
     *g = ((pixel & 0x38) >> 1) | ((pixel & 0x200) >> 8);
     *b = ((pixel & 0xc0) >> 3) | ((pixel & 0x400) >> 8);
   } else {
-    uint16_t color = ppu->cgram[pixel & 0xff];
+    uint16_t color = layer==4
+        ? PpuPixelColor(ppu,ppu->objBuffer.data[x+kPpuExtraLeftRight],x+kPpuExtraLeftRight)
+        : ppu->cgram[pixel & 0xff];
     *r = color & 0x1f;
     *g = (color >> 5) & 0x1f;
     *b = (color >> 10) & 0x1f;

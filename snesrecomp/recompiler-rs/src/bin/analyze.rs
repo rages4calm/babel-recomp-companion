@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
+use std::io::Write;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -24,8 +25,8 @@ use snesrecomp_analyzer::decoder::{
 };
 use snesrecomp_analyzer::insn::Mode;
 use snesrecomp_analyzer::rom::{
-    addr_to_rom_offset, detect_rom_mapping, is_rom_address, load_rom, vector_table_offset,
-    RelocRegion, RomMapping,
+    addr_to_rom_offset, detect_rom_mapping, execution_mirror_bank as mirror_bank, is_rom_address,
+    load_rom, vector_table_offset, RelocRegion, RomMapping,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -103,11 +104,17 @@ impl NodeSummary {
 }
 
 struct Inputs {
+    rom_image_size: usize,
     cfgs: Vec<BankCfg>,
     roots: BTreeSet<VariantKey>,
     entries: HashMap<u32, BankEntry>,
     sibling_entries: HashMap<u32, BTreeSet<u32>>,
+    /// Per bank (and its execution mirror): 16-bit PCs whose bodies are
+    /// replaced by `hle_func` / `hle_spc_upload` host implementations.
+    hle_entries: HashMap<u32, BTreeSet<u32>>,
     cfg_index: HashMap<u32, usize>,
+    authority_bytes: HashMap<u32, Vec<u8>>,
+    authority_data: HashMap<u32, Vec<bool>>,
     data_regions: Vec<(u32, u32, u32)>,
     exclude_ranges: HashMap<u32, Vec<(u32, u32)>>,
     force_lle: BTreeSet<u32>,
@@ -115,7 +122,10 @@ struct Inputs {
     hle_dispatch: HashMap<u32, String>,
     inline_skip: HashMap<u32, i32>,
     terminal_jsr_sites: BTreeSet<u32>,
+    live_operand_sites: BTreeSet<u32>,
+    brk_rti_sites: BTreeSet<u32>,
     declared_exit_modes: HashMap<(u32, u8, u8), (u8, u8)>,
+    declared_exit_sets: HashMap<(u32, u8, u8), Vec<(u8, u8)>>,
     /// Synthetic reloc regions redirecting WRAM ram_routine entries to blob
     /// bytes appended to the ROM image (plus any cfg `reloc` directives).
     reloc_regions: Vec<RelocRegion>,
@@ -157,21 +167,37 @@ fn filename_bank(path: &Path) -> Option<u32> {
     u32::from_str_radix(body, 16).ok()
 }
 
-fn mirror_bank(bank: u32) -> Option<u32> {
-    let bank = bank & 0xFF;
-    if bank < 0x40 || (0x80..0xC0).contains(&bank) {
-        Some(bank ^ 0x80)
-    } else {
-        None
-    }
-}
-
-fn mirror_pc24(pc24: u32) -> Option<u32> {
-    mirror_bank((pc24 >> 16) & 0xFF).map(|bank| (bank << 16) | (pc24 & 0xFFFF))
+fn mirror_pc24(mapping: RomMapping, pc24: u32) -> Option<u32> {
+    mirror_bank(mapping, (pc24 >> 16) & 0xFF).map(|bank| (bank << 16) | (pc24 & 0xFFFF))
 }
 
 fn rom_u16(rom: &[u8], offset: usize) -> Option<u32> {
     Some(*rom.get(offset)? as u32 | ((*rom.get(offset + 1)? as u32) << 8))
+}
+
+fn rom_byte(rom: &[u8], mapping: RomMapping, bank: u32, addr: u32) -> Option<u8> {
+    if !is_rom_address(mapping, bank, addr) {
+        return None;
+    }
+    rom.get(addr_to_rom_offset(mapping, bank, addr, &[]))
+        .copied()
+}
+
+/// `brk_rti` is sound only where the byte is a BRK and the native BRK vector
+/// ($00:FFE6) is a bare RTI. Peer of recompiler/v2/brk_rti.py: same rule,
+/// same wording, checked for every declared site whether decoded or not.
+fn check_brk_rti_site(rom: &[u8], mapping: RomMapping, site: u32) -> Result<(), String> {
+    let site = site & 0xFFFFFF;
+    if rom_byte(rom, mapping, site >> 16, site & 0xFFFF) != Some(0x00) {
+        return Err(format!("brk_rti at ${site:06X}: not a BRK in ROM"));
+    }
+    let vector = rom_u16(rom, vector_table_offset(rom) + 6).unwrap_or(0);
+    if rom_byte(rom, mapping, 0, vector) != Some(0x40) {
+        return Err(format!(
+            "brk_rti at ${site:06X}: the native BRK vector ${vector:04X} is not a bare RTI"
+        ));
+    }
+    Ok(())
 }
 
 fn expand_auto_vectors(cfgs: &mut [BankCfg], rom: &[u8]) {
@@ -224,6 +250,8 @@ fn architectural_roots(rom: &[u8]) -> BTreeSet<VariantKey> {
 }
 
 fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result<Inputs, String> {
+    let rom_image_size = rom.len();
+    let mapping = detect_rom_mapping(rom);
     let mut paths: Vec<PathBuf> = fs::read_dir(cfg_dir)
         .map_err(|e| format!("{}: {e}", cfg_dir.display()))?
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
@@ -241,12 +269,18 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
         cfg.bank = bank as i32;
         cfgs.push(cfg);
     }
+    if mapping == RomMapping::HiRom {
+        cfgs = snesrecomp_analyzer::hirom_cfg::expand(cfgs);
+    }
     expand_auto_vectors(&mut cfgs, rom.as_slice());
 
     let mut roots = architectural_roots(rom.as_slice());
     let mut entries = HashMap::new();
     let mut sibling_entries: HashMap<u32, BTreeSet<u32>> = HashMap::new();
+    let mut hle_entries: HashMap<u32, BTreeSet<u32>> = HashMap::new();
     let mut cfg_index = HashMap::new();
+    let mut authority_bytes = HashMap::new();
+    let mut authority_data = HashMap::new();
     let mut data_regions = Vec::new();
     let mut exclude_ranges = HashMap::new();
     let mut force_lle = BTreeSet::new();
@@ -254,14 +288,17 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
     let mut hle_dispatch = HashMap::new();
     let mut inline_skip = HashMap::new();
     let mut terminal_jsr_sites = BTreeSet::new();
+    let mut live_operand_sites = BTreeSet::new();
+    let mut brk_rti_sites = BTreeSet::new();
     let mut declared_exit_modes = HashMap::new();
+    let mut declared_exit_sets: HashMap<(u32, u8, u8), Vec<(u8, u8)>> = HashMap::new();
 
     for (index, cfg) in cfgs.iter().enumerate() {
         let bank = cfg.bank as u32 & 0xFF;
         cfg_index.insert(bank, index);
         sibling_entries.insert(bank, cfg.entries.iter().map(|e| e.start & 0xFFFF).collect());
         exclude_ranges.insert(bank, cfg.exclude_ranges.clone());
-        if let Some(mirror) = mirror_bank(bank) {
+        if let Some(mirror) = mirror_bank(mapping, bank) {
             exclude_ranges
                 .entry(mirror)
                 .or_insert_with(|| cfg.exclude_ranges.clone());
@@ -269,14 +306,46 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
         for &pc24 in &cfg.force_lle {
             let pc24 = pc24 & 0xFFFFFF;
             force_lle.insert(pc24);
-            if let Some(mirror) = mirror_pc24(pc24) {
+            if let Some(mirror) = mirror_pc24(mapping, pc24) {
                 force_lle.insert(mirror);
             }
         }
+        for (&start, raw) in &cfg.authority_insns {
+            let mut banks = vec![bank];
+            if start >= 0x8000 {
+                if let Some(mirror) = mirror_bank(mapping, bank) {
+                    banks.push(mirror);
+                }
+            }
+            for mapped_bank in banks {
+                for n in 0..raw.len() {
+                    let pc = (mapped_bank << 16) | (start + n as u32);
+                    let value = if n == 0 { raw.clone() } else { Vec::new() };
+                    if authority_bytes.get(&pc).is_some_and(|old| old != &value) {
+                        return Err(format!("overlapping instruction authority at {pc:06X}"));
+                    }
+                    authority_bytes.insert(pc, value);
+                }
+            }
+        }
+        for &(start, end) in &cfg.authority_data {
+            let mut banks = vec![bank];
+            if start >= 0x8000 {
+                if let Some(mirror) = mirror_bank(mapping, bank) {
+                    banks.push(mirror);
+                }
+            }
+            for mapped_bank in banks {
+                let mask = authority_data
+                    .entry(mapped_bank)
+                    .or_insert_with(|| vec![false; 0x10000]);
+                mask[start as usize..end as usize].fill(true);
+            }
+        }
         for &(region_bank, start, end) in &cfg.data_regions {
-            data_regions.push((region_bank & 0xFF, start & 0xFFFF, end & 0xFFFF));
-            if let Some(mirror) = mirror_bank(region_bank) {
-                data_regions.push((mirror, start & 0xFFFF, end & 0xFFFF));
+            data_regions.push((region_bank & 0xFF, start & 0xFFFF, end));
+            if let Some(mirror) = mirror_bank(mapping, region_bank) {
+                data_regions.push((mirror, start & 0xFFFF, end));
             }
         }
         for entry in &cfg.entries {
@@ -287,7 +356,7 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
                 if let Some(force_variants) = &entry.force_variants {
                     for &(m, x) in force_variants {
                         roots.insert(VariantKey::new(pc24, m, x));
-                        if let Some(mirror_pc24) = mirror_pc24(pc24) {
+                        if let Some(mirror_pc24) = mirror_pc24(mapping, pc24) {
                             roots.insert(VariantKey::new(mirror_pc24, m, x));
                         }
                     }
@@ -295,7 +364,7 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
             }
             if let Some(skip) = entry.inline_skip {
                 inline_skip.insert(pc24, skip);
-                if let Some(mirror) = mirror_pc24(pc24) {
+                if let Some(mirror) = mirror_pc24(mapping, pc24) {
                     inline_skip.insert(mirror, skip);
                 }
             }
@@ -303,7 +372,7 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
         for &site_pc16 in &cfg.terminal_jsr {
             let site = (bank << 16) | (site_pc16 & 0xFFFF);
             terminal_jsr_sites.insert(site);
-            if let Some(mirror) = mirror_pc24(site) {
+            if let Some(mirror) = mirror_pc24(mapping, site) {
                 terminal_jsr_sites.insert(mirror);
             }
         }
@@ -312,8 +381,23 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
         for &site_pc16 in &cfg.noreturn_jsr {
             let site = (bank << 16) | (site_pc16 & 0xFFFF);
             terminal_jsr_sites.insert(site);
-            if let Some(mirror) = mirror_pc24(site) {
+            if let Some(mirror) = mirror_pc24(mapping, site) {
                 terminal_jsr_sites.insert(mirror);
+            }
+        }
+        for &site_pc16 in &cfg.live_operand {
+            let site = (bank << 16) | (site_pc16 & 0xFFFF);
+            live_operand_sites.insert(site);
+            if let Some(mirror) = mirror_pc24(mapping, site) {
+                live_operand_sites.insert(mirror);
+            }
+        }
+        for &site_pc16 in &cfg.brk_rti {
+            let site = (bank << 16) | (site_pc16 & 0xFFFF);
+            check_brk_rti_site(rom, mapping, site)?;
+            brk_rti_sites.insert(site);
+            if let Some(mirror) = mirror_pc24(mapping, site) {
+                brk_rti_sites.insert(mirror);
             }
         }
         for site in &cfg.indirect_dispatch {
@@ -331,7 +415,7 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
                 targets: site.targets.clone(),
             };
             indirect_dispatch.insert(pc24, value.clone());
-            if let Some(mirror) = mirror_pc24(pc24) {
+            if let Some(mirror) = mirror_pc24(mapping, pc24) {
                 indirect_dispatch.entry(mirror).or_insert(value);
             }
         }
@@ -340,7 +424,10 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
         }
         for &(exit_bank, pc, exit_m, exit_x) in &cfg.exit_mx_at {
             let target = ((exit_bank as u32) << 16) | (pc & 0xFFFF);
-            for resolved in [Some(target), mirror_pc24(target)].into_iter().flatten() {
+            for resolved in [Some(target), mirror_pc24(mapping, target)]
+                .into_iter()
+                .flatten()
+            {
                 for m in 0..=1 {
                     for x in 0..=1 {
                         declared_exit_modes.insert((resolved, m, x), (exit_m & 1, exit_x & 1));
@@ -350,15 +437,44 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
         }
         for &(exit_bank, pc, m, x, exit_m, exit_x) in &cfg.exit_mx_at_per_variant {
             let target = ((exit_bank as u32) << 16) | (pc & 0xFFFF);
-            for resolved in [Some(target), mirror_pc24(target)].into_iter().flatten() {
+            for resolved in [Some(target), mirror_pc24(mapping, target)]
+                .into_iter()
+                .flatten()
+            {
                 declared_exit_modes.insert((resolved, m & 1, x & 1), (exit_m & 1, exit_x & 1));
             }
         }
-        let mut hle_entries: BTreeSet<u32> = cfg.hle_func.keys().copied().collect();
-        hle_entries.extend(cfg.hle_spc_upload.iter().copied());
-        for pc in hle_entries {
+        // Multi-exit callees. Kept out of `declared_exit_modes` deliberately:
+        // that map is single-valued, and a set is not a stronger version of an
+        // exact fact -- it is a different one. It seeds `active_sets`, which
+        // the decoder forks the post-call continuation on.
+        for (exit_bank, pc, m, x, exits) in &cfg.exit_mx_set {
+            let target = ((*exit_bank as u32) << 16) | (pc & 0xFFFF);
+            let modes: Vec<(u8, u8)> = exits.iter().map(|&(em, ex)| (em & 1, ex & 1)).collect();
+            for resolved in [Some(target), mirror_pc24(mapping, target)]
+                .into_iter()
+                .flatten()
+            {
+                declared_exit_sets.insert((resolved, m & 1, x & 1), modes.clone());
+            }
+        }
+        let mut bank_hle: BTreeSet<u32> = cfg.hle_func.keys().map(|pc| pc & 0xFFFF).collect();
+        bank_hle.extend(cfg.hle_spc_upload.iter().map(|pc| pc & 0xFFFF));
+        for decode_bank in [Some(bank), mirror_bank(mapping, bank)]
+            .into_iter()
+            .flatten()
+        {
+            hle_entries
+                .entry(decode_bank)
+                .or_default()
+                .extend(bank_hle.iter().copied());
+        }
+        for pc in bank_hle {
             let target = (bank << 16) | (pc & 0xFFFF);
-            for resolved in [Some(target), mirror_pc24(target)].into_iter().flatten() {
+            for resolved in [Some(target), mirror_pc24(mapping, target)]
+                .into_iter()
+                .flatten()
+            {
                 for m in 0..=1 {
                     for x in 0..=1 {
                         declared_exit_modes
@@ -410,11 +526,15 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
     }
 
     Ok(Inputs {
+        rom_image_size,
         cfgs,
         roots,
         entries,
         sibling_entries,
+        hle_entries,
         cfg_index,
+        authority_bytes,
+        authority_data,
         data_regions,
         exclude_ranges,
         force_lle,
@@ -422,7 +542,10 @@ fn load_inputs(cfg_dir: &Path, rom: &mut Vec<u8>, all_cfg_roots: bool) -> Result
         hle_dispatch,
         inline_skip,
         terminal_jsr_sites,
+        live_operand_sites,
+        brk_rti_sites,
         declared_exit_modes,
+        declared_exit_sets,
         reloc_regions,
     })
 }
@@ -437,7 +560,7 @@ fn target_is_code(key: VariantKey, inputs: &Inputs, rom: &[u8], mapping: RomMapp
         return false;
     }
     let offset = addr_to_rom_offset(mapping, bank, pc, &[]);
-    if offset >= rom.len() {
+    if offset >= rom.len() || offset >= inputs.rom_image_size {
         return false;
     }
     if inputs
@@ -490,7 +613,11 @@ fn summarize(
         let insn = &decoded.insn;
         let site = insn.addr & 0xFFFFFF;
         pcs.push(site);
-        if (insn.mnem == "BRK" || insn.mnem == "COP") && !graph.data_region_exec_pcs.contains(&site)
+        // COP tiers to the interpreter (see lowering::_h_cop) and is M/X-
+        // transparent, so it is a modelled call, not poison. BRK is not.
+        if insn.mnem == "BRK"
+            && !graph.data_region_exec_pcs.contains(&site)
+            && !inputs.brk_rti_sites.contains(&site)
         {
             poison_reasons.insert(format!("{}_at_{site:06X}", insn.mnem.to_ascii_lowercase()));
         }
@@ -630,6 +757,25 @@ fn summarize(
         });
     }
 
+    if graph.authority_conflict {
+        reasons.extend([
+            "authority_conflict".to_string(),
+            "structural_poison".to_string(),
+        ]);
+        let mut sites = graph.authority_conflict_sites.clone();
+        sites.sort_unstable();
+        sites.dedup();
+        for (site, m, x, pred) in sites.into_iter().take(4) {
+            reasons.insert(if pred < 0 {
+                format!("authority_conflict_at_{site:06X}_m{m}x{x}_entry")
+            } else {
+                format!(
+                    "authority_conflict_at_{site:06X}_m{m}x{x}_from_{:04X}",
+                    pred & 0xFFFF
+                )
+            });
+        }
+    }
     if graph.is_empty() {
         reasons.extend(["empty_decode".to_string(), "structural_poison".to_string()]);
     }
@@ -649,7 +795,7 @@ fn summarize(
         .copied()
         .filter(|&(_, target, m, x)| {
             !poisoned.contains(&(target, m, x))
-                && mirror_pc24(target)
+                && mirror_pc24(mapping, target)
                     .map(|p| !poisoned.contains(&(p, m, x)))
                     .unwrap_or(true)
         })
@@ -770,11 +916,12 @@ struct ExitEquation {
 }
 
 fn equation_target(
+    mapping: RomMapping,
     dependency: ExitDependency,
     tuple_to_key: &HashMap<ExitDependency, VariantKey>,
 ) -> Option<VariantKey> {
     tuple_to_key.get(&dependency).copied().or_else(|| {
-        mirror_pc24(dependency.0).and_then(|pc24| {
+        mirror_pc24(mapping, dependency.0).and_then(|pc24| {
             tuple_to_key
                 .get(&(pc24, dependency.1, dependency.2))
                 .copied()
@@ -783,13 +930,14 @@ fn equation_target(
 }
 
 fn known_equation_modes(
+    mapping: RomMapping,
     dependency: ExitDependency,
     exact: &HashMap<ExitDependency, (u8, u8)>,
     sets: &HashMap<ExitDependency, Vec<(u8, u8)>>,
     tuple_to_key: &HashMap<ExitDependency, VariantKey>,
     solved: &BTreeMap<VariantKey, BTreeSet<(u8, u8)>>,
 ) -> Option<BTreeSet<(u8, u8)>> {
-    let mirror = mirror_pc24(dependency.0).map(|pc24| (pc24, dependency.1, dependency.2));
+    let mirror = mirror_pc24(mapping, dependency.0).map(|pc24| (pc24, dependency.1, dependency.2));
     if let Some(&(m, x)) = exact
         .get(&dependency)
         .or_else(|| mirror.and_then(|key| exact.get(&key)))
@@ -802,10 +950,12 @@ fn known_equation_modes(
     {
         return Some(modes.iter().map(|&(m, x)| (m & 1, x & 1)).collect());
     }
-    equation_target(dependency, tuple_to_key).and_then(|target| solved.get(&target).cloned())
+    equation_target(mapping, dependency, tuple_to_key)
+        .and_then(|target| solved.get(&target).cloned())
 }
 
 fn solve_exit_equation_sccs(
+    mapping: RomMapping,
     equations: &BTreeMap<VariantKey, ExitEquation>,
     exact: &HashMap<ExitDependency, (u8, u8)>,
     sets: &HashMap<ExitDependency, Vec<(u8, u8)>>,
@@ -819,7 +969,7 @@ fn solve_exit_equation_sccs(
         .map(|&key| ((key.pc24, key.m, key.x), key))
         .collect();
     for &key in equations.keys() {
-        if let Some(mirror) = mirror_pc24(key.pc24) {
+        if let Some(mirror) = mirror_pc24(mapping, key.pc24) {
             tuple_to_key.entry((mirror, key.m, key.x)).or_insert(key);
         }
     }
@@ -831,13 +981,13 @@ fn solve_exit_equation_sccs(
     let mut mode_adjacency = adjacency.clone();
     for (&key, equation) in equations {
         for &dependency in &equation.dependencies {
-            if let Some(target) = equation_target(dependency, &tuple_to_key) {
+            if let Some(target) = equation_target(mapping, dependency, &tuple_to_key) {
                 adjacency.get_mut(&key).unwrap().insert(target);
                 mode_adjacency.get_mut(&key).unwrap().insert(target);
             }
         }
         for &(dependency, _, _) in &equation.assumptions {
-            if let Some(target) = equation_target(dependency, &tuple_to_key) {
+            if let Some(target) = equation_target(mapping, dependency, &tuple_to_key) {
                 adjacency.get_mut(&key).unwrap().insert(target);
             }
         }
@@ -918,14 +1068,19 @@ fn solve_exit_equation_sccs(
             let mut complete = true;
             for &key in &component {
                 for &dependency in &equations[&key].dependencies {
-                    if equation_target(dependency, &tuple_to_key)
+                    if equation_target(mapping, dependency, &tuple_to_key)
                         .is_some_and(|target| component.contains(&target))
                     {
                         continue;
                     }
-                    let Some(modes) =
-                        known_equation_modes(dependency, exact, sets, &tuple_to_key, &solved)
-                    else {
+                    let Some(modes) = known_equation_modes(
+                        mapping,
+                        dependency,
+                        exact,
+                        sets,
+                        &tuple_to_key,
+                        &solved,
+                    ) else {
                         complete = false;
                         break;
                     };
@@ -935,13 +1090,20 @@ fn solve_exit_equation_sccs(
                     break;
                 }
                 for &(dependency, _, _) in &equations[&key].assumptions {
-                    if equation_target(dependency, &tuple_to_key)
+                    if equation_target(mapping, dependency, &tuple_to_key)
                         .is_some_and(|target| component.contains(&target))
                     {
                         continue;
                     }
-                    if known_equation_modes(dependency, exact, sets, &tuple_to_key, &solved)
-                        .is_none()
+                    if known_equation_modes(
+                        mapping,
+                        dependency,
+                        exact,
+                        sets,
+                        &tuple_to_key,
+                        &solved,
+                    )
+                    .is_none()
                     {
                         complete = false;
                         break;
@@ -981,11 +1143,12 @@ fn solve_exit_equation_sccs(
                     .assumptions
                     .iter()
                     .all(|&(dependency, m, x)| {
-                        let modes = equation_target(dependency, &tuple_to_key)
+                        let modes = equation_target(mapping, dependency, &tuple_to_key)
                             .filter(|target| component.contains(target))
                             .and_then(|target| values.get(&target).cloned())
                             .or_else(|| {
                                 known_equation_modes(
+                                    mapping,
                                     dependency,
                                     exact,
                                     sets,
@@ -993,7 +1156,11 @@ fn solve_exit_equation_sccs(
                                     &solved,
                                 )
                             });
-                        modes == Some(BTreeSet::from([(m & 1, x & 1)]))
+                        modes.is_some_and(|modes| {
+                            // A proven non-returning call cannot violate a
+                            // preservation assumption about its continuation.
+                            modes.is_empty() || modes == BTreeSet::from([(m & 1, x & 1)])
+                        })
                     })
             });
             if !assumptions_hold {
@@ -1027,7 +1194,7 @@ fn analyze(
 > {
     let mapping = detect_rom_mapping(rom);
     let mut active_exact = inputs.declared_exit_modes.clone();
-    let mut active_sets: HashMap<(u32, u8, u8), Vec<(u8, u8)>> = HashMap::new();
+    let mut active_sets: HashMap<(u32, u8, u8), Vec<(u8, u8)>> = inputs.declared_exit_sets.clone();
     let mut unstable_exact = HashSet::new();
     let mut unstable_sets = HashSet::new();
     let mut poisoned = HashSet::new();
@@ -1044,6 +1211,9 @@ fn analyze(
             NodeSummary,
         ),
     > = HashMap::new();
+    let mut round_log = std::env::var("SNESRECOMP_NATIVE_ROUND_LOG")
+        .ok()
+        .map(|path| fs::File::create(path).expect("create analysis round log"));
     for _round in 1..=128 {
         let mut pending = inputs.roots.clone();
         let mut nodes = BTreeMap::new();
@@ -1063,7 +1233,7 @@ fn analyze(
             }
             let bank = (key.pc24 >> 16) & 0xFF;
             let pc = key.pc24 & 0xFFFF;
-            let mirror = mirror_bank(bank);
+            let mirror = mirror_bank(mapping, bank);
             let cfg = inputs
                 .cfg_index
                 .get(&bank)
@@ -1072,7 +1242,7 @@ fn analyze(
             let entry = inputs
                 .entries
                 .get(&key.pc24)
-                .or_else(|| mirror_pc24(key.pc24).and_then(|p| inputs.entries.get(&p)));
+                .or_else(|| mirror_pc24(mapping, key.pc24).and_then(|p| inputs.entries.get(&p)));
             let end = entry.and_then(|entry| entry.end);
             let mut siblings = inputs
                 .sibling_entries
@@ -1081,20 +1251,30 @@ fn analyze(
                 .cloned()
                 .unwrap_or_default();
             siblings.remove(&pc);
+            let hle_pcs = inputs
+                .hle_entries
+                .get(&bank)
+                .or_else(|| mirror.and_then(|m| inputs.hle_entries.get(&m)));
             let inline_loops = cfg.map(|cfg| &cfg.inline_dispatch_loops);
             let env = DecodeEnv {
                 rom_mapping: mapping,
+                rom_image_size: Some(inputs.rom_image_size),
                 max_insns: Some(max_insns),
                 dispatch_helpers: Some(&helpers),
                 indirect_dispatch: Some(&inputs.indirect_dispatch),
                 hle_dispatch: Some(&inputs.hle_dispatch),
+                authority_bytes: Some(&inputs.authority_bytes),
+                authority_data: Some(&inputs.authority_data),
                 data_regions: Some(&inputs.data_regions),
                 callee_exit_mx: Some(&active_exact),
                 callee_exit_mx_modes: Some(&active_sets),
                 sibling_entry_pcs: Some(&siblings),
+                hle_entry_pcs: hle_pcs,
                 callee_inline_skip: Some(&inline_args),
                 inline_dispatch_loop_pcs: inline_loops,
                 terminal_jsr_sites: Some(&inputs.terminal_jsr_sites),
+                live_operand_sites: Some(&inputs.live_operand_sites),
+                brk_rti_sites: Some(&inputs.brk_rti_sites),
                 global_inline_skip: Some(&inline_args),
                 stop_on_unknown_callee_exit: true,
                 reloc_regions: Some(&inputs.reloc_regions),
@@ -1124,7 +1304,7 @@ fn analyze(
             // four elements, so six iterations is a conservative bound.
             let self_keys: HashSet<(u32, u8, u8)> = [
                 Some((key.pc24, key.m, key.x)),
-                mirror_pc24(key.pc24).map(|pc24| (pc24, key.m, key.x)),
+                mirror_pc24(mapping, key.pc24).map(|pc24| (pc24, key.m, key.x)),
             ]
             .into_iter()
             .flatten()
@@ -1206,7 +1386,7 @@ fn analyze(
                 .copied()
                 .filter(|&(_, target, m, x)| {
                     !poisoned.contains(&(target, m, x))
-                        && mirror_pc24(target)
+                        && mirror_pc24(mapping, target)
                             .map(|p| !poisoned.contains(&(p, m, x)))
                             .unwrap_or(true)
                 })
@@ -1248,7 +1428,7 @@ fn analyze(
                 .any(|reason| reason == "structural_poison");
             let fact_key = (key.pc24, key.m, key.x);
             let graph_has_poison = graph.insns().iter().any(|decoded| {
-                matches!(decoded.insn.mnem, "BRK" | "COP")
+                decoded.insn.mnem == "BRK"
                     && !graph
                         .data_region_exec_pcs
                         .contains(&(decoded.insn.addr & 0xFFFFFF))
@@ -1276,12 +1456,12 @@ fn analyze(
                     }));
                     if let Ok(probe) = probe {
                         let probe_has_poison = probe.insns().iter().any(|decoded| {
-                            matches!(decoded.insn.mnem, "BRK" | "COP")
+                            decoded.insn.mnem == "BRK"
                                 && !probe
                                     .data_region_exec_pcs
                                     .contains(&(decoded.insn.addr & 0xFFFFFF))
                         });
-                        if !probe_has_poison {
+                        if !probe_has_poison && !probe.authority_conflict {
                             let (local_modes, dependencies) = function_exit_mx_equation(&probe);
                             let assumptions = graph
                                 .unknown_callee_exit_sites
@@ -1337,7 +1517,7 @@ fn analyze(
         }
 
         let recursive_solutions =
-            solve_exit_equation_sccs(&round_equations, &active_exact, &active_sets);
+            solve_exit_equation_sccs(mapping, &round_equations, &active_exact, &active_sets);
         let mut recursive_solution_keys = HashSet::new();
         let mut recursive_nonempty_solution_keys = HashSet::new();
         for (key, modes) in recursive_solutions {
@@ -1364,14 +1544,21 @@ fn analyze(
         }
 
         let mut next_exact = active_exact.clone();
+        let mut next_sets = active_sets.clone();
         for (key, pair) in round_exact {
             if unstable_exact.contains(&key) {
                 continue;
             }
             match next_exact.get(&key).copied() {
                 None => {
+                    // A cfg-declared set is authoritative; an inferred exact
+                    // fact must not silently replace it, or the extra proven
+                    // continuation is lost.
+                    if inputs.declared_exit_sets.contains_key(&key) {
+                        continue;
+                    }
                     next_exact.insert(key, pair);
-                    active_sets.remove(&key);
+                    next_sets.remove(&key);
                 }
                 Some(old) if old != pair => {
                     unstable_exact.insert(key);
@@ -1380,9 +1567,11 @@ fn analyze(
                 _ => {}
             }
         }
-        let mut next_sets = active_sets.clone();
         for (key, modes) in round_sets {
-            if unstable_sets.contains(&key) || inputs.declared_exit_modes.contains_key(&key) {
+            if unstable_sets.contains(&key)
+                || inputs.declared_exit_modes.contains_key(&key)
+                || inputs.declared_exit_sets.contains_key(&key)
+            {
                 continue;
             }
             // New callee facts can expose an additional return path that was
@@ -1414,7 +1603,7 @@ fn analyze(
             .map(|(&key, modes)| (key, modes.clone()))
             .collect();
         for ((pc24, m, x), modes) in proven_sets {
-            let Some(mirror_pc) = mirror_pc24(pc24) else {
+            let Some(mirror_pc) = mirror_pc24(mapping, pc24) else {
                 continue;
             };
             let mirror_key = (mirror_pc, m, x);
@@ -1440,7 +1629,13 @@ fn analyze(
                 .reasons
                 .iter()
                 .any(|reason| reason == "unproven_callee_exit" || reason == "structural_poison");
+            // A cfg-declared exit -- exact or set -- is an assertion by the
+            // author and outranks the analyzer's own inability to see the
+            // body. Without the `declared_exit_sets` arm a declared set is
+            // dropped for exactly the callees it exists to describe: ones the
+            // solver truncated and therefore could never derive an exit for.
             if !inputs.declared_exit_modes.contains_key(&fact_key)
+                && !inputs.declared_exit_sets.contains_key(&fact_key)
                 && ((truncated && !recursive_nonempty_solution_keys.contains(&fact_key))
                     || (unresolved && !recursive_solution_keys.contains(&fact_key)))
             {
@@ -1453,6 +1648,34 @@ fn analyze(
             && before_poisoned == poisoned
             && before_helpers == helpers
             && before_inline_args == inline_args;
+        if let Some(log) = round_log.as_mut() {
+            let keys: BTreeSet<_> = active_exact
+                .keys()
+                .chain(next_exact.keys())
+                .chain(active_sets.keys())
+                .chain(next_sets.keys())
+                .copied()
+                .collect();
+            let changes: Vec<_> = keys.into_iter().filter(|key|
+                active_exact.get(key) != next_exact.get(key) || active_sets.get(key) != next_sets.get(key))
+                .map(|key| {
+                    let variant = VariantKey::new(key.0, key.1, key.2);
+                    json!({"key": variant.manifest_key(), "old_exact": active_exact.get(&key),
+                        "new_exact": next_exact.get(&key), "old_set": active_sets.get(&key),
+                        "new_set": next_sets.get(&key), "node": nodes.get(&variant).map(NodeSummary::json),
+                        "equation": round_equations.get(&variant).map(|e| json!({
+                            "local_modes": e.local_modes, "dependencies": e.dependencies,
+                            "assumptions": e.assumptions}))})
+                }).collect();
+            writeln!(
+                log,
+                "{}",
+                json!({"round": _round, "stable": stable,
+                "nodes": nodes.len(), "poisoned": poisoned.len(), "helpers": helpers.len(),
+                "inline_args": inline_args.len(), "changes": changes})
+            )
+            .expect("write analysis round log");
+        }
         active_exact = next_exact;
         active_sets = next_sets;
         if stable {
@@ -1461,8 +1684,12 @@ fn analyze(
                 std::env::var("SNESRECOMP_NATIVE_ANALYSIS_SNAPSHOT_TARGET"),
             ) {
                 if let Ok(target) = parse_root(&target_text) {
-                    let solved =
-                        solve_exit_equation_sccs(&round_equations, &active_exact, &active_sets);
+                    let solved = solve_exit_equation_sccs(
+                        mapping,
+                        &round_equations,
+                        &active_exact,
+                        &active_sets,
+                    );
                     let equation = round_equations.get(&target);
                     let dependencies = equation
                         .map(|equation| {
@@ -1610,6 +1837,7 @@ fn main() {
         .unwrap_or(100_000);
     let started = Instant::now();
     let mut rom = load_rom(&rom_path).expect("load rom");
+    let mapping = detect_rom_mapping(&rom);
     let mut inputs = load_inputs(
         Path::new(&cfg_dir),
         &mut rom,
@@ -1630,7 +1858,7 @@ fn main() {
     {
         let pc24 = parse_pc24(&value, "--force-lle").expect("parse --force-lle");
         inputs.force_lle.insert(pc24);
-        if let Some(mirror) = mirror_pc24(pc24) {
+        if let Some(mirror) = mirror_pc24(mapping, pc24) {
             inputs.force_lle.insert(mirror);
         }
     }
@@ -1695,5 +1923,97 @@ mod tests {
         };
         let graph = decode_function(&rom, 0, 0x8000, 1, 1, None, &env);
         assert!(!has_truncated_call_continuation(&graph));
+    }
+
+    fn equation(
+        local: &[(u8, u8)],
+        deps: &[ExitDependency],
+        assumptions: &[ExitAssumption],
+    ) -> ExitEquation {
+        ExitEquation {
+            local_modes: local.iter().copied().collect(),
+            dependencies: deps.iter().copied().collect(),
+            assumptions: assumptions.iter().copied().collect(),
+        }
+    }
+
+    fn solve(
+        equations: Vec<(VariantKey, ExitEquation)>,
+    ) -> BTreeMap<VariantKey, BTreeSet<(u8, u8)>> {
+        let equations: BTreeMap<_, _> = equations.into_iter().collect();
+        solve_exit_equation_sccs(
+            RomMapping::LoRom,
+            &equations,
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+    }
+
+    #[test]
+    fn exit_equation_solver_bootstraps_closed_recursive_component() {
+        let first = VariantKey::new(0xB98000, 0, 0);
+        let second = VariantKey::new(0xB98100, 0, 0);
+        let blocked = VariantKey::new(0xB98200, 0, 0);
+        let solved = solve(vec![
+            (first, equation(&[(0, 0)], &[(second.pc24, 0, 0)], &[])),
+            (second, equation(&[], &[(first.pc24, 0, 0)], &[])),
+            (blocked, equation(&[], &[(0xB9F000, 0, 0)], &[])),
+        ]);
+        assert_eq!(solved[&first], BTreeSet::from([(0, 0)]));
+        assert_eq!(solved[&second], BTreeSet::from([(0, 0)]));
+        assert!(!solved.contains_key(&blocked));
+    }
+
+    #[test]
+    fn exit_equation_solver_rejects_false_preservation_probe() {
+        let caller = VariantKey::new(0xB98000, 0, 0);
+        let callee = VariantKey::new(0xB98100, 0, 0);
+        let callee_dep = (callee.pc24, 0, 0);
+        let solved = solve(vec![
+            (
+                caller,
+                equation(&[(0, 0)], &[callee_dep], &[(callee_dep, 0, 0)]),
+            ),
+            (callee, equation(&[(1, 0)], &[(caller.pc24, 0, 0)], &[])),
+        ]);
+        assert!(solved.is_empty());
+    }
+
+    #[test]
+    fn exit_equation_solver_preserves_closed_noreturn_fact() {
+        let looping = VariantKey::new(0xB98000, 0, 0);
+        let solved = solve(vec![(looping, equation(&[], &[], &[]))]);
+        assert_eq!(solved[&looping], BTreeSet::new());
+    }
+
+    #[test]
+    fn exit_equation_solver_accepts_noreturn_in_preservation_cycle() {
+        let dispatcher = VariantKey::new(0x008100, 1, 0);
+        let looping = VariantKey::new(0x008400, 1, 0);
+        let solved = solve(vec![
+            (
+                dispatcher,
+                equation(&[(1, 0)], &[], &[((looping.pc24, 1, 0), 1, 0)]),
+            ),
+            (
+                looping,
+                equation(&[], &[], &[((dispatcher.pc24, 1, 0), 1, 0)]),
+            ),
+        ]);
+        assert_eq!(solved[&dispatcher], BTreeSet::from([(1, 0)]));
+        assert_eq!(solved[&looping], BTreeSet::new());
+    }
+
+    #[test]
+    fn probe_requirement_does_not_become_caller_exit() {
+        let caller = VariantKey::new(0xB98000, 0, 0);
+        let helper = VariantKey::new(0xB98100, 0, 0);
+        let helper_dep = (helper.pc24, 0, 0);
+        let solved = solve(vec![
+            (caller, equation(&[], &[], &[(helper_dep, 0, 0)])),
+            (helper, equation(&[(0, 0)], &[], &[])),
+        ]);
+        assert_eq!(solved[&caller], BTreeSet::new());
+        assert_eq!(solved[&helper], BTreeSet::from([(0, 0)]));
     }
 }

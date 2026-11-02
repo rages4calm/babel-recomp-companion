@@ -132,7 +132,10 @@ const char *SkipPrefix(const char *big, const char *little) {
 }
 
 void StrSet(char **rv, const char *s) {
-  char *news = strdup(s);
+  size_t size = strlen(s) + 1;
+  char *news = (char *)malloc(size);
+  if (!news) Die("memory allocation failed");
+  memcpy(news, s, size);
   char *old = *rv;
   *rv = news;
   free(old);
@@ -186,7 +189,7 @@ MemBlk FindIndexInMemblk(MemBlk data, size_t i) {
   size_t end = data.size, left_off, right_off;
   if (end < 2)
     return (MemBlk) { 0, 0 };
-  
+
   uint16 f = *(uint16 *)(data.ptr + (end -= 2));
   size_t mx = f & 0xfff;
   if (f & 0x4000) {

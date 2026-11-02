@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include "rom_identity.h"
+
 #ifdef __cplusplus
 #include <filesystem>
 #include <string>
@@ -53,9 +55,24 @@ typedef int (*SNESModApuWriteCallback)(uint16_t reg, uint8_t value);
 
 struct RecompLauncherCModProvider;
 
+/* The directory the BUILD stages the preloaded catalog into, relative to the
+ * executable. Pass this as `root` to snes_mod_runtime_initialize_c rather than
+ * spelling it out: the framework moved the layout from "mods" to
+ * "mods/preloaded" (see SNESRECOMP_MOD_CATALOG_DEST in runner.cmake), the
+ * shared desktop host was updated, and every port that resolved the root for
+ * itself kept looking in the old place -- which presents to a player as a Mods
+ * page with nothing in it, no error anywhere. */
+#define SNES_MOD_CATALOG_ROOT "mods/preloaded"
+
 int snes_mod_runtime_initialize_c(const char* root,
                                   const char* game_id,
                                   const char* rom_sha256);
+/* The port's catalog of known dumps (borrowed; must outlive the runtime). A
+ * file picked for a resource with normalized_sha256 that does not match is
+ * then named ("Wrong ROM: this is Mega Man X3 (Japan). Select Mega Man X3
+ * (USA) (SHA-256 ...).") rather than reported only as wrong. */
+void snes_mod_runtime_set_rom_catalog_c(const SnesRomRevision* catalog,
+                                        int count);
 int snes_mod_runtime_commit_c(const char* rom_path);
 void snes_mod_runtime_activate_plugins_c(void);
 const struct RecompLauncherCModProvider*
@@ -63,6 +80,11 @@ snes_mod_runtime_launcher_provider_c(void);
 const char* snes_mod_runtime_last_error_c(void);
 int snes_mod_runtime_feature_enabled_c(const char* package_id,
                                        const char* feature_id);
+/* The committed path of an [[external_rom]]/[[resource]] the player selected
+ * for a feature, or 0 (and an empty string) when none is selected. This is the
+ * engine-owned answer content_variant.c resolves donor ROMs through; a plugin
+ * that re-parses state.toml by hand is doing the runtime's job twice. */
+
 /* Verdicts for snes_mod_runtime_check_set_c. Values match the wire codes in
  * the netplay protocol, but are declared here so the mod runtime does not have
  * to know what a packet is -- the netplay layer owns that mapping. */
@@ -87,6 +109,12 @@ int snes_mod_runtime_adopt_set_c(const char* want, char* reason, uint32_t cap);
  * lobby row can name what a player needs to install. */
 int snes_mod_runtime_have_package_c(const char* package_id, const char* version,
                                     char* name_out, uint32_t name_cap);
+
+/* Features of installed `package_id` whose required owner files are not
+ * provided (unselected, missing, or the wrong file), comma-separated into
+ * `out`. Every feature, enabled or not. Returns how many. */
+int snes_mod_runtime_missing_files_c(const char* package_id, char* out,
+                                     uint32_t cap);
 
 /* One package row on the lobby wire.
  *
@@ -221,6 +249,16 @@ int snes_mod_runtime_exempted_packages_c(char* out, uint32_t cap);
 int snes_mod_runtime_unapproved_cosmetics_c(char* out, uint32_t cap);
 
 int snes_mod_runtime_effective_set_c(char* out, uint32_t cap);
+
+/* Stage a lobby's selections without replacing the owner's offline plan.
+ * Idempotent, not nested. Resources remain local and persist normally.
+ * End restores selections/validation; call before activation, never mid-game. */
+int snes_mod_runtime_begin_temporary_c(void);
+void snes_mod_runtime_end_temporary_c(void);
+
+/* Resolve an admitted feature's configured resource without truncation. */
+int snes_mod_runtime_resource_path_c(const char* package_id, const char* feature_id,
+                                      const char* resource_id, char* out, uint32_t cap);
 
 int snes_mod_runtime_feature_option_value_c(const char* package_id,
                                             const char* feature_id,

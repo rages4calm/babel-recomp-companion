@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "gameId": "illusion-of-gaia",
+  "editionId": "stock-companion",
+  "catalogVersion": 1,
+  "title": "Illusion of Gaia Companion",
+  "achievements": [
+    {"id":"gaia.first-room","title":"A Little Stronger","description":"Earn a room-clear reward during play.","event":"rooms.cleared","rule":"milestone","target":1},
+    {"id":"gaia.first-jewel","title":"A Flash of Red","description":"Find your first Red Jewel during play.","event":"jewels.collected","rule":"milestone","target":1},
+    {"id":"gaia.ten-jewels","title":"A Growing Collection","description":"Find ten Red Jewels in one adventure.","event":"jewels.collected","rule":"milestone","target":10},
+    {"id":"gaia.thirty-jewels","title":"Careful Explorer","description":"Find thirty Red Jewels in one adventure.","event":"jewels.collected","rule":"milestone","target":30},
+    {"id":"gaia.fifty-jewels","title":"Every Red Jewel","description":"Find all fifty Red Jewels in one adventure.","event":"jewels.collected","rule":"milestone","target":50},
+    {"id":"gaia.ending","title":"A New Morning","description":"Reach the END screen after the epilogue.","event":"story.finished","rule":"milestone","target":1}
+  ]
+}

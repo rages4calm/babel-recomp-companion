@@ -150,6 +150,9 @@ snesrecomp_target_sdl(IllusionOfGaiaUsaSNESRecomp)
 # report. src/main.c is the shim that names this title and supplies its
 # hooks; the host is the framework's and improves on a submodule pull.
 # Add TIER2 once this port reads the interpreter-gap manifest after each run.
+# This edition uses independent offline CompanionAchievements. Retain upstream
+# sources/notices, but compile no RetroAchievements client or network backend.
+set(SNESRECOMP_DISABLE_RETROACHIEVEMENTS ON)
 snesrecomp_target_desktop_host(IllusionOfGaiaUsaSNESRecomp)
 # rom.cfg (the ROM the wizard set this project up from; git-ignored) is
 # staged beside the executable when none is there yet, so the first launch

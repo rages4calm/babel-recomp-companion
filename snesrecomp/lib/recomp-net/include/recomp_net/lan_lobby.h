@@ -20,6 +20,8 @@ extern "C" {
 #define RNET_LAN_LOBBY_ENDPOINT_MAX   64
 #define RNET_LAN_LOBBY_PLAYER_MAX     64
 #define RNET_LAN_LOBBY_PASSWORD_MAX   64
+#define RNET_LAN_LOBBY_MOD_SET_MAX    512
+#define RNET_LAN_LOBBY_HAS_MOD_SET    1
 
 typedef struct RNetLanLobby {
     char name[RNET_LAN_LOBBY_NAME_MAX];
@@ -35,6 +37,22 @@ typedef struct RNetLanLobby {
     /* V3+: host-authoritative match caps (guest must mirror at launch). */
     int rollback;          /* 0 = delay-sync; 1 = invent/rollback */
     int input_prediction;  /* invent runway P; meaningful when rollback=1 */
+    /* V4+: the session id of the match this room last started (0 = none /
+     * a host that predates it). The HOST allocates a fresh one per start --
+     * there is no server to -- and it rides START (lan_direct) and the
+     * registry file, so both peers launch with the same id and a rematch
+     * never reuses the last match's (a stale HELLO/BYE from match N must not
+     * be taken for match N+1's). Trailing on both wires: older readers
+     * ignore it, and read as 0 from an older writer. */
+    rnet_u32 session_id;
+    /* Opaque engine-defined session variant. Zero is the legacy default.
+     * Carried at join, when caps change, and at start; never interpreted by
+     * the transport. Engines must include it in their startup identity. */
+    int session_variant;
+    /* Canonical host mod selections, semicolon-separated feature lines.
+     * No local paths or resource bytes. Empty means an older host / vanilla.
+     * Optional trailing field on registry, JOIN_OK, CAPS and START. */
+    char mod_set[RNET_LAN_LOBBY_MOD_SET_MAX];
 } RNetLanLobby;
 
 enum {

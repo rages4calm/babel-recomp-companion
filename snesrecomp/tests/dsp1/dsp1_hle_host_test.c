@@ -93,7 +93,7 @@ int main(void) {
   Dsp1 *restored = dsp1_create();
   fails += check(source && restored, "create DSP-1 instances");
   if (!source || !restored) return 1;
-  fails += check(activate_hle(source), "missing firmware activates HLE");
+  fails += check(activate_hle(source), "HLE build ignores firmware inputs");
   fails += check(activate_hle(restored), "restored instance activates HLE");
 
   fails += check(write_command(source, 0x00), "submit multiply command");
@@ -103,7 +103,7 @@ int main(void) {
   fails += check((status(source) & kDrs) != 0,
                  "partial parameter word sets byte phase");
 
-  MemoryState memory = {{memory_state_transfer}, {0}, 0, 0, 0};
+  MemoryState memory = {{memory_state_transfer, NULL}, {0}, 0, 0, 0};
   dsp1_saveload(source, &memory.base);
   fails += check(!memory.failed, "save in-flight HLE command");
   memory.position = 0;

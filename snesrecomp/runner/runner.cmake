@@ -1,3 +1,92 @@
+# Qualified on Windows x64; retain the reference default on other targets.
+# An explicit cache selection always wins, including an existing LLE build.
+set(_SNESRECOMP_FRAME_DEFAULT "LLE")
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _SNESRECOMP_FRAME_PROCESSOR)
+if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND
+   _SNESRECOMP_FRAME_PROCESSOR MATCHES "^(amd64|x86_64|x64)$")
+    set(_SNESRECOMP_FRAME_DEFAULT "HLE")
+endif()
+set(SNESRECOMP_FRAME_IMPL "${_SNESRECOMP_FRAME_DEFAULT}" CACHE STRING
+    "Desktop frame composition (LLE or HLE; Windows x64 defaults to HLE)")
+set_property(CACHE SNESRECOMP_FRAME_IMPL PROPERTY STRINGS LLE HLE)
+if(NOT SNESRECOMP_FRAME_IMPL MATCHES "^(LLE|HLE)$")
+    message(FATAL_ERROR "SNESRECOMP_FRAME_IMPL must be LLE or HLE")
+endif()
+set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/src/desktop/host_main.c"
+    APPEND PROPERTY COMPILE_DEFINITIONS
+    SNESRECOMP_FRAME_STAGING_HLE=$<STREQUAL:${SNESRECOMP_FRAME_IMPL},HLE>)
+message(STATUS "SNES desktop frame composition: ${SNESRECOMP_FRAME_IMPL}")
+# Game-by-game qualification covers Windows x64. Other targets keep the
+# portable reference defaults; both implementations remain selectable.
+set(_SNESRECOMP_APU_DEFAULT "LLE")
+set(_SNESRECOMP_CRC_DEFAULT "BYTE")
+if(_SNESRECOMP_FRAME_DEFAULT STREQUAL "HLE")
+    set(_SNESRECOMP_APU_DEFAULT "NATIVE")
+    set(_SNESRECOMP_CRC_DEFAULT "SLICE8")
+endif()
+set(SNESRECOMP_APU_TIME_IMPL "${_SNESRECOMP_APU_DEFAULT}" CACHE STRING
+    "Audio time advancement (LLE or NATIVE)")
+set_property(CACHE SNESRECOMP_APU_TIME_IMPL PROPERTY STRINGS LLE NATIVE)
+if(NOT SNESRECOMP_APU_TIME_IMPL MATCHES "^(LLE|NATIVE)$")
+    message(FATAL_ERROR "SNESRECOMP_APU_TIME_IMPL must be LLE or NATIVE")
+endif()
+set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/src/snes/apu.c"
+    APPEND PROPERTY COMPILE_DEFINITIONS
+    SNESRECOMP_APU_NATIVE=$<STREQUAL:${SNESRECOMP_APU_TIME_IMPL},NATIVE>)
+message(STATUS "SNES audio time advancement: ${SNESRECOMP_APU_TIME_IMPL}")
+set(SNESRECOMP_DSP_MIX_IMPL "LLE" CACHE STRING "DSP voice mixing (LLE or NATIVE)")
+set_property(CACHE SNESRECOMP_DSP_MIX_IMPL PROPERTY STRINGS LLE NATIVE)
+if(NOT SNESRECOMP_DSP_MIX_IMPL MATCHES "^(LLE|NATIVE)$")
+    message(FATAL_ERROR "SNESRECOMP_DSP_MIX_IMPL must be LLE or NATIVE")
+endif()
+set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/src/snes/dsp.c"
+    APPEND PROPERTY COMPILE_DEFINITIONS
+    SNESRECOMP_DSP_NATIVE_MIX=$<STREQUAL:${SNESRECOMP_DSP_MIX_IMPL},NATIVE>)
+message(STATUS "SNES DSP voice mixing: ${SNESRECOMP_DSP_MIX_IMPL}")
+set(SNESRECOMP_INTERP_READ_IMPL "REFERENCE" CACHE STRING
+    "Interpreter ROM read decoding (REFERENCE or FUSED)")
+set_property(CACHE SNESRECOMP_INTERP_READ_IMPL PROPERTY STRINGS REFERENCE FUSED)
+if(NOT SNESRECOMP_INTERP_READ_IMPL MATCHES "^(REFERENCE|FUSED)$")
+    message(FATAL_ERROR "SNESRECOMP_INTERP_READ_IMPL must be REFERENCE or FUSED")
+endif()
+set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/src/snes/interp_bridge.c"
+    APPEND PROPERTY COMPILE_DEFINITIONS
+    SNESRECOMP_INTERP_FUSED_ROM_READ=$<STREQUAL:${SNESRECOMP_INTERP_READ_IMPL},FUSED>)
+message(STATUS "SNES interpreter ROM read decoding: ${SNESRECOMP_INTERP_READ_IMPL}")
+set(SNESRECOMP_LEGACY_MODE7_IMPL "REFERENCE" CACHE STRING
+    "Legacy Mode 7 line image service (REFERENCE or NATIVE)")
+set_property(CACHE SNESRECOMP_LEGACY_MODE7_IMPL PROPERTY STRINGS REFERENCE NATIVE)
+if(NOT SNESRECOMP_LEGACY_MODE7_IMPL MATCHES "^(REFERENCE|NATIVE)$")
+    message(FATAL_ERROR "SNESRECOMP_LEGACY_MODE7_IMPL must be REFERENCE or NATIVE")
+endif()
+set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/src/snes/ppu_legacy.c"
+    APPEND PROPERTY COMPILE_DEFINITIONS
+    SNESRECOMP_LEGACY_MODE7_NATIVE=$<STREQUAL:${SNESRECOMP_LEGACY_MODE7_IMPL},NATIVE>)
+message(STATUS "SNES legacy Mode 7 line image: ${SNESRECOMP_LEGACY_MODE7_IMPL}")
+set(SNESRECOMP_SA1_TIMER_IMPL "REFERENCE" CACHE STRING
+    "SA-1 timer advancement (REFERENCE or NATIVE event spans)")
+set_property(CACHE SNESRECOMP_SA1_TIMER_IMPL PROPERTY STRINGS REFERENCE NATIVE)
+if(NOT SNESRECOMP_SA1_TIMER_IMPL MATCHES "^(REFERENCE|NATIVE)$")
+    message(FATAL_ERROR "SNESRECOMP_SA1_TIMER_IMPL must be REFERENCE or NATIVE")
+endif()
+set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/src/snes/sa1.c"
+    APPEND PROPERTY COMPILE_DEFINITIONS
+    SNESRECOMP_SA1_TIMER_NATIVE=$<STREQUAL:${SNESRECOMP_SA1_TIMER_IMPL},NATIVE>)
+message(STATUS "SA-1 timer advancement: ${SNESRECOMP_SA1_TIMER_IMPL}")
+set(SNESRECOMP_SUPERFX_IDLE_IMPL "LLE" CACHE STRING
+    "Super FX halted clock advancement (LLE or NATIVE)")
+set_property(CACHE SNESRECOMP_SUPERFX_IDLE_IMPL PROPERTY STRINGS LLE NATIVE)
+if(NOT SNESRECOMP_SUPERFX_IDLE_IMPL MATCHES "^(LLE|NATIVE)$")
+    message(FATAL_ERROR "SNESRECOMP_SUPERFX_IDLE_IMPL must be LLE or NATIVE")
+endif()
+set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/src/snes/superfx.c"
+    APPEND PROPERTY COMPILE_DEFINITIONS
+    SNESRECOMP_SUPERFX_IDLE_NATIVE=$<STREQUAL:${SNESRECOMP_SUPERFX_IDLE_IMPL},NATIVE>)
+message(STATUS "SNES Super FX halted clocks: ${SNESRECOMP_SUPERFX_IDLE_IMPL}")
+option(SNESRECOMP_EXPOSE_COVERAGE_MOD "Show the default-off Coverage Capture mod" OFF)
+add_compile_definitions(SNESRECOMP_EXPOSE_COVERAGE_MOD=$<BOOL:${SNESRECOMP_EXPOSE_COVERAGE_MOD}>)
+include(${CMAKE_CURRENT_LIST_DIR}/ppu_8bpp_backend.cmake)
+
 # runner.cmake — shared source list for snesrecomp game projects.
 #
 # Usage from a game project's CMakeLists.txt:
@@ -12,6 +101,20 @@
 # of this list — it is a developer-only verify backend, off for normal builds.
 
 set(SNESRECOMP_RUNNER_ROOT ${CMAKE_CURRENT_LIST_DIR})
+set(SNESRECOMP_CRC32_IMPL "${_SNESRECOMP_CRC_DEFAULT}" CACHE STRING "IEEE CRC implementation (BYTE or SLICE8)")
+set_property(CACHE SNESRECOMP_CRC32_IMPL PROPERTY STRINGS BYTE SLICE8)
+if(SNESRECOMP_CRC32_IMPL STREQUAL "SLICE8")
+    set(_SNESRECOMP_CRC32_SLICES 8)
+elseif(SNESRECOMP_CRC32_IMPL STREQUAL "BYTE")
+    set(_SNESRECOMP_CRC32_SLICES 1)
+else()
+    message(FATAL_ERROR "SNESRECOMP_CRC32_IMPL must be BYTE or SLICE8")
+endif()
+set_property(SOURCE "${SNESRECOMP_RUNNER_ROOT}/src/crc32.c" APPEND PROPERTY
+    COMPILE_DEFINITIONS SNESRECOMP_CRC32_SLICES=${_SNESRECOMP_CRC32_SLICES})
+message(STATUS "SNES IEEE CRC: ${SNESRECOMP_CRC32_IMPL}")
+unset(_SNESRECOMP_CRC32_SLICES)
+include(${SNESRECOMP_RUNNER_ROOT}/dsp1_backend.cmake)
 # The framework checkout itself (runner/..). Derived, not taken from the
 # caller's SNESRECOMP_ROOT: that one is the includer's own spelling and a
 # project is free not to define it at all.
@@ -178,21 +281,37 @@ set(SNESRECOMP_RUNNER_SOURCES
     ${SNESRECOMP_RUNNER_ROOT}/src/present_filter.c
     ${SNESRECOMP_RUNNER_ROOT}/src/recomp_hw.c
     ${SNESRECOMP_RUNNER_ROOT}/src/framedump.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/state_dump.c
     ${SNESRECOMP_RUNNER_ROOT}/src/host_paths.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/diagnostics/trace_writer.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/diagnostics/replay_writer.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/host_args.c
     ${SNESRECOMP_RUNNER_ROOT}/src/launcher.c
     ${SNESRECOMP_RUNNER_ROOT}/src/launcher_cache.c
     ${SNESRECOMP_RUNNER_ROOT}/src/launcher_picker.c
     ${SNESRECOMP_RUNNER_ROOT}/src/rom_image_verify.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/rom_identity.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/sha1.c
     ${SNESRECOMP_RUNNER_ROOT}/src/crc32.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/snapshot_guard.c
     ${SNESRECOMP_RUNNER_ROOT}/src/sha256.c
     ${SNESRECOMP_RUNNER_ROOT}/src/keybinds.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes_overlay_draw.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes_runahead.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes_savestate_menu.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes_settings_menu.c
+    # The facade supplies offline stubs unless this target enables netplay.
+    # Shared menus must link even without snesrecomp_enable_recomp_net().
+    ${SNESRECOMP_RUNNER_ROOT}/src/netplay/snes_netplay.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes_osd.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes_rewind.c
     ${SNESRECOMP_RUNNER_ROOT}/src/cpu_state.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/program_module.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/rom_patch.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/generic_frame_driver.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/beam_frame_driver.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/content_variant.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/variant_selector.c
     ${SNESRECOMP_RUNNER_ROOT}/src/cpu_trace.c
     ${SNESRECOMP_RUNNER_ROOT}/src/audio_trace.c
     ${SNESRECOMP_RUNNER_ROOT}/src/ppu_dma_trace.c
@@ -217,6 +336,7 @@ set(SNESRECOMP_RUNNER_SOURCES
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/msu1.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/color_lut.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/ppu.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/snes/hd_jobs.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/ppu_legacy.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/sa1.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/sdd1.c
@@ -240,6 +360,29 @@ set(SNESRECOMP_RUNNER_SOURCES
 list(APPEND SNESRECOMP_RUNNER_SOURCES
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/cx4.c)
 message(STATUS "Cx4: instruction-level HG51B S169 core (ares, ISC)")
+
+# ── Windows: UTF-8 process code page ──────────────────────────────────────
+# Paths cross the host as narrow strings: GetModuleFileNameA, fopen and the
+# command line on the C side; std::filesystem, SDL and the launcher's pickers
+# on the other. On Windows those disagreed (ANSI vs UTF-8), and an install
+# folder such as "Mega Man X Recompilé" aborted at startup. The manifest makes
+# the process code page UTF-8 (Windows 10 1903+), so every narrow path is
+# UTF-8 on both sides. It rides in the runner sources so every host
+# executable carries it (resources in a static library would be dropped).
+if(WIN32)
+    set(_snes_utf8_manifest "${SNESRECOMP_RUNNER_ROOT}/windows/snesrecomp_utf8.manifest")
+    if(MSVC)
+        list(APPEND SNESRECOMP_RUNNER_SOURCES "${_snes_utf8_manifest}")
+    else()
+        enable_language(RC)
+        set(_snes_utf8_rc "${CMAKE_BINARY_DIR}/snesrecomp_utf8_manifest.rc")
+        file(WRITE "${_snes_utf8_rc}.in"
+            "1 24 \"${_snes_utf8_manifest}\"\n")
+        configure_file("${_snes_utf8_rc}.in" "${_snes_utf8_rc}" COPYONLY)
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_snes_utf8_manifest}")
+        list(APPEND SNESRECOMP_RUNNER_SOURCES "${_snes_utf8_rc}")
+    endif()
+endif()
 
 # Execution policy DEFAULT for optimized (HLE) replacements over the faithful
 # LLE floor. This chooses the default only — the policy itself is resolved at
@@ -345,6 +488,7 @@ endif()
 
 set(SNESRECOMP_RUNNER_LIBRARIES)
 include(${CMAKE_CURRENT_LIST_DIR}/lua.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/data_packs.cmake)
 if(NOT WIN32)
     # cx4.c synthesizes its internal data ROM with libm.
     list(APPEND SNESRECOMP_RUNNER_LIBRARIES m)
@@ -353,7 +497,7 @@ if(SNESRECOMP_ENABLE_TRACE AND WIN32)
     list(APPEND SNESRECOMP_RUNNER_LIBRARIES ws2_32 dbghelp)
 endif()
 
-# Differential co-simulation (SNES_COSIM.md): full-state first-divergence oracle.
+# Differential co-simulation (docs/COSIM.md): full-state first-divergence oracle.
 # DEV/DIAGNOSTICS ONLY — must NEVER be enabled in a shipping Production config.
 # Adds the frame-keyed park/step engine (cosim.c) + canonical state hash
 # (cosim_state.c) + a loopback TCP server; needs ws2_32 on Windows. Defines
@@ -922,6 +1066,57 @@ function(snesrecomp_target_generated_code target gen_dir)
         "rebuild wizard is the only path forward in this binary")
 endfunction()
 
+# An ADDITIONAL recompiled program module linked beside the title's own
+# generated code: a content variant's tree (v2_emit --module-prefix <p>),
+# e.g. Super Mario All-Stars inside the SMW executable, or F-Zero's BS Deluxe.
+#
+#     snesrecomp_target_program_module(<target> <gen_dir> [OPTIONAL])
+#
+# The tree must have been generated WITH a prefix (it carries its own
+# module_namespace.h and funcs.h), or its symbols collide with the stock module
+# at link time. Without OPTIONAL an empty directory fails the configure, the
+# same contract as snesrecomp_target_generated_code: a variant the build was
+# asked for and could not include must never ship silently missing. With
+# OPTIONAL the target builds without it and the variant simply is not linked
+# (the runtime then reports "module '<id>' is not part of this build").
+function(snesrecomp_target_program_module target gen_dir)
+    cmake_parse_arguments(_pm "OPTIONAL" "" "" ${ARGN})
+    file(GLOB _pm_sources CONFIGURE_DEPENDS "${gen_dir}/*.c")
+    if(NOT _pm_sources)
+        if(_pm_OPTIONAL)
+            message(STATUS "${target}: program module ${gen_dir} not generated; skipped")
+            return()
+        endif()
+        message(FATAL_ERROR
+            "${gen_dir} is empty -- generate this program module (v2_emit "
+            "--module-prefix) before building, or pass OPTIONAL.")
+    endif()
+    if(NOT EXISTS "${gen_dir}/module_namespace.h")
+        message(FATAL_ERROR
+            "${gen_dir} was generated without --module-prefix: it has no "
+            "module_namespace.h and would collide with the title's own "
+            "generated symbols. Regenerate it with a prefix.")
+    endif()
+    target_sources(${target} PRIVATE ${_pm_sources})
+    if(NOT MSVC)
+        set_source_files_properties(${_pm_sources} PROPERTIES COMPILE_OPTIONS "-w")
+    endif()
+    list(LENGTH _pm_sources _pm_n)
+    message(STATUS "${target}: program module ${_pm_n} translation unit(s) from ${gen_dir}")
+endfunction()
+
+# Opt-in, shared CC0 shader catalog for hosts exposing shader_supported.
+# Keep user-added presets in place; updating built-ins must not delete them.
+function(snesrecomp_target_shader_presets target)
+    set(_presets "${SNESRECOMP_RUNNER_ROOT}/assets/shaders")
+    file(GLOB_RECURSE _preset_files CONFIGURE_DEPENDS "${_presets}/*")
+    set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS ${_preset_files})
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${_presets}" "$<TARGET_FILE_DIR:${target}>/assets/shaders"
+        COMMENT "${target}: staging shared SNES shader presets" VERBATIM)
+endfunction()
+
 # Optional desktop GLSL preset renderer. It deliberately stays out of
 # SNESRECOMP_RUNNER_SOURCES because headless tools and non-OpenGL frontends do
 # not carry the game-owned gl_core/stb/config dependencies it consumes.
@@ -963,6 +1158,8 @@ endfunction()
 # enabled together.
 function(snesrecomp_target_opengl target)
     snesrecomp_target_glsl_shader(${target})
+    include(${SNESRECOMP_RUNNER_ROOT}/hd_gpu.cmake)
+    snesrecomp_target_hd_gpu(${target} EXTERNAL_GL_LOADER)
     target_sources(${target} PRIVATE
         ${SNESRECOMP_RUNNER_ROOT}/src/desktop/opengl.c
         ${SNESRECOMP_FRAMEWORK_ROOT}/third_party/gl_core/gl_core_3_1.c)
@@ -1162,6 +1359,15 @@ endfunction()
 # when devkitPro's switch-curl is installed), WinHTTP on Windows. Without one
 # the module builds but reports "not available" (Android for now).
 function(snesrecomp_target_retroachievements target)
+    if(SNESRECOMP_DISABLE_RETROACHIEVEMENTS)
+        target_sources(${target} PRIVATE
+            ${SNESRECOMP_RUNNER_ROOT}/src/achievements/snes_ra_disabled.c)
+        target_include_directories(${target} PRIVATE
+            ${SNESRECOMP_RUNNER_ROOT}/src/achievements)
+        target_compile_definitions(${target} PRIVATE SNESRECOMP_DISABLE_RETROACHIEVEMENTS=1)
+        message(STATUS "${target}: RetroAchievements disabled by edition policy (no client/network backend)")
+        return()
+    endif()
     set(_rc ${SNESRECOMP_FRAMEWORK_ROOT}/third_party/rcheevos)
     file(GLOB _rc_src
         ${_rc}/src/rc_client.c ${_rc}/src/rc_compat.c ${_rc}/src/rc_util.c
@@ -1207,7 +1413,8 @@ function(snesrecomp_target_desktop_host target)
     target_sources(${target} PRIVATE
         ${SNESRECOMP_RUNNER_ROOT}/src/desktop/host_main.c
         ${SNESRECOMP_RUNNER_ROOT}/src/desktop/host_logs.c
-        ${SNESRECOMP_RUNNER_ROOT}/src/desktop/host_clock.c)
+        ${SNESRECOMP_RUNNER_ROOT}/src/desktop/host_clock.c
+        ${SNESRECOMP_RUNNER_ROOT}/src/desktop/host_relaunch.c)
     if(NINTENDO_SWITCH)
         target_sources(${target} PRIVATE
             ${SNESRECOMP_RUNNER_ROOT}/src/desktop/switch_safeboot.c

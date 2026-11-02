@@ -2,12 +2,21 @@
  * contract. Self-contained: no SDL dependency — it borrows the APU mutex
  * (RtlApuLock/RtlApuUnlock) to serialise its state against the audio
  * thread, the same lock the S-DSP ports already use. */
+#ifndef _WIN32
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
+#endif
 #include "msu1.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 #include <sys/stat.h>
 #include <pthread.h>
 #include <time.h>
@@ -69,6 +78,8 @@ static struct {
     volatile bool busy;
     volatile bool play_req;
     volatile bool reset_mix;  /* the mixer drops its resample tail */
+    uint16_t selected_track;
+    bool selected;
 
     /* Data channel */
     FILE  *data;         /* <base>.msu, opened lazily */
@@ -86,8 +97,18 @@ static struct {
 static int16_t *s_mix_buf;
 static int s_mix_buf_cap;         /* frames capacity of s_mix_buf */
 static double s_mix_phase;        /* fractional 44.1kHz position, carried over */
+static uint64_t s_mix_consumed;
 static int16_t s_mix_carry[8 * 2];
 static int s_mix_carry_count;
+static Msu1TrackResolver s_track_resolver;
+static void *s_track_context;
+
+void msu1_set_track_resolver(Msu1TrackResolver resolver, void *context) {
+    RtlApuLock();
+    s_track_resolver = resolver;
+    s_track_context = context;
+    RtlApuUnlock();
+}
 
 /* ── lifecycle ───────────────────────────────────────────────────────── */
 
@@ -195,8 +216,12 @@ void msu1_set_unavailable(void) { s_unavailable = true; }
 bool msu1_available(void) { return !s_unavailable; }
 
 void msu1_init(void) {
+    /* Cold game/profile changes may initialize again in the same process. */
+    if (g.track) fclose(g.track);
+    if (g.data) fclose(g.data);
     memset(&g, 0, sizeof(g));
     g.pending = -1;
+    s_mix_phase = 0; s_mix_consumed = 0; s_mix_carry_count = 0;
     g.volume = 255;  /* full unless the game says otherwise */
     const char *e = getenv("SNESRECOMP_MSU1");
     if (!e || !*e) return;                 /* default-OFF, silent, byte-identical */
@@ -355,10 +380,13 @@ static void msu_reset_stream_locked(void) {
     s_eof = 0;
 }
 
-static void msu_close_track(void) {
-    pthread_mutex_lock(&s_io);
+static void msu_close_track_locked(void) {
     if (g.track) { fclose(g.track); g.track = NULL; }
     msu_reset_stream_locked();
+}
+static void msu_close_track(void) {
+    pthread_mutex_lock(&s_io);
+    msu_close_track_locked();
     pthread_mutex_unlock(&s_io);
 }
 
@@ -372,8 +400,17 @@ static void msu_close_track(void) {
 static void msu_open_locked(int track) {
     if (g.track) { fclose(g.track); g.track = NULL; }
     msu_reset_stream_locked();
-    char fn[MSU1_PATH_MAX + 32];
-    snprintf(fn, sizeof(fn), "%s-%u.pcm", g.base, (unsigned)track);
+    char fn[MSU1_PATH_MAX + 32] = {0};
+    if (s_track_resolver) {
+        if (!s_track_resolver(s_track_context, g.base, track, fn, sizeof(fn)) ||
+            !fn[0] || !memchr(fn, 0, sizeof(fn))) {
+            g.audio_error = true;
+            g.busy = false;
+            return;
+        }
+    } else {
+        snprintf(fn, sizeof(fn), "%s-%u.pcm", g.base, (unsigned)track);
+    }
     FILE *f = fopen(fn, "rb");
     if (f) {
         uint8_t hdr[MSU1_PCM_HEADER];
@@ -400,6 +437,7 @@ static void msu_open_locked(int track) {
 
 /* Selecting a track stops playback (spec); the reader opens it. */
 static void msu_load_track(uint16_t track) {
+    g.selected = true; g.selected_track = track;
     g.playing = false;
     g.audio_error = false;
     g.busy = true;
@@ -421,7 +459,99 @@ int msu1_track_present(uint16_t track) {
     return 1;
 }
 
+static void msu_put64(uint8_t *out, uint64_t value) {
+    for (unsigned i=0; i<8; ++i) out[i]=(uint8_t)(value>>(i*8));
+}
+static uint64_t msu_get64(const uint8_t *in) {
+    uint64_t value=0;
+    for (unsigned i=0; i<8; ++i) value|=(uint64_t)in[i]<<(i*8);
+    return value;
+}
+_Static_assert(sizeof(double)==sizeof(uint64_t), "MSU bookmark requires a 64-bit double");
+void msu1_capture_playback(uint8_t out[MSU1_PLAYBACK_STATE_SIZE]) {
+    RtlApuLock();
+    memset(out,0,MSU1_PLAYBACK_STATE_SIZE);memcpy(out,"MSUP",4);out[4]=1;
+    out[5]=(uint8_t)(g.selected | g.playing<<1 | g.repeat<<2 | g.audio_error<<3);
+    out[6]=g.volume;out[7]=(uint8_t)g.track_lo;
+    out[8]=(uint8_t)g.selected_track;out[9]=(uint8_t)(g.selected_track>>8);
+    uint64_t phase=0;memcpy(&phase,&s_mix_phase,sizeof(phase));
+    msu_put64(out+16,s_mix_consumed);msu_put64(out+24,phase);
+    RtlApuUnlock();
+}
+bool msu1_playback_state_valid(const uint8_t in[MSU1_PLAYBACK_STATE_SIZE]) {
+    if (!in || memcmp(in,"MSUP",4) || in[4]!=1 || (in[5]&~15)) return false;
+    for (unsigned i=10; i<16; ++i) if (in[i]) return false;
+    if ((in[5]&2) && (!(in[5]&1) || (in[5]&8))) return false;
+    if ((in[5]&8) && !(in[5]&1)) return false;
+    uint64_t bits=msu_get64(in+24);double phase;
+    memcpy(&phase,&bits,sizeof(phase));
+    return isfinite(phase) && phase>=0 && phase<1;
+}
+static bool msu_seek64(FILE *file, int64_t offset, int origin) {
+#ifdef _WIN32
+    return _fseeki64(file,offset,origin)==0;
+#else
+    return fseeko(file,(off_t)offset,origin)==0;
+#endif
+}
+static int64_t msu_tell64(FILE *file) {
+#ifdef _WIN32
+    return _ftelli64(file);
+#else
+    return (int64_t)ftello(file);
+#endif
+}
+bool msu1_restore_playback(const uint8_t in[MSU1_PLAYBACK_STATE_SIZE]) {
+    if (!msu1_playback_state_valid(in)) return false;
+    RtlApuLock();
+    if (!msu1_enabled()) {RtlApuUnlock();return false;}
+    pthread_mutex_lock(&s_io);
+    __atomic_store_n(&g.pending, -1, __ATOMIC_RELEASE);
+    msu_close_track_locked();g.selected=false;g.selected_track=0;g.playing=false;g.audio_error=false;
+    s_mix_carry_count=0;s_mix_phase=0;s_mix_consumed=0;
+    g.repeat=(in[5]&4)!=0;g.volume=in[6];
+    bool ok=true;
+    if (in[5]&1) {
+        g.selected = true; g.selected_track = (uint16_t)(in[8]|(unsigned)in[9]<<8);
+        g.play_req = false;
+        msu_open_locked(g.selected_track);
+        if (in[5]&8) {msu_close_track_locked();g.audio_error=true;}
+        else if (!g.track || !msu_seek64(g.track,0,SEEK_END)) ok=false;
+        else {
+            int64_t end=msu_tell64(g.track);
+            uint64_t elapsed=msu_get64(in+16),position=elapsed;
+            uint64_t length=end>=g.data_start?(uint64_t)(end-g.data_start)/4:0;
+            if (position>=length) {
+                if (g.repeat && g.loop_point<length)
+                    position=g.loop_point+(position-length)%(length-g.loop_point);
+                else position=length;
+            }
+            if (!length || position>(uint64_t)(INT64_MAX-g.data_start)/4 ||
+                !msu_seek64(g.track,g.data_start+(int64_t)position*4,SEEK_SET)) ok=false;
+            if (ok) {
+                uint64_t bits=msu_get64(in+24);memcpy(&s_mix_phase,&bits,sizeof(bits));
+                s_mix_consumed=elapsed;
+                g.playing=(in[5]&2)!=0 && position<length;
+            }
+        }
+    }
+    g.track_lo=in[7];
+    if (!ok) {msu_close_track_locked();g.playing=false;g.audio_error=true;}
+    g.reset_mix = false;
+    pthread_mutex_unlock(&s_io);
+    RtlApuUnlock();return ok;
+}
+
 /* ── register interface (CPU thread) ─────────────────────────────────── */
+
+bool msu1_seek_playback(uint64_t source_frames) {
+    uint8_t state[MSU1_PLAYBACK_STATE_SIZE];
+    RtlApuLock();
+    msu1_capture_playback(state);
+    msu_put64(state+16,source_frames);msu_put64(state+24,0);
+    bool ok=(state[5]&1) && msu1_restore_playback(state);
+    RtlApuUnlock();return ok;
+}
 
 uint8_t msu1_read(uint16_t reg) {
     if (!msu1_enabled()) return 0;
@@ -630,4 +760,5 @@ void msu1_mix(int16_t *out, int out_frames) {
                 (size_t)remain * 2 * sizeof(int16_t));
     s_mix_carry_count = remain;
     s_mix_phase = consumed_span - (double)retire;
+    s_mix_consumed += (unsigned)retire;
 }

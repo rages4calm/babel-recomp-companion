@@ -1929,6 +1929,11 @@ typedef struct RecompLauncherCGameInfo {
     /* RetroAchievements card in Settings; NULL => no card. Appended for ABI
      * stability. */
     const RecompLauncherCAchievements* achievements;
+    /* SNESRecomp 66eebe6 seed compatibility. Gaia keeps its existing settings
+     * overlay and does not enable the newer in-session launcher workflow.
+     * These values are unused by this pinned UI implementation. */
+    int in_session;
+    int has_open_launcher_hotkey;
 } RecompLauncherCGameInfo;
 
 /* recomp_launcher_run_window return codes */
