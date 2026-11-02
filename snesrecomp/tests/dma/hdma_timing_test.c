@@ -13,6 +13,7 @@ uint8_t g_snesrecomp_last_hdmaen;
 bool g_fail;
 int g_interp_apu_driving;
 CpuState g_cpu;
+const char *g_last_recomp_func = "hdma_timing_test";
 
 void wlog_addr_note_direct(uint32_t wa, uint8_t v, const char *via) {
     (void)wa;
@@ -62,6 +63,7 @@ void audio_trace_on_cpu_port_read(uint8_t port, uint8_t value) {
     (void)port;
     (void)value;
 }
+void apu_notePortObserved(Apu *apu) { (void)apu; }
 
 Cpu *cpu_init(void) { return NULL; }
 void cpu_free(Cpu *cpu) { (void)cpu; }

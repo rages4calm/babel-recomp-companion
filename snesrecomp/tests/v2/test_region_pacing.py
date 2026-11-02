@@ -49,7 +49,7 @@ def test_mmio_or_unmodeled_instruction_falls_back_before_charge(code):
 
 
 def _c_function(source, name):
-    start = re.search(r"(?m)^(?:static\s+)?(?:inline\s+)?[A-Za-z_]\w*\s+" + re.escape(name) + r"\(", source).start()
+    start = re.search(r"(?m)^(?:static\s+)?(?:inline\s+)?[A-Za-z_]\w*\s+\**" + re.escape(name) + r"\(", source).start()
     brace = source.index("{", start)
     depth = 1
     end = brace + 1
