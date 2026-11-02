@@ -40,16 +40,27 @@ Every region-mode fetch/internal/dynamic addition and each paced data helper
 uses `cpu_add_aot_master_cycles`. That API updates the master clock and invokes
 the nullable `g_cpu_aot_master_credit_hook`. The active interpreter bridge
 installs a callback that queues native instruction time in the existing APU
-pending accumulator under its legacy relative-clock policy. The callback
-ignores calls outside an active bridge, missing machines, shared-clock co-sim,
-and the existing absolute-timeline policy. Existing port/boundary flushes own
-APU synchronization; crediting does not introduce another flush.
+pending accumulator under the same scheduling predicate as interpretation.
+The callback ignores calls outside an active bridge, missing machines,
+shared-clock co-sim, and non-extended absolute ownership. Extended absolute
+mode retains a pending marker for scheduled syncs; the flush's existing absolute
+branch clears it without adding relative catch-up. Crediting itself does not
+flush the APU midway through an instruction.
 
 Credits originate at actual increments. They are never inferred from elapsed
 time around a call, which could include nested interpretation, nested native
 execution, DRAM refresh, DMA, or parked time. Existing interpreter opcode
 credit remains separate. The pending accumulator already belongs to bridge
 rollback state; the callback adds no independent clock counter to save.
+
+The separate nullable `g_cpu_aot_instruction_boundary_hook` observes completion
+of the preceding instruction. Paced labels call it after refresh finalization
+and before the deadline check. Paired returns also call it after finalizing
+refresh, covering a last native return instruction without another label.
+The bridge applies its existing pending-clock batch threshold there, synchronizes
+the beam, and flushes the existing accumulator. It adds no credit. Flushing in
+the per-access credit callback would run the SPC midway through an instruction;
+omitting boundary flushes can defer a logged SPC event into the next host frame.
 
 ## Fallback and ownership
 
@@ -58,14 +69,24 @@ direct-page/absolute/long memory, stack, direct call/return and branch paths.
 It falls back before charging the current instruction for:
 
 - Emulation-mode entry and `XCE`, which can change emulation mode mid-body.
-- Indirect pointers/dispatches, `PEI`, software interrupts/`RTI`, block moves,
+- Indirect dispatches, `PEI`, software interrupts/`RTI`, block moves,
   waits/stops, live operands, or an unrecognized bus recipe.
 - Effective addresses in system-bank MMIO windows, unusual stack windows,
   and word accesses crossing a bank boundary.
 
-MMIO guards evaluate pure address expressions. They do not read a pointer or
-device register to decide whether to fall back. This preserves side effects
-and leaves unmodeled device-access timing to the interpreter.
+The optional cached-pointer recipe supports load/store and accumulator ALU
+operations through `(dp)`, `(dp,X)`, `(dp),Y`, `[dp]`, `[dp],Y` and `(sr,S),Y`.
+It first requires the entire pointer in plain low WRAM and previews that host
+memory without a CPU bus access. Effective MMIO targets and word bank crossings
+fall back before guest changes. Accepted instructions fetch the architectural
+pointer exactly once through paced bus helpers, cache it, and preserve full
+24-bit indexing carry. Dynamic dispatch, live operands and other pointer
+operations remain interpreted. The [pointer fixture](../tests/v2/test_region_pointers.py)
+checks all six modes against the actual interpreter, including refusal paths.
+
+MMIO guards do not access a device register to decide whether to fall back.
+The pointer preview does not change open bus, clocks or memory. This preserves
+side effects and leaves unmodeled device-access timing to the interpreter.
 
 These guards use `interp_tier_dispatch_tail`. When an interpreter owns the
 active AOT bounce, that helper unwinds to that owner and resumes the exact guest

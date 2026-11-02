@@ -16,6 +16,8 @@
  *   <tag>.sram.bin                 cartridge RAM, whatever size the cart has
  *   <tag>.regs.json                PPU / HDMA register state
  *   <tag>.ppuw.tsv                 the frame's PPU register write journal
+ *   <tag>.apu-clock.tsv            Same captured port rows plus event-time
+ *                                executed APU cycles for SPC reads/writes
  *   <tag>.apu.tsv                  CPU<->SPC port traffic still in the always-on
  *                                  port ring (audio_trace.h)
  *   <tag>.apu-state.bin            existing pointer-free APU/SPC/DSP save

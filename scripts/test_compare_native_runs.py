@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from compare_native_runs import APU_HEADER, STATE_SUFFIXES, compare
+from compare_native_runs import APU_HEADER, APU_CYCLE_HEADER, APU_STATE_SUFFIXES, STATE_SUFFIXES, compare
 
 
 class NativeComparisonTests(unittest.TestCase):
@@ -38,6 +38,7 @@ class NativeComparisonTests(unittest.TestCase):
         (folder/"snapshots"/(tag+".dma.tsv")).write_bytes(b"# synthetic DMA schema retained byte-exact\n")
         (folder/"snapshots"/(tag+".ppuw.tsv")).write_bytes(b"# synthetic PPU schema retained byte-exact\n")
         self.apu(folder,self.lines,tag)
+        self.apu_cycles(folder,self.lines,tag=tag)
         if state:
             (folder/"snapshots"/(tag+".apu-state.bin")).write_bytes(b"synthetic APU CPU/RAM/DSP state")
             (folder/"snapshots"/(tag+".apu-scheduler.bin")).write_bytes(b"synthetic PCM ring and queue state")
@@ -48,6 +49,19 @@ class NativeComparisonTests(unittest.TestCase):
     def sample_compare(self):
         return compare(self.reference,self.candidate,0.001,True,"samples",True)
 
+    def apu_cycles(self,folder,lines,cycles=None,tag="one"):
+        cycles = cycles if cycles is not None else [3200 + i * 32 if line.split("\t")[3].startswith("spc_") else 0
+                                                   for i,line in enumerate(lines)]
+        rows = [line+"\t"+str(cycle) for line,cycle in zip(lines,cycles)]
+        (folder/"snapshots"/(tag+".apu-clock.tsv")).write_bytes(APU_CYCLE_HEADER+b"\n"+"\n".join(rows).encode()+b"\n")
+
+    def cycle_compare(self):
+        return compare(self.reference,self.candidate,0.001,True,"cycles",True)
+
+    def write_timed_apu(self,folder,lines,cycles=None):
+        self.apu(folder,lines)
+        self.apu_cycles(folder,lines,cycles)
+
     def spc_beam_difference(self):
         lines=self.lines.copy()
         for index in (2,3):
@@ -57,7 +71,8 @@ class NativeComparisonTests(unittest.TestCase):
     def test_assisted_inputs_must_match(self):
         path = self.candidate / "receipt.json"
         original = json.loads(path.read_text())
-        for field, value in (("seed_state", "ef" * 32), ("room_reward_multiplier", 8), ("route_assisted", True)):
+        for field, value in (("seed_state", "ef" * 32), ("room_reward_multiplier", 8), ("route_assisted", True),
+                             ("infinite_hp", True), ("fixture_mod_state_sha256", "12" * 32)):
             with self.subTest(field=field):
                 changed = copy.deepcopy(original)
                 if field == "seed_state":
@@ -226,6 +241,148 @@ class NativeComparisonTests(unittest.TestCase):
         script=Path(__file__).with_name("compare_native_runs.py")
         result=subprocess.run([sys.executable,str(script),str(self.reference),str(self.candidate),"--apu-clock","samples","--output",str(self.root/"invalid.json")],capture_output=True,text=True)
         self.assertEqual(result.returncode,2);self.assertFalse((self.root/"invalid.json").exists())
+
+    def test_cycles_equal_and_spc_host_stamps_only_are_explicit(self):
+        self.assertTrue(self.cycle_compare()["passed"])
+        changed=self.lines.copy()
+        for index in (2,3):
+            columns=changed[index].split("\t");columns[:3]=["2","200","1300"]
+            changed[index]="\t".join(columns)
+        self.write_timed_apu(self.candidate,changed)
+        result=self.cycle_compare()
+        self.assertTrue(result["passed"])
+        self.assertFalse(result["raw_apu_equal"])
+        self.assertEqual(result["spc_host_stamp_only_differences"],["one.apu.tsv"])
+        self.assertEqual(result["spc_beam_only_differences"],[])
+        self.assertEqual(result["apu_cycle_differences"],[])
+        self.assertIn("not a hardware timestamp",result["apu_clock_scope"])
+        self.assertFalse(self.sample_compare()["passed"])
+        self.assertFalse(compare(self.reference,self.candidate,0.001,True,"strict",True)["passed"])
+
+    def test_cycles_require_devices_and_complete_apu_state_in_api_and_cli(self):
+        script=Path(__file__).with_name("compare_native_runs.py")
+        for devices,state in [(False,False),(True,False),(False,True)]:
+            with self.subTest(devices=devices,state=state):
+                with self.assertRaises(ValueError):
+                    compare(self.reference,self.candidate,0.001,devices,"cycles",state)
+                args=[sys.executable,str(script),str(self.reference),str(self.candidate),
+                      "--apu-clock","cycles","--output",str(self.root/"invalid-cycles.json")]
+                if devices:args.append("--devices")
+                if state:args.append("--apu-state")
+                result=subprocess.run(args,capture_output=True,text=True)
+                self.assertEqual(result.returncode,2)
+                self.assertFalse((self.root/"invalid-cycles.json").exists())
+
+    def test_cycles_missing_empty_or_unknown_sidecars_fail(self):
+        for data in (None,b"",b"# unknown clock schema\n",APU_CYCLE_HEADER+b"\n"):
+            for folders in ((self.reference,),(self.candidate,),(self.reference,self.candidate)):
+                with self.subTest(data=data,folders=folders):
+                    for folder in (self.reference,self.candidate):self.apu_cycles(folder,self.lines)
+                    for folder in folders:
+                        path=folder/"snapshots/one.apu-clock.tsv"
+                        if data is None:path.unlink()
+                        else:path.write_bytes(data)
+                    result=self.cycle_compare()
+                    self.assertFalse(result["passed"])
+                    self.assertFalse(result["checks"]["apu_log_schema_valid"])
+                    self.assertTrue(result["apu_cycle_differences"])
+
+    def test_cycles_sidecar_must_bind_every_raw_column_and_row(self):
+        for column,value in [(0,"2"),(1,"200"),(2,"1300"),(3,"spc_wr"),(4,"1"),(5,"AB"),(6,"102")]:
+            with self.subTest(column=column):
+                changed=self.lines.copy();columns=changed[2].split("\t");columns[column]=value
+                changed[2]="\t".join(columns)
+                # Even identical sidecars cannot replace the independently
+                # captured raw row in either run.
+                for folder in (self.reference,self.candidate):self.apu_cycles(folder,changed)
+                result=self.cycle_compare()
+                self.assertFalse(result["passed"])
+                self.assertIn("apu_cycle_raw_row_binding_mismatch",str(result["apu_schema_errors"]))
+        for changed in (self.lines[:-1],self.lines+[self.lines[-1]]):
+            for folder in (self.reference,self.candidate):self.apu_cycles(folder,changed)
+            self.assertFalse(self.cycle_compare()["passed"])
+
+    def test_cycles_reject_invalid_unknown_sentinel_and_nonzero_cpu_clocks(self):
+        baseline=[0,0,3264,3296,0]
+        for index,value in [(2,"NaN"),(2,"-1"),(2,"1.0"),(2,str(2**64)),
+                            (2,str(2**64-1)),(0,"1"),(1,"1"),(4,"1")]:
+            with self.subTest(index=index,value=value):
+                clocks=baseline.copy();clocks[index]=value
+                for folder in (self.reference,self.candidate):self.apu_cycles(folder,self.lines,clocks)
+                result=self.cycle_compare()
+                self.assertFalse(result["passed"])
+                self.assertFalse(result["checks"]["apu_log_schema_valid"])
+        for folder in (self.reference,self.candidate):
+            self.apu_cycles(folder,self.lines)
+            path=folder/"snapshots/one.apu-clock.tsv"
+            path.write_bytes(path.read_bytes().replace(b"\t3264\n",b"\t3264\textra\n"))
+        self.assertFalse(self.cycle_compare()["passed"])
+
+    def test_cycles_clock_mutation_cannot_hide_behind_identical_samples(self):
+        clocks=[0,0,3265,3296,0]
+        self.apu_cycles(self.candidate,self.lines,clocks)
+        result=self.cycle_compare()
+        self.assertFalse(result["passed"])
+        self.assertTrue(result["checks"]["apu_log_schema_valid"])
+        self.assertTrue(result["raw_apu_equal"])
+        self.assertTrue(result["apu_cycle_differences"])
+
+    def test_cycles_missing_malformed_raw_evidence_and_unbound_format_fail(self):
+        for bad in (None,b"",b"# unknown raw schema\n",
+                    APU_HEADER+b"\n1\t12\t30\tspc_rd\t0\tGG\t101\n"):
+            with self.subTest(raw=bad):
+                for folder in (self.reference,self.candidate):
+                    path=folder/"snapshots/one.apu.tsv"
+                    if bad is None:path.unlink(missing_ok=True)
+                    else:path.write_bytes(bad)
+                self.assertFalse(self.cycle_compare()["passed"])
+        for folder in (self.reference,self.candidate):self.apu(folder,self.lines)
+        path=self.candidate/"snapshots/one.apu.tsv"
+        path.write_bytes(path.read_bytes().replace(b"\n",b"\r\n"))
+        self.assertFalse(self.cycle_compare()["passed"])
+        self.apu(self.candidate,self.lines)
+        path=self.candidate/"snapshots/one.apu-clock.tsv"
+        path.write_bytes(path.read_bytes().replace(b"\n",b"\r\n"))
+        self.assertFalse(self.cycle_compare()["passed"])
+
+    def test_cycles_cpu_all_seven_fields_stay_exact(self):
+        for index in (0,1,4):
+            for column,value in [(0,"2"),(1,"200"),(2,"1300"),(3,"cpu_rd" if index != 4 else "cpu_wr"),
+                                 (4,"2"),(5,"AB"),(6,"103")]:
+                with self.subTest(index=index,column=column):
+                    changed=self.lines.copy();columns=changed[index].split("\t");columns[column]=value
+                    changed[index]="\t".join(columns)
+                    self.write_timed_apu(self.candidate,changed)
+                    self.assertFalse(self.cycle_compare()["passed"])
+
+    def test_cycles_spc_semantics_and_order_remain_exact(self):
+        for column,value in [(3,"spc_wr"),(4,"1"),(5,"AB"),(6,"102")]:
+            with self.subTest(column=column):
+                changed=self.lines.copy();columns=changed[2].split("\t");columns[column]=value
+                changed[2]="\t".join(columns)
+                self.write_timed_apu(self.candidate,changed)
+                self.assertFalse(self.cycle_compare()["passed"])
+        for changed in [self.lines[:2]+[self.lines[3],self.lines[2]]+self.lines[4:],
+                        self.lines[:-1],self.lines+[self.lines[-1]]]:
+            self.write_timed_apu(self.candidate,changed)
+            self.assertFalse(self.cycle_compare()["passed"])
+
+    def test_cycles_state_pcm_queue_and_other_evidence_remain_gates(self):
+        for suffix in STATE_SUFFIXES+APU_STATE_SUFFIXES+(".dma.tsv",".ppuw.tsv"):
+            with self.subTest(suffix=suffix):
+                path=self.candidate/"snapshots"/("one"+suffix);original=path.read_bytes()
+                path.write_bytes(original+b"changed")
+                self.assertFalse(self.cycle_compare()["passed"])
+                path.write_bytes(original)
+
+    def test_cycles_every_snapshot_and_orphan_sidecar_require_bound_evidence(self):
+        for folder in (self.reference,self.candidate):self.snapshot(folder,"two")
+        (self.candidate/"snapshots/two.apu-clock.tsv").unlink()
+        self.assertFalse(self.cycle_compare()["passed"])
+        for folder in (self.reference,self.candidate):self.apu_cycles(folder,self.lines,tag="two")
+        self.assertTrue(self.cycle_compare()["passed"])
+        for folder in (self.reference,self.candidate):self.apu_cycles(folder,self.lines,tag="orphan")
+        self.assertFalse(self.cycle_compare()["passed"])
 
 
 if __name__=="__main__":unittest.main()

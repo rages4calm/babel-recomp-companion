@@ -427,6 +427,10 @@ uint32_t  cpu_region_speed(uint32_t adr);
  * refresh, DMA and interpreted instructions must not call this helper. */
 extern void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);
 void cpu_add_aot_master_cycles(CpuState *cpu, uint64 clocks);
+/* Called only at architectural boundaries by opt-in paced emission. This
+ * reports completion, not elapsed time, and must never credit clocks again. */
+extern void (*g_cpu_aot_instruction_boundary_hook)(CpuState *cpu);
+void cpu_aot_instruction_boundary(CpuState *cpu);
 /* SNESRECOMP_WLOG_ADDR hook for direct-WRAM stores that bypass cpu_write8/16
  * (DMA A-bus writes in snes_write, WMDATA $2180). wa = g_ram offset. */
 void wlog_addr_note_direct(uint32_t wa, uint8_t v, const char *via);

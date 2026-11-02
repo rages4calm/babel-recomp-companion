@@ -11,6 +11,7 @@ FIELDS = ("frame", "wram_crc32", "A", "X", "Y", "S", "D", "DB", "PB", "P")
 STATE_SUFFIXES = (".wram.bin", ".sram.bin", ".vram.bin", ".cgram.bin", ".oam.bin", ".fb.bgrx", ".regs.json")
 APU_STATE_SUFFIXES = (".apu-state.bin", ".apu-scheduler.bin")
 APU_HEADER = b"# frame\tscanline\thclock\tevent\tport\tvalue\tsample"
+APU_CYCLE_HEADER = APU_HEADER + b"\tapu_cycle"
 APU_EVENTS = {b"cpu_wr", b"cpu_ap", b"cpu_rd", b"spc_rd", b"spc_wr"}
 SPC_EVENTS = {b"spc_rd", b"spc_wr"}
 
@@ -70,12 +71,59 @@ def first_raw_apu_difference(a: bytes, b: bytes) -> dict:
     return {"reason": "raw_byte_format_or_line_ending_difference"}
 
 
+def apu_cycle_rows(raw: bytes, sidecar: bytes) -> tuple[bytes | None, list[dict]]:
+    """Bind executed-cycle evidence to raw rows before ignoring SPC host stamps.
+
+    The eighth column is Apu.portClock at the SPC callback, not a hardware
+    timestamp. CPU rows retain all seven original fields and require cycle 0.
+    """
+    _, raw_errors = apu_sample_rows(raw)
+    if raw_errors:
+        return None, raw_errors
+    lines, clocks = raw.splitlines(keepends=True), sidecar.splitlines(keepends=True)
+    if not clocks or clocks[0].rstrip(b"\r\n") != APU_CYCLE_HEADER:
+        return None, [{"row": 1, "reason": "missing_or_unknown_apu_cycle_header"}]
+    if clocks[0] != lines[0].replace(APU_HEADER, APU_CYCLE_HEADER, 1):
+        return None, [{"row": 1, "reason": "apu_cycle_header_binding_mismatch"}]
+    if len(lines) != len(clocks):
+        return None, [{"reason": "apu_cycle_row_count_mismatch",
+                       "raw_rows": len(lines), "cycle_rows": len(clocks)}]
+    normalized = [clocks[0]]
+    errors = []
+    for number, (original, timed) in enumerate(zip(lines[1:], clocks[1:]), 2):
+        ending = b"\r\n" if timed.endswith(b"\r\n") else b"\n" if timed.endswith(b"\n") else b""
+        original_ending = b"\r\n" if original.endswith(b"\r\n") else b"\n" if original.endswith(b"\n") else b""
+        columns = timed.rstrip(b"\r\n").split(b"\t")
+        reason = None
+        if len(columns) != 8:
+            reason = "unknown_apu_cycle_column_count"
+        elif b"\t".join(columns[:7]) != original.rstrip(b"\r\n"):
+            reason = "apu_cycle_raw_row_binding_mismatch"
+        elif ending != original_ending:
+            reason = "apu_cycle_line_ending_binding_mismatch"
+        elif not re.fullmatch(rb"[0-9]+", columns[7]):
+            reason = "invalid_apu_cycle_integer"
+        elif int(columns[7]) > 0xFFFFFFFFFFFFFFFF:
+            reason = "apu_cycle_integer_out_of_range"
+        elif columns[3] in SPC_EVENTS and int(columns[7]) == 0xFFFFFFFFFFFFFFFF:
+            reason = "missing_executed_spc_cycle"
+        elif columns[3] not in SPC_EVENTS and columns[7] != b"0":
+            reason = "cpu_event_requires_zero_apu_cycle"
+        if reason:
+            errors.append({"row": number, "reason": reason})
+            continue
+        if columns[3] in SPC_EVENTS:
+            columns[0] = columns[1] = columns[2] = b"<spc-host>"
+        normalized.append(b"\t".join(columns) + ending)
+    return (None if errors else b"".join(normalized)), errors
+
+
 def compare(reference: Path, candidate: Path, minimum_native: float, devices: bool = False,
             apu_clock: str = "strict", apu_state: bool = False) -> dict:
-    if apu_clock not in ("strict", "samples"):
+    if apu_clock not in ("strict", "samples", "cycles"):
         raise ValueError("unknown APU clock comparison mode")
-    if apu_clock == "samples" and not (devices and apu_state):
-        raise ValueError("APU samples mode requires both devices and complete APU state comparison")
+    if apu_clock in ("samples", "cycles") and not (devices and apu_state):
+        raise ValueError(f"APU {apu_clock} mode requires both devices and complete APU state comparison")
     if not math.isfinite(minimum_native) or not 0 <= minimum_native <= 100:
         raise ValueError("native threshold must be finite and within 0..100")
     ref = json.loads((reference / "receipt.json").read_text())
@@ -86,6 +134,8 @@ def compare(reference: Path, candidate: Path, minimum_native: float, devices: bo
     identity["seed_state"] = ref["input_sha256"].get("seed_state") == got["input_sha256"].get("seed_state")
     identity["room_reward_multiplier"] = ref.get("room_reward_multiplier", 1) == got.get("room_reward_multiplier", 1)
     identity["assisted_mode"] = ref.get("route_assisted", False) == got.get("route_assisted", False)
+    identity["infinite_hp"] = ref.get("infinite_hp", False) == got.get("infinite_hp", False)
+    identity["fixture_mod_state"] = ref.get("fixture_mod_state_sha256") == got.get("fixture_mod_state_sha256")
     a = (reference / "trace.csv").read_text().splitlines() if (reference / "trace.csv").is_file() else []
     b = (candidate / "trace.csv").read_text().splitlines() if (candidate / "trace.csv").is_file() else []
     traces_valid = bool(a and b) and all(len(row.split(",")) == len(FIELDS) for row in a+b)
@@ -103,8 +153,13 @@ def compare(reference: Path, candidate: Path, minimum_native: float, devices: bo
     raw_apu_differences = []
     apu_schema_errors = []
     spc_beam_only_differences = []
+    spc_host_stamp_only_differences = []
+    apu_cycle_differences = []
     tags = {p.name.removesuffix(".wram.bin") for folder in (reference,candidate)
             for p in (folder/"snapshots").glob("*.wram.bin")}
+    if apu_clock == "cycles":
+        tags.update(p.name.removesuffix(".apu-clock.tsv") for folder in (reference, candidate)
+                    for p in (folder / "snapshots").glob("*.apu-clock.tsv"))
     tag_errors = []
     for receipt in (ref,got):
         for snapshot in receipt.get("snapshots",[]):
@@ -143,6 +198,26 @@ def compare(reference: Path, candidate: Path, minimum_native: float, devices: bo
                     equal = complete and normalized_a == normalized_b
                     if equal and not raw_equal:
                         spc_beam_only_differences.append(name)
+                if apu_clock == "cycles":
+                    cycle_name = name.removesuffix(".apu.tsv") + ".apu-clock.tsv"
+                    cycle_a_path = reference / "snapshots" / cycle_name
+                    cycle_b_path = candidate / "snapshots" / cycle_name
+                    cycle_a = cycle_a_path.read_bytes() if cycle_a_path.is_file() else b""
+                    cycle_b = cycle_b_path.read_bytes() if cycle_b_path.is_file() else b""
+                    cycle_normalized_a, cycle_errors_a = apu_cycle_rows(raw_a, cycle_a)
+                    cycle_normalized_b, cycle_errors_b = apu_cycle_rows(raw_b, cycle_b)
+                    equal = complete and bool(cycle_a) and bool(cycle_b) and not (cycle_errors_a or cycle_errors_b) and cycle_normalized_a == cycle_normalized_b
+                    if cycle_errors_a or cycle_errors_b:
+                        apu_schema_errors.append({"file": cycle_name,
+                            "reference_errors": cycle_errors_a, "candidate_errors": cycle_errors_b})
+                    if not equal:
+                        apu_cycle_differences.append({"file": cycle_name,
+                            "reference_present": cycle_a_path.is_file(), "candidate_present": cycle_b_path.is_file(),
+                            "reference_bytes": len(cycle_a), "candidate_bytes": len(cycle_b),
+                            "reason": "missing_or_empty" if not (cycle_a and cycle_b) else "content_or_schema_difference",
+                            "first_difference": first_raw_apu_difference(cycle_a, cycle_b)})
+                    elif not raw_equal:
+                        spc_host_stamp_only_differences.append(name)
             if not equal:
                 snapshots.append({"file":name,"reference_present":present_a,"candidate_present":present_b,
                     "reference_bytes":len(raw_a),"candidate_bytes":len(raw_b),
@@ -179,9 +254,11 @@ def compare(reference: Path, candidate: Path, minimum_native: float, devices: bo
             "apu_state_differences":apu_state_differences,
             "raw_apu_equal":not raw_apu_differences if devices else None,
             "raw_apu_differences":raw_apu_differences,
+            "apu_cycle_differences":apu_cycle_differences,
             "apu_schema_errors":apu_schema_errors,"snapshot_tag_errors":tag_errors,
             "spc_beam_only_differences":spc_beam_only_differences,
-            "apu_clock_scope":"Strict raw bytes by default. Samples mode ignores only scanline/hclock on SPC read/write rows; frame, event/order, port/value and DSP-produced sample count remain exact, as do full CPU rows. DSP-produced sample count is not exact SPC cycle time; APU state, PCM ring and scheduler/queue snapshots must also match.",
+            "spc_host_stamp_only_differences":spc_host_stamp_only_differences,
+            "apu_clock_scope":("Cycles mode binds every .apu-clock.tsv row to the same run's raw seven-column APU row. SPC read/write event order, port/value, DSP-produced sample and executed Apu.portClock must match; only their host frame/scanline/hclock stamps are ignored. CPU rows retain all seven exact fields and require cycle zero. Executed APU cycles are emulator timing, not a hardware timestamp. Complete APU state, PCM ring and scheduler/queue snapshots must also match." if apu_clock == "cycles" else "Strict raw bytes by default. Samples mode ignores only scanline/hclock on SPC read/write rows; frame, event/order, port/value and DSP-produced sample count remain exact, as do full CPU rows. DSP-produced sample count is not exact SPC cycle time; APU state, PCM ring and scheduler/queue snapshots must also match."),
             "evidence_scope": "matched route CPU/WRAM, saved memory/PPU/frame snapshots and nonempty byte-identical full final.ppm output including widescreen margins; device logs and complete APU state only when explicitly selected; no campaign certification"}
 
 
@@ -191,14 +268,14 @@ if __name__ == "__main__":
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--minimum-native-cycle-pct", type=float, default=0.001)
     parser.add_argument("--devices", action="store_true")
-    parser.add_argument("--apu-clock",choices=("strict","samples"),default="strict")
+    parser.add_argument("--apu-clock",choices=("strict","samples","cycles"),default="strict")
     parser.add_argument("--apu-state",action="store_true",help="Require equal nonempty APU and scheduler/PCM/queue snapshots for every WRAM tag")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if not 0 <= args.minimum_native_cycle_pct <= 100:
         parser.error("native threshold must be 0..100")
-    if args.apu_clock=="samples" and not(args.devices and args.apu_state):
-        parser.error("--apu-clock samples requires --devices and --apu-state")
+    if args.apu_clock in ("samples","cycles") and not(args.devices and args.apu_state):
+        parser.error(f"--apu-clock {args.apu_clock} requires --devices and --apu-state")
     result = compare(args.reference, args.candidate, args.minimum_native_cycle_pct, args.devices,args.apu_clock,args.apu_state)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2))

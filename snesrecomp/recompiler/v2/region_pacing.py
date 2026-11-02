@@ -52,6 +52,9 @@ def plan(insn, lines, cpu_cycles, *, live_operand=False):
     The supported bodies have one straight-line data-access sequence; complex
     dispatch/pointer/control helpers deliberately remain authoritative LLE.
     """
+    from v2.region_pointers import MODES, plan as pointer_plan
+    if insn.mode in MODES and not live_operand:
+        return pointer_plan(insn, lines, cpu_cycles)
     count = data_bytes(insn)
     if count is None or live_operand:
         return None
@@ -72,7 +75,7 @@ def plan(insn, lines, cpu_cycles, *, live_operand=False):
     # at its origin, never infer elapsed time around nested mixed-tier calls.
     paced = re.sub(r"cpu->master_cycles\s*\+=\s*([^;]+);",
                    r"cpu_add_aot_master_cycles(cpu, \1);", paced).split("\n")
-    return " + ".join(costs), paced
+    return " + ".join(costs), paced, []
 
 
 def mmio_guard(insn):

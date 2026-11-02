@@ -7,6 +7,11 @@ No owner installation, save, mod selection, soundtrack or source ROM was changed
 
 ## Inputs and scope
 
+This section preserves batch 002's input history. Batch 003 now verifies 23
+source-backed area entries, real inventory open/return and original Freedan/
+Shadow transformation roundtrips. [Current results and exact assistance](NATIVE-BATCH-003.md)
+and [form prerequisites](NATIVE-003-FORMS.md) extend only their stated scope.
+
 The original retained PB executable was copied before testing:
 `3e2d4cc30267147b2c5d2cdb4caf7de31a760b803f19c9bf36f12df2a2960953`.
 A 6,040-frame continuation of the existing natural classroom-to-South-Cape input
@@ -98,14 +103,17 @@ The following church probes remain **failed**:
 | Request plus source-backed fade parameters; 400 mixed frames | Same fields plus `$064A = $0303`, `$0648 = $0002` from the original transition actor | Scene stayed `$01`; no church terrain loaded. |
 | Same request after a cold natural-route continuation; 6,500 mixed frames | Same fields; no checkpoint load | Remained in South Cape after the request, ruling out a checkpoint-only explanation for this failed request. |
 
-No guessed additional flags were tried and no broad room-ID sweep ran. Source
-inspection identifies a transition state machine and caller-entry prerequisite
-that remains unproven. A later focused investigation should capture actual
-pending/fade writers around the already-working natural church exit, then trace
-the caller rather than treating a pending scene word as a teleport API.
+No guessed additional flags were tried and no broad room-ID sweep ran. At this
+historical checkpoint the caller-entry prerequisite was unproven. Batch 003
+traced it to the scene-title input wait at `83:DA8A..DAA4`; real input dismisses
+the banner and returns to the main loop that consumes the request. It also
+reproduces the original warp writer's return-context fields instead of treating
+a pending scene word alone as a teleport API. Those later successful fixtures
+do not change the failed receipts above.
 `warp-contract-failure-summary.json` preserves the negative result's scope.
 
 One additional 260-frame checkpoint-assisted natural-input probe confirmed
 horizontal South Cape movement: X 200 → 248. Downward input remained blocked at
 the tested position. It changed no coordinates or flags and establishes neither
-a house/cave entry nor a new area. No additional area's gameplay is claimed.
+a house/cave entry nor a new area. That earlier probe claims no new area;
+batch 003's additional areas and mechanics have their own separate receipts.

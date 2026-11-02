@@ -19,12 +19,16 @@ from check_native_routes import ROOT,sha,snapshots
 
 
 def run(binary:Path,rom:Path,script:Path,output:Path,frames:int,seed:Path|None=None,
-        rate:int=1,interpret_all:bool=False,expect_scene:int|None=None,timeout:int=180)->dict:
+        rate:int=1,interpret_all:bool=False,expect_scene:int|None=None,timeout:int=180,
+        capture:bool=False,wide:bool=False,infinite_hp:bool=False,
+        watch_wram:tuple[int,int]|None=None)->dict:
     private=(ROOT/'.local').resolve();output=output.resolve()
     if not output.is_relative_to(private) or not 60<=frames<=10000 or not 1<=rate<=8 or not 1<=timeout<=300:
         raise ValueError('private output, 60..10000 frames, 1x..8x rate and 1..300 second timeout required')
     if seed and not seed.resolve().is_relative_to(private):
         raise ValueError('Only private fixture-owned checkpoints may be imported')
+    if watch_wram and not (0<=watch_wram[0]<=watch_wram[1]<=0xFFFF):
+        raise ValueError('The native WRAM watch accepts a 16-bit address range')
     image=rom.read_bytes();expected=re.search(r'^expected_sha256\s*=\s*(\w+)',(ROOT/'rom_identity.txt').read_text(),re.M)[1]
     if len(image)!=2097152 or hashlib.sha256(image).hexdigest()!=expected:
         raise ValueError('the verified bare USA ROM is required')
@@ -50,17 +54,27 @@ def run(binary:Path,rom:Path,script:Path,output:Path,frames:int,seed:Path|None=N
     state='format_version = 1\n\n[[package]]\nid = "iog.cheats"\nversion = "1.0.0"\n\n'
     state+='[[feature]]\npackage_id = "iog.cheats"\nid = "room_rewards"\n'
     state+=f'enabled = {str(rate>1).lower()}\n\n[feature.values]\nmultiplier = "{rate}"\n'
+    if infinite_hp:
+        state+='\n[[feature]]\npackage_id = "iog.cheats"\nid = "infinite_hp"\nenabled = true\n'
     (output/'mods/preloaded/state.toml').write_text(state)
     if seed:
         (output/'saves').mkdir();shutil.copy2(seed,output/'saves/save0.sav')
     (output/'route.txt').write_text(text,encoding='utf-8')
-    config=output/'test.ini';config.write_text('[Graphics]\nOutputMethod = SDL-Software\nNewRenderer = 1\nWidescreen = 0\nDisplayAspect = 4:3\nMode7Enabled = 0\n[General]\nDisableFrameDelay = 1\nRetroAchievements = 0\n[Sound]\nEnableAudio = 0\n[GamepadMap]\nEnableGamepad1 = false\nEnableGamepad2 = false\n')
+    config=output/'test.ini';config.write_text('[Graphics]\nOutputMethod = SDL-Software\nNewRenderer = 1\n'+f'Widescreen = {int(wide)}\n'+'DisplayAspect = 4:3\nMode7Enabled = 0\n[General]\nDisableFrameDelay = 1\nRetroAchievements = 0\n[Sound]\nEnableAudio = 0\n[GamepadMap]\nEnableGamepad1 = false\nEnableGamepad2 = false\n')
     env={k:v for k,v in os.environ.items()if not k.startswith(('SNESRECOMP_','IOG_','IOGR_'))}
     env.update(SDL_VIDEODRIVER='dummy',SDL_AUDIODRIVER='dummy',SNESRECOMP_RUN_FRAMES=str(frames),
                SNESRECOMP_STATE_TRACE=str(output/'trace.csv'),SNESRECOMP_DUMP_DIR=str(output/'snapshots'),
                SNESRECOMP_SCREENSHOT=str(output/'final.ppm'),SNESRECOMP_SCREENSHOT_FRAME=str(frames-1))
     if interpret_all:env['SNESRECOMP_INTERPRET_ALL']='1'
     command=[str(output/'babel-recomp.exe'),'--no-launcher','--config',str(config),'--script',str(output/'route.txt'),'--rom',str(rom)]
+    if capture:
+        env.update(SNESRECOMP_TIER2_MANIFEST=str(output/'tier2-manifest.json'),
+                   SNESRECOMP_TIER2_JOURNAL=str(output/'tier2-journal.jsonl'))
+        command.insert(1,'--coverage-capture=on')
+    if watch_wram:
+        env['SNESRECOMP_WLOG_ADDR']=f'{watch_wram[0]:X}:{watch_wram[1]:X}:{output / "wram-writes.log"}'
+        env['SNESRECOMP_WLOG_ADDR_CAP']='100000'
+        env['SNESRECOMP_WLOG_STATE']='1'
     began=time.monotonic()
     try:
         result=subprocess.run(command,cwd=output,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=timeout)
@@ -82,13 +96,26 @@ def run(binary:Path,rom:Path,script:Path,output:Path,frames:int,seed:Path|None=N
             'visible_last_snapshot':final.get('nonblack_pixels',0)>0,'player_actor_present':final.get('player_actor',0)!=0,
             'owner_inputs_unchanged':hashes['binary']==sha(binary)and hashes['rom']==sha(rom)and hashes['route']==sha(script)and(not seed or hashes['seed_state']==sha(seed))}
     if expect_scene is not None:checks['expected_scene']=final.get('scene')==expect_scene
+    coverage=None
+    if capture:
+        manifest=output/'tier2-manifest.json';journal=output/'tier2-journal.jsonl'
+        checks['coverage_files_written']=manifest.is_file()and journal.is_file()
+        if manifest.is_file():
+            raw=json.loads(manifest.read_text())
+            checks['coverage_identity_matches']=raw.get('identity',{}).get('rom_sha256')==expected
+            checks['coverage_complete']=raw.get('schema')=='snesrecomp tier2 coverage v2'and raw.get('checkpoint_complete')is True
+            counters=('overflowed_tuples','journal_write_failures','dropped_cost_samples','ram_routines_overflow')
+            checks['coverage_not_truncated']=all(raw.get(key)==0 for key in counters)
+            coverage={key:raw.get(key)for key in('schema','capture_id','identity','checkpoint_complete','sequence','distinct_sites',*counters)}
+            coverage.update(manifest_sha256=sha(manifest),cost_rows=len(raw.get('costs',[])),transfer_rows=len(raw.get('discoveries',[])))
     share=json.loads((output/'last_run_report.json').read_text()).get('execution_share')if(output/'last_run_report.json').exists()else None
     report={'schema':'iog-native-route-v1','passed':all(checks.values()),'checks':checks,'frames_requested':frames,'frames_traced':len(rows),
-        'input_sha256':hashes,'exit_code':code,'elapsed_seconds':round(time.monotonic()-began,3),'widescreen':False,
+        'input_sha256':hashes,'exit_code':code,'elapsed_seconds':round(time.monotonic()-began,3),'widescreen':wide,
         'route_assisted':bool(changes or seed or re.search(r'(?m)^loadstate\s+',text)),
         'interpret_all':interpret_all,'room_reward_multiplier':rate,'script_writes':changes,'seed_state':str(seed)if seed else None,
         'snapshots':states,'execution_share':share,'fixture_mod_state_sha256':sha(output/'mods/preloaded/state.toml'),
         'runner_source_sha256':sha(Path(__file__)),
+        'capture_requested':capture,'coverage':coverage,'infinite_hp':infinite_hp,'watch_wram':watch_wram,
         'evidence_scope':'Isolated dummy video/audio engine fixture. Explicit checkpoint loads/WRAM writes are assisted; no natural combat, puzzle, speaker/controller or campaign claim.'}
     (output/'receipt.json').write_text(json.dumps(report,indent=2)+'\n');return report
 
@@ -99,7 +126,12 @@ def main():
     parser.add_argument('--frames',type=int,required=True);parser.add_argument('--seed-state',type=Path)
     parser.add_argument('--room-rate',type=int,default=1);parser.add_argument('--interpret-all',action='store_true')
     parser.add_argument('--expect-scene',type=lambda x:int(x,0));parser.add_argument('--timeout',type=int,default=180)
-    args=parser.parse_args();r=run(args.binary.resolve(),args.rom.resolve(),args.script.resolve(),args.output,args.frames,args.seed_state,args.room_rate,args.interpret_all,args.expect_scene,args.timeout)
+    parser.add_argument('--capture',action='store_true');parser.add_argument('--wide',action='store_true')
+    parser.add_argument('--infinite-hp',action='store_true')
+    parser.add_argument('--watch-wram',type=lambda value:tuple(int(v,16)for v in value.split(':')))
+    args=parser.parse_args()
+    if args.watch_wram and len(args.watch_wram)!=2:parser.error('--watch-wram needs LO:HI in hex')
+    r=run(args.binary.resolve(),args.rom.resolve(),args.script.resolve(),args.output,args.frames,args.seed_state,args.room_rate,args.interpret_all,args.expect_scene,args.timeout,args.capture,args.wide,args.infinite_hp,args.watch_wram)
     print(json.dumps({'passed':r['passed'],'checks':r['checks'],'frames':r['frames_traced'],'assisted':r['route_assisted'],'scenes':sorted({s['scene']for s in r['snapshots']}),'last':r['snapshots'][-1]if r['snapshots']else None}))
     return 0 if r['passed']else 1
 

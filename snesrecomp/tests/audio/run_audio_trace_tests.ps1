@@ -158,4 +158,13 @@ foreach ($mode in 0, 1, 2, 3) {
     }
 }
 
+$spcClockExe = Join-Path $OutDir "audio_trace_spc_clock_test.exe"
+Invoke-Native $Gcc @(
+    "-std=c11", "-Wall", "-Wextra", "-Werror", "-O1",
+    "-I", $runnerSrc,
+    (Join-Path $root "tests\audio\audio_trace_spc_clock_test.c"),
+    $audioTraceC, "-o", $spcClockExe
+)
+Invoke-Native $spcClockExe @()
+
 Write-Host "audio_trace history/clock matrix passed"

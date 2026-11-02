@@ -339,6 +339,11 @@ static uint8_t s_cpu_wr_pending[4];
 static AudioTracePortEvent s_port_ring[AUDIO_TRACE_PORT_RING];
 static uint64_t s_port_count;
 static AudioTraceBeamProbe *s_beam_probe;
+static AudioTraceSpcClockProbe *s_spc_clock_probe;
+
+void audio_trace_set_spc_clock_probe(AudioTraceSpcClockProbe *probe) {
+  s_spc_clock_probe = probe;
+}
 
 void audio_trace_set_beam_probe(AudioTraceBeamProbe *probe) {
   s_beam_probe = probe;
@@ -349,6 +354,10 @@ static AudioTraceEvent *push_port_event(uint8_t type, uint8_t port, uint8_t val)
     AudioTracePortEvent *p =
         &s_port_ring[s_port_count & (AUDIO_TRACE_PORT_RING - 1)];
     p->sample_idx = s_stats.produced;
+    p->apu_cycle = (type == AUDIO_TRACE_EV_SPC_PORT_READ ||
+                    type == AUDIO_TRACE_EV_SPC_PORT_WRITE)
+                      ? (s_spc_clock_probe ? s_spc_clock_probe() : UINT64_MAX)
+                      : 0;
     p->frame = (uint32_t)snes_frame_counter;
     p->vpos = p->hpos = 0;
     if (s_beam_probe)
