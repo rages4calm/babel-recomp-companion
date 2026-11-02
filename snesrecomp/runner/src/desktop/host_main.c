@@ -841,7 +841,8 @@ static void PreparePpuFrame(void) {
 typedef struct {
   uint32 mask;      // button bits to hold
   int hold_frames;  // frames to hold mask (0 = release)
-  int wait_frames;  // frames to wait after hold ends before next entry
+  int wait_frames;  // idle frames before this entry
+  bool continuous; // explicit hold command: no release frame at its end
   uint32 poke_addr; // script-only WRAM write address
   uint8 *poke_bytes;
   int poke_count;
@@ -927,6 +928,7 @@ static uint32 ParseButtonMask(const char *name) {
   if (strcmp(name, "y")      == 0) return 0x0002;
   if (strcmp(name, "l")      == 0) return 0x0400;
   if (strcmp(name, "r")      == 0) return 0x0800;
+  if (strcmp(name, "none")   == 0) return 0;
   fprintf(stderr, "script: unknown button '%s'\n", name);
   return 0;
 }
@@ -995,6 +997,9 @@ static ScriptEntry *NewScriptEntry(int *cap) {
  *   wait N                  frames before the next command
  *   press <buttons> [N]     hold a+b+... for N frames (default 1)
  *                           prefix P2 buttons with p2:, e.g. right+p2:right
+ *   hold <buttons> [N]      host extension: continuous segment, 1..10000 frames;
+ *                           no automatic release before the next entry;
+ *                           `hold none 1` explicitly releases every button
  *   loadstate N             load save-state slot N
  *   savestate N             save slot N while the game keeps running
  *   reset                   the Reset hotkey's console reset
@@ -1010,9 +1015,10 @@ static ScriptEntry *NewScriptEntry(int *cap) {
  *                           frame just completed into $SNESRECOMP_DUMP_DIR
  *   quit                    exit the process
  *
- * The same file drives the snesref oracle (tools/snesref/README.md), with
- * the same per-frame meaning: every hold-type entry is followed by one idle
- * frame, and until/dump/quit consume no frames. */
+ * Original press scripts retain the snesref oracle's per-frame meaning
+ * (tools/snesref/README.md): each press is followed by one idle frame, and
+ * until/dump/quit consume no frames. Continuous hold is a host-only extension;
+ * an external oracle needs its own equivalent input timeline. */
 static void LoadScript(const char *path) {
   FILE *f = fopen(path, "r");
   if (!f) { fprintf(stderr, "script: cannot open '%s'\n", path); return; }
@@ -1142,9 +1148,22 @@ static void LoadScript(const char *path) {
       e->mask = kScriptQuit;
       e->wait_frames = pending_wait;
       pending_wait = 0;
-    } else if (strcmp(cmd, "press") == 0) {
-      int hold = (sscanf(line, "%*s %*s %d", &n) == 1) ? n : 1;
+    } else if (strcmp(cmd, "press") == 0 || strcmp(cmd, "hold") == 0) {
+      const bool continuous = strcmp(cmd, "hold") == 0;
+      int hold = !continuous && sscanf(line, "%*s %*s %d", &n) == 1 ? n : 1;
+      char duration[32], extra;
+      int fields = sscanf(line, "%*s %63s %31s %c", arg1, duration, &extra);
+      char *end = NULL;
+      long continuous_frames = fields >= 2 ? strtol(duration, &end, 10) : 1;
+      if (fields < 1 || (continuous && (fields > 2 ||
+          (fields == 2 && (!end || *end)) || continuous_frames < 1 || continuous_frames > 10000))) {
+        fprintf(stderr, "script: bad %s (buttons and 1..10000 hold frames required)\n", cmd);
+        g_script_failed = g_script_quit = 1;
+        break;
+      }
+      if (continuous) hold = (int)continuous_frames;
       ScriptEntry *e = NewScriptEntry(&cap);
+      e->continuous = continuous;
       e->mask = ParseButtonMask(arg1);
       if (e->mask & 0x000fffu) g_script_controllers |= 1u;
       if (e->mask & 0xfff000u) g_script_controllers |= 2u;
@@ -1259,13 +1278,16 @@ static uint32 TickScript(void) {
       }
       return e->mask;
     }
-    // hold done — advance
+    // Ordinary press retains its release frame. Explicit hold segments may
+    // change the mask at this boundary while shared buttons remain held.
+    const bool continuous = e->continuous;
     g_script_index++;
     if (g_script_index < g_script_count) {
       e = &g_script_entries[g_script_index];
       g_script_phase = 1;
       g_script_counter = e->wait_frames;
     }
+    if (continuous) continue;
     return 0;
   }
   return 0;

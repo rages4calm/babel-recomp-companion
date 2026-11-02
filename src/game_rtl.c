@@ -68,6 +68,14 @@ extern Ppu *g_ppu;
 /* 0 until the first frame has booted from the reset vector. */
 static uint32_t g_resume_pc;
 
+static void GameInitialize(void)
+{
+    /* This frame host pulses inNmi below. A second beam-owned RDNMI edge
+     * lets the original vblank wait return twice before NMI refreshes the
+     * raw pad, so the game remaps an already-remapped controller word. */
+    snes_set_rdnmi_beam_enabled(false);
+}
+
 static uint32_t read_vector(uint32_t addr)
 {
     /* Read through the guest bus so a mapper or coprocessor window resolves
@@ -263,7 +271,7 @@ static void GameStateLoad(SaveLoadInfo *sli, uint32_t version)
 
 const RtlGameInfo kGameInfo = {
     .title = "illusionofgaiausa",
-    .initialize = NULL,
+    .initialize = &GameInitialize,
     .run_frame = &GameRunOneFrame,
     .draw_ppu_frame = &GameDrawPpuFrame,
     .save_name_prefix = "save",

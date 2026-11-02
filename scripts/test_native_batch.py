@@ -10,6 +10,18 @@ import native_batch
 from native_batch import bounded_run, read_profiles, read_historical_profiles, prepare
 
 
+class GaiaGuardTests(unittest.TestCase):
+    def test_math_leaf_is_separate_from_poll_and_mutable_guards(self):
+        policy = json.loads(native_batch.POLICY.read_text(encoding="utf-8"))
+        blocked, _ = native_batch.guards(policy)
+        for base in (0x000000, 0x400000, 0x800000, 0xC00000):
+            for offset in (0x028000, 0x028002, 0x02803A):
+                self.assertNotIn(base | offset, blocked)
+            for offset in (0x02803B, 0x028043, 0x02804D, 0x028051, 0x028190,
+                           0x008000, 0x0082F8, 0x008386, 0x03C5FF, 0x03C9FF):
+                self.assertIn(base | offset, blocked)
+
+
 class ProfileRecordTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

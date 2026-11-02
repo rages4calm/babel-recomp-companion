@@ -160,6 +160,11 @@ void snes_set_hdma_beam_enabled(Snes *snes, bool enabled);
  * frame, freezing the guest. Default: enabled (the beam latches). Host policy,
  * not guest state: kept out of the Snes struct and so out of savestates. */
 void snes_set_raster_irq_beam_enabled(bool enabled);
+/* RDNMI ownership, independent of IRQ/HDMA and field observers. A frame host
+ * that supplies its own vblank pulse through inNmi must disable the beam's
+ * additional $4210 latch, or one host frame can expose two distinct edges.
+ * Default enabled; host configuration, outside the frozen savestate layout. */
+void snes_set_rdnmi_beam_enabled(bool enabled);
 bool snes_next_irq_master(const Snes *snes, uint64_t now, uint64_t *out);
 
 /* Master clocks from the current beam position to the next programmed H/V IRQ
