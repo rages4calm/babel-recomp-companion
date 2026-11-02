@@ -14,6 +14,14 @@ The teleport prerequisite was an undismissed scene-title input loop. Source
 request context and real Dark Space prerequisites are now recorded; assistance
 does not count as earned story progression.
 
+Tested source is published at `bf826a377ff608fd4c524ba0e67b315c9c4fe4ee`.
+Default v2 indirect bank-carry mismatch is reported as
+[upstream #240](https://github.com/RetroPortingToolKit/snesrecomp/issues/240),
+with a ROM-free reproducer; this is separate from the tested opt-in pointer
+recipe. Current timing results extend the existing
+[#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6588298236).
+No release was created.
+
 ## Current source and decisions
 
 - Fork: `rages4calm/babel-recomp-companion`; original Babel author **mr0ta /

@@ -237,6 +237,13 @@ mechanics, not naturally earned forms, ability use or achievement evidence.
 
 ### Tests, reproduction and next boundary
 
+Tested source: [bf826a3](https://github.com/rages4calm/babel-recomp-companion/commit/bf826a3).
+Timing results were contributed to the matching [upstream issue 205](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6588298236).
+A separate, ROM-free executed witness reproduces lost bank carry in default
+`(dp),Y` and `(sr,S),Y` address emission; [issue 240](https://github.com/RetroPortingToolKit/snesrecomp/issues/240)
+contains the complete reproducer and matching noncrossing controls. The default
+emitter bug is not claimed fixed by this batch's separate opt-in pointer path.
+
 - 665 Python tests passed, two existing compiler-path skips, 163 subtests.
 - Pointer differential fixtures execute 864 cases against actual `interp816`,
   plus refusal/ownership tests and the existing direct pacing cases.
