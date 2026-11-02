@@ -113,6 +113,10 @@ CPU/WRAM trace and nonblack PPM evidence. `scripts/check_msu_runtime.py` creates
 isolated full/partial/missing/off fixtures that reference the one private pack.
 Detailed logs, failed receipts, captures, original upstream release and dependency
 preservation records remain in the single ignored `.local/batch-001/` scratch batch.
+Completed batch-003 v2/v3 raw run blobs are compacted in
+`native-003/failed-expanded-v2-v3-raw.zip`, with a per-file verified SHA-256 index
+in `failed-expanded-v2-v3-archive.json` there. Their failed receipts, manifests,
+journals and seeds remain in place. Selected v4 evidence remains unpacked.
 Automatic approval review blocked deleting its downloaded framework checkout
 (`blocked by policy`); it remains isolated there. Do not retry through a bypass.
 
