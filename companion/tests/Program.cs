@@ -2,6 +2,7 @@ using System.Text.Json;
 using Companion.Launcher.Core;
 
 if (args.Contains("--engine")) { await EngineSmoke.Run(args); return; }
+if (args.Contains("--mods-tests")) { NativeModSettingsTests.Run(); return; }
 if (args.Contains("--activation")) { ActivationTests.Run(); return; }
 if (args.Contains("--soundtrack-tests")) { await SoundtrackTests.RunAsync(); return; }
 if (args.Length == 3 && args[0] == "--import-soundtrack") {

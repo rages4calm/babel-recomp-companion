@@ -21,14 +21,19 @@
  */
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "common_cpu_infra.h"
+#include "common_rtl.h"
 #include "mod_runtime.h"
 #include "snes/snes.h"
+#include "snes/cart.h"
 #include "present_filter.h"
 #include "snes_ra.h"
+#include "iog_cheat_rates.h"
+#include "iog_randomizer.h"
 
 static uint16_t Rd(uint32_t a) { return g_snes->ram[a] | g_snes->ram[a + 1] << 8; }
 static void Wr(uint32_t a, uint16_t v) { g_snes->ram[a] = (uint8_t)v; g_snes->ram[a + 1] = (uint8_t)(v >> 8); }
@@ -137,6 +142,54 @@ static void ActivateSwap(void)
 /* Live switches (the in-game settings): the frame callbacks are always
  * installed (ResetHd) and do nothing while off. */
 static int g_cheat_hp, g_cheat_dp, g_cheat_stats;
+static int g_room_reward_multiplier=1;
+static bool g_cheat_session_tainted;
+static IogCheatRateTracker g_room_reward_tracker;
+
+void IogCheatsMarkUsed(void) { g_cheat_session_tainted=true; }
+bool IogCheatsSessionTainted(void) { return g_cheat_session_tainted; }
+void IogCheatRatesInvalidate(void)
+{ IogCheatRateTrackerInvalidate(&g_room_reward_tracker); }
+int IogRoomRewardMultiplierGet(void) { return g_room_reward_multiplier; }
+void IogRoomRewardMultiplierSet(int value)
+{
+    char text[8];
+    g_room_reward_multiplier=IogCheatRateClampMultiplier(value);
+    IogCheatRatesInvalidate();
+    if(g_room_reward_multiplier>1) IogCheatsMarkUsed();
+    snprintf(text,sizeof text,"%d",g_room_reward_multiplier);
+    snes_mod_runtime_persist_feature_c("iog.cheats","room_rewards",
+        g_room_reward_multiplier>1,"multiplier",text);
+}
+
+/* The framework excludes speculative run-ahead frames from mod callbacks.
+ * Only exact observed original stat awards may produce bounded extra points. */
+static void RoomRewardFrame(void)
+{
+    IogCheatRateSample sample={0};
+    if(g_room_reward_multiplier==1||!g_snes||!g_snes->cart) {
+        IogCheatRatesInvalidate();return;
+    }
+    sample.generation=RtlStateGeneration();
+    sample.scene=Rd(0x0644);sample.player=Rd(0x09AA);sample.hp=Rd(0x0ACE);
+    sample.stats[0]=Rd(0x0ACA);sample.stats[1]=Rd(0x0ADE);sample.stats[2]=Rd(0x0ADC);
+    memcpy(sample.cleared,g_snes->ram+0x0A60,sizeof sample.cleared);
+    sample.supported=IogCheatRateSourceSupported(g_snes->cart->rom,g_snes->cart->romSize);
+    sample.blocked=g_cheat_stats||IogRandomizerActive()||
+        snes_mod_runtime_feature_enabled_c("iog.apocalypse","apocalypse_gaia")>0||
+        (g_snes->ram[0x0B54]&0x7F)!=0;
+    if(sample.scene<256&&sample.supported)
+        sample.reward_kind=g_snes->cart->rom[0x01AADE + sample.scene];
+    IogCheatRateAward award=IogCheatRateStep(&g_room_reward_tracker,&sample,g_room_reward_multiplier);
+    if(!award.extra) return;
+    static const uint16_t stat_at[]={0x0ACA,0x0ADE,0x0ADC};
+    Wr(stat_at[award.kind-1],sample.stats[award.kind-1]+award.extra);
+    if(award.kind==1) {
+        unsigned hp=(unsigned)sample.hp+award.extra;
+        unsigned maximum=(unsigned)sample.stats[0]+award.extra;
+        Wr(0x0ACE,(uint16_t)(hp>maximum?maximum:hp));
+    }
+}
 
 static void InfiniteHpFrame(void)
 {
@@ -176,12 +229,14 @@ static const char kRaCheats[] = "cheats are on";
 
 static void ActivateInfiniteHp(void)
 {
+    IogCheatsMarkUsed();
     SnesRa_SetBlocked(kRaCheats);
     g_cheat_hp = 1;
 }
 
 static void ActivateDp(void)
 {
+    IogCheatsMarkUsed();
     SnesRa_SetBlocked(kRaCheats);
     g_min_dp = (uint16_t)OptionInt("iog.cheats", "dp", "amount", 99);
     g_cheat_dp = 1;
@@ -189,11 +244,20 @@ static void ActivateDp(void)
 
 static void ActivateStats(void)
 {
+    IogCheatsMarkUsed();
     SnesRa_SetBlocked(kRaCheats);
     g_min_str = (uint16_t)OptionInt("iog.cheats", "stats", "strength", 0);
     g_min_def = (uint16_t)OptionInt("iog.cheats", "stats", "defense", 0);
     g_min_maxhp = (uint16_t)OptionInt("iog.cheats", "stats", "max_hp", 0);
     g_cheat_stats = 1;
+}
+
+static void ActivateRoomRewards(void)
+{
+    long value=OptionInt("iog.cheats","room_rewards","multiplier",1);
+    g_room_reward_multiplier=value<1?1:value>8?8:(int)value;
+    IogCheatRatesInvalidate();
+    if(g_room_reward_multiplier>1) IogCheatsMarkUsed();
 }
 
 /* ---- hold to advance dialogue --------------------------------------------- */
@@ -256,10 +320,13 @@ static void ResetHd(void)
     g_advance_period = 0;
     snes_mod_register_input_filter(HoldAdvanceFilter);
     g_cheat_hp = g_cheat_dp = g_cheat_stats = 0;
+    g_room_reward_multiplier=1;
+    IogCheatRatesInvalidate();
     g_min_dp = 99;
     snes_mod_register_frame_callback(InfiniteHpFrame);
     snes_mod_register_frame_callback(DpFrame);
     snes_mod_register_frame_callback(StatsFrame);
+    snes_mod_register_frame_callback(RoomRewardFrame);
     SnesRa_SetBlocked(NULL);   /* each launch decides again (plugins follow) */
     PresentFilter_Set(kPresentFilter_Config);
 }
@@ -274,6 +341,7 @@ SNES_MOD_CONSTRUCTOR(register_iog_mods)
     snes_mod_register_activation_plugin("iog.cheat.hp", ActivateInfiniteHp);
     snes_mod_register_activation_plugin("iog.cheat.dp", ActivateDp);
     snes_mod_register_activation_plugin("iog.cheat.stats", ActivateStats);
+    snes_mod_register_activation_plugin("iog.cheat.room_rewards", ActivateRoomRewards);
 }
 
 /* In-game settings (iog_settings.c): 0 infinite HP, 1 DP, 2 stats. */
@@ -287,6 +355,6 @@ void IogCheatSet(int which, int on)
     static const char *const kFeat[] = {"infinite_hp", "dp", "stats"};
     if (which < 0 || which > 2) return;
     if (which == 0) g_cheat_hp = on; else if (which == 1) g_cheat_dp = on; else g_cheat_stats = on;
-    if (on) SnesRa_SetBlocked(kRaCheats);
+    if (on) { IogCheatsMarkUsed(); SnesRa_SetBlocked(kRaCheats); }
     snes_mod_runtime_persist_feature_c("iog.cheats", kFeat[which], on, NULL, NULL);
 }

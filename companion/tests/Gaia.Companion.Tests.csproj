@@ -8,6 +8,7 @@
     <PackageReference Include="Companion.Launcher.Core" Version="[0.2.0]" />
     <Compile Include="../GameAdapter.cs" Link="GameAdapter.cs" />
     <Compile Include="../NativeSettings.cs" Link="NativeSettings.cs" />
+    <Compile Include="../NativeModSettings.cs" Link="NativeModSettings.cs" />
     <Compile Include="../SoundtrackActivation.cs" Link="SoundtrackActivation.cs" />
     <Compile Include="../SoundtrackService.cs" Link="SoundtrackService.cs" />
     <EmbeddedResource Include="../soundtrack-catalog.json" LogicalName="soundtrack-catalog.json" />

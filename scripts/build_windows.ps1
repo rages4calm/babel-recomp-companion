@@ -1,11 +1,30 @@
-param([switch]$PrivateAot, [string]$Rom = '', [int]$Jobs = 8)
+param([switch]$PrivateAot, [string]$Rom = '', [int]$Jobs = 8, [string]$NativeBatch = '')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $buildRoot = Join-Path $projectRoot 'build'
 if ($Jobs -lt 1 -or $Jobs -gt 32) { throw 'Jobs must be 1..32.' }
 $compilerC = (Get-Command clang -ErrorAction Stop).Source
 $compilerCpp = (Get-Command clang++ -ErrorAction Stop).Source
-if ($PrivateAot) {
+$generatedRoot = Join-Path $projectRoot 'src/gen'
+$generatedIncludes = Join-Path $projectRoot 'recomp'
+if ($NativeBatch) {
+    $PrivateAot = $true
+    $batchRoot = (Resolve-Path -LiteralPath $NativeBatch).Path
+    $generatedRoot = Join-Path $batchRoot 'generated'
+    $generatedIncludes = Join-Path $batchRoot 'cfg'
+    if (-not (Test-Path -LiteralPath (Join-Path $generatedRoot 'program_manifest.json')) -or
+        -not (Test-Path -LiteralPath (Join-Path $generatedIncludes 'funcs.h'))) {
+        throw 'NativeBatch requires a completed generated program and its matching cfg/funcs.h.'
+    }
+    $receiptPath = Join-Path $batchRoot 'generation-receipt.json'
+    if (-not (Test-Path -LiteralPath $receiptPath)) { throw 'NativeBatch requires its generation receipt.' }
+    $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+    $manifestHash = (Get-FileHash -LiteralPath (Join-Path $generatedRoot 'program_manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($receipt.exit_code -ne 0 -or $receipt.guarded_range_violations.Count -ne 0 -or
+        $receipt.manifest_sha256 -ne $manifestHash) {
+        throw 'NativeBatch generation failed, violated a fallback guard, or no longer matches its receipt.'
+    }
+} elseif ($PrivateAot) {
     if (-not $Rom) { throw 'Private AOT generation requires -Rom pointing to your own supported USA image.' }
     $Rom = (Resolve-Path -LiteralPath $Rom).Path
     $romIdentity = @{}
@@ -21,7 +40,8 @@ if ($PrivateAot) {
 $executionMode = if ($PrivateAot) { 'OFF' } else { 'ON' }
 cmake -S $projectRoot -B $buildRoot -G Ninja -DCMAKE_BUILD_TYPE=Release `
     "-DCMAKE_C_COMPILER=$compilerC" "-DCMAKE_CXX_COMPILER=$compilerCpp" `
-    "-DSNESRECOMP_INTERPRETER_ONLY=$executionMode"
+    "-DSNESRECOMP_INTERPRETER_ONLY=$executionMode" `
+    "-DIOG_GENERATED_DIR=$generatedRoot" "-DIOG_GENERATED_INCLUDE_DIR=$generatedIncludes"
 if ($LASTEXITCODE -ne 0) { throw 'Engine configuration failed.' }
 cmake --build $buildRoot -j $Jobs
 if ($LASTEXITCODE -ne 0) { throw 'Engine build failed.' }

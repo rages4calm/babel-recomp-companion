@@ -62,6 +62,7 @@ set(IOG_SOURCES
     src/iog_widescreen.c
     src/iog_i18n.c
     src/iog_mods.c
+    src/iog_cheat_rates.c
     src/iog_msu.c
     src/iog_inventory.c
     src/iog_ips.c
@@ -102,7 +103,11 @@ endif()
 # That is what release zips contain; the player's machine produces the
 # playable binary from their own ROM. Without the option an empty src/gen/ is
 # still a hard error (the framework owns the message).
-snesrecomp_target_generated_code(IllusionOfGaiaUsaSNESRecomp ${CMAKE_SOURCE_DIR}/src/gen)
+set(IOG_GENERATED_DIR "${CMAKE_SOURCE_DIR}/src/gen" CACHE PATH
+    "Private generated-code directory (never distribute ROM-derived output)")
+set(IOG_GENERATED_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/recomp" CACHE PATH
+    "Matching generated function declarations for the selected private program")
+snesrecomp_target_generated_code(IllusionOfGaiaUsaSNESRecomp ${IOG_GENERATED_DIR})
 
 # The mod catalog. This names WHERE the packages are; the framework owns the
 # layout they are staged into beside the executable, and stages them on every
@@ -130,6 +135,7 @@ snesrecomp_target_mod_catalog(IllusionOfGaiaUsaSNESRecomp ${CMAKE_SOURCE_DIR}/mo
 # is staged with snesrecomp_target_stage_dir, never with a separate ALL target.
 
 target_include_directories(IllusionOfGaiaUsaSNESRecomp PRIVATE
+    ${IOG_GENERATED_INCLUDE_DIR}
     ${SNESRECOMP_RUNNER_INCLUDE_DIRS}
     # common_rtl.c includes "config.h": the desktop key-map / Config contract
     # the framework host supplies (snesrecomp_target_desktop_host below).

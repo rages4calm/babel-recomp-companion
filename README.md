@@ -8,8 +8,10 @@ The original author's credit, support link and full acknowledgments remain below
 ## Companion development status
 
 This is an early development fork, with no Companion release yet. The default
-engine interprets the game's 65816 instructions; locally generated AOT builds
-remain mixed execution and are not qualified as fully native.
+source build interprets the game's 65816 instructions. A private mixed-native
+batch now passes a 6,000-frame classroom/South Cape comparison in 4:3 and 16:9,
+with **6.26% / 6.32% native CPU cycles** and retained interpreter fallback.
+This is bounded route evidence, not a fully native game or completed campaign.
 
 - **CompanionLauncher:** Windows adapter using the shared 0.2.0 shell, verified
   USA ROM selection, native display/audio/gamepad settings, and direct Play.
@@ -24,9 +26,19 @@ remain mixed execution and are not qualified as fully native.
   is disabled in this edition; [policy and implementation](docs/RETROACHIEVEMENTS.md).
 - **Presentation:** inherited real 16:9 expansion; actor/terrain edge coverage
   still needs scene testing. 21:9, 32:9, a scenery map and journal are planned.
+- **Cheats and mods:** a dedicated launcher panel shares the native settings
+  with the in-game menu. Optional room-clear stat rewards support 1x–8x;
+  movement keeps Babel's existing hold-Y run behavior.
+  [Controls and limits](docs/CHEATS-AND-MODS.md).
+- **Windows icons:** coordinated flute/world/comet artwork for the game and a
+  play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
 - **Framework:** updated to SNESRecomp `66eebe6`, latest main checked November 2,
   2026, with Babel-specific integration changes preserved. RomAtlas independently
-  checked reset/wait boundaries using the method retained by Lagoon.
+  checked 4,096 observed cartridge boundaries using the method retained by Lagoon.
+  [Native batch evidence and remaining timing work](docs/NATIVE-BATCH.md).
+  Confirmed analyzer bug [#239](https://github.com/RetroPortingToolKit/snesrecomp/issues/239)
+  and matching timing findings on [#205](https://github.com/RetroPortingToolKit/snesrecomp/issues/205)
+  are reported upstream.
 - **Evidence:** [baseline audit](docs/BASELINE-AUDIT.md),
   [current handoff](HANDOFF.md), [launcher build/use](companion/README.md),
   [achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md).

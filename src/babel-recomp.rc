@@ -1,6 +1,6 @@
 // Windows version information (Explorer: Properties -> Details).
 #include <winver.h>
-1 ICON "../res/icon.ico"
+1 ICON "../res/branding/gaia-game.ico"
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION 0,1,0,1
 PRODUCTVERSION 0,1,0,1

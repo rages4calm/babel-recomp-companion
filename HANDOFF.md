@@ -3,6 +3,12 @@
 Updated November 2, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
+Batch 002 now has a **route-qualified private mixed-native build**. The natural
+6,000-frame classroom-to-South-Cape route matches retained interpretation in
+4:3 and 16:9. Native CPU-cycle shares are **6.2645% / 6.3244%** respectively;
+this is partial native execution, not a fully native game or campaign proof.
+[Detailed evidence, failures and reproduction](docs/NATIVE-BATCH.md).
+
 ## Current source and decisions
 
 - Fork: `rages4calm/babel-recomp-companion`; original Babel author **mr0ta /
@@ -24,6 +30,13 @@ Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
   are present, **not yet connected to live unlock/storage/UI/audio**. Follow the
   [integration worklist](docs/ACHIEVEMENTS-INTEGRATION.md); never infer unlocks
   from a loaded save or copy the RA set.
+- Dedicated launcher **Cheats and Mods** shares native settings with the in-game
+  menu. Source-guarded room-clear rewards support 1x–8x; no movement multipliers.
+  Cheat eligibility is sticky for the process session, ready for future live
+  achievements. [Controls](docs/CHEATS-AND-MODS.md), [engine guards](docs/CHEAT-RATES.md).
+- New transparent game/launcher icons are embedded at nine Windows sizes.
+  [Artwork, provenance and converter](res/branding/README.md). Computer-control
+  runtime was released after visual checks; previews are closed.
 
 ## Verified behavior
 
@@ -31,21 +44,28 @@ Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 |---|---|
 | Windows source builds | Interpreter-only and private generated-code builds linked with Clang/Ninja. Final development package is interpreter-only. |
 | Stock cold boot/input | 3,600-frame CPU/WRAM traces matched between the two configurations; final interpreter build reproduced hash `a5573d387c5a744337f72410902330e4d2c2388abf310559feafc763a599bd64`. Visible sea/intro text checked; 342x224 and 256x224 framing captured. |
-| Native execution | **100% interpreted CPU cycles, 0% AOT cycles** on that route, including the generated-code build. This is not native-game qualification or a campaign. |
-| Framework regressions | 26 Python checks; 89 interpreter checks; 432 bridge checks in each of two bus modes; 27 interrupt-tail checks; CPU bus and Mode 7 analytic fixtures. Two hardcoded-toolchain Python skips were covered by directly running their C harnesses. |
-| Launcher | 30 synthetic adapter checks, 35 including read-only owner-ROM/launch-plan checks; shared pages and new soundtrack window rendered/reviewed. Actual adapter-to-engine bounded process handoff passed separately. |
+| Native execution | Batch 002: 201 profile roots, 888 variants / 816 eligible candidates; actual natural-route native share **6.2645% in 4:3, 6.3244% in 16:9**. Candidate counts are not counts of executed/qualified functions. Earlier baseline remained 0% AOT. |
+| Natural gameplay comparison | 6,000 frames from cold boot through classroom dialogue, directional movement and the South Cape transition. Exact CPU/WRAM trace, CPU/master totals, 13 memory/PPU/APU/DSP/PCM-ring/port-scheduler snapshots, DMA/PPU journals, and full final output including widescreen margins. CPU audio-event stamps match; batched SPC beam tags are explicitly separated from matching event/sample/state evidence. |
+| Framework regressions | 593 Python v2/SDK tests passed, 2 skips; 12 Rust analyzer tests; 432 bridge checks in each bus mode and 27 interrupt-tail checks directly passed. Earlier baseline's 89 interpreter, CPU bus and Mode 7 checks remain scoped to their receipts. |
+| Launcher/mods/icons | 30 adapter +47 importer +7 activation +21 native-mod tests. Room-reward helpers/source: 136 assertions; actual callbacks with host stubs: 656 assertions. Final-engine assisted 8x/native versus 8x/interpreter comparison passed; separate 1x control passed 8 reward-effect assertions. Native launcher UI/draft/Revert and its title-bar icon reviewed. Both rebuilt PE icon groups match all nine source ICO frames. |
 | Achievements foundation | 100 synthetic checks through the actual shared core/presentation. No live unlock claim. |
 | Music import | 47 importer checks plus 7 native activation checks. The owner's JUD6MENT ZIP imported once, all 28 track hashes verified, original credits DOCX retained and original ZIP hash unchanged. |
 | Music runtime | Four paced 900-frame cases: full JUD6MENT pack, absent selected folder, partial synthetic pack missing title track, and original audio. All booted/captured output and delivered samples to SDL's dummy device. Full pack started title track 1; absent/partial selections retained original audio. |
 | RomAtlas | Existing verified Lagoon research tool is current in decoder implementation to the inspected latest commit; 18 bounded Gaia structural decodes passed. Structural evidence only. [Method/provenance](docs/ROMATLAS-PLAN.md). |
 
-No physical controller, speaker output, campaign, combat/puzzle route, save-state
-music restoration or non-Windows gameplay has been qualified in this batch.
+No physical controller, speaker output, campaign, natural combat reward,
+save-state music restoration or non-Windows gameplay has been qualified here.
+Assisted/teleported/flag-edited checks have separate receipts and do not extend
+the natural route's cold-play scope.
+[Assisted testing](docs/ASSISTED-TESTING.md) records every injected field, the
+checkpoint dependency and failed teleport prerequisites. Current assisted proof
+covers actual reward-backend wiring and narrow town movement, not another area.
 Early failed receipts remain failed: the inherited AOT build differed at frame 1;
 an initial bridge merge missed initialization; early harness runs used invalid
 button/aspect spellings or accepted black captures; a missing optional-pack path
 blocked boot before the fallback fix. Later checks supersede only their stated
-scope. Do not turn the 0% AOT comparison into a native-coverage claim.
+scope. Batch 002's failed aggregate, instruction-only, first pacing and
+pre-credit/pre-PB candidates remain failed; see its detailed note.
 
 ## Working local artifacts and reproduction
 
@@ -58,7 +78,15 @@ python scripts/package_release.py build windows-x86_64 --companion companion/bin
 ```
 
 The shared launcher package feed is the sibling CompanionLauncher checkout.
-The compiled engine is `build/babel-recomp.exe`. The one verified local music
+The compiled engine is `build/babel-recomp.exe`, currently the selected private
+mixed-native build (SHA-256
+`f8f7f82ff37336ac24b1053ae89151668dd377cd2507ae09680d04c90a034680`).
+Its generated source lives only under `.local/batch-001/native-002/native-selected/`.
+`./scripts/build_windows.ps1` still builds an interpreter-only package candidate;
+use `-NativeBatch .local/batch-001/native-002/native-selected -Jobs 2` to restore
+this private native build. Set `SNESRECOMP_INTERPRET_ALL=1` for retained fallback
+in the same mixed executable; clear that environment variable for native play.
+The one verified local music
 copy is under `build/msu1/companion-packs/`; native selection is enabled in
 `build/mods/preloaded/state.toml`. Use **Soundtrack → Use original audio** to
 disable it without deleting music. Download opens the credited provider in the
@@ -80,13 +108,14 @@ is authorized or published. Tag builds no longer publish automatically.
 
 ## Next bounded work
 
-1. Capture an actual in-play stock route and exact PC/M/X/E execution residuals;
-   use existing GaiaLabs definitions plus the transferred RomAtlas method to
-   promote a small meaningful native batch. Keep deadline guards and interpreter
-   fallback. Current optional generation produced 8 exact variants with no AOT
-   execution in the measured route; bulk source generation is not the endpoint.
-2. Qualify actor visibility, terrain streaming, transitions, dialogue/HUD and
-   camera boundaries in existing 16:9 before extending to 21:9/32:9.
+1. Extend the qualified large cohort from the current natural route, using
+   [guide milestones](docs/GUIDE-RESEARCH.md) and explicitly recorded assisted
+   teleports/flags/cheats. First natural prison reward/combat, Freedan puzzles,
+   later forms and source-safe missing transfer boundaries remain work.
+2. Expand 16:9 actor/terrain/camera/dialogue coverage beyond the qualified
+   classroom/South Cape route before extending to 21:9/32:9. Existing raw SPC
+   beam-tag differences are diagnostic batching metadata; preserve the strict
+   failed receipt and require matching APU state/PCM/queue in sample-clock mode.
 3. Wire durable local achievements with verified event hooks and explicit restore/
    rewind/profile generations, then shared browser/toasts/chime and launcher view.
 4. Build scenery map, story-flag journal and spoiler-controlled jewel assistance
