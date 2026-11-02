@@ -1102,7 +1102,8 @@ static void AddAscii(const Structure *st, const Rom *ru, const Rom *re, IogPack 
             Toks v = {0};
             if (AsciiDecode(&ae, t, &v, 0) && v.n) {
                 et[nes].toks = v;
-                es[nes++] = (Site){(uint32_t)i, t, 0xBD, nes};
+                es[nes] = (Site){(uint32_t)i, t, 0xBD, nes};
+                nes++;
             } else {
                 free(v.t);
             }

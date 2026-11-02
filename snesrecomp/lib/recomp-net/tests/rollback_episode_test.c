@@ -21,6 +21,20 @@ typedef struct TestHost
     uint32_t digest_at[256];
     uint8_t loaded_tick_valid;
     uint32_t loaded_tick;
+    /* What the host's history holds for a REMOTE seat. A real host has the
+     * wire-confirmed rows up to its admitted tip and only predictions (or
+     * nothing) past it; a stub that answers "confirmed" for every seat at
+     * every tick is the one history in which the peer's SEAL_ROWS are never
+     * needed. 0: predicted, 1: wire-confirmed, 2: missing, 3: invalid. */
+    uint8_t remote_history;
+    /* Seats the stub will answer for at all (a seat outside the match has no
+     * row). */
+    uint32_t seats;
+    uint32_t asked_outside_seats;
+    /* Seats whose rows the host answers wire-confirmed whatever
+     * remote_history says: a sparse room's empty seats, for which every peer
+     * synthesizes the same row and nobody sends SEAL_ROWS. */
+    uint32_t confirmed_seats;
 } TestHost;
 
 static int host_save_state(void *ctx, uint32_t tick)
@@ -61,14 +75,262 @@ static uint8_t host_hash_confirm_through(void *ctx, uint32_t tick)
 
 static uint8_t host_get_input_row(void *ctx, int32_t slot, uint32_t tick, RNetRbFrame *out)
 {
-    (void)ctx;
+    TestHost *h = (TestHost *)ctx;
+    memset(out, 0, sizeof(*out));
+    if (slot < 0 || (uint32_t)slot >= h->seats)
+    {
+        h->asked_outside_seats++;
+        return 0u;
+    }
+    if (slot != 0 && h->remote_history == 2u)
+    {
+        return 0u;
+    }
     out->tick = tick;
     out->buttons = (uint16_t)(0x100u + (uint16_t)slot);
     out->stick_x = (int8_t)(10 + slot);
     out->stick_y = 0;
-    out->is_predicted = 0u;
-    out->is_valid = 1u;
+    /* Seat 0 is local in every session below: its row is always authority. */
+    out->is_predicted = (slot != 0 && h->remote_history == 0u) ? 1u : 0u;
+    out->is_valid = (slot != 0 && h->remote_history == 3u) ? 0u : 1u;
+    if (h->confirmed_seats & (1u << (uint32_t)slot))
+    {
+        out->buttons = 0u;
+        out->stick_x = 0;
+        out->is_predicted = 0u;
+        out->is_valid = 1u;
+    }
     return 1u;
+}
+
+/* A sparse room: seats 0 and 2 of 4 are occupied, 1 and 3 are empty. Seat 2
+ * sends SEAL_ROWS; nobody sends them for 1 or 3. Seal completion must wait on
+ * seat 2 alone -- waiting on an empty seat never completes, the episode times
+ * out, and its correction is lost (measured: rb_driver_test's sparse
+ * scenario forked 3 runs in 8 before RNetRbConfig.occupied_mask). */
+static void test_sparse_room(const RNetRollbackVTable *vt, TestHost *host)
+{
+    RNetRbConfig cfg;
+    RNetRbSession *s;
+    RNetRbCorrection corr;
+    RNetRbFrame rows[2];
+    RNetRbFrame got;
+    uint32_t i;
+
+    host->seats = 4u;
+    host->remote_history = 0u;        /* remote history is only predictions */
+    host->confirmed_seats = 0xAu;     /* seats 1 and 3: the synthesized row */
+
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.local_slot = 0u;
+    cfg.delay = 3u;
+    cfg.slot_count = 4u;
+    memset(&corr, 0, sizeof(corr));
+    corr.epoch_id = 21u;
+    corr.target_tick = 1u;
+    memset(rows, 0, sizeof(rows));
+    for (i = 0u; i < 2u; ++i)
+    {
+        rows[i].tick = i;
+        rows[i].buttons = 0x202u;
+        rows[i].is_valid = 1u;
+    }
+
+    /* Dense (legacy occupied_mask = 0): every seat is a peer. Seats 1 and 3
+     * pre-seal from confirmed history; seat 2 must still send its rows. */
+    s = rnet_rb_create(&cfg, vt);
+    expect_true(s != NULL, "dense 4-seat session creates");
+    expect_true(rnet_rb_expected_peer_mask(s) == 0xEu, "dense: expects seats 1,2,3");
+    rnet_rb_begin_episode(s, &corr);
+    rnet_rb_seal_inputs(s, 0u, 1u, 2);
+    expect_true(!rnet_rb_all_peer_seal_rows_complete(s), "dense: waits on seat 2");
+    rnet_rb_destroy(s);
+
+    /* Dense, and the host has NOTHING confirmed for seat 3: the dense room
+     * keeps waiting on it after seat 2 answers (the sparse bug's shape). */
+    host->confirmed_seats = 0x2u;
+    s = rnet_rb_create(&cfg, vt);
+    rnet_rb_begin_episode(s, &corr);
+    rnet_rb_seal_inputs(s, 0u, 1u, 2);
+    expect_true(rnet_rb_apply_peer_seal_rows(s, 21u, 0u, 1u, 2, 0u, rows, 2u),
+                "dense: seat 2's rows apply");
+    expect_true(!rnet_rb_all_peer_seal_rows_complete(s),
+                "dense: still waits on seat 3, which nobody seals");
+    rnet_rb_destroy(s);
+    host->confirmed_seats = 0xAu;
+
+    /* Sparse: only seat 2 is expected. */
+    cfg.occupied_mask = 0x5u;
+    s = rnet_rb_create(&cfg, vt);
+    expect_true(s != NULL, "sparse session creates");
+    expect_true(rnet_rb_expected_peer_mask(s) == 0x4u, "sparse: expects seat 2 only");
+    rnet_rb_begin_episode(s, &corr);
+    rnet_rb_seal_inputs(s, 0u, 1u, 2);
+    expect_true(!rnet_rb_all_peer_seal_rows_complete(s),
+                "sparse: still waits on the occupied seat");
+    expect_true(rnet_rb_apply_peer_seal_rows(s, 21u, 0u, 1u, 2, 0u, rows, 2u),
+                "sparse: seat 2's rows apply");
+    expect_true(rnet_rb_all_peer_seal_rows_complete(s),
+                "sparse: complete once every OCCUPIED seat has sealed");
+    for (i = 0u; i < 2u; ++i)
+    {
+        expect_true(rnet_rb_get_sealed_frame(s, 3, i, &got) && got.buttons == 0u &&
+                        !got.is_predicted,
+                    "sparse: an empty seat replays the synthesized row");
+        expect_true(rnet_rb_get_sealed_frame(s, 2, i, &got) && got.buttons == 0x202u,
+                    "sparse: the occupied seat replays its owner's row");
+    }
+    rnet_rb_destroy(s);
+
+    /* Sparse, and the host breaks the contract (no confirmed row for the
+     * empty seats): completion still does not wait on a seat nobody sits in,
+     * and the core never invents the missing row -- the replay finds it
+     * missing and says so, instead of a seal watchdog timing out silently. */
+    host->confirmed_seats = 0u;
+    s = rnet_rb_create(&cfg, vt);
+    rnet_rb_begin_episode(s, &corr);
+    rnet_rb_seal_inputs(s, 0u, 1u, 2);
+    expect_true(rnet_rb_apply_peer_seal_rows(s, 21u, 0u, 1u, 2, 0u, rows, 2u),
+                "sparse/no-row: seat 2's rows apply");
+    expect_true(rnet_rb_all_peer_seal_rows_complete(s),
+                "sparse/no-row: completion does not wait on an empty seat");
+    expect_true(!rnet_rb_get_sealed_frame(s, 3, 0u, &got),
+                "sparse/no-row: the core never invents an empty seat's row");
+    rnet_rb_destroy(s);
+    host->confirmed_seats = 0xAu;
+
+    /* An observer (local_slot == slot_count) waits on every occupied seat. */
+    cfg.local_slot = 4u;
+    s = rnet_rb_create(&cfg, vt);
+    expect_true(s != NULL && rnet_rb_expected_peer_mask(s) == 0x5u,
+                "sparse observer expects seats 0 and 2");
+    rnet_rb_destroy(s);
+
+    host->seats = 2u;
+    host->confirmed_seats = 0u;
+}
+
+static void test_seal_bounds(RNetRbConfig cfg, const RNetRollbackVTable *vt)
+{
+    static const uint32_t capacities[] = {0u, 1u, 63u, 64u, 65u, 128u, UINT32_MAX};
+    RNetRbCorrection corr;
+    RNetRbFrame row;
+    uint32_t c;
+
+    memset(&corr, 0, sizeof(corr));
+    corr.epoch_id = 11u;
+    corr.slot = 1;
+    memset(&row, 0, sizeof(row));
+    row.is_valid = 1u;
+    for (c = 0u; c < sizeof(capacities) / sizeof(capacities[0]); ++c)
+    {
+        uint32_t limit = capacities[c];
+        uint32_t offset;
+        RNetRbSession *s;
+        cfg.seal_max_span = limit;
+        if (limit == 0u || limit > 64u)
+        {
+            limit = 64u;
+        }
+        s = rnet_rb_create(&cfg, vt);
+        expect_true(s != NULL, "create bounded session");
+        corr.load_tick = 100u;
+        corr.target_tick = 100u + limit;
+        rnet_rb_begin_episode(s, &corr);
+        rnet_rb_seal_inputs(s, 100u, corr.target_tick, 1);
+        expect_true(!rnet_rb_inputs_sealed(s), "oversized initial seal rejected");
+        expect_true(rnet_rb_get_seal_span(s) == 0u, "rejected seal has no rows");
+        expect_true(rnet_rb_get_target_tick(s) == corr.target_tick,
+                    "oversized request does not silently shorten target");
+        expect_true(!rnet_rb_all_peer_seal_rows_complete(s), "rejected seal incomplete");
+
+        corr.target_tick--;
+        rnet_rb_begin_episode(s, &corr);
+        rnet_rb_seal_inputs(s, 100u, corr.target_tick, 1);
+        expect_true(rnet_rb_get_seal_span(s) == limit, "initial seal fills capacity");
+        for (offset = 0u; offset + 1u < limit; ++offset)
+        {
+            expect_true(rnet_rb_apply_peer_seal_rows(s, 11u, 100u, corr.target_tick,
+                                                     1, offset, &row, 1u), "apply prefix row");
+        }
+        expect_true(!rnet_rb_all_peer_seal_rows_complete(s), "last row required at capacity");
+        expect_true(!rnet_rb_seat_row_authoritative(s, 1, corr.target_tick),
+                    "missing last row has no authority");
+        expect_true(rnet_rb_apply_peer_seal_rows(s, 11u, 100u, corr.target_tick,
+                                                 1, limit - 1u, &row, 1u), "apply last row");
+        expect_true(rnet_rb_all_peer_seal_rows_complete(s), "all capacity rows complete");
+        expect_true(rnet_rb_seat_row_authoritative(s, 1, corr.target_tick), "last row authoritative");
+        expect_true(!rnet_rb_extend_target(s, corr.target_tick + 1u), "extension beyond capacity rejected");
+        expect_true(!rnet_rb_apply_peer_seal_rows(s, 11u, 100u, corr.target_tick + 1u,
+                                                  1, limit, &row, 1u), "peer oversized extension rejected");
+        expect_true(rnet_rb_get_target_tick(s) == corr.target_tick, "failed extension retains target");
+        rnet_rb_seal_inputs(s, 100u, corr.target_tick, 1);
+        expect_true(!rnet_rb_all_peer_seal_rows_complete(s), "reseal clears previous peer credit");
+        rnet_rb_seal_inputs(s, 0u, UINT32_MAX, 1);
+        expect_true(!rnet_rb_inputs_sealed(s), "overflow seal invalidates previous seal");
+        expect_true(rnet_rb_get_target_tick(s) == corr.target_tick, "overflow preserves correction target");
+        rnet_rb_seal_inputs(s, 101u, 100u, 1);
+        expect_true(!rnet_rb_inputs_sealed(s), "reversed seal rejected");
+
+        corr.load_tick = 0u;
+        corr.target_tick = 0u;
+        rnet_rb_begin_episode(s, &corr);
+        rnet_rb_seal_inputs(s, 0u, 0u, 1);
+        expect_true(!rnet_rb_can_extend_target(s, UINT32_MAX), "overflow extension unavailable");
+        expect_true(!rnet_rb_apply_peer_seal_rows(s, 11u, 0u, UINT32_MAX,
+                                                  1, 0u, &row, 1u), "peer overflow extension rejected");
+
+        corr.load_tick = UINT32_MAX - limit + 1u;
+        corr.target_tick = UINT32_MAX;
+        rnet_rb_begin_episode(s, &corr);
+        rnet_rb_seal_inputs(s, corr.load_tick, corr.target_tick, 1);
+        expect_true(rnet_rb_tick_in_sealed_span(s, UINT32_MAX), "maximum tick included");
+        expect_true(!rnet_rb_tick_in_sealed_span(s, 0u), "maximum tick span does not wrap");
+        expect_true(rnet_rb_resign_slot_range(s, 0, 0u, UINT32_MAX), "resign clamps full tick range");
+        expect_true(rnet_rb_apply_peer_seal_rows(s, 11u, corr.load_tick, UINT32_MAX,
+                                                 1, limit - 1u, &row, 1u), "apply maximum tick row");
+        expect_true(rnet_rb_seat_row_authoritative(s, 1, UINT32_MAX), "maximum tick authority");
+        rnet_rb_destroy(s);
+    }
+}
+
+static void test_history_authority(const RNetRbConfig *cfg, const RNetRollbackVTable *vt,
+                                   TestHost *host)
+{
+    uint8_t mode;
+    for (mode = 0u; mode < 4u; ++mode)
+    {
+        RNetRbSession *s = rnet_rb_create(cfg, vt);
+        RNetRbCorrection corr;
+        RNetRbFrame row;
+        uint8_t confirmed = (mode == 1u);
+        host->remote_history = mode;
+        memset(&corr, 0, sizeof(corr));
+        corr.target_tick = 1u;
+        rnet_rb_begin_episode(s, &corr);
+        rnet_rb_seal_inputs(s, 0u, 1u, 1);
+        expect_true(rnet_rb_all_peer_seal_rows_complete(s) == confirmed,
+                    "only confirmed history pre-seals remote rows");
+        expect_true(rnet_rb_seat_row_authoritative(s, 1, 1u) == confirmed,
+                    "history row authority matches confirmation");
+        expect_true(rnet_rb_extend_target(s, 2u), "extend history test");
+        expect_true(rnet_rb_all_peer_seal_rows_complete(s) == confirmed,
+                    "only confirmed history completes extension");
+        expect_true(rnet_rb_resign_slot_range(s, 1, 0u, 2u), "resign history test");
+        expect_true(rnet_rb_seat_row_authoritative(s, 1, 2u) == confirmed,
+                    "resign does not invent remote authority");
+        memset(&row, 0, sizeof(row));
+        row.buttons = 0x234u;
+        row.is_valid = 1u;
+        expect_true(rnet_rb_apply_peer_seal_rows(s, 0u, 0u, 2u, 1, 2u, &row, 1u),
+                    "peer confirms row before resign");
+        expect_true(rnet_rb_resign_slot_range(s, 1, 2u, 2u), "resign previously credited row");
+        expect_true(rnet_rb_get_sealed_frame(s, 1, 2u, &row) && !row.is_predicted &&
+                        row.buttons == (confirmed ? 0x101u : 0x234u),
+                    "unconfirmed history preserves prior peer authority");
+        rnet_rb_destroy(s);
+    }
+    host->remote_history = 0u;
 }
 
 int main(void)
@@ -84,6 +346,7 @@ int main(void)
     RNetRbEvent ev;
 
     memset(&host, 0, sizeof(host));
+    host.seats = 2u;
     memset(&cfg, 0, sizeof(cfg));
     cfg.local_slot = 0u;
     cfg.delay = 3u;
@@ -127,6 +390,8 @@ int main(void)
     expect_true(rnet_rb_get_sealed_frame(s, 0, 52u, &got), "local sealed row valid");
     expect_true(got.buttons == 0x100u, "local row buttons from history");
     expect_true(!rnet_rb_all_peer_seal_rows_complete(s), "peer rows not complete yet");
+    expect_true(host.asked_outside_seats == 0u,
+                "sealing never asks the host for a seat outside the match");
 
     /* Export local chunk for slot 0. */
     expect_true(rnet_rb_export_seal_rows_chunk(s, 0, 0u, 8u, rows, &count), "export local chunk");
@@ -194,6 +459,38 @@ int main(void)
     rnet_rb_session_reset(s);
     expect_true(rnet_rb_get_phase(s) == nRNetRbPhaseLive, "reset to live");
     expect_true(!rnet_rb_inputs_sealed(s), "reset clears seal");
+
+    /* --- Pre-seal from wire-confirmed history (ca18d96) ---
+     * A remote row the host holds as wire-CONFIRMED is the owner's own
+     * transmitted pad, byte-identical to what the owner seals, so it counts
+     * without waiting for SEAL_ROWS. That is what lets a follower -- whose
+     * history already holds the initiator's confirmed rows -- complete its
+     * seal with no message at all. A PREDICTED row never counts: sealing a
+     * prediction as authority forks the peers when it was wrong. */
+    host.remote_history = 1u;
+    memset(&corr, 0, sizeof(corr));
+    corr.epoch_id = 11u;
+    corr.mismatch_tick = 60u;
+    corr.load_tick = 60u;
+    corr.target_tick = 63u;
+    corr.slot = 1;
+    rnet_rb_begin_episode(s, &corr);
+    rnet_rb_seal_inputs(s, corr.load_tick, corr.target_tick, corr.slot);
+    expect_true(rnet_rb_all_peer_seal_rows_complete(s),
+                "confirmed remote history pre-seals the remote seat");
+    expect_true(rnet_rb_seat_row_authoritative(s, 1, 61u),
+                "a pre-sealed confirmed row is authoritative");
+    expect_true(rnet_rb_get_sealed_frame(s, 1, 61u, &got) && got.buttons == 0x101u,
+                "pre-sealed row carries the confirmed pad");
+    rnet_rb_session_reset(s);
+    host.remote_history = 0u;
+    rnet_rb_begin_episode(s, &corr);
+    rnet_rb_seal_inputs(s, corr.load_tick, corr.target_tick, corr.slot);
+    expect_true(!rnet_rb_all_peer_seal_rows_complete(s),
+                "predicted remote history does NOT pre-seal");
+    expect_true(!rnet_rb_seat_row_authoritative(s, 1, 61u),
+                "a predicted row is not authoritative");
+    rnet_rb_session_reset(s);
 
     /* --- Tip-extend + light-tip --- */
     cfg.tip_runway = RNET_RB_TIP_RUNWAY_DEFAULT;
@@ -457,6 +754,10 @@ int main(void)
         expect_true(rnet_rb_create(&ocfg, &vt) == NULL,
                     "a slot past the sentinel is still refused");
     }
+
+    test_seal_bounds(cfg, &vt);
+    test_history_authority(&cfg, &vt, &host);
+    test_sparse_room(&vt, &host);
 
     if (g_failures == 0)
     {

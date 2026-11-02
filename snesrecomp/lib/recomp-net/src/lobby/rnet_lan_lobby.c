@@ -96,6 +96,14 @@ static int write_lobby(const char *path, const RNetLanLobby *lobby)
                  clamp_lan_prediction(lobby->input_prediction >= 2
                                           ? lobby->input_prediction
                                           : 4)) > 0;
+    /* V4, trailing and optional (the magic stays _3 so an older reader,
+     * which stops after the prediction line, still reads this file). */
+    if (ok)
+        ok = fprintf(file, "%u\n", (unsigned)lobby->session_id) > 0;
+    if (ok)
+        ok = fprintf(file, "%d\n", lobby->session_variant) > 0;
+    if (ok)
+        write_field(file, lobby->mod_set);
     if (fclose(file) != 0)
     {
         ok = 0;
@@ -135,6 +143,7 @@ int rnet_lan_lobby_read(const char *path, const char *expected_game,
     char input_delay_line[16];
     char rollback_line[16];
     char prediction_line[16];
+    char session_line[16];
     RNetLanLobby lobby;
     if (path == NULL || out == NULL)
     {
@@ -185,6 +194,12 @@ int rnet_lan_lobby_read(const char *path, const char *expected_game,
         lobby.rollback = (strtol(rollback_line, NULL, 10) != 0) ? 1 : 0;
         lobby.input_prediction =
             clamp_lan_prediction((int)strtol(prediction_line, NULL, 10));
+        /* V4 session id: optional, absent from an older writer. */
+        if (read_field(file, session_line, sizeof(session_line)))
+            lobby.session_id = (rnet_u32)strtoul(session_line, NULL, 10);
+        if (read_field(file, session_line, sizeof(session_line)))
+            lobby.session_variant = (int)strtol(session_line, NULL, 10);
+        (void)read_field(file, lobby.mod_set, sizeof(lobby.mod_set));
     }
     fclose(file);
     if (strcmp(magic, "RNET_LAN_LOBBY_1") != 0 &&

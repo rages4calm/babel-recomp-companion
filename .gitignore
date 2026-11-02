@@ -10,6 +10,7 @@
 # Build trees and packaged output
 /build/
 /build-*/
+/.local/
 /dist/
 /saves/
 
@@ -22,6 +23,7 @@
 /rom.cfg
 /keybinds.ini
 /config.ini
+/config.local.ini
 /input.ini
 
 .DS_Store
@@ -36,6 +38,7 @@
 /languages/
 /mods/**/*.ips
 ra.ini
+*.token
 last_run_report.json
 *.bak*
 __pycache__/

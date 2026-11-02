@@ -1,5 +1,5 @@
 /*
- * cosim_state.c -- full guest-architectural-state canonical hash (SNES_COSIM.md).
+ * cosim_state.c -- full guest-architectural-state canonical hash (docs/COSIM.md).
  * Shared by the recomp `snes-cosim` build and the `snes-cosim-ref` build; the
  * two sides run IDENTICAL hashing code so any divergence is a real guest one.
  * DEV/DIAGNOSTICS ONLY (see cosim_state.h).
@@ -63,7 +63,11 @@ static void hashsli_func(SaveLoadInfo *sli, void *data, size_t n) {
     HashSli *hs = (HashSli *)sli;
     hs->h = fnv_bytes(hs->h, data, n);
 }
-static void hashsli_init(HashSli *hs) { hs->base.func = hashsli_func; hs->h = FNV_OFF; }
+static void hashsli_init(HashSli *hs) {
+    hs->base.func = hashsli_func;
+    hs->base.peek = NULL;
+    hs->h = FNV_OFF;
+}
 
 /* ── canonical CPU emit (fixed order/width, no PC) ──────────────────────── */
 static uint64_t hash_cpu(uint32_t *leader_pc_out) {
@@ -83,7 +87,7 @@ static uint64_t hash_cpu(uint32_t *leader_pc_out) {
 #endif
     if (leader_pc_out) *leader_pc_out = pc24;
     /* Explicit little-endian, fixed field order. PC deliberately EXCLUDED
-     * (currency mismatch — SNES_COSIM.md); reported separately as a label. */
+     * (currency mismatch — docs/COSIM.md); reported separately as a label. */
     uint8_t b[12];
     b[0]=A&0xff; b[1]=A>>8; b[2]=X&0xff; b[3]=X>>8; b[4]=Y&0xff; b[5]=Y>>8;
     b[6]=S&0xff; b[7]=S>>8; b[8]=D&0xff; b[9]=D>>8; b[10]=DB; b[11]=PB;

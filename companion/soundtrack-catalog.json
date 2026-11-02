@@ -1,0 +1,191 @@
+{
+  "formatVersion": 1,
+  "packs": [
+    {
+      "id": "jud6ment-orchestra",
+      "title": "Illusion of Gaia Orchestra",
+      "author": "JUD6MENT",
+      "sourceListingUrl": "https://www.zeldix.net/t1604-illusion-of-gaiatime-gaia-trilogy-ii",
+      "sourceDownloadUrl": "https://mega.nz/file/6OpyGLIQ#uE3VHjqVNrR-hQjOt1wpknC-1-TT8YQkwRwLbSzAtW0",
+      "verifiedDate": "2026-11-02",
+      "archiveName": "Illusion of Gaia Orchestra by JUD6MENT.zip",
+      "archiveSize": 671551176,
+      "archiveSha256": "c9fd1df5590bdeabe411c238d9a7fbb8295b0fefc7ca7cf68ff47da6492604dc",
+      "credits": {
+        "name": "Artist Track Credit Link.docx",
+        "size": 17357,
+        "sha256": "a97fad1d5de8589d781cb388ab4fb05649e73cfdf7fd9a496420dc5d6f9c075a"
+      },
+      "tracks": [
+        {
+          "number": 1,
+          "size": 33645192,
+          "loopStart": 1405687,
+          "sha256": "03c84f90e844c1d1f37c5c1a35b9d61f77ac8cb170bda0dfe5e2b4b91c546c04"
+        },
+        {
+          "number": 2,
+          "size": 18315356,
+          "loopStart": 797003,
+          "sha256": "dbd813614e8759548e1c7cf9a71b9ccba68574e0dbf99201ac6aadea20b3501c"
+        },
+        {
+          "number": 3,
+          "size": 36778692,
+          "loopStart": 1122126,
+          "sha256": "b9d618c23ab3c84510e44f4c521b2a0d7a06c6cf94d25323d518e7649b336bca"
+        },
+        {
+          "number": 4,
+          "size": 23850948,
+          "loopStart": 2982260,
+          "sha256": "aafed49add842e00c5d430c80c5a04ad581bceca4ea8f6782c4fda5d9c54b7fe"
+        },
+        {
+          "number": 5,
+          "size": 24851084,
+          "loopStart": 1271541,
+          "sha256": "c70a4f4387103e03349d7fb616975bad818a565f8fc2e2692fb0586b396231f0"
+        },
+        {
+          "number": 6,
+          "size": 36787176,
+          "loopStart": 1124247,
+          "sha256": "9c530ba82d6297a71fa0c1319e99de183195db5d6b4967d5667e9fadd6e0ebfa"
+        },
+        {
+          "number": 7,
+          "size": 32227432,
+          "loopStart": 252743,
+          "sha256": "d769a99da3e024e9d918aad8c1a98158a1664eb949b24dc84a3a5b379a99e450"
+        },
+        {
+          "number": 8,
+          "size": 28688644,
+          "loopStart": 1463925,
+          "sha256": "ded41043dfdbf9b80073c1b9884564648b024dec779391371e622d8a7bf258f1"
+        },
+        {
+          "number": 9,
+          "size": 22932576,
+          "loopStart": 391407,
+          "sha256": "2426e0c116dda5acd546fe85b97aaa1fff3898b786a1245a2dce90386f80f4d0"
+        },
+        {
+          "number": 10,
+          "size": 23375696,
+          "loopStart": 294780,
+          "sha256": "465c12c73dd22e6d3131ebc4d29f381e5514c2ab6b99d3342478a05d6d232cf7"
+        },
+        {
+          "number": 11,
+          "size": 22353664,
+          "loopStart": 211662,
+          "sha256": "729aac4e6197e3b1ba6bc0b93b57982e40b72b4ffc7a64b15347bd6a5079d629"
+        },
+        {
+          "number": 12,
+          "size": 34499588,
+          "loopStart": 1387647,
+          "sha256": "fd481321c4e6aed990d0fa963aa674fb20a8f2e57713a6b2507401ee3ab32555"
+        },
+        {
+          "number": 13,
+          "size": 33767696,
+          "loopStart": 3926004,
+          "sha256": "7191c5193a610a69edfa20e85000e0c388e90fd80d8db6669453154423006267"
+        },
+        {
+          "number": 14,
+          "size": 13033296,
+          "loopStart": 362427,
+          "sha256": "8ae34420610d1dc2973522d4561e8f2f65752876277fbffbfcca7b60bb404861"
+        },
+        {
+          "number": 15,
+          "size": 25505648,
+          "loopStart": 1283351,
+          "sha256": "0d2d0b7a91b1dfeb6d0bb4f23f522d53ad233e628aff70f96d34ae5aa7034aab"
+        },
+        {
+          "number": 16,
+          "size": 86066544,
+          "loopStart": 1785538,
+          "sha256": "f38a8f4d0f45fcb1b5dde9931b9cccb4de99c8b1a967eb745eb3fdb3e93c6c37"
+        },
+        {
+          "number": 17,
+          "size": 26283760,
+          "loopStart": 357682,
+          "sha256": "dbd85d50d1259ac209ce49a2b87a32fcbae0cf2c5a8fdc6543bca94a3f348de4"
+        },
+        {
+          "number": 18,
+          "size": 22253976,
+          "loopStart": 2823611,
+          "sha256": "f72d79e3831a2d16f5e62187ab5f68837bd5a5106211f9d66998927cb6dd735e"
+        },
+        {
+          "number": 19,
+          "size": 28164460,
+          "loopStart": 3858118,
+          "sha256": "f7d186bfbcfa1409e5c0a1e5a3c403ac85b0ef02f664bd8124c4c633b2a5d0bc"
+        },
+        {
+          "number": 20,
+          "size": 29758684,
+          "loopStart": 393692,
+          "sha256": "3caffe7788a793d726100cf921c676e8c76c457c489295493590dc633f9150ca"
+        },
+        {
+          "number": 21,
+          "size": 35484672,
+          "loopStart": 5136063,
+          "sha256": "c2d810142bc44c07a97be30a157347295f1e57e7eddf5ce775baef96af9039dd"
+        },
+        {
+          "number": 22,
+          "size": 87792912,
+          "loopStart": 0,
+          "sha256": "b34ce9eb6ec8f548d22609bdfa7b012e89f9d58eec2d9c9bf97a5cd00ba3712f"
+        },
+        {
+          "number": 23,
+          "size": 3587804,
+          "loopStart": 0,
+          "sha256": "2aa260b6dec81c682fb5e6b0966b9a51879360720c437b16b1065a6d95252ba3"
+        },
+        {
+          "number": 24,
+          "size": 2126444,
+          "loopStart": 0,
+          "sha256": "a38f12c94ef26a369d9e7e9845e06d8c8ce464fd06888acb5efc7c340d435bf3"
+        },
+        {
+          "number": 25,
+          "size": 3837604,
+          "loopStart": 0,
+          "sha256": "8b43a7228140dadd0292c1953bdb36668fa3419d666746f41e847cdcf6a4796b"
+        },
+        {
+          "number": 26,
+          "size": 2798696,
+          "loopStart": 0,
+          "sha256": "af87ff1a4c6aa271f9424a4054758a927daf78a7486f44528b3a0e962fff3bba"
+        },
+        {
+          "number": 27,
+          "size": 5026552,
+          "loopStart": 110360,
+          "sha256": "9c3e4d092f0e61668d12964551a1a5b4dfc597fefd503e19d14867426b881ed7"
+        },
+        {
+          "number": 31,
+          "size": 4057352,
+          "loopStart": 0,
+          "sha256": "ea21bb499c77456471d2395ec0b06ac34092d5e4a05e6e0e5cb3265148d33253"
+        }
+      ]
+    }
+  ]
+}

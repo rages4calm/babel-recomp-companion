@@ -1,4 +1,51 @@
-# Babel Recomp — Illusion of Gaia
+# Illusion of Gaia Companion
+
+An enhanced edition in development, based on **[Babel Recomp](https://github.com/mrOt4/babel-recomp)
+by mr0ta / mrOt4**. Companion additions are maintained by
+**[Carl Prewitt Jr. / rages4calm](https://github.com/rages4calm)**.
+The original author's credit, support link and full acknowledgments remain below.
+
+## Companion development status
+
+This is an early development fork, with no Companion release yet. The default
+engine interprets the game's 65816 instructions; locally generated AOT builds
+remain mixed execution and are not qualified as fully native.
+
+- **CompanionLauncher:** Windows adapter using the shared 0.2.0 shell, verified
+  USA ROM selection, native display/audio/gamepad settings, and direct Play.
+  Babel tools remain available for full remapping and mod management.
+- **Optional music:** Soundtrack opens the credited JUD6MENT download in your
+  browser and imports a ZIP/folder with validation, progress and cancellation.
+  Music stays separate from releases; original audio remains available offline.
+  [Soundtrack instructions and credits](docs/MSU1.md).
+- **Achievements:** shared CompanionAchievements 0.3.0 foundation and guarded
+  observations pass synthetic tests. Live unlocks, storage, notifications and
+  sound are not yet connected. RetroAchievements account/network integration
+  is disabled in this edition; [policy and implementation](docs/RETROACHIEVEMENTS.md).
+- **Presentation:** inherited real 16:9 expansion; actor/terrain edge coverage
+  still needs scene testing. 21:9, 32:9, a scenery map and journal are planned.
+- **Framework:** updated to SNESRecomp `66eebe6`, latest main checked November 2,
+  2026, with Babel-specific integration changes preserved. RomAtlas independently
+  checked reset/wait boundaries using the method retained by Lagoon.
+- **Evidence:** [baseline audit](docs/BASELINE-AUDIT.md),
+  [current handoff](HANDOFF.md), [launcher build/use](companion/README.md),
+  [achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md).
+
+Build the engine using the instructions below, then run:
+
+```powershell
+./companion/build.ps1 -Test
+./companion/bin/Release/net8.0-windows/illusion-of-gaia.Companion.exe
+```
+
+The launcher currently needs the sibling CompanionLauncher package feed; see
+its build instructions. No soundtrack, ROM, generated game code, save or private
+validation data is included. Original SNES audio remains available offline.
+
+## Babel foundation and original credits
+
+The following describes inherited Babel functionality and upstream platform
+reports. It is not a claim of new Companion campaign or hardware testing.
 
 A native PC and console port of **Illusion of Gaia** (SNES, USA) built on a
 static-recompilation framework, with languages, an MSU-1 soundtrack, HD
@@ -26,6 +73,13 @@ scaling, New Game+, RetroAchievements and more.
 ## Thanks
 
 This port stands on the work of many people. Thank you all.
+
+- **[mr0ta / mrOt4](https://github.com/mrOt4)** — original author of
+  **[Babel Recomp](https://github.com/mrOt4/babel-recomp)**, the foundation
+  of this fork. The Ko-fi link above supports the original author.
+- **[CompanionLauncher](https://github.com/rages4calm/companion-launcher)**
+  and **[CompanionAchievements](https://github.com/rages4calm/companion-achievements)**
+  — shared Companion integrations by Carl Prewitt Jr. and contributors (MIT).
 
 - **[snesrecomp](https://github.com/RetroPortingToolKit/snesrecomp)** — the
   SNES static-recompilation framework this port is built on, by Matthew
@@ -102,7 +156,8 @@ This port stands on the work of many people. Thank you all.
 ## Features
 
 **The game**
-- The whole game, playable from start to finish, running natively.
+- Upstream reports a complete playable game. The default build interprets
+  guest CPU instructions; this fork has not completed a campaign qualification.
 - Save files compatible with the original (`.srm`), plus 10 save-state slots
   with thumbnails, rewind and fast-forward.
 - **Languages:** Spanish, French and German text and font taken from your own
@@ -283,8 +338,9 @@ Requires HENkaku/Ensō with VitaShell.
 
 ### Performance on handhelds
 
-Every version emulates the SNES hardware exactly (the same frames and the same
-sound as on a PC, verified frame by frame). The 3DS and the Vita have far less
+Upstream reports matching frame and audio checks for its hardware runtime;
+this fork has not independently repeated those handheld comparisons.
+The 3DS and the Vita have far less
 CPU than a phone or a Switch: they skip drawing frames when needed so the game
 keeps its speed, and use the fastest settings automatically. Measured in an
 emulator, a New 3DS should run the game at about three quarters of full
@@ -341,8 +397,8 @@ You need CMake ≥ 3.20, a C11/C++17 compiler, Python 3 and Ninja (or Make).
 SDL3 is downloaded and built automatically when the system has none.
 
 ```sh
-git clone https://github.com/mrOt4/babel-recomp.git
-cd babel-recomp
+git clone https://github.com/rages4calm/babel-recomp-companion.git
+cd babel-recomp-companion
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/babel-recomp
@@ -350,8 +406,9 @@ cmake --build build -j
 
 The default build is **interpreter-only**: the game's code is read from your
 ROM at run time, so nothing derived from the ROM is ever compiled in, and no
-ROM is needed to build. (For this game it plays identically and just as fast;
-we compared every frame.) Developers who want the statically recompiled code
+ROM is needed to build. Generated AOT execution requires separate matched-state
+qualification; local testing has found CPU-state differences from interpretation.
+Developers who want the statically recompiled code
 can configure with `-DSNESRECOMP_INTERPRETER_ONLY=OFF` and generate it from
 their own ROM with `bash tools/regen.sh --rom /path/to/rom.sfc`; that output
 (`src/gen/`) must never be committed or shared.
@@ -366,8 +423,11 @@ their own ROM with `bash tools/regen.sh --rom /path/to/rom.sfc`; that output
 | Package | `scripts/package_release.sh <build-dir> <platform-tag>` |
 
 [scripts/toolchains/README.md](scripts/toolchains/README.md) has the details.
-The GitHub Actions workflow builds Linux, Windows, macOS and Android, and
-publishes them when a `v*` tag is pushed.
+The inherited GitHub Actions workflow builds several engine platforms.
+Companion releases require a separate explicit publication decision and platform
+qualification. The new launcher is Windows-only in this batch. Packaging rejects
+mixed/AOT binaries and stages dependency notices; VPK/APK and opaque console
+containers need a separately verified packaging path.
 
 ## Reporting a problem
 

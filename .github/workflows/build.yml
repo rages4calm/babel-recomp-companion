@@ -1,5 +1,5 @@
 # Builds the interpreter-only game for Linux, Windows, macOS and Android, and
-# on a v* tag publishes the zips (and the APK) as a GitHub Release. Nothing
+# builds on tags; publishing requires an explicit manual selection. Nothing
 # here touches a ROM: the binaries carry no ROM-derived code and every player
 # supplies their own copy. The 3DS and Vita jobs are best effort
 # (continue-on-error); the Switch
@@ -8,6 +8,12 @@ name: Build
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish built engine artifacts (owner authorization required)'
+        required: false
+        default: false
+        type: boolean
   push:
     tags: ['v*']
 
@@ -122,7 +128,7 @@ jobs:
         with: { name: vita, path: dist/*.vpk }
 
   release:
-    if: always() && startsWith(github.ref, 'refs/tags/v')
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.publish_release && startsWith(github.ref, 'refs/tags/v')
     needs: [desktop, android, n3ds, vita]
     runs-on: ubuntu-24.04
     steps:

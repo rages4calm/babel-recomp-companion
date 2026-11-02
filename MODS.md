@@ -1,5 +1,10 @@
 # Mods
 
+> This document describes inherited Babel features. In Companion, optional music
+> can also be managed through Soundtrack in the new launcher. RetroAchievements
+> account/service support is disabled; local CompanionAchievements is being
+> integrated separately. See [current status](README.md) and [music setup](docs/MSU1.md).
+
 Every mod here is off by default and is switched on from the launcher's
 **Mods** page. Nothing taken from a ROM ships with this project: languages,
 music and graphics all come from files the player supplies, and the ROM you

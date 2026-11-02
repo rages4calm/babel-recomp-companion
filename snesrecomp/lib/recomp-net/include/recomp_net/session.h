@@ -48,6 +48,38 @@ int rnet_session_start_lan_hub(RNetSession *s, const char *bind_hostport);
  */
 int rnet_session_start_ice(RNetSession *s, const RNetIceConfig *ice);
 
+/*
+ * Host-as-relay over ICE: one libjuice agent per guest seat (host answers,
+ * guests offer) and the host fans each guest's datagrams out to the other
+ * guests. guest_slot_mask bit i (1..RNET_MAX_SLOTS-1) = seat i gets an agent.
+ * ice->bind_port is ignored (always 0); there is no TURN/force-relay fallback
+ * in hub mode. on_signal delivers RNetSignal with peer_slot = the seat; feed
+ * guest signals back with rnet_session_push_signal_from. Returns 0 / -1.
+ */
+int rnet_session_start_ice_hub(RNetSession *s, const RNetIceConfig *ice, rnet_u32 guest_slot_mask);
+
+/*
+ * Handover from the waiting room (recomp_net/host_ice.h): the agents are
+ * ALREADY COMPLETED, so nothing is renegotiated. The session takes ownership
+ * of every agent on success (destroying them in rnet_session_destroy) and the
+ * caller must forget them; on -1 nothing was taken and the caller still owns
+ * them. Dead-path timers (ICE attempt / completion / peer-rx) measure from the
+ * moment of adoption, not from when the agent connected.
+ *
+ * rnet_session_start_ice_hub_adopt (HOST): seats[i].slot is the SESSION slot
+ * (1..RNET_MAX_SLOTS-1) the agent serves; the hub mask is built from exactly
+ * these seats. Fails (-1) if any agent is NULL, duplicated, out of range, or
+ * not COMPLETED -- a seat that is not connected never yields a smaller room.
+ * rnet_session_adopt_ice_agent (GUEST): the one agent connected to the host.
+ */
+typedef struct RNetIceAdoptSeat
+{
+    int slot;
+    RNetIceAgent *agent;
+} RNetIceAdoptSeat;
+int rnet_session_start_ice_hub_adopt(RNetSession *s, const RNetIceAdoptSeat *seats, int n);
+int rnet_session_adopt_ice_agent(RNetSession *s, RNetIceAgent *agent);
+
 /* Recv datagrams, poll ICE, send pending INPUT, drive bootstrap. */
 void rnet_session_pump(RNetSession *s);
 
@@ -94,8 +126,38 @@ int rnet_session_peer_disconnected(const RNetSession *s, rnet_u64 timeout_ms);
  */
 void rnet_session_touch_peer_liveness(RNetSession *s);
 
+/*
+ * Per-seat liveness (3+ seats). The aggregate calls above answer "has ANY
+ * peer left / gone quiet": a BYE from any seat trips them, and any seat's
+ * traffic keeps the silence budget fresh -- so in a room of four a seat that
+ * went silent never trips a timeout while the other two keep talking. These
+ * answer per seat. `slot` is a seat index (0..slot_count-1, not our own);
+ * anything else answers "not gone" / RNET_PEER_RX_NEVER. A packet is
+ * attributed to the sender slot in its header (which a hub / lobby relay
+ * forwards unchanged); START counts as seat 0, DELAY_SYNC (no sender field)
+ * counts for no seat. rnet_session_touch_peer_liveness stamps every occupied
+ * remote seat that has not sent BYE. Clock: the session clock (host now_ms,
+ * else platform monotonic), the same one RNetSessionStats uses.
+ */
+#define RNET_PEER_RX_NEVER ((rnet_u64)~(rnet_u64)0)
+/* 1 when seat `slot` sent BYE. */
+int rnet_session_peer_gone(const RNetSession *s, int slot);
+/* Bit i = seat i sent BYE. */
+rnet_u32 rnet_session_peer_gone_mask(const RNetSession *s);
+/* ms since the last valid packet from seat `slot`; RNET_PEER_RX_NEVER if none. */
+rnet_u64 rnet_session_peer_rx_age_ms(const RNetSession *s, int slot);
+/* rnet_session_peer_disconnected for one seat: 1 on that seat's BYE, or when
+ * it has been silent >= timeout_ms after its first packet. Never heard from:
+ * 1 only past the same >=90 s link budget. timeout_ms == 0 = BYE only.
+ * Unoccupied seats and our own answer 0. */
+int rnet_session_peer_slot_disconnected(const RNetSession *s, int slot, rnet_u64 timeout_ms);
+/* Bit i = rnet_session_peer_slot_disconnected(s, i, timeout_ms). */
+rnet_u32 rnet_session_disconnected_peers(const RNetSession *s, rnet_u64 timeout_ms);
+
 /* Deliver an inbound signaling message from the lobby. */
 void rnet_session_push_signal(RNetSession *s, const RNetSignal *msg);
+/* Hub mode: route an inbound signal to seat `slot`'s agent. 0 ok, -1 if no such agent. */
+int rnet_session_push_signal_from(RNetSession *s, int slot, const RNetSignal *sig);
 
 rnet_u8 rnet_session_committed_delay(const RNetSession *s);
 /*
@@ -156,13 +218,24 @@ typedef struct RNetSessionStats
     char ice_path[16];   /* host|srflx|prflx|relay|lan|pending|failed|unknown */
     char ice_local[96];
     char ice_remote[96];
+    rnet_u32 ice_recv_drops; /* datagrams lost to ICE recv-queue overflow (all agents) */
     int state_busy;
     rnet_u8 state_op;
     int state_sender;          /* 1 while local peer is the STATE sender */
     rnet_u32 state_bytes_total; /* active xfer size (0 if idle) */
-    rnet_u32 state_bytes_acked; /* sender: peer ACK; receiver: contiguity */
+    rnet_u32 state_bytes_acked; /* sender: SLOWEST receiver's ACK; receiver: contiguity
+                                 * (the outbound transfer if any, else the
+                                 * lowest-seat inbound one) */
     rnet_u32 packets_rx;
     rnet_u32 input_bundle_sends;
+    /* Multi-seat STATE / liveness (appended; bit i = seat i). */
+    rnet_u32 state_expect_mask;       /* sender: receivers the transfer waits on */
+    rnet_u32 state_done_mask;         /* sender: receivers that ACKed everything */
+    rnet_u32 state_rx_mask;           /* source seats with an inbound transfer open */
+    rnet_u32 state_probe_expect_mask; /* prober: seats that must answer */
+    rnet_u32 state_probe_reply_mask;  /* prober: seats that answered */
+    rnet_u32 peer_gone_mask;          /* seats that sent BYE */
+    rnet_u64 peer_rx_age_ms[RNET_MAX_SLOTS]; /* per seat; RNET_PEER_RX_NEVER if never */
 } RNetSessionStats;
 
 void rnet_session_get_stats(const RNetSession *s, RNetSessionStats *out);
@@ -172,6 +245,7 @@ void rnet_session_get_stats(const RNetSession *s, RNetSessionStats *out);
 #define RNET_STATE_OP_LOAD 1 /* stalls admit until guest has blob */
 #define RNET_STATE_OP_SRAM 2 /* stalls admit until guest has blob */
 #define RNET_STATE_OP_RB_KF 3 /* rollback FMV media keyframe (raw boot_state snap) */
+#define RNET_STATE_OP_MENU 6 /* host-authoritative paused snapshot */
 #define RNET_STATE_OP_BOOT 4 /* post-BIOS host snap barrier (boot_state blob) */
 /* Guest-owned memory card upload. The ONLY peer→host op: a seated guest sends
  * its card to the host before the host's SRAM broadcast, so the host can fold
@@ -180,17 +254,40 @@ void rnet_session_get_stats(const RNetSession *s, RNetSessionStats *out);
 #define RNET_STATE_OP_MEMCARD 5
 
 /*
+ * Receivers ("expected seats") of a host transfer or probe: every occupied
+ * seat except the sender's own (RNetConfig.occupied_mask; 0 = all of
+ * [0, slot_count)), or only rnet_session_set_rb_peer_slot's seat while that
+ * scoping is on (STATE packets from other seats are filtered there). For
+ * MEMCARD (guest→host) the one receiver is seat 0. Observers are never
+ * expected. With two seats this is the one guest, and every call below
+ * behaves exactly as the single-peer API did. See docs/protocol.md
+ * "Multi-seat STATE".
+ */
+
+/*
  * Hash probe (host→guest): announce (op, slot, size, crc).
  * - SAVE + size==0: coordinate local save (no INPUT/admit stall — savestate_poll).
  * - LOAD + size==0: post-load ready rendezvous (no INPUT stall — late applier
  *   still needs tip rows; app freezes sim until mutual ready + hard_resync).
  * - BOOT + size==0: post-boot-snap ready rendezvous (same INPUT rules as LOAD).
  * - size!=0: hash announce; stalls until probe_finish or following transfer.
+ * The probe is retransmitted (8 ms) until EVERY expected seat has replied; a
+ * seat whose reply already landed ignores the retransmits. Returns -1 when a
+ * transfer is open, a previous probe still waits on replies, or there is no
+ * expected seat.
  */
 int rnet_session_state_probe(RNetSession *s, rnet_u8 op, rnet_u8 slot, rnet_u32 total_size,
                              rnet_u32 payload_crc);
-/* Host: 1 when guest replied; *match_out = guest already has identical blob. */
+/* Host: 1 when EVERY expected seat replied (an N-party barrier);
+ * *match_out = 1 only if every one of them already has the identical blob. */
 int rnet_session_state_probe_take_reply(RNetSession *s, int *match_out);
+/* Host: 1 when seat `slot` (an expected seat) has replied; *match_out = its
+ * answer. Does not consume -- replies stay until the next probe/finish. */
+int rnet_session_state_probe_take_reply_from(RNetSession *s, int slot, int *match_out);
+/* Host: 1 while a host probe is open; masks (bit i = seat i) of the seats it
+ * waits on, those that replied, and those that replied "match". */
+int rnet_session_state_probe_replies(const RNetSession *s, rnet_u32 *expect_mask,
+                                     rnet_u32 *replied_mask, rnet_u32 *match_mask);
 /* Guest: 1 if a host probe is waiting for a local hash/coord answer. */
 int rnet_session_state_probe_pending(const RNetSession *s, rnet_u8 *op_out, rnet_u8 *slot_out,
                                      rnet_u32 *size_out, rnet_u32 *crc_out);
@@ -200,19 +297,55 @@ int rnet_session_state_probe_reply(RNetSession *s, int match);
 void rnet_session_state_probe_finish(RNetSession *s);
 
 /*
- * Host-only (local_slot == 0) chunked blob transfer. Stalls try_admit until the
- * peer ACKs the full payload (all ops). Prefer probe-first; call begin only on
- * hash miss. payload_crc in BEGIN is verified by the guest before ready.
+ * Host-only (local_slot == 0) chunked blob transfer to every expected seat.
+ * Stalls try_admit until EVERY expected seat ACKs the full payload (all ops):
+ * the send window follows the slowest receiver, BEGIN is retransmitted until
+ * every receiver has acknowledged it, and a receiver whose ACK stalls gets its
+ * own retransmission. Prefer probe-first; call begin only on hash miss.
+ * payload_crc in BEGIN is verified by each guest before ready.
  * Exception: RNET_STATE_OP_MEMCARD is guest-only (local_slot != 0) and is
- * received by the host alone; other guests drop it.
+ * received by the host alone; other guests drop it. Several guests may upload
+ * at once: the host keeps one receive per source seat.
+ * Returns -1 while any transfer (outbound or inbound) is open, for an
+ * observer, or when there is no expected seat.
  */
 int rnet_session_state_begin(RNetSession *s, rnet_u8 op, rnet_u8 slot, const void *data, size_t size);
+/* 1 while a probe waits on replies / the app, or any open transfer
+ * (outbound or inbound) is incomplete. */
 int rnet_session_state_busy(const RNetSession *s);
-/* 1 when transfer complete and blob ready for guest apply/store (or host finish). */
+/* 1 when a transfer is complete and its blob ready for guest apply/store (or
+ * host finish). With several open, reports the outbound one first, then the
+ * inbound one from the lowest source seat; the next state_finish finishes
+ * the one reported. */
 int rnet_session_state_take_ready(RNetSession *s, rnet_u8 *op_out, rnet_u8 *slot_out, const void **data_out,
                                   size_t *size_out);
-/* After apply/store: clear transfer; hard_resync clears input rings on LOAD. */
+/* take_ready plus *from_out = the transfer's source seat: our own local_slot
+ * for our outbound transfer (sender completion), else the uploading seat. */
+int rnet_session_state_take_ready_from(RNetSession *s, int *from_out, rnet_u8 *op_out, rnet_u8 *slot_out,
+                                       const void **data_out, size_t *size_out);
+/* After apply/store: clear the transfer the last take_ready reported (or, if
+ * none, the one it would report); with nothing ready it aborts every open
+ * transfer, as it always did. hard_resync clears input rings on LOAD. */
 void rnet_session_state_finish(RNetSession *s, int hard_resync);
+/* Finish (ready) or abort (not ready) one transfer: from_slot == our
+ * local_slot = our outbound one, another seat = the inbound one from that
+ * seat, RNET_STATE_FROM_ALL = every one. */
+#define RNET_STATE_FROM_ALL (-1)
+void rnet_session_state_finish_from(RNetSession *s, int from_slot, int hard_resync);
+/* Stop waiting on seat `slot` (it left): removes it from the open outbound
+ * transfer's receivers and the open host probe's expected seats, which may
+ * complete either. Nothing is dropped automatically -- not even on BYE --
+ * so a vanished seat stalls the transfer until the host decides. With every
+ * seat dropped the transfer is complete and the probe reports all replied
+ * with match = 1 (vacuously). Returns 1 if anything changed. */
+int rnet_session_state_drop_peer(RNetSession *s, int slot);
+/* Sender: 1 and seat `slot`'s contiguous ACK / the blob size, while it is an
+ * expected receiver of the open outbound transfer. */
+int rnet_session_state_progress(const RNetSession *s, int slot, rnet_u32 *acked_out, rnet_u32 *total_out);
+/* Sender: expected receivers that have not yet ACKed the whole blob. */
+rnet_u32 rnet_session_state_pending_receivers(const RNetSession *s);
+/* Receiver: source seats with an inbound transfer open (ready or not). */
+rnet_u32 rnet_session_state_inbound_mask(const RNetSession *s);
 /* Post-load resync: clear local + remote rings + confirm, sim_tick → 0.
  * Call once at mutual ready, then prime_delay_inputs on both peers and wait
  * for try_admit (do not drop the app barrier until admit succeeds). */
@@ -231,7 +364,10 @@ void rnet_session_set_input_send_suppress(RNetSession *s, int suppress);
  */
 int rnet_session_send_rb_frame_commit(RNetSession *s, rnet_u32 through_tick,
                                       rnet_u32 state_hash);
-/* 1 if a peer FRAME_COMMIT is pending; copies and clears it. */
+/* 1 if a peer FRAME_COMMIT is pending; copies and clears it (FIFO). The
+ * sender is rnet_session_rb_last_take_from(): with more than two seats a
+ * hash chain is kept per peer, and one ring shared by every peer's commits
+ * would confirm a tick against whichever peer spoke last. */
 /* PSX-Link group scoping: accept rollback episode/state packets only from
  * `slot` (-1 = all, default). Input-plane packets are never filtered. */
 void rnet_session_set_rb_peer_slot(RNetSession *s, int slot);
@@ -261,6 +397,13 @@ int rnet_session_peek_input(const RNetSession *s, int slot, rnet_u32 wire_tick,
                             RNetInputSample *out);
 int rnet_session_peek_remote_input(const RNetSession *s, int slot, rnet_u32 wire_tick,
                                    RNetInputSample *out);
+/* One remote seat's input tip: the highest wire tick its ring holds. 1 and
+ * *tip set for an occupied remote seat, 0 otherwise. RNetSessionStats'
+ * highest_remote_wire is the HIGHEST over every remote seat, which is the
+ * one tip there is with two seats -- but with more, a seat that stopped
+ * sending hides behind the others, and a prediction cap measured against it
+ * never trips (the rollback driver uses this per seat). */
+int rnet_session_remote_tip(const RNetSession *s, int slot, rnet_u32 *tip);
 /* §56 pipeline diagnostics: ms since the remote row for wire_tick arrived
  * (first-wins latch). 0xffffffff if unknown / not yet arrived. Consumption
  * slack at admit = this value; ~0 means rows arrive just-in-time (no cushion
@@ -278,7 +421,8 @@ void rnet_session_clear_remote_inputs(RNetSession *s);
 
 /*
  * Rollback episode wire (opcodes 20–23, 25). MotK drains via take_* after pump.
- * Seal-row take copies up to RNET_RB_SEAL_ROWS_CHUNK_MAX frames.
+ * Seal-row take copies up to RNET_RB_SEAL_ROWS_CHUNK_MAX frames (rollback.h);
+ * send truncates a larger chunk to that bound.
  *
  * RB_SYNC op codes (the wire byte historically called "initiator"):
  *   NACK  — follower refuses/cannot follow. target_tick carries the
@@ -301,13 +445,33 @@ void rnet_session_clear_remote_inputs(RNetSession *s);
 #define RNET_RB_SYNC_OP_BEGIN 1u
 #define RNET_RB_SYNC_OP_ABORT 2u
 #define RNET_RB_SYNC_OP_COMMIT 3u
-/* Peer identity, sent once at session start. mismatch_tick carries a build
+/* Peer identity, sent at session start. mismatch_tick carries a build
  * fingerprint and load_tick a content/mod fingerprint; both are opaque to this
- * library and compared only for equality. Purely diagnostic: it explains WHY
- * two peers disagree, while the state digests remain what detects THAT they
- * do. Additive on purpose -- a peer that predates it ignores an unknown op,
- * and a host that never sends one simply gets no explanation. */
+ * library and compared only for equality. target_tick carries the seats whose
+ * identity the sender already holds (bit i = seat i, its own included; 0 from
+ * a peer that predates the field), so a receiver missing from it answers
+ * again. The episode driver refuses a match on a content difference and
+ * leaves a build difference to the boot digest (rb_driver.h). Re-sent at most
+ * every 100 ms for the first 90 ticks. Additive on purpose -- a peer that
+ * predates it ignores an unknown op, and a host that never sends one simply
+ * gets no explanation. */
 #define RNET_RB_SYNC_OP_IDENT 4u
+/* Coordinated stop (rb_driver.h, rnet_rb_driver_request_quiesce): "I will
+ * open no further episode, and I have none open". mismatch_tick is 1 when the
+ * sender already holds the receiver's own QUIESCE (so the receiver need not
+ * wait for it), load_tick the sender's sim tick; epoch_id is 0. Re-sent while
+ * the sender drains, because it is one datagram on a link that may drop it.
+ * Additive like IDENT: a peer that predates it ignores an unknown op, and the
+ * sender's drain then ends on its bound rather than hanging. */
+#define RNET_RB_SYNC_OP_QUIESCE 5u
+/* Request the named seat's FRAME_COMMIT for mismatch_tick (RB_SYNC a).
+ * Needed when one UDP commit is lost and the hash-chain frontier has only
+ * its local half. No episode or input row is changed by this request. */
+#define RNET_RB_SYNC_OP_FRAME_COMMIT_REQUEST 6u
+/* Immutable execution startup barrier (startup_profiles.h). Reserved by the
+ * session; never forwarded to the episode driver's RB_SYNC receive queue. */
+#define RNET_RB_SYNC_OP_PROFILE_OFFER 7u
+#define RNET_RB_SYNC_OP_PROFILE_ACK 8u
 
 /* RB_SYNC flags (BEGIN): initiator-authoritative episode attributes the
  * follower must adopt verbatim so both peers run the same episode shape. */
@@ -359,15 +523,37 @@ int rnet_session_take_rb_post(RNetSession *s, rnet_u32 *epoch_id, rnet_u32 *targ
  * only let a stale set win a race against the current one.
  */
 int rnet_session_send_modset(RNetSession *s, const char *text);
+/* Nonzero once a peer's HELLO carried another wire version (RNET_WIRE_VERSION
+ * in src/protocol): that peer's version, or -1 for a peer that predates the
+ * field. The session never links with it; a host can say why it stalled. */
+int rnet_session_peer_wire_version_mismatch(const RNetSession *s);
 /* 1 and fills `out` when a set has arrived since the last take, else 0. */
 int rnet_session_take_modset(RNetSession *s, char *out, rnet_u32 cap);
 int rnet_session_send_modset_ack(RNetSession *s, rnet_u8 status,
                                  const char *reason);
-/* 1 and fills status/reason when an ack has arrived since the last take. */
+/* 1 and fills status/reason when an ack has arrived since the last take.
+ * Latest-only PER SEAT, lowest seat first: with more than two seats every
+ * guest answers, and one slot for all of them let a second answer overwrite
+ * the first. rnet_session_rb_last_take_from() names the seat that answered. */
 int rnet_session_take_modset_ack(RNetSession *s, rnet_u8 *status, char *reason,
                                  rnet_u32 cap);
 
+/* Sender slot (packet header) of the rb_* message most recently returned by
+ * take_rb_sync / take_rb_seal_rows / take_rb_baseline / take_rb_post /
+ * take_rb_frame_commit / take_modset_ack / take_rb_resolved, or -1 before any. Call it right after the take it describes. With two seats there
+ * is one peer and this is redundant; with more, an episode needs a BASELINE
+ * and a POST from EVERY peer, and without the sender the first reply to
+ * arrive would answer for all of them. */
+int rnet_session_rb_last_take_from(const RNetSession *s);
+/* Episode-control datagrams refused because their receive queue was full
+ * (each refusal is also logged). Non-zero means the host let rb_* messages
+ * pile up between drains -- a long inline replay is the usual cause. */
+rnet_u32 rnet_session_rb_ctrl_dropped(const RNetSession *s);
+
 int rnet_session_send_rb_resolved(RNetSession *s, rnet_u32 resolved_through);
+/* One entry per sender (its highest advert since the last take);
+ * rnet_session_rb_last_take_from() names the seat. A receiver with more than
+ * one peer keeps a frontier per seat and trusts only the lowest. */
 int rnet_session_take_rb_resolved(RNetSession *s, rnet_u32 *resolved_through);
 
 #ifdef __cplusplus

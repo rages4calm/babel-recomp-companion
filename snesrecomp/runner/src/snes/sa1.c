@@ -13,6 +13,7 @@
 #include "sa1.h"
 
 #include "interp816.h"
+#include "tier2_capture.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -93,6 +94,10 @@ struct Sa1 {
   uint8_t interrupt_vector_kind; /* 1=NMI, 2=IRQ */
   uint32_t extra_cycles;
   uint32_t cpu_bus_address;
+  Sa1Observer observer;
+  void *observer_context;
+  uint32_t observer_addresses[4];
+  size_t observer_count;
 };
 
 static uint8_t sa1_bus_read(void *opaque, uint32_t address);
@@ -320,7 +325,12 @@ static uint8_t io_read_sa1(Sa1 *sa1, uint16_t address) {
   }
 }
 
-static void timer_advance(Sa1 *sa1, uint32_t clocks) {
+#ifndef SNESRECOMP_SA1_TIMER_NATIVE
+#define SNESRECOMP_SA1_TIMER_NATIVE 0
+#endif
+
+#if !SNESRECOMP_SA1_TIMER_NATIVE || defined(SNESRECOMP_SA1_TIMER_TEST)
+static void timer_advance_reference(Sa1 *sa1, uint32_t clocks) {
   while (clocks--) {
     if (!sa1->io.timer_linear) {
       if (++sa1->h_counter >= 1364) {
@@ -344,6 +354,100 @@ static void timer_advance(Sa1 *sa1, uint32_t clocks) {
            && sa1->v_counter == sa1->io.v_count_target;
     if (match) sa1->io.timer_irq_flag = true;
   }
+}
+#endif
+
+#if SNESRECOMP_SA1_TIMER_NATIVE || defined(SNESRECOMP_SA1_TIMER_TEST)
+/* No timer observer runs between ticks: IRQ is sticky, and the CPU checks it
+ * only after the instruction's entire charge. Locate the first match and
+ * compute the final counters instead of visiting every master clock. */
+static inline void timer_advance_span(Sa1 *sa1, uint32_t clocks,
+                                     uint32_t h_period, uint32_t v_period) {
+  if (!clocks) return;
+  uint32_t h = sa1->h_counter;
+  uint16_t v = sa1->v_counter;
+  const uint32_t target_h = sa1->io.timer_h_enable
+      ? (uint32_t)sa1->io.h_count_target << 2 : 0;
+
+  /* A mode write does not reset counters. The next scalar increment can
+   * discard an H counter outside the new period (not reduce it modulo that
+   * period). Keep even uint32 wrap and uint16 V wrap identical to the floor. */
+  if (h >= h_period) {
+    if (++h >= h_period) {
+      h = 0;
+      v = (uint16_t)(v + 1u);
+      if (sa1->io.timer_linear) v &= 0x01ffu;
+      else if (v >= v_period) v = 0;
+    }
+    if ((sa1->io.timer_h_enable || sa1->io.timer_v_enable) &&
+        h == target_h &&
+        (!sa1->io.timer_v_enable || v == sa1->io.v_count_target))
+      sa1->io.timer_irq_flag = true;
+    if (!--clocks) {
+      sa1->h_counter = h;
+      sa1->v_counter = v;
+      return;
+    }
+  }
+
+  const uint64_t total = (uint64_t)h + clocks;
+  /* Most instruction charges stay within one row. In that case neither
+   * division nor V normalization is necessary; H-only/both comparators can
+   * match once in the open-left, closed-right interval. A V-only comparator
+   * needs H=0, which is reached only by the wrap path below. */
+  if (total < h_period) {
+    sa1->h_counter = (uint32_t)total;
+    sa1->v_counter = v;
+    if (!sa1->io.timer_irq_flag && sa1->io.timer_h_enable &&
+        (!sa1->io.timer_v_enable || v == sa1->io.v_count_target) &&
+        target_h > h && target_h <= total)
+      sa1->io.timer_irq_flag = true;
+    return;
+  }
+  const uint32_t rows = (uint32_t)(total / h_period);
+  const uint32_t next_v = sa1->io.timer_linear
+      ? (uint16_t)(v + 1u) & 0x01ffu
+      : ((uint16_t)(v + 1u) >= v_period ? 0 : (uint16_t)(v + 1u));
+
+  if (!sa1->io.timer_irq_flag &&
+      (sa1->io.timer_h_enable || sa1->io.timer_v_enable) &&
+      target_h < h_period) {
+    if (!sa1->io.timer_v_enable) {
+      uint32_t distance = target_h > h ? target_h - h
+                                     : h_period - h + target_h;
+      if (distance <= clocks) sa1->io.timer_irq_flag = true;
+    } else {
+      /* V can remain outside the new period until the first H wrap. Such a
+       * value may legitimately match an H comparator within this first row. */
+      if (v == sa1->io.v_count_target && target_h > h &&
+          target_h - h <= clocks)
+        sa1->io.timer_irq_flag = true;
+      if (rows && sa1->io.v_count_target < v_period) {
+        uint32_t row_distance = (sa1->io.v_count_target + v_period - next_v)
+                              % v_period;
+        uint64_t distance = (uint64_t)(h_period - h)
+                          + (uint64_t)row_distance * h_period + target_h;
+        if (distance <= clocks) sa1->io.timer_irq_flag = true;
+      }
+    }
+  }
+  sa1->h_counter = (uint32_t)(total % h_period);
+  if (rows) sa1->v_counter = (uint16_t)((next_v + rows - 1u) % v_period);
+  else sa1->v_counter = v;
+}
+
+static void timer_advance_native(Sa1 *sa1, uint32_t clocks) {
+  if (sa1->io.timer_linear) timer_advance_span(sa1, clocks, 2048, 512);
+  else timer_advance_span(sa1, clocks, 1364, 262);
+}
+#endif
+
+static void timer_advance(Sa1 *sa1, uint32_t clocks) {
+#if SNESRECOMP_SA1_TIMER_NATIVE
+  timer_advance_native(sa1, clocks);
+#else
+  timer_advance_reference(sa1, clocks);
+#endif
 }
 
 static void dma_finish(Sa1 *sa1) {
@@ -913,6 +1017,32 @@ void sa1_set_cpu_bus_address(Sa1 *sa1, uint32_t address) {
   if (sa1) sa1->cpu_bus_address = address & 0xffffffu;
 }
 
+bool sa1_set_observer(Sa1 *sa1, const uint32_t *addresses, size_t count,
+                     Sa1Observer observer, void *context) {
+  if (!sa1 || count > 4 || (observer && (!addresses || !count))) return false;
+  for (size_t i = 0; observer && i < count; ++i)
+    if (addresses[i] > 0xffffff) return false;
+  if (observer) memcpy(sa1->observer_addresses, addresses, count * sizeof(*addresses));
+  sa1->observer_count = observer ? count : 0;
+  sa1->observer_context = observer ? context : NULL;
+  sa1->observer = observer;
+  return true;
+}
+
+static void observe_instruction(Sa1 *sa1) {
+  const Interp816 *cpu = sa1->cpu;
+  if (cpu->stopped || (cpu->waiting && !cpu->nmiWanted && !cpu->irqWanted) ||
+      cpu->nmiWanted || (!cpu->i && cpu->irqWanted)) return;
+  uint32_t pc = ((uint32_t)cpu->k << 16) | cpu->pc;
+  for (size_t i = 0; i < sa1->observer_count; ++i) {
+    if (pc != sa1->observer_addresses[i]) continue;
+    Sa1Observation observation = {pc, sa1->master_clock, sa1->iram, sa1->bwram,
+                                  sizeof(sa1->iram), sa1->bwram_size, cpu->x};
+    sa1->observer(sa1->observer_context, &observation);
+    break;
+  }
+}
+
 void sa1_sync(Sa1 *sa1, uint64_t master_clock) {
   if (!sa1 || master_clock <= sa1->master_clock) return;
   while (sa1->master_clock < master_clock) {
@@ -923,8 +1053,14 @@ void sa1_sync(Sa1 *sa1, uint64_t master_clock) {
     }
     sa1_request_interrupt(sa1);
     sa1->extra_cycles = 0;
+    if (sa1->observer) observe_instruction(sa1);
+    uint32_t capture_pc = ((uint32_t)sa1->cpu->k << 16) | sa1->cpu->pc;
+    uint8_t capture_mx = ((uint8_t)sa1->cpu->mf << 1) | (uint8_t)sa1->cpu->xf;
+    uint8_t capture_e = sa1->cpu->e;
     int cycles = interp816_runOpcode(sa1->cpu);
     if (cycles < 1) cycles = 1;
+    if (g_tier2_capture_active)
+      tier2_capture_cpu_instruction(1, capture_pc, capture_mx, capture_e, (unsigned)cycles);
     uint32_t clocks =
         ((uint32_t)cycles + sa1->extra_cycles) *
         SA1_MASTER_CLOCKS_PER_CPU_CYCLE;

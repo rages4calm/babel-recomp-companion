@@ -321,7 +321,10 @@ static void rnet_rb_fill_local_row(RNetRbSession *s, uint32_t tick, uint32_t off
          * authoritative without waiting for the peer's SEAL_ROWS. Predicted
          * rows stay unsealed: 2026-08-02 soak forked when a tip-extend left
          * the remote seat zeroed, the arm fell back to live hist
-         * (s1=---- at arm 4179) and the peers simmed different pads. */
+         * (s1=---- at arm 4179) and the peers simmed different pads.
+         * An EMPTY seat of a sparse room (occupied_mask) is sealed only here:
+         * nobody sends its SEAL_ROWS, so the host must answer with the
+         * deterministic row every peer synthesizes for it, unpredicted. */
         RNetRbFrame row;
         if (s->vt.get_input_row(s->vt.ctx, (int32_t)slot, tick, &row) != 0u &&
             row.is_valid != 0u && row.is_predicted == 0u)
@@ -340,7 +343,6 @@ uint8_t rnet_rb_can_extend_target(const RNetRbSession *s, uint32_t new_target)
 {
     uint32_t old_target;
     uint32_t begin;
-    uint32_t new_span;
 
     if ((s == NULL) || (s->inputs_sealed == 0u))
     {
@@ -361,12 +363,8 @@ uint8_t rnet_rb_can_extend_target(const RNetRbSession *s, uint32_t new_target)
     {
         return 0u;
     }
-    new_span = new_target - begin + 1u;
-    if (new_span > s->cfg.seal_max_span)
-    {
-        return 0u;
-    }
-    if (new_span > RNET_RB_PEER_SEAL_MASK_BITS)
+    /* Compare the distance before adding the inclusive row, which can wrap. */
+    if (new_target - begin >= s->cfg.seal_max_span)
     {
         return 0u;
     }
@@ -401,7 +399,10 @@ uint8_t rnet_rb_extend_target(RNetRbSession *s, uint32_t new_target)
     for (offset = s->sealed_span; offset < new_span; ++offset)
     {
         uint32_t tick = begin + offset;
-        for (slot = 0u; slot < RNET_RB_MAX_SLOTS; ++slot)
+        /* Active seats only. A seat outside the match has no owner to seal
+         * it and no row to replay, and asking the host for one invites a
+         * stub answer to credit a mask nobody waits on. */
+        for (slot = 0u; slot < s->cfg.slot_count; ++slot)
         {
             rnet_rb_fill_local_row(s, tick, offset, slot);
         }
@@ -431,7 +432,7 @@ uint8_t rnet_rb_enter_tip_hold(RNetRbSession *s)
 uint8_t rnet_rb_resign_slot_range(RNetRbSession *s, int32_t slot, uint32_t from_tick,
                                   uint32_t to_tick)
 {
-    uint32_t tick;
+    uint32_t offset;
     if ((s == NULL) || (s->inputs_sealed == 0u) || (rnet_rb_slot_valid(slot) == 0u))
     {
         return 0u;
@@ -440,18 +441,23 @@ uint8_t rnet_rb_resign_slot_range(RNetRbSession *s, int32_t slot, uint32_t from_
     {
         return 0u;
     }
-    for (tick = from_tick; tick <= to_tick; ++tick)
+    for (offset = 0u; offset < s->sealed_span; ++offset)
     {
-        uint32_t offset;
+        uint32_t tick = s->seal_base_tick + offset;
         RNetRbFrame row;
         RNetRbFrame *dst;
-        if (rnet_rb_tick_in_sealed_span(s, tick) == 0u)
+        if (tick < from_tick || tick > to_tick)
         {
             continue;
         }
-        offset = tick - s->seal_base_tick;
         dst = &s->sealed[rnet_rb_seal_index(offset, (uint32_t)slot)];
         if (s->vt.get_input_row(s->vt.ctx, slot, tick, &row) == 0u)
+        {
+            continue;
+        }
+        /* Unconfirmed history cannot replace an owner's already sealed row. */
+        if ((uint32_t)slot != s->cfg.local_slot &&
+            (row.is_valid == 0u || row.is_predicted != 0u))
         {
             continue;
         }
@@ -516,24 +522,25 @@ void rnet_rb_seal_inputs(RNetRbSession *s, uint32_t begin_tick, uint32_t target_
     {
         return;
     }
-    span = (target_tick >= begin_tick) ? (target_tick - begin_tick + 1u) : 0u;
-    if (span == 0u)
+    s->inputs_sealed = 0u;
+    s->sealed_span = 0u;
+    memset(s->peer_seal_mask, 0, sizeof(s->peer_seal_mask));
+    if (target_tick < begin_tick || target_tick - begin_tick >= s->cfg.seal_max_span)
     {
         return;
     }
-    if (span > s->cfg.seal_max_span)
-    {
-        span = s->cfg.seal_max_span;
-    }
+    span = target_tick - begin_tick + 1u;
     /* Seal local-authority rows from the host's input history; peer-authority
      * slots arrive via apply_peer_seal_rows. begin_tick is typically load_tick
      * so every Replay quantum has a sealed row. */
     s->seal_base_tick = begin_tick;
-    s->sealed_span = 0u;
     for (offset = 0u; offset < span; ++offset)
     {
         uint32_t tick = begin_tick + offset;
-        for (slot = 0u; slot < RNET_RB_MAX_SLOTS; ++slot)
+        /* Active seats only. A seat outside the match has no owner to seal
+         * it and no row to replay, and asking the host for one invites a
+         * stub answer to credit a mask nobody waits on. */
+        for (slot = 0u; slot < s->cfg.slot_count; ++slot)
         {
             rnet_rb_fill_local_row(s, tick, offset, slot);
         }
@@ -541,10 +548,7 @@ void rnet_rb_seal_inputs(RNetRbSession *s, uint32_t begin_tick, uint32_t target_
     s->sealed_span = span;
     s->inputs_sealed = 1u;
     /* Keep corr.target in sync with the sealed tip. */
-    if (target_tick >= begin_tick)
-    {
-        s->corr.target_tick = begin_tick + span - 1u;
-    }
+    s->corr.target_tick = target_tick;
 }
 
 uint8_t rnet_rb_inputs_sealed(const RNetRbSession *s)
@@ -558,7 +562,7 @@ uint8_t rnet_rb_tick_in_sealed_span(const RNetRbSession *s, uint32_t tick)
     {
         return 0u;
     }
-    return ((tick >= s->seal_base_tick) && (tick < s->seal_base_tick + s->sealed_span)) ? 1u
+    return ((tick >= s->seal_base_tick) && (tick - s->seal_base_tick < s->sealed_span)) ? 1u
                                                                                          : 0u;
 }
 
@@ -683,25 +687,49 @@ uint8_t rnet_rb_peer_seal_rows_complete(const RNetRbSession *s, int32_t slot)
     return ((s->peer_seal_mask[(uint32_t)slot] & want) == want) ? 1u : 0u;
 }
 
-uint8_t rnet_rb_all_peer_seal_rows_complete(const RNetRbSession *s)
+uint32_t rnet_rb_expected_peer_mask(const RNetRbSession *s)
 {
-    uint32_t slot;
     uint32_t n;
+    uint32_t mask;
 
-    if ((s == NULL) || (rnet_rb_inputs_sealed(s) == 0u))
+    if (s == NULL)
     {
         return 0u;
     }
-    /* Only active match seats — waiting on unused slots (up to MAX=8) deadlocks
-     * 2P MotK episodes forever in SealInputs. */
     n = s->cfg.slot_count;
     if (n == 0u || n > RNET_RB_MAX_SLOTS)
     {
         n = RNET_RB_MAX_SLOTS;
     }
-    for (slot = 0u; slot < n; ++slot)
+    mask = (n >= 32u) ? 0xffffffffu : ((1u << n) - 1u);
+    if (s->cfg.occupied_mask != 0u)
     {
-        if (slot == s->cfg.local_slot)
+        mask &= s->cfg.occupied_mask;
+    }
+    if (s->cfg.local_slot < n)
+    {
+        mask &= ~(1u << s->cfg.local_slot);
+    }
+    return mask;
+}
+
+uint8_t rnet_rb_all_peer_seal_rows_complete(const RNetRbSession *s)
+{
+    uint32_t slot;
+    uint32_t want;
+
+    if ((s == NULL) || (rnet_rb_inputs_sealed(s) == 0u))
+    {
+        return 0u;
+    }
+    /* Only occupied match seats — waiting on unused slots (up to MAX=8)
+     * deadlocks 2P MotK episodes forever in SealInputs, and waiting on an
+     * empty seat of a sparse room (seats 0+2 of 4) does the same at N > 2:
+     * nobody sits there to send its rows. */
+    want = rnet_rb_expected_peer_mask(s);
+    for (slot = 0u; slot < RNET_RB_MAX_SLOTS; ++slot)
+    {
+        if ((want & (1u << slot)) == 0u)
         {
             continue;
         }

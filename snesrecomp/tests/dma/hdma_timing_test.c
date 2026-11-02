@@ -33,6 +33,23 @@ void ppu_write(Ppu *ppu, uint8_t adr, uint8_t val) {
     ppu_regs[adr & 0x3f] = val;
 }
 
+/* snes.c's save-state and reset paths call into joypad.c, which this harness
+ * does not link. POSIX linkers drop those unreferenced functions under
+ * --gc-sections; PE/COFF (MinGW) keeps them and fails the link, which used to
+ * stop run_c_tests.sh here on Windows before any later suite ran. */
+void joypad_reset_state(void) {}
+void joypad_saveload(struct SaveLoadInfo *sli) { (void)sli; }
+
+/* The PPU write journal and raster journal (ppu.c) are not linked into this
+ * harness. */
+uint8_t g_ppu_wlog_src;
+void ppu_wlog_note_reg(uint16_t reg, uint8_t val) { (void)reg; (void)val; }
+void ppu_rasterRecord(uint16_t reg, uint16_t line, uint8_t val) {
+  (void)reg; (void)line; (void)val;
+}
+void ppu_rasterFieldBoundary(void) {}
+void ppu_rasterReset(void) {}
+
 void RtlApuLock(void) {}
 void RtlApuUnlock(void) {}
 void rtl_sync_apu_to_cpu_locked(void) {}
@@ -55,6 +72,7 @@ Apu *apu_init(void) { return NULL; }
 void apu_free(Apu *apu) { (void)apu; }
 void apu_reset(Apu *apu) { (void)apu; }
 void apu_cycle(Apu *apu) { (void)apu; }
+void apu_runCycles(Apu *apu, uint32_t clocks) { (void)apu; (void)clocks; }
 void apu_saveload(Apu *apu, SaveLoadInfo *sli) { (void)apu; (void)sli; }
 
 Ppu *ppu_init(void) { return NULL; }

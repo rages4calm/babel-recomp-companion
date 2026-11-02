@@ -1,4 +1,5 @@
 #include "common_cpu_infra.h"
+#include "audio_trace.h"
 #include "framedump.h"
 #include "types.h"
 #include "common_rtl.h"
@@ -8,6 +9,8 @@
 #include "snes/msu1.h"
 #include "snes/interp_bridge.h"
 #include "snes/tier2_capture.h"
+#include "sha256.h"
+#include "program_module.h"
 #include "util.h"
 #include "cpu_trace.h"
 #include "debug_server.h"
@@ -58,24 +61,27 @@ const char *rtl_game_title(void) {
                                                      : "unknown";
 }
 
+static void rtl_snes_charge_master_cycles(Snes *snes, uint64_t clocks) {
+  g_cpu.master_cycles += clocks;
+  snes_sync_master_clock(snes, g_cpu.master_cycles);
+}
+
 void RtlRegisterGame(const RtlGameInfo *info) {
   g_rtl_game_info = info;
+  RtlSetStateExtraBound(NULL);
   tier2_capture_set_default_enabled(info && info->tier2_capture);
   /* Arm MSU-1 from the environment for every game, with no per-game
    * wiring. Inert (default-OFF) unless SNESRECOMP_MSU1 is set. A game's
    * main.c may additionally call msu1_set_rom_path() to enable the
    * "auto" base-from-ROM-name mode. */
   msu1_init();
-  /* Harvest the interp-coverage manifest on exit only when the game or
-   * developer environment opts in. Registered once regardless of how many times
-   * a game re-registers (e.g. a reset path). */
-  {
-    static int coverage_atexit_registered = 0;
-    if (tier2_capture_enabled() && !coverage_atexit_registered) {
-      coverage_atexit_registered = 1;
-      atexit(rtl_write_tier2_coverage_manifest);
-    }
-  }
+
+}
+
+/* The audio trace's port ring stamps each event with the beam position. */
+static void snes_beam_probe_for_audio_trace(uint16_t *vpos, uint16_t *hpos) {
+  *vpos = g_snes ? g_snes->vPos : 0;
+  *hpos = g_snes ? g_snes->hPos : 0;
 }
 
 uint8_t *SnesRomPtr(uint32 v) {
@@ -120,11 +126,11 @@ int g_recomp_stack_top = 0;
  * Used by cpu_resolve_ancestor_skip() to turn a return-to-ancestor RTS
  * (manual PLA/PLX/PLB rebalance to an ancestor's entry level, then RTS)
  * into a SKIP_N non-local return through the existing call-site
- * decrement contract. See ISSUES.md "shared-tail multi-level non-local
+ * decrement contract. See the historical issue notes "shared-tail multi-level non-local
  * return" (the fish-explosion OAM wipe). */
 uint16_t g_cpu_entry_s[RECOMP_STACK_DEPTH];
-/* A forwarding HLE stub has a recomp-stack frame but no generated prologue,
- * so its entry-S must never take part in a return-to-ancestor lookup. */
+/* HLE forwarding and interpreter attribution scopes are not generated guest
+ * callers, so their entry-S must not take part in return-to-ancestor lookup. */
 static uint8_t g_cpu_entry_s_valid[RECOMP_STACK_DEPTH];
 /* Expected positive S delta when a generated callee consumes the hardware
  * return frame that its generated caller pushed. */
@@ -151,6 +157,12 @@ void cpu_interrupt_context_leave(void) {
 
 int cpu_interrupt_context_active(void) {
   return g_interrupt_context_depth != 0;
+}
+
+void cpu_guest_scope_unwind(void) {
+  g_recomp_stack_top = 0;
+  g_interrupt_context_depth = 0;
+  g_tailcall_context_valid = 0;
 }
 
 void cpu_tailcall_inherit_return_context(uint16_t entry_s, uint8_t hrv) {
@@ -579,6 +591,18 @@ void aot_prof_frame_end(int frame) {
 }
 #endif /* SNESRECOMP_INTERP_PROFILE */
 
+void RecompStackPushInterpreter(const char *name) {
+  const int slot = g_recomp_stack_top;
+  RecompStackPush(name);
+  /* The diagnostic scope can start below its enclosing function's entry S
+   * (PHB; PEA; JMP is one example). An AOT helper's non-local RTS can land
+   * exactly at this seed while still inside the interpreted continuation.
+   * Treating it as a compiled ancestor loses the popped return PC and resumes
+   * after the wrong JSR. The bridge owns that continuation, not SKIP_N. */
+  if (slot < RECOMP_STACK_DEPTH)
+    g_cpu_entry_s_valid[slot] = 0;
+}
+
 void RecompStackPush(const char *name) {
 #ifdef SNESRECOMP_INTERP_PROFILE
   if (g_aotprof_on < 0) aotprof_latch_env();
@@ -916,6 +940,10 @@ void snes_refresh_state_set(uint64_t phase, uint64_t charged_upto) {
 
 // Called at loop headers in generated code — detect infinite loops
 void WatchdogCheck(void) {
+  RtlGuestScopeCheckpoint();
+  /* The scoped budget owns aborts here; the ordinary watchdog's longjmp
+   * would bypass scope cleanup and strand the audio lock. */
+  if (RtlGuestScopeActive()) return;
   snes_refresh_charge();
 #ifdef SNES_COSIM
   /* Co-sim WRAM watchpoint (dev, env-gated): name the recompiled function that
@@ -1053,6 +1081,8 @@ Snes *SnesInit(const uint8 *data, int data_size) {
   return NULL;
 #else
   g_snes = snes_init(g_ram);
+  snes_set_master_clock_charge_hook(rtl_snes_charge_master_cycles);
+  snes_set_wram_write_log_hook(wlog_addr_note_direct);
   /* The CpuState's WRAM pointer is host state, not simulation state: no reset
    * path sets it, and a CpuState that never had it dereferences NULL on the
    * first guest stack push (interp816_pushByte -> cpu_write8 -> cpu->ram[off])
@@ -1068,6 +1098,7 @@ Snes *SnesInit(const uint8 *data, int data_size) {
   g_snes_cpu = g_snes->cpu;
   g_dma = g_snes->dma;
   g_ppu = g_snes->ppu;
+  audio_trace_set_beam_probe(snes_beam_probe_for_audio_trace);
 
   if (data_size != 0) {
     bool loaded = snes_loadRom(g_snes, data, data_size);
@@ -1075,6 +1106,28 @@ Snes *SnesInit(const uint8 *data, int data_size) {
       return NULL;
     }
     g_rom = g_snes->cart->rom;
+    {
+      tier2_capture_set_entry_probe(cpu_dispatch_entry_reason);
+      tier2_capture_set_checkpoint_hook(rtl_write_tier2_coverage_manifest);
+      static int capture_exit_registered;
+      if (!capture_exit_registered) { atexit(rtl_write_tier2_coverage_manifest); capture_exit_registered = 1; }
+      Tier2CoverageReset(); /* seal the previous image before replacing identity */
+      uint8_t digest[32];
+      char hex[65];
+      /* Coverage is keyed to the generator's headerless input image, not
+       * the bus allocation (e.g. a 3 MiB ROM mirrored to 4 MiB). */
+      sha256_compute(g_rom, g_snes->cart->romImageSize, digest);
+      for (unsigned i = 0; i < 32; ++i) snprintf(hex + 2*i, 3, "%02x", digest[i]);
+      const SnesProgramModule *module = snes_program_module_active();
+      if (!module) module = snes_program_module_find("main");
+      static const char *mappers[] = {"unknown","lorom","hirom","superfx","cx4",
+                                     "dsp1","dsp1_hirom","sa1","sdd1"};
+      unsigned type = g_snes->cart->type;
+      tier2_capture_set_identity(hex, module ? module->id : "main",
+          module ? module->program_digest : "",
+          type < sizeof mappers/sizeof *mappers ? mappers[type] : "unknown");
+      tier2_capture_set_build_digest(module ? module->build_digest : "");
+    }
 
     assert(g_rtl_game_info && "RtlRegisterGame must be called before SnesInit");
 

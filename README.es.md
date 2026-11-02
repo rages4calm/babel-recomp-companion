@@ -1,5 +1,10 @@
 # Babel Recomp — Illusion of Gaia
 
+> Este documento conserva las instrucciones y los créditos originales de Babel.
+> Para el estado actual de **Illusion of Gaia Companion**, el nuevo lanzador,
+> la música opcional y las limitaciones verificadas, consulta [README.md](README.md).
+> Esta edición aún está en desarrollo; no es una nueva certificación de campaña.
+
 Port nativo para PC y consolas de **Illusion of Gaia** (SNES, USA), construido
 sobre un framework de recompilación estática, con idiomas, banda sonora MSU-1,
 escalado HD, New Game+, RetroAchievements y mucho más.

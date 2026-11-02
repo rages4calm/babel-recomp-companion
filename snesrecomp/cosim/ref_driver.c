@@ -1,5 +1,5 @@
 /*
- * ref_driver.c -- Track A B-side reference (SNES_COSIM.md): a headless,
+ * ref_driver.c -- Track A B-side reference (docs/COSIM.md): a headless,
  * deterministic SNES driven by the interp816 65816 interpreter over the
  * runner's OWN device sources (identical struct layouts => the cosim state
  * hash compares directly against the recomp A-side). Accurate H/V timing +
@@ -49,6 +49,8 @@ static uint64_t s_joy_strobe_writes;
 void RtlApuLock(void)   {}
 void RtlApuUnlock(void) {}
 void rtl_sync_apu_to_cpu_locked(void) {}
+/* No host audio replacement in the reference: APU port reads pass through. */
+uint8 rtl_apu_port_observers_read(uint16 reg, uint8 value) { (void)reg; return value; }
 /* Accurate reference: latch the CPU->APU port immediately (hardware behaviour),
  * NOT the recomp's deferred sample-time scheduler. adr is $2140-$2143. */
 void RtlApuWrite(uint16 adr, uint8 val) { g_snes->apu->inPorts[adr & 3] = val; }

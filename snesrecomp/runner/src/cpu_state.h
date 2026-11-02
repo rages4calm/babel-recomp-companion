@@ -105,7 +105,7 @@ typedef struct CpuState {
     uint8  DB;
     uint8  PB;
 
-    /* Option-1 cpu->S return-frame ABI (see IMPROVEMENTS.md). NON-ZERO
+    /* Option-1 cpu->S return-frame ABI (see docs/MULTI_TIER.md). NON-ZERO
      * when the current function was entered via a direct generated JSR/JSL
      * C call (a paired host-C caller exists and pushed a matching return
      * frame on cpu->S) — and the value IS the pushed frame size in bytes:
@@ -155,7 +155,7 @@ typedef struct CpuState {
      * / PB-relative addressing all resolve through the cpu_ helpers. */
     uint8 *ram;
 
-    /* Axis-2 cycle accounting (SNES_ACCURACY_BURNDOWN.md). Cumulative 65816
+    /* Axis-2 cycle accounting (docs/validation/accuracy-history.md). Cumulative 65816
      * CPU (bus) cycles, charged by the v2 emitter as a per-block integer
      * constant (recompiler/snes_cycles.py is the authority; the interp816
      * reference + bsnes hook validate it). One add per block — near-free, the
@@ -373,6 +373,11 @@ static inline void cpu_p_to_mirrors(CpuState *cpu) {
     cpu->_flag_D = (cpu->P & CPU_P_D) ? 1 : 0;
     cpu->_flag_V = (cpu->P & CPU_P_V) ? 1 : 0;
     cpu->_flag_N = (cpu->P & CPU_P_N) ? 1 : 0;
+    /* 65816: with X set the index registers are 8-bit and their high bytes
+     * read as zero (SEP #$10, PLP, RTI). 8-bit X/Y writes zero-extend, but a
+     * register kept across the switch would otherwise carry its old high byte
+     * into the next 16-bit use (e.g. an IRQ handler's REP #$30; PHX). */
+    if (cpu->x_flag) { cpu->X &= 0xFFu; cpu->Y &= 0xFFu; }
 }
 
 static inline void cpu_mirrors_to_p(CpuState *cpu) {
@@ -417,35 +422,13 @@ void   cpu_write16(CpuState *cpu, uint8 bank, uint16 addr, uint16 v);
  * interpreter's bridge shims use the plain accessors (they account
  * transfers themselves). */
 uint32_t  cpu_region_speed(uint32_t adr);
-extern uint8_t g_memsel;
-/* cpu_region_speed's body, for callers on the per-access path. */
-static inline uint32_t cpu_region_speed_inline(uint32_t adr) {
-    const uint8_t bank = (uint8_t)(adr >> 16);
-    const uint16_t a = (uint16_t)adr;
-    if (bank >= 0x40 && bank <= 0x7f) return 8;
-    if (bank >= 0xc0) return g_memsel ? 6 : 8;
-    if (a >= 0x8000) return bank <= 0x3f ? 8 : (g_memsel ? 6 : 8);
-    if (a < 0x2000) return 8;
-    if (a < 0x4000) return 6;
-    if (a < 0x4200) return 12;
-    if (a < 0x6000) return 6;
-    return 8;
-}
-
-/* Read fast path (cpu_state.c): the 24-bit space as 4096 pages of 4 KB. A
- * page that is plain WRAM, or plain ROM of a LoROM/HiROM cart, points at its
- * bytes; any other page is NULL and needs the full decode (cpu_read8). The
- * table is rebuilt whenever g_cart_map_generation moves (cart load, reset,
- * overlay, replaced ROM), and fully revalidated once per frame. */
-extern const uint8 *g_cpu_read_page[4096];
-extern uint32_t g_cpu_read_map_gen;
-extern uint32_t g_cart_map_generation;
-void cpu_read_map_build(CpuState *cpu);
-void cpu_read_map_check(CpuState *cpu);
-static inline const uint8 *cpu_read_page_of(CpuState *cpu, uint32_t adr) {
-    if (g_cpu_read_map_gen != g_cart_map_generation) cpu_read_map_build(cpu);
-    return g_cpu_read_page[(adr >> 12) & 0xFFF];
-}
+/* SNESRECOMP_WLOG_ADDR hook for direct-WRAM stores that bypass cpu_write8/16
+ * (DMA A-bus writes in snes_write, WMDATA $2180). wa = g_ram offset. */
+void wlog_addr_note_direct(uint32_t wa, uint8_t v, const char *via);
+/* Optional interp step-ring dump used by the WLOG_ADDR_HALT path; installed
+ * by interp_bridge.c at load when that TU is linked, NULL otherwise. */
+#include <stdio.h>
+extern void (*g_interp_recent_dump_hook)(int n, FILE *out);
 uint8  cpu_read8_paced (CpuState *cpu, uint8 bank, uint16 addr);
 uint16 cpu_read16_paced(CpuState *cpu, uint8 bank, uint16 addr);
 void   cpu_write8_paced (CpuState *cpu, uint8 bank, uint16 addr, uint8  v);
@@ -608,6 +591,9 @@ extern const unsigned        g_ram_routine_guard_count;
  * Passing NULL restores the original generated program. Never call mid-frame. */
 void cpu_select_program(const DispatchEntry *dispatch, unsigned count,
                         const RamRoutineGuard *guards, unsigned guard_count);
+/* A code-changing resource without a compiled module must never fall back to
+ * the stock table (NULL means stock). Select an intentionally empty program. */
+void cpu_select_interpreted_program(void);
 
 uint8 cpu_dispatch_inline_arg_bytes(uint32 pc24);
 
@@ -657,6 +643,10 @@ RecompReturn cpu_dispatch_pc_paired(CpuState *cpu, uint32 pc24, uint8 frame_size
 /* Read-only exact-AOT probe used by interpreter bounce and RTS rewriting.
  * A known LLE-only row intentionally returns false. */
 int cpu_dispatch_has_entry(CpuState *cpu, uint32 pc24);
+/* Capture-only inspection. Does not perform bus reads or update guard counters. */
+const char *cpu_dispatch_entry_reason(uint32_t pc24, uint8_t mx);
+/* Side-effect-free fetch mapping guard for generated banked-ROM code. */
+int cpu_aot_rom_mapping_matches(uint32 pc24, uint32 rom_offset, unsigned length);
 
 /* Balanced abandon of the current function invocation at an UNRESOLVED
  * control-transfer site (unresolved indirect dispatch / OOB index,
@@ -699,14 +689,18 @@ int rtl_aot_node_denied(uint32 pc24);
  * cpu_push_interrupt_frame() frame, then return to the host scheduler. */
 RecompReturn interp_tier_dispatch_interrupt(CpuState *cpu,
                                             uint32 target_pc24);
+/* Explicit entry semantics for new generated code. from_indirect means the
+ * entry is the JMP/JML instruction itself, whose first landing is the target.
+ * Ordinary continuations must record their entry, even when target == site. */
 RecompReturn interp_tier_dispatch_balanced(CpuState *cpu, uint32 target_pc24,
-                                           uint32 site_pc24, uint16 entry_s,
-                                           uint8 hrv);
+    uint32 site_pc24, uint16 entry_s, uint8 hrv, bool from_indirect);
 /* Tail transfer that preserves the enclosing architectural boundary.  Normal
  * subroutines stop past entry_s; an interrupt handler stops at its RTI. */
 RecompReturn interp_tier_dispatch_tail(CpuState *cpu, uint32 target_pc24,
                                        uint32 site_pc24, uint16 entry_s,
                                        uint8 hrv);
+RecompReturn interp_tier_dispatch_tail_ex(CpuState *cpu, uint32 target_pc24,
+    uint32 site_pc24, uint16 entry_s, uint8 hrv, bool from_indirect);
 /* RTS/RTL trampoline reached a known function row whose live M/X variant has
  * no AOT body.  The prior frame is already popped, so execution unwinds past
  * the current cpu->S; a bounded bail restores the ordinary dispatch-miss S. */
