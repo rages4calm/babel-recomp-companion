@@ -41,8 +41,9 @@ This is bounded route evidence, not a fully native game or completed campaign.
   [Current native batch and limits](docs/NATIVE-BATCH-003.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
   Confirmed analyzer bug [#239](https://github.com/RetroPortingToolKit/snesrecomp/issues/239)
-  and matching timing findings on [#205](https://github.com/RetroPortingToolKit/snesrecomp/issues/205)
-  are reported upstream.
+  and default indirect bank-carry bug [#240](https://github.com/RetroPortingToolKit/snesrecomp/issues/240)
+  are reported upstream. The tested timing work is added to the existing
+  [#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6588298236).
 - **Evidence:** [baseline audit](docs/BASELINE-AUDIT.md),
   [current handoff](HANDOFF.md), [launcher build/use](companion/README.md),
   [achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md).

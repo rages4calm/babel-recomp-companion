@@ -8,6 +8,10 @@ used exact COP argument sizes from that metadata and tracked REP/SEP; this is
 not another independent RomAtlas check. Private source excerpts, hashes and
 frame-specific observations are in `.local/batch-001/native-003/forms/`.
 
+The later [batch 003 execution record](NATIVE-BATCH-003.md) separately qualifies
+assisted original Freedan/Shadow transformations and returns to Ankor/Pyramid.
+It does not qualify naturally earned abilities or form-dependent puzzles.
+
 ## Form state is not a complete startup recipe
 
 | Field | Meaning |
