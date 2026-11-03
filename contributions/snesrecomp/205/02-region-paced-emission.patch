@@ -1,0 +1,1388 @@
+From 21836d22b83bf32f82c369da55365ab81a534c11 Mon Sep 17 00:00:00 2001
+From: "Carl Prewitt Jr." <10109900+rages4calm@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 13:59:29 -0600
+Subject: [PATCH] Add explicit instruction and region paced emission with cache
+ identity
+
+Prepared for issue #205 from the bounded Gaia consumer timing work. Based on current main 66eebe6; prerequisite PRs remain unmerged. Rebase on eventual merged heads before submission. Canonical interpretation remains available; no combined-game or hardware qualification is claimed.
+---
+ docs/REGION_PACED_TIMING.md                 | 106 +++++++++
+ recompiler/v2/emit_bank.py                  |   4 +
+ recompiler/v2/emit_function.py              |  46 +++-
+ recompiler/v2/program_emit.py               |  12 +-
+ recompiler/v2/region_pacing.py              | 109 +++++++++
+ recompiler/v2/region_pointers.py            | 101 +++++++++
+ runner/src/cpu_state.c                      |  29 ++-
+ runner/src/cpu_state.h                      |  17 +-
+ tests/test_timing_generation_identity.py    |  87 +++++++
+ tests/v2/test_instruction_block_deadline.py |  86 +++++++
+ tests/v2/test_region_pacing.py              | 238 ++++++++++++++++++++
+ tests/v2/test_region_pointers.py            | 127 +++++++++++
+ tools/generation_recipe.py                  |   4 +-
+ tools/sdk_generate.py                       |  25 +-
+ tools/v2_emit.py                            |  16 +-
+ 15 files changed, 986 insertions(+), 21 deletions(-)
+ create mode 100644 docs/REGION_PACED_TIMING.md
+ create mode 100644 recompiler/v2/region_pacing.py
+ create mode 100644 recompiler/v2/region_pointers.py
+ create mode 100644 tests/test_timing_generation_identity.py
+ create mode 100644 tests/v2/test_instruction_block_deadline.py
+ create mode 100644 tests/v2/test_region_pacing.py
+ create mode 100644 tests/v2/test_region_pointers.py
+
+diff --git a/docs/REGION_PACED_TIMING.md b/docs/REGION_PACED_TIMING.md
+new file mode 100644
+index 0000000..b0f6de8
+--- /dev/null
++++ b/docs/REGION_PACED_TIMING.md
+@@ -0,0 +1,106 @@
++# Opt-in region-paced instruction timing
++
++`generate --instruction-blocks --region-paced` enables a conservative timing
++path for hosts that use the interpreter bridge as an instruction-boundary
++scheduler with an armed master-clock deadline. The runtime's deadline guard
++requires an active owning scheduler/bounce context; these flags do not retrofit
++that ownership into a host that calls compiled routines directly.
++Both flags default to false. SA-1 retains its existing instruction-block
++behavior. The options participate in generation-recipe identity, output-cache
++identity, and per-bank cache identity; a tree emitted under one setting cannot
++be silently reused under the other.
++
++```text
++python snesrecomp_cli.py generate --rom owner.sfc --cfg-dir recomp --out-dir private-gen --instruction-blocks --region-paced
++```
++
++A project recipe may declare `instruction_blocks = true` and
++`region_paced = true` in `generate.toml`. Region pacing requires instruction
++blocks explicitly. This changes emission and timing; it does not prove a
++routine safe to compile or turn off interpreter fallback.
++
++## Clock contract
++
++Each supported instruction charges its ordinary CPU-cycle count. Master-clock
++accounting prices each opcode/operand fetch byte through `cpu_region_speed`
++using the live program bank, prices internal cycles at six clocks, and uses
++the existing paced helpers for architectural data and stack transfers. Fetch
++values come from the materialized instruction bytes, without a duplicate ROM
++read, and update the open-bus latch before data accesses. Dynamic direct-page,
++index/page-cross and taken-branch additions use six master clocks per internal
++cycle. A proven taken conditional branch still pays its extra cycle when
++constant-Z folding lowers it to an unconditional IR transfer.
++
++An emission-time byte-access count must agree with the instruction's supported
++bus recipe. If a lowering changes that count, the instruction remains
++interpreted. Prologue reads that sample the paired host-return frame are ABI
++bookkeeping and stay unpaced.
++
++Every region-mode fetch/internal/dynamic addition and each paced data helper
++uses `cpu_add_aot_master_cycles`. It updates the master clock and invokes the
++nullable `g_cpu_aot_master_credit_hook`. The separate nullable
++`g_cpu_aot_instruction_boundary_hook` observes completion before the next
++instruction/deadline check. These extension points report origins and completed
++instructions; they never infer elapsed native time around a mixed-tier call.
++
++This emission change supplies the generic clock/boundary extension points, not
++the interpreter bridge's native APU scheduling policy. The matching bridge
++integration must be applied before qualifying a consumer's sound/device timing.
++With null hooks, no additional APU credit or flushing occurs. The canonical
++interpreter and default aggregate generator remain available.
++
++## Fallback and ownership
++
++The initial native-mode implementation supports ordinary immediate/implied,
++direct-page/absolute/long memory, stack, direct call/return and branch paths.
++It falls back before charging the current instruction for:
++
++- Emulation-mode entry and `XCE`, which can change emulation mode mid-body.
++- Indirect dispatches, `PEI`, software interrupts/`RTI`, block moves,
++  waits/stops, live operands, or an unrecognized bus recipe.
++- Effective addresses in system-bank MMIO windows, unusual stack windows,
++  and word accesses crossing a bank boundary.
++
++The optional cached-pointer recipe supports load/store and accumulator ALU
++operations through `(dp)`, `(dp,X)`, `(dp),Y`, `[dp]`, `[dp],Y` and `(sr,S),Y`.
++It first requires the entire pointer in plain low WRAM and previews that host
++memory without a CPU bus access. Effective MMIO targets and word bank crossings
++fall back before guest changes. Accepted instructions fetch the architectural
++pointer exactly once through paced bus helpers, cache it, and preserve full
++24-bit indexing carry. Dynamic dispatch, live operands and other pointer
++operations remain interpreted. The [pointer fixture](../tests/v2/test_region_pointers.py)
++checks all six modes against the actual interpreter, including refusal paths.
++
++MMIO guards do not access a device register to decide whether to fall back.
++The pointer preview does not change open bus, clocks or memory. This preserves
++side effects and leaves unmodeled device-access timing to the interpreter.
++
++These guards use `interp_tier_dispatch_tail`. When an interpreter owns the
++active AOT bounce, that helper unwinds to that owner and resumes the exact guest
++PC with registers and stack intact. Starting a new balanced interpreter at a
++mid-body guard can consume the wrong guest continuation. Without an active
++owner, the helper retains its established balanced fallback.
++
++A JSL envelope restores its caller's bank on ordinary `NORMAL`/`SKIP_N` returns.
++During a pending LLE yield/deadline unwind it preserves the live resume bank
++through every ancestor. `interp_bridge_lle_unwind_pending()` identifies that
++ownership state directly; the emitter does not guess from a sentinel value
++that decreases as host frames unwind.
++
++## Evidence and limits
++
++The ROM-free [region fixture](../tests/v2/test_region_pacing.py) executes emitted
++C against the actual interpreter core and current runtime paced-helper
++definitions. It compares CPU/master totals, registers, flags, stack, memory,
++and open bus across slow/FastROM cases, origin-clock totals and ownership guards.
++The [deadline fixture](../tests/v2/test_instruction_block_deadline.py) demonstrates
++aggregate-block overshoot, and the [JSL fixture](../tests/v2/test_jsl_live_pb.py)
++checks live-bank preservation through nested unwinds.
++
++These are bounded synthetic checks, not hardware, campaign, performance, or
++gameplay qualification. Instruction-boundary agreement does not establish
++per-bus-phase scheduling or device-state equivalence. A game must retain its
++code-patch guards and interpreter policies, then compare matched-input native
++and interpreter execution, guest memory, devices and rendered output before
++claiming route qualification. See upstream [timing issue 205](https://github.com/RetroPortingToolKit/snesrecomp/issues/205)
++for the associated timing investigation.
+diff --git a/recompiler/v2/emit_bank.py b/recompiler/v2/emit_bank.py
+index 8632674..f94ddc4 100644
+--- a/recompiler/v2/emit_bank.py
++++ b/recompiler/v2/emit_bank.py
+@@ -84,6 +84,8 @@ def emit_bank(rom: bytes, bank: int,
+               live_operand_sites=None,
+               entry_hooks=None,
+               brk_rti_sites=None,
++              instruction_blocks: bool = False,
++              region_paced: bool = False,
+               suppressed_collector=None,
+               const_z_fold_collector=None,
+               dispatch_target_suppressed_collector=None,
+@@ -210,6 +212,8 @@ def emit_bank(rom: bytes, bank: int,
+             live_operand_sites=live_operand_sites,
+             entry_hooks=entry_hooks,
+             brk_rti_sites=brk_rti_sites,
++            instruction_blocks=instruction_blocks,
++            region_paced=region_paced,
+             suppressed_collector=suppressed_collector,
+             const_z_fold_collector=const_z_fold_collector,
+             dispatch_target_suppressed_collector=
+diff --git a/recompiler/v2/emit_function.py b/recompiler/v2/emit_function.py
+index e9567c0..301e594 100644
+--- a/recompiler/v2/emit_function.py
++++ b/recompiler/v2/emit_function.py
+@@ -536,6 +536,8 @@ def emit_function(rom: bytes, bank: int, start: int,
+                   live_operand_sites=None,
+                   entry_hooks=None,
+                   brk_rti_sites=None,
++                  instruction_blocks: bool = False,
++                  region_paced: bool = False,
+                   entry_s_offset: int = 0) -> str:
+     """Emit a complete v2 C function source for one 65816 function.
+ 
+@@ -547,6 +549,8 @@ def emit_function(rom: bytes, bank: int, start: int,
+             emit_op(op)  → C lines
+         block-end op → goto / fall-through wiring
+     """
++    if region_paced and not instruction_blocks:
++        raise ValueError("region-paced emission requires instruction-blocks")
+     base_func_name = func_name if func_name is not None else _default_func_name(bank, start)
+     # HLE bypass: if cfg declared this function's PC as the SPC upload
+     # entry (`hle_spc_upload <pc>` in the bank cfg), replace the entire
+@@ -689,7 +693,7 @@ def emit_function(rom: bytes, bank: int, start: int,
+     hook_by_pc24 = {pc24 & 0xFFFFFF: name
+                     for pc24, name in (entry_hooks or {}).items()
+                     if ((pc24 >> 16) & 0xFF) == bank}
+-    cfg = build_cfg(graph, instruction_blocks=get_rom_mapping() == ROM_MAP_SA1,
++    cfg = build_cfg(graph, instruction_blocks=instruction_blocks or get_rom_mapping() == ROM_MAP_SA1,
+                     extra_leader_pcs={pc24 & 0xFFFF for pc24 in hook_by_pc24})
+ 
+     # A tight, side-effect-free memory poll cannot execute atomically under
+@@ -1425,6 +1429,8 @@ def emit_function(rom: bytes, bank: int, start: int,
+         # Axis-5: master-clocks-per-CPU-cycle for this block's code region, used
+         # to weight the dynamic (D.l/page-cross/branch-taken) master charges.
+         _blk_spd_expr, _blk_spd_const = _block_speed(bank, key.pc)
++        if region_paced:
++            _blk_spd_expr, _blk_spd_const = "6", 6
+ 
+         # Iterate the pre-lowered (Insn, [IROp]) pairs. Calling lower()
+         # again here would mint fresh Value-ids and break codegen's
+@@ -2175,6 +2181,10 @@ def emit_function(rom: bytes, bank: int, start: int,
+             f'RecompStackPop(); return interp_tier_dispatch_balanced('
+             f'cpu, {_transfer_target_expr(fn_entry_pc, False)}, 0x{fn_entry_pc:06X}u, _entry_s, _hrv, false); }}')
+     src.append(f'  uint32 _host_return_pc24 = 0xFFFFFFFFu;')
++    if region_paced:
++        src.append('  if (cpu->emulation || (cpu->S >= 0x1FFBu && cpu->S < 0x6005u)) { RecompStackPop();')
++        src.append(f'    return interp_tier_dispatch_tail(cpu, {_transfer_target_expr(fn_entry_pc, False)}, '
++                   f'0x{fn_entry_pc:06X}u, _entry_s, _hrv); }} /* native-mode pacing only */')
+     src.append(f'  if (_hrv == 2 || _hrv == 3) {{')
+     src.append(f'    uint16 _host_rpcl = cpu_read8(cpu, 0x00, (uint16)(_entry_s + 1u));')
+     src.append(f'    uint16 _host_rpch = cpu_read8(cpu, 0x00, (uint16)(_entry_s + 2u));')
+@@ -2237,6 +2247,8 @@ def emit_function(rom: bytes, bank: int, start: int,
+         # across a frame boundary. Every CFG block starts at an architectural
+         # instruction boundary, so it is safe to unwind here and resume this
+         # exact PC through the owning interpreter after host events run.
++        if region_paced:
++            src.append('    cpu_aot_instruction_boundary(cpu);')
+         src.append(
+             f'    if (interp_bridge_lle_master_deadline_reached(cpu)) {{')
+         src.append('      RecompStackPopYield();')
+@@ -2262,14 +2274,42 @@ def emit_function(rom: bytes, bank: int, start: int,
+         # Axis-5: also charge the region-weighted MASTER clocks (CPU cycles x
+         # code-region speed) into cpu->master_cycles, which paces the SPC700.
+         _cyc_const = _block_cycle_const(block_per_insn_ir.get(key, []))
++        _paced_plan = None
++        if region_paced:
++            from v2.region_pacing import plan, mmio_guard
++            _pairs = block_per_insn_ir.get(key, [])
++            if len(_pairs) == 1:
++                _insn = _pairs[0][0]
++                _paced_plan = plan(_insn, block_lines[key], _cyc_const,
++                                   live_operand=bool(live_operand_sites and block_pc24 in live_operand_sites))
++            if _paced_plan is None:
++                src.append('    RecompStackPop();')
++                src.append(f'    return interp_tier_dispatch_tail(cpu, {_transfer_target_expr(block_pc24, False)}, '
++                           f'0x{block_pc24:06X}u, _entry_s, _hrv); /* unmodeled region-paced instruction */')
++                continue
++            _pointer_fallback = (
++                f'RecompStackPop(); return interp_tier_dispatch_tail(cpu, '
++                f'{_transfer_target_expr(block_pc24, False)}, '
++                f'0x{block_pc24:06X}u, _entry_s, _hrv);')
++            for _prefix_line in _paced_plan[2]:
++                src.append('    ' + _prefix_line.replace('@FALLBACK@', _pointer_fallback))
++            _guard = mmio_guard(_insn)
++            if _guard:
++                src.append(f'    if ({_guard}) {{ RecompStackPop();')
++                src.append(f'      return interp_tier_dispatch_tail(cpu, {_transfer_target_expr(block_pc24, False)}, '
++                           f'0x{block_pc24:06X}u, _entry_s, _hrv); }} /* MMIO remains authoritative LLE */')
++            _fetch_last = rom_offset(bank, (_insn.addr + _insn.length - 1) & 0xFFFF)
++            src.append(f'    cpu->open_bus = 0x{rom[_fetch_last]:02X}u; /* last opcode/operand fetch */')
+         if _cyc_const:
+             src.append(f'    cpu->cycles += {_cyc_const};')
+             _spd_expr, _spd_const = _block_speed(bank, key.pc)
+-            if _spd_const is not None:
++            if _paced_plan is not None:
++                src.append(f'    cpu_add_aot_master_cycles(cpu, {_paced_plan[0]});')
++            elif _spd_const is not None:
+                 src.append(f'    cpu->master_cycles += {_cyc_const * _spd_const};')
+             else:
+                 src.append(f'    cpu->master_cycles += {_cyc_const} * {_spd_expr};')
+-        for ln in block_lines[key]:
++        for ln in (_paced_plan[1] if _paced_plan is not None else block_lines[key]):
+             # Inject a stack-auditor pop before any return so the shadow
+             # stack stays balanced. An LLE yield unwind is NOT a return: the
+             # bounce site resumes the interpreter mid-routine with pushed
+diff --git a/recompiler/v2/program_emit.py b/recompiler/v2/program_emit.py
+index 705afaf..6a750a0 100644
+--- a/recompiler/v2/program_emit.py
++++ b/recompiler/v2/program_emit.py
+@@ -727,7 +727,9 @@ def _bank_cache_key(bank: int, manifest: ProgramManifest, rom_digest: str,
+                     helpers: Mapping, inline_args: Mapping,
+                     enable_hle: bool, host_alias_entries: Mapping,
+                     shard_threshold_bytes: int, shard_pc_span: int,
+-                    module_prefix: str | None = None) -> str:
++                    module_prefix: str | None = None,
++                    instruction_blocks: bool = False,
++                    region_paced: bool = False) -> str:
+     nodes = [
+         (key.manifest_key, node.digest, node.disposition.value)
+         for key, node in sorted(manifest.nodes.items())
+@@ -762,6 +764,8 @@ def _bank_cache_key(bank: int, manifest: ProgramManifest, rom_digest: str,
+             if ((pc24 >> 16) & 0xFF) == bank
+         ),
+         "hle": bool(enable_hle),
++        "instruction_blocks": bool(instruction_blocks),
++        "region_paced": bool(region_paced),
+         "sharding": [int(shard_threshold_bytes), int(shard_pc_span)],
+         "module_prefix": module_prefix or "",
+     })
+@@ -775,6 +779,8 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
+                  callee_exit_mx: Mapping | None = None,
+                  callee_exit_mx_modes: Mapping | None = None,
+                  enable_hle: bool = True,
++                 instruction_blocks: bool = False,
++                 region_paced: bool = False,
+                  shard_threshold_bytes: int = 4 * 1024 * 1024,
+                  shard_pc_span: int = 0x0800,
+                  check_link_closure: bool = True,
+@@ -850,7 +856,7 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
+                 bank, manifest, rom_digest, generator_digest, config_digest,
+                 dispatch_helpers, inline_arg_map, enable_hle,
+                 host_alias_entries, shard_threshold_bytes, shard_pc_span,
+-                module_prefix)
++                module_prefix, instruction_blocks, region_paced)
+             new_bank_keys[f"{bank:02X}"] = cache_key
+             previous_names = old_bank_outputs.get(f"{bank:02X}", ())
+             reusable_output = bool(previous_names) and all(
+@@ -931,6 +937,8 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
+                         data_regions.append((bank, start, end))
+             source = emit_bank(
+                 rom, bank, entries_by_bank.get(bank, []),
++                instruction_blocks=instruction_blocks,
++                region_paced=region_paced,
+                 dispatch_helpers=dict(dispatch_helpers) or None,
+                 indirect_call_tables=indirect_call_tables,
+                 indirect_dispatch=indirect_dispatch or None,
+diff --git a/recompiler/v2/region_pacing.py b/recompiler/v2/region_pacing.py
+new file mode 100644
+index 0000000..fe36132
+--- /dev/null
++++ b/recompiler/v2/region_pacing.py
+@@ -0,0 +1,109 @@
++"""Opt-in instruction timing against interp816's counted-bus model.
++
++Fetch bytes are charged without reading the ROM twice. Architectural data
++accesses use the runtime paced helpers; remaining CPU cycles are internal/6.
++Unsupported instructions tier to the interpreter before any charge. In
++particular, indirect pointers/dispatches are not re-read to estimate timing.
++This is instruction-boundary clock parity, not a bus-phase scheduler.
++"""
++import re
++
++import snes65816 as d
++
++_M = {"LDA", "STA", "ORA", "AND", "EOR", "ADC", "SBC", "CMP", "BIT", "STZ"}
++_X = {"LDX", "LDY", "STX", "STY", "CPX", "CPY"}
++_RMW = {"ASL", "LSR", "ROL", "ROR", "INC", "DEC", "TSB", "TRB"}
++_DIRECT = {d.DP, d.DP_X, d.DP_Y, d.ABS, d.ABS_X, d.ABS_Y, d.LONG, d.LONG_X, d.STK}
++_SPECIAL = {"COP", "BRK", "RTI", "MVN", "MVP", "WAI", "STP", "PEI", "XCE"}
++_BUS_CALL = re.compile(r"\bcpu_(?:read|write)(8|16)\(")
++
++
++def data_bytes(insn):
++    """Known architectural data bytes, or None for conservative fallback."""
++    name, mode = insn.mnem, insn.mode
++    if name in _SPECIAL or getattr(insn, "dispatch_entries", None):
++        return None
++    if name in {"JSR", "JMP"} and mode not in {d.ABS, d.LONG}:
++        return None
++    m = 1 if insn.m_flag else 2
++    x = 1 if insn.x_flag else 2
++    if name in {"PHA", "PLA"}: return m
++    if name in {"PHX", "PLX", "PHY", "PLY"}: return x
++    if name in {"PHP", "PLP", "PHB", "PLB", "PHK"}: return 1
++    if name in {"PHD", "PLD", "PEA", "PER", "JSR", "RTS"}: return 2
++    if name in {"JSL", "RTL"}: return 3
++    if mode in {d.IMP, d.ACC, d.IMM, d.REL, d.REL16}:
++        return 0
++    if name == "JMP" and mode in {d.ABS, d.LONG}:
++        return 0
++    if mode not in _DIRECT:
++        return None
++    if name in _M: return m
++    if name in _X: return x
++    if name in _RMW: return m * 2
++    return None
++
++
++def plan(insn, lines, cpu_cycles, *, live_operand=False):
++    """Return fetch/internal precharge and paced body, or None.
++
++    Checking the emitted byte-access count prevents an optimization or new
++    lowering from silently invalidating a previously supported bus recipe.
++    The supported bodies have one straight-line data-access sequence; complex
++    dispatch/pointer/control helpers deliberately remain authoritative LLE.
++    """
++    from v2.region_pointers import MODES, plan as pointer_plan
++    if insn.mode in MODES and not live_operand:
++        return pointer_plan(insn, lines, cpu_cycles)
++    count = data_bytes(insn)
++    if count is None or live_operand:
++        return None
++    text = "\n".join(lines)
++    actual = sum(int(bits) // 8 for bits in _BUS_CALL.findall(text))
++    internal = cpu_cycles - insn.length - count
++    if actual != count or internal < 0:
++        return None
++    # Opcode/operand fetch wraps within the live program bank. Do not call a
++    # read accessor: materialized immediate bytes already supplied their value.
++    pc = insn.addr & 0xFFFF
++    costs = [f"cpu_region_speed(((uint32)cpu->PB << 16) | 0x{(pc + n) & 0xFFFF:04X}u)"
++             for n in range(insn.length)]
++    if internal:
++        costs.append(str(internal * 6))
++    paced = re.sub(r"\bcpu_(read|write)(8|16)\(", r"cpu_\1\2_paced(", text)
++    # Dynamic DP/page/branch additions are native instruction time too. Credit
++    # at its origin, never infer elapsed time around nested mixed-tier calls.
++    paced = re.sub(r"cpu->master_cycles\s*\+=\s*([^;]+);",
++                   r"cpu_add_aot_master_cycles(cpu, \1);", paced).split("\n")
++    return " + ".join(costs), paced, []
++
++
++def mmio_guard(insn):
++    """Pure address predicates only; never perform a data/pointer read."""
++    count = data_bytes(insn)
++    if not count:
++        return None
++    mode, name, value = insn.mode, insn.mnem, insn.operand
++    stack = {"PHA", "PLA", "PHX", "PLX", "PHY", "PLY", "PHP", "PLP", "PHB", "PLB",
++             "PHK", "PHD", "PLD", "PEA", "PER", "JSR", "JSL", "RTS", "RTL"}
++    if name in stack:
++        # Conservative window also covers every preincrement/decrement byte.
++        return "cpu->S >= 0x1FFBu && cpu->S < 0x6005u"
++    idx = " + cpu->X" if mode in {d.DP_X, d.ABS_X, d.LONG_X} else " + cpu->Y" if mode in {d.DP_Y, d.ABS_Y} else ""
++    if mode in {d.DP, d.DP_X, d.DP_Y}:
++        ea = f"(uint16)(cpu->D + 0x{value & 0xFF:02X}u{idx})"
++    elif mode == d.STK:
++        ea = f"(uint16)(cpu->S + 0x{value & 0xFF:02X}u)"
++    elif mode in {d.ABS, d.ABS_X, d.ABS_Y}:
++        ea = f"((((uint32)cpu->DB << 16) + 0x{value & 0xFFFF:04X}u{idx}) & 0xFFFFFFu)"
++    elif mode in {d.LONG, d.LONG_X}:
++        ea = f"((0x{value & 0xFFFFFF:06X}u{idx}) & 0xFFFFFFu)"
++    else:
++        return None
++    # RMW count includes both directions, but maximum accessed width is half.
++    width = count // 2 if name in _RMW else count
++    terms = [f"(({ea}) & 0xFFFFu) == 0xFFFFu"] if width > 1 else []
++    for n in range(width):
++        adr = f"(({ea}) + {n}u)"
++        terms.append(f"((({adr} >> 16) & 0x7Fu) < 0x40u && ({adr} & 0xFFFFu) >= 0x2000u && ({adr} & 0xFFFFu) < 0x6000u)")
++    return " || ".join(terms)
+diff --git a/recompiler/v2/region_pointers.py b/recompiler/v2/region_pointers.py
+new file mode 100644
+index 0000000..d049cf9
+--- /dev/null
++++ b/recompiler/v2/region_pointers.py
+@@ -0,0 +1,101 @@
++"""Conservative cached-pointer recipes for instruction-paced emission.
++
++Only low WRAM may supply a pointer. A pure host-memory preview refuses MMIO
++destinations before any guest mutation; the accepted instruction then performs
++its architectural pointer fetch once through the paced CPU bus. Dispatch and
++software-interrupt pointers are separate contracts and remain interpreted.
++"""
++import re
++import snes65816 as d
++
++MODES = {d.DP_INDIR, d.INDIR_DPX, d.INDIR_Y, d.INDIR_L, d.INDIR_LY, d.STK_IY}
++NAMES = {"LDA", "STA", "ORA", "AND", "EOR", "ADC", "SBC", "CMP"}
++
++
++def plan(insn, lines, cpu_cycles):
++    if insn.mode not in MODES or insn.mnem not in NAMES:
++        return None
++    from v2.codegen import _emit_read, _emit_write
++    from v2.ir import Read, Write, Value
++    from v2.lowering import _segref_for
++    from snes_cycles import xcross_add
++
++    width = 1 if insn.m_flag else 2
++    long_pointer = insn.mode in {d.INDIR_L, d.INDIR_LY}
++    pointer_bytes = 3 if long_pointer else 2
++    internal = cpu_cycles - insn.length - pointer_bytes - width
++    if internal < 0:
++        return None
++    segment = _segref_for(insn)
++    text = "\n".join(lines)
++    name = f"_rp_{insn.addr:06X}_{insn.m_flag}{insn.x_flag}"
++    # Match the current code generator's complete architectural access, not
++    # a nested address expression. Indexed-indirect lowering may cache the
++    # pointer and split a word crossing into a conditional sequence. The
++    # precharge guards below refuse that crossing, so accepted instructions
++    # replace the entire sequence with one guarded, cached paced access.
++    # Reusing the emitted Read/Write shape supports both the original and
++    # bank-carry-corrected lowering without reading the guest pointer twice.
++    matches = []
++    for vid in sorted(set(int(v) for v in re.findall(r"\b_v(\d+)\b", text))):
++        value = Value(vid)
++        if insn.mnem == "STA":
++            original = "\n".join(_emit_write(Write(segment, value, width)))
++            replacement = (f"cpu_write{width * 8}_paced(cpu, "
++                f"(uint8)({name}_ea >> 16), (uint16){name}_ea, _v{vid});")
++        else:
++            original = "\n".join(_emit_read(Read(segment, width, value)))
++            replacement = (f"uint{width * 8} _v{vid} = cpu_read{width * 8}_paced(cpu, "
++                f"(uint8)({name}_ea >> 16), (uint16){name}_ea);")
++        if text.count(original) == 1:
++            matches.append((original, replacement))
++    if len(matches) != 1:
++        return None
++    text = text.replace(*matches[0])
++    if re.search(r"\bcpu_(?:read|write)(?:8|16)\(", text):
++        return None
++
++    offset = insn.operand & 0xFF
++    base = "cpu->S" if insn.mode == d.STK_IY else "cpu->D"
++    preindex = " + cpu->X" if insn.mode == d.INDIR_DPX else ""
++    postindex = " + cpu->Y" if insn.mode in {d.INDIR_Y, d.INDIR_LY, d.STK_IY} else ""
++
++    def effective(pointer):
++        start = pointer if long_pointer else f"(((uint32)cpu->DB << 16) + {pointer})"
++        return f"(({start}{postindex}) & 0xFFFFFFu)"
++
++    # Preview is not a CPU bus read: the range guard proves plain low WRAM,
++    # excludes devices/bank wrap, and leaves open_bus and every clock untouched.
++    preview = f"((uint32)cpu->ram[{name}_at] | ((uint32)cpu->ram[{name}_at + 1u] << 8))"
++    if long_pointer:
++        preview += f" | ((uint32)cpu->ram[{name}_at + 2u] << 16)"
++    prefix = [
++        f"uint16 {name}_at = (uint16)({base} + 0x{offset:02X}u{preindex});",
++        f"if ({name}_at > 0x{0x2000 - pointer_bytes:04X}u) {{ @FALLBACK@ }}",
++        f"uint32 {name}_preview = {preview};",
++        f"uint32 {name}_target = {effective(name + '_preview')};",
++    ]
++    refused = []
++    for n in range(width):
++        adr = f"({name}_target + {n}u)"
++        refused.append(f"((({adr} >> 16) & 0x7Fu) < 0x40u && ({adr} & 0xFFFFu) >= 0x2000u && ({adr} & 0xFFFFu) < 0x6000u)")
++    if width == 2:
++        refused.append(f"({name}_target & 0xFFFFu) == 0xFFFFu")
++    prefix.append(f"if ({' || '.join(refused)}) {{ @FALLBACK@ }}")
++
++    body = [f"uint32 {name}_pointer = cpu_read16_paced(cpu, 0x00, {name}_at);"]
++    if long_pointer:
++        body.append(f"{name}_pointer |= (uint32)cpu_read8_paced(cpu, 0x00, (uint16)({name}_at + 2u)) << 16;")
++    body.append(f"uint32 {name}_ea = {effective(name + '_pointer')};")
++    # X=0's read penalty is already part of the static cost. X=1 requires the
++    # actual pointer's page comparison; stores already include indexing cost.
++    if insn.mode == d.INDIR_Y and insn.x_flag and xcross_add(insn.opcode):
++        body.append(f"if (({name}_pointer >> 8) != (({name}_pointer + cpu->Y) >> 8)) {{ cpu->cycles += 1; cpu_add_aot_master_cycles(cpu, 6); }}")
++    text = re.sub(r"cpu->master_cycles\s*\+=\s*([^;]+);",
++                  r"cpu_add_aot_master_cycles(cpu, \1);", text)
++    body.extend(text.split("\n"))
++    pc = insn.addr & 0xFFFF
++    costs = [f"cpu_region_speed(((uint32)cpu->PB << 16) | 0x{(pc + n) & 0xFFFF:04X}u)" for n in range(insn.length)]
++    if internal:
++        costs.append(str(internal * 6))
++    return " + ".join(costs), body, prefix
+diff --git a/runner/src/cpu_state.c b/runner/src/cpu_state.c
+index ae7d7f1..3d44b57 100644
+--- a/runner/src/cpu_state.c
++++ b/runner/src/cpu_state.c
+@@ -760,16 +760,31 @@ void cpu_write16(CpuState *cpu, uint8 bank, uint16 addr, uint16 v) {
+ /* ── Region-paced AOT bus (2026-08-31) ────────────────────────────────────
+  * The LLE charges master clocks PER BUS TRANSFER at the region speed
+  * (interp_bridge.c: master = Σ region_speed + internal×6). The AOT emitter's
+- * block const covers fetch+internal cycles only; every data/stack/pointer
+- * access in generated code calls these paced variants so the AOT master
+- * advance matches the LLE exactly. The plain cpu_read8/16 / cpu_write8/16
++ * opt-in region-paced emitter accounts for fetch/internal clocks separately
++ * and uses these variants for supported data/stack accesses. Unsupported
++ * instructions stay interpreted; default aggregate emission does not use
++ * these helpers. The plain cpu_read8/16 / cpu_write8/16
+  * stay UNPACED because the LLE's bridge shims call them inside their own
+  * per-transfer accounting (pacing there would double-count the interp path).
+  * The 16-bit forms charge both bytes at their own regions (they can straddle
+  * a region boundary, e.g. $00:1FFF->$00:2000). */
++void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks) = NULL;
++void (*g_cpu_aot_instruction_boundary_hook)(CpuState *cpu) = NULL;
++
++void cpu_aot_instruction_boundary(CpuState *cpu) {
++    if (g_cpu_aot_instruction_boundary_hook)
++        g_cpu_aot_instruction_boundary_hook(cpu);
++}
++
++void cpu_add_aot_master_cycles(CpuState *cpu, uint64 clocks) {
++    cpu->master_cycles += clocks;
++    if (g_cpu_aot_master_credit_hook)
++        g_cpu_aot_master_credit_hook(cpu, clocks);
++}
++
+ uint8_t cpu_read8_paced(CpuState *cpu, uint8_t bank, uint16_t addr) {
+     uint32_t _sp = cpu_region_speed(((uint32_t)bank << 16) | addr);
+-    cpu->master_cycles += _sp;
++    cpu_add_aot_master_cycles(cpu, _sp);
+     {
+         static int _pl = -1;
+         if (_pl < 0) _pl = getenv("SNESRECOMP_PACELOG") ? 1 : 0;
+@@ -785,7 +800,7 @@ uint8_t cpu_read8_paced(CpuState *cpu, uint8_t bank, uint16_t addr) {
+ uint16_t cpu_read16_paced(CpuState *cpu, uint8_t bank, uint16_t addr) {
+     uint32_t _sp = cpu_region_speed(((uint32_t)bank << 16) | addr) +
+         cpu_region_speed(((uint32_t)bank << 16) | (uint16_t)(addr + 1));
+-    cpu->master_cycles += _sp;
++    cpu_add_aot_master_cycles(cpu, _sp);
+     {
+         static int _pl = -1;
+         if (_pl < 0) _pl = getenv("SNESRECOMP_PACELOG") ? 1 : 0;
+@@ -800,7 +815,7 @@ uint16_t cpu_read16_paced(CpuState *cpu, uint8_t bank, uint16_t addr) {
+ 
+ void cpu_write8_paced(CpuState *cpu, uint8_t bank, uint16_t addr, uint8_t v) {
+     uint32_t _sp = cpu_region_speed(((uint32_t)bank << 16) | addr);
+-    cpu->master_cycles += _sp;
++    cpu_add_aot_master_cycles(cpu, _sp);
+     {
+         static int _pl = -1;
+         if (_pl < 0) _pl = getenv("SNESRECOMP_PACELOG") ? 1 : 0;
+@@ -816,7 +831,7 @@ void cpu_write8_paced(CpuState *cpu, uint8_t bank, uint16_t addr, uint8_t v) {
+ void cpu_write16_paced(CpuState *cpu, uint8_t bank, uint16_t addr, uint16_t v) {
+     uint32_t _sp = cpu_region_speed(((uint32_t)bank << 16) | addr) +
+         cpu_region_speed(((uint32_t)bank << 16) | (uint16_t)(addr + 1));
+-    cpu->master_cycles += _sp;
++    cpu_add_aot_master_cycles(cpu, _sp);
+     {
+         static int _pl = -1;
+         if (_pl < 0) _pl = getenv("SNESRECOMP_PACELOG") ? 1 : 0;
+diff --git a/runner/src/cpu_state.h b/runner/src/cpu_state.h
+index f294715..cfd43d4 100644
+--- a/runner/src/cpu_state.h
++++ b/runner/src/cpu_state.h
+@@ -415,13 +415,22 @@ uint16 cpu_read16(CpuState *cpu, uint8 bank, uint16 addr);
+ void   cpu_write8 (CpuState *cpu, uint8 bank, uint16 addr, uint8  v);
+ void   cpu_write16(CpuState *cpu, uint8 bank, uint16 addr, uint16 v);
+ 
+-/* Region-paced AOT bus (2026-08-31): the AOT emitter charges block const
+- * cycles minus data transfers, and paces each data/stack/pointer access
+- * here at its region speed so master_cycles matches the LLE per-transfer
+- * model exactly. Only generated (AOT) code calls the _paced forms; the
++/* Region-paced AOT bus: opt-in region-paced emission accounts for fetch and
++ * internal clocks separately, and uses these helpers for supported data/stack
++ * accesses. Unsupported instructions retain interpreter ownership. Default
++ * aggregate emission does not call them. Only AOT calls the _paced forms; the
+  * interpreter's bridge shims use the plain accessors (they account
+  * transfers themselves). */
+ uint32_t  cpu_region_speed(uint32_t adr);
++/* Opt-in paced emission credits only its own instruction clocks. The bridge
++ * installs this nullable hook to share its existing rollback-safe APU credit;
++ * refresh, DMA and interpreted instructions must not call this helper. */
++extern void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);
++void cpu_add_aot_master_cycles(CpuState *cpu, uint64 clocks);
++/* Called only at architectural boundaries by opt-in paced emission. This
++ * reports completion, not elapsed time, and must never credit clocks again. */
++extern void (*g_cpu_aot_instruction_boundary_hook)(CpuState *cpu);
++void cpu_aot_instruction_boundary(CpuState *cpu);
+ /* SNESRECOMP_WLOG_ADDR hook for direct-WRAM stores that bypass cpu_write8/16
+  * (DMA A-bus writes in snes_write, WMDATA $2180). wa = g_ram offset. */
+ void wlog_addr_note_direct(uint32_t wa, uint8_t v, const char *via);
+diff --git a/tests/test_timing_generation_identity.py b/tests/test_timing_generation_identity.py
+new file mode 100644
+index 0000000..527928d
+--- /dev/null
++++ b/tests/test_timing_generation_identity.py
+@@ -0,0 +1,87 @@
++"""Explicit timing selection reaches emission and invalidates every cache tier."""
++import argparse
++import hashlib
++import pathlib
++import sys
++
++import pytest
++
++ROOT = pathlib.Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT))
++from tools import sdk_generate
++from tools.generation_recipe import load_recipe
++from tools.smoke_sdk_generate import write_fixture_rom
++
++
++def test_cli_defaults_and_explicit_timing():
++    parser = argparse.ArgumentParser()
++    sdk_generate.add_generate_parser(parser.add_subparsers(dest="command"))
++    required = ["generate", "--rom", "fixture", "--cfg-dir", "cfg", "--out-dir", "gen"]
++    defaults = parser.parse_args(required)
++    assert not defaults.instruction_blocks and not defaults.region_paced
++    explicit = parser.parse_args(required + ["--instruction-blocks", "--region-paced"])
++    assert explicit.instruction_blocks and explicit.region_paced
++
++
++def test_sdk_forwards_timing_to_emitter(tmp_path, monkeypatch):
++    cfg = tmp_path / "recomp"
++    cfg.mkdir()
++    (cfg / "bank00.cfg").write_text("bank = 0\n")
++    rom = tmp_path / "fixture.sfc"
++    write_fixture_rom(rom)
++    calls = []
++    monkeypatch.setattr(sdk_generate, "run_tool", lambda tool, args: calls.append(args) or 0)
++    result = sdk_generate._generate(rom=rom, cfg_dir=cfg, out_dir=tmp_path / "gen",
++                                   instruction_blocks=True, region_paced=True)
++    assert "--instruction-blocks" in calls[0] and result["instruction_blocks"]
++    assert "--region-paced" in calls[0] and result["region_paced"]
++
++
++def test_effective_recipe_options_change_identity(tmp_path, monkeypatch):
++    cfg = tmp_path / "recomp"
++    cfg.mkdir()
++    (cfg / "bank00.cfg").write_text("bank = 0\n")
++    recipe_path = cfg / "generate.toml"
++    recipe_path.write_text("schema = 1\n")
++    rom = tmp_path / "fixture.sfc"
++    write_fixture_rom(rom)
++    calls = []
++    def fake_generate(**options):
++        calls.append(options.copy())
++        (options["out_dir"] / "synthetic.c").write_text("/* synthetic */\n")
++        return {"ok": True}
++    monkeypatch.setattr(sdk_generate, "_generate", fake_generate)
++    for block, paced in [(False, False), (True, False), (True, True), (False, False)]:
++        sdk_generate.generate(rom=rom, cfg_dir=cfg, out_dir=tmp_path / "gen",
++                              instruction_blocks=block, region_paced=paced)
++    digests = [call["generation_recipe_digest"] for call in calls]
++    assert len(set(digests[:3])) == 3 and digests[0] == digests[3]
++    expected = hashlib.sha256((load_recipe(cfg).digest() +
++        "\0instruction_blocks=0\0region_paced=0").encode("ascii")).hexdigest()
++    assert digests[0] == expected
++    recipe_path.write_text("schema = 1\ninstruction_blocks = true\nregion_paced = true\n")
++    sdk_generate.generate(rom=rom, cfg_dir=cfg, out_dir=tmp_path / "gen")
++    assert calls[-1]["instruction_blocks"] and calls[-1]["region_paced"]
++
++
++def test_refuse_invalid_timing_before_rom_or_output_access(tmp_path):
++    with pytest.raises(ValueError, match="requires instruction-blocks"):
++        sdk_generate._generate(rom=tmp_path / "absent", cfg_dir=tmp_path,
++                               out_dir=tmp_path / "gen", region_paced=True)
++    assert not (tmp_path / "gen").exists()
++
++
++def test_emitter_output_and_bank_cache_invalidate_on_timing_change(tmp_path):
++    from test_program_emit import _fixture, _emit
++    rom, cfg, out = _fixture(tmp_path, target_opcode=0xEA)
++    common = ["--rom", str(rom), "--cfg-dir", str(cfg), "--out-dir", str(out),
++              "--no-host-root-scan"]
++    for flags in [[], ["--instruction-blocks"], ["--instruction-blocks", "--region-paced"], []]:
++        first = _emit(*(common + flags))
++        assert first.returncode == 0, first.stdout + first.stderr
++        assert "1 bank(s) emitted, 0 reused" in first.stdout
++        text = (out / "bank00_v2.c").read_text()
++        assert ("cpu_add_aot_master_cycles(cpu," in text) == ("--region-paced" in flags)
++        repeated = _emit(*(common + flags))
++        assert repeated.returncode == 0, repeated.stdout + repeated.stderr
++        assert "0 bank(s) emitted, 1 reused" in repeated.stdout
+diff --git a/tests/v2/test_instruction_block_deadline.py b/tests/v2/test_instruction_block_deadline.py
+new file mode 100644
+index 0000000..0f5eda1
+--- /dev/null
++++ b/tests/v2/test_instruction_block_deadline.py
+@@ -0,0 +1,86 @@
++"""Synthetic proof of aggregate-block overshoot and opt-in instruction yields."""
++import os
++from pathlib import Path
++import subprocess
++
++import pytest
++
++from _helpers import make_lorom_bank0
++from snes65816 import get_rom_mapping, set_rom_mapping, ROM_MAP_LOROM
++from v2.emit_function import emit_function
++
++
++def emit(name, instruction_blocks):
++    previous = get_rom_mapping()
++    try:
++        set_rom_mapping(ROM_MAP_LOROM)
++        # LDA #$01 (2 cycles), NOP (2), RTS (6).
++        rom = make_lorom_bank0({0x8000: bytes([0xA9, 0x01, 0xEA, 0x60])})
++        return emit_function(rom, bank=0, start=0x8000, entry_m=1, entry_x=1,
++                             func_name=name, instruction_blocks=instruction_blocks)
++    finally:
++        set_rom_mapping(previous)
++
++
++def test_opt_in_places_deadline_checks_before_each_instruction():
++    aggregate = emit("Aggregate", False)
++    split = emit("Split", True)
++    assert "cpu->cycles += 10;" in aggregate
++    assert "L_8002_M1X1:" not in aggregate
++    for pc in ("8000", "8002", "8003"):
++        block = split.split(f"L_{pc}_M1X1:", 1)[1]
++        assert block.index("interp_bridge_lle_master_deadline_reached") < block.index("cpu->cycles +=")
++    assert split.count("cpu->cycles += 2;") == 2
++    assert "cpu->cycles += 6;" in split
++
++
++def test_executed_deadline_preserves_guest_frame_before_rts(tmp_path):
++    import test_hle_func_seam as seam
++    compiler = seam._compiler()
++    if not compiler:
++        pytest.skip("C compiler required")
++    harness = seam._HARNESS.split("/* The C helpers.")[0]
++    old = ('int interp_bridge_lle_master_deadline_reached(const CpuState *cpu) {\n'
++           '  (void)cpu; return 0;\n}')
++    assert old in harness
++    harness = harness.replace(old,
++        'int interp_bridge_lle_master_deadline_reached(const CpuState *cpu) {\n'
++        '  return cpu->master_cycles >= 16;\n}')
++    main = r'''
++static void prepare(CpuState *cpu) {
++  memset(cpu, 0, sizeof *cpu); memset(g_ram, 0, sizeof g_ram);
++  cpu->ram = g_ram; cpu->S = 0x01FF;
++  cpu->m_flag = 1; cpu->x_flag = 1; cpu->P = 0x30;
++  g_other_exits = 0; g_other_target = 0; g_tc_valid = 0; g_recomp_stack_top = 0;
++  cpu_push_jsr_return_frame(cpu);
++}
++int main(void) {
++  CpuState cpu;
++  prepare(&cpu); Aggregate_M1X1(&cpu);
++  /* The default aggregate body runs its RTS after crossing the deadline. */
++  if (cpu.S != 0x01FF || cpu.cycles != 10 || cpu.master_cycles != 80 || g_other_exits) return 1;
++  prepare(&cpu); Split_M1X1(&cpu);
++  /* At the same deadline the split body suspends BEFORE NOP/RTS, retaining
++     the guest call frame. This fixture isolates scheduling, not bus timing. */
++  if (cpu.S != 0x01FD || cpu.cycles != 2 || cpu.master_cycles != 16 ||
++      cpu.A != 1 || g_other_exits != 1 || g_other_target != 0x008002) return 2;
++  puts("aggregate S=01ff cycles=10; instruction S=01fd cycles=2 resume=008002");
++  return 0;
++}
++'''
++    source = harness + emit("Aggregate", False) + emit("Split", True) + main
++    c_file = tmp_path / "deadline.c"
++    c_file.write_text(source)
++    exe = tmp_path / ("deadline.exe" if os.name == "nt" else "deadline")
++    runner = Path(__file__).resolve().parents[2] / "runner" / "src"
++    build = subprocess.run([compiler, "-std=c11", "-O1", "-I", str(runner),
++                            str(c_file), "-o", str(exe)], capture_output=True, text=True)
++    assert build.returncode == 0, build.stdout + build.stderr
++    run = subprocess.run([str(exe)], capture_output=True, text=True)
++    assert run.returncode == 0, run.stdout + run.stderr
++    assert "resume=008002" in run.stdout
++
++
++def test_instruction_blocks_keep_folded_taken_cycle(tmp_path):
++    from test_folded_branch_cycles import run_folded_branch_cases
++    run_folded_branch_cases(tmp_path, instruction_blocks=True)
+diff --git a/tests/v2/test_region_pacing.py b/tests/v2/test_region_pacing.py
+new file mode 100644
+index 0000000..99999cb
+--- /dev/null
++++ b/tests/v2/test_region_pacing.py
+@@ -0,0 +1,238 @@
++"""ROM-free generated execution vs actual interp816 bus callbacks."""
++import os
++import re
++from pathlib import Path
++import subprocess
++
++import pytest
++
++from _helpers import make_lorom_bank0
++from snes65816 import get_rom_mapping, set_rom_mapping, ROM_MAP_LOROM
++from v2.emit_function import emit_function
++
++REPO = Path(__file__).resolve().parents[2]
++
++
++def _emit(code, name="Case", m=1, x=1, **options):
++    old = get_rom_mapping()
++    try:
++        set_rom_mapping(ROM_MAP_LOROM)
++        rom = make_lorom_bank0({0x8000: bytes.fromhex(code)})
++        return emit_function(rom, 0, 0x8000, m, x, func_name=name,
++                             instruction_blocks=True, region_paced=True, **options)
++    finally:
++        set_rom_mapping(old)
++
++
++def test_region_pacing_requires_instruction_blocks():
++    with pytest.raises(ValueError, match="requires instruction-blocks"):
++        emit_function(make_lorom_bank0({0x8000: b"\x60"}), 0, 0x8000, 1, 1,
++                      region_paced=True)
++
++
++@pytest.mark.parametrize("code", ["A5 00 60", "BD FF 00 60", "D0 01 EA 60"])
++def test_all_region_master_charges_use_origin_credit_api(code):
++    source = _emit(code)
++    assert "cpu_add_aot_master_cycles(cpu," in source
++    assert "cpu->master_cycles +=" not in source
++
++
++@pytest.mark.parametrize("code", ["AD 40 21 60", "B1 10 60", "02 01 60", "54 7E 7F 60", "FB 60"])
++def test_mmio_or_unmodeled_instruction_falls_back_before_charge(code):
++    source = _emit(code)
++    block = source.split("L_8000_M1X1:", 1)[1]
++    guard = block.index("interp_tier_dispatch_tail")
++    charge = block.find("cpu->cycles +=")
++    assert charge < 0 or guard < charge
++    assert "cpu_read16_paced(cpu, 0x00, (uint16)(cpu->D" not in block
++    assert "interp_tier_dispatch_balanced" not in source
++
++
++def _c_function(source, name):
++    start = re.search(r"(?m)^(?:static\s+)?(?:inline\s+)?[A-Za-z_]\w*\s+\**" + re.escape(name) + r"\(", source).start()
++    brace = source.index("{", start)
++    depth = 1
++    end = brace + 1
++    while depth:
++        depth += (source[end] == "{") - (source[end] == "}")
++        end += 1
++    return source[start:end] + "\n"
++
++
++def run_region_cases(tmp_path, cases=None, *, extra_main="", extra_emitted="", check_read_counts=False):
++    import test_hle_func_seam as seam
++    compiler = seam._compiler()
++    if not compiler:
++        pytest.skip("C compiler required")
++    runtime = (REPO / "runner/src/cpu_state.c").read_text()
++    paced = "void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);\n"
++    paced += "void (*g_cpu_aot_instruction_boundary_hook)(CpuState *cpu);\n"
++    paced += "\n".join(_c_function(runtime, name) for name in (
++        "cpu_aot_instruction_boundary", "cpu_add_aot_master_cycles", "cpu_region_speed", "cpu_read8_paced", "cpu_read16_paced",
++        "cpu_write8_paced", "cpu_write16_paced"))
++    harness = seam._HARNESS.split("/* The C helpers.")[0]
++    harness = harness.replace("return g_ram[addr];", "return cpu->open_bus = g_ram[addr];")
++    harness = harness.replace("g_ram[addr] = v;", "g_ram[addr] = v; cpu->open_bus = v;")
++    harness = harness.replace("g_ram[addr]", "g_ram[(bank == 0x7f ? 0x10000u : 0u) + addr]")
++    harness = "static unsigned g_mmio_reads, g_probe_reads[0x40];\n" + harness
++    harness = harness.replace(_c_function(harness, "interp_tier_dispatch_tail"), "")
++    harness = harness.replace("(void)cpu; (void)bank; return cpu->open_bus",
++        "if (bank == 0 && addr >= 0x100 && addr < 0x120) g_probe_reads[addr-0x100]++; "
++        "if (bank == 0 && addr >= 0x200 && addr < 0x220) g_probe_reads[addr-0x200+0x20]++; "
++        "if ((bank & 0x7f) < 0x40 && addr >= 0x2000 && addr < 0x6000) g_mmio_reads++; return cpu->open_bus")
++    extra = r'''
++#include "snes/interp816.h"
++int snes_frame_counter;
++static int g_balanced_calls, s_interp_bounce_owner_depth;
++static uint64 credited_master;
++static void record_credit(CpuState *cpu, uint64 clocks) { (void)cpu; credited_master += clocks; }
++int cpu_interrupt_context_active(void) { return 0; }
++RecompReturn interp_tier_dispatch_interrupt(CpuState *cpu, uint32 pc) {
++  (void)cpu; (void)pc; return 0;
++}
++int interp816_opcode_hook(uint32_t address) { (void)address; return 0; }
++RecompReturn interp_tier_dispatch_balanced(CpuState *cpu, uint32 pc,
++  uint32 site, uint16 entry, uint8 hrv, bool tail) {
++  (void)cpu; (void)site; (void)entry; (void)hrv; (void)tail;
++  g_other_exits++; g_other_target = pc; g_balanced_calls++; return 0;
++}
++static unsigned bus_count; static uint64_t bus_master;
++static uint8_t reference_read(void *opaque, uint32_t address) {
++  bus_count++; bus_master += cpu_region_speed(address);
++  return cpu_read8(opaque, address >> 16, (uint16)address);
++}
++static void reference_write(void *opaque, uint32_t address, uint8_t value) {
++  bus_count++; bus_master += cpu_region_speed(address);
++  cpu_write8(opaque, address >> 16, (uint16)address, value);
++}
++static uint8 expected_ram[sizeof g_ram];
++static unsigned expected_reads[0x40];
++static void prepare(CpuState *cpu, const uint8_t *code, unsigned length,
++                    int m, int x, int fast) {
++  memset(cpu, 0, sizeof *cpu); memset(g_ram, 0, sizeof g_ram);
++  memcpy(g_ram + 0x8000, code, length);
++  g_ram[0x0100] = 0x56; g_ram[0x0101] = 0x78;
++  g_ram[0x10000] = 0xAB; g_ram[0x10001] = 0xCD; g_ram[0x10002] = 0xEF;
++  cpu->ram = g_ram; cpu->S = 0x01FF; cpu->A = 0x1234;
++  cpu->X = 1; cpu->Y = 2; cpu->D = 0; cpu->DB = 0x7E;
++  cpu->P = (m ? 0x20 : 0) | (x ? 0x10 : 0); cpu_p_to_mirrors(cpu);
++  cpu->PB = fast ? 0x80 : 0; g_memsel = fast;
++  g_other_exits = 0; g_tc_valid = 0; g_recomp_stack_top = 0; g_mmio_reads = 0; g_balanced_calls = 0;
++  credited_master = 0; g_cpu_aot_master_credit_hook = record_credit;
++  memset(g_probe_reads, 0, sizeof g_probe_reads);
++  cpu_push_jsr_return_frame(cpu);
++}
++static int check(const char *name, RecompReturn (*fn)(CpuState *),
++                 const uint8_t *code, unsigned len, int m, int x, int dp, int fast) {
++  CpuState native, memory;
++  prepare(&native, code, len, m, x, fast); native.D = dp;
++  fn(&native); cpu_mirrors_to_p(&native); memcpy(expected_ram, g_ram, sizeof g_ram);
++  memcpy(expected_reads, g_probe_reads, sizeof g_probe_reads);
++  if (credited_master != native.master_cycles) {
++    fprintf(stderr, "%s native credit missing/doubled\n", name); return 1;
++  }
++  if (g_other_exits) { fprintf(stderr, "%s unexpectedly fell back at %06x\n", name, g_other_target); return 1; }
++  prepare(&memory, code, len, m, x, fast);
++  Interp816 ref; memset(&ref, 0, sizeof ref);
++  ref.mem = &memory; ref.read = reference_read; ref.write = reference_write;
++  ref.a = memory.A; ref.x = memory.X; ref.y = memory.Y; ref.sp = memory.S;
++  ref.pc = 0x8000; ref.k = memory.PB; ref.db = memory.DB; ref.dp = dp;
++  interp816_setFlags(&ref, memory.P); ref.e = false;
++  uint64_t cycles = 0, master = 0;
++  for (unsigned n = 0; n < 256 && ref.pc != 1; n++) {
++    bus_count = 0; bus_master = 0;
++    unsigned c = interp816_runOpcode(&ref);
++    cycles += c; master += bus_master + (c > bus_count ? c - bus_count : 0) * 6u;
++  }
++  if (ref.pc != 1 || native.cycles != cycles || native.master_cycles != master ||
++      native.A != ref.a || native.X != ref.x || native.Y != ref.y ||
++      native.S != ref.sp || native.D != ref.dp || native.DB != ref.db ||
++      native.P != interp816_getFlags(&ref) || native.open_bus != memory.open_bus ||
++      credited_master || memcmp(expected_ram, g_ram, sizeof g_ram) ||
++      (CHECK_READ_COUNTS && memcmp(expected_reads, g_probe_reads, sizeof g_probe_reads))) {
++    fprintf(stderr, "%s failed: cycles %llu/%llu master %llu/%llu S %04x/%04x P %02x/%02x bus %02x/%02x\n", name,
++      (unsigned long long)native.cycles, (unsigned long long)cycles,
++      (unsigned long long)native.master_cycles, (unsigned long long)master,
++      native.S, ref.sp, native.P, interp816_getFlags(&ref), native.open_bus, memory.open_bus);
++    return 1;
++  }
++  return 0;
++}
++'''
++    cases = cases if cases is not None else [
++        ("Immediate", "A9 05 EA 60", 1, 1, 0),
++        ("Wide", "A9 34 12 EA 60", 0, 0, 0),
++        ("Dp", "A5 00 85 04 60", 1, 1, 0x100),
++        ("DpPenalty", "A5 00 85 04 60", 1, 1, 0x101),
++        ("WideDp", "A5 00 85 04 60", 0, 0, 0x100),
++        ("PageRead", "BD FF 00 60", 1, 1, 0),
++        ("WideIndex", "BD FF 00 60", 1, 0, 0),
++        ("PageStore", "9D FF 00 60", 1, 1, 0),
++        ("Rmw", "EE 00 01 60", 1, 1, 0),
++        ("WideRmw", "EE 00 01 60", 0, 0, 0),
++        ("Stack", "48 68 DA FA 5A 7A 08 28 8B AB 0B 2B 60", 1, 1, 0),
++        ("WideStack", "48 68 DA FA 5A 7A 0B 2B 60", 0, 0, 0),
++        ("Effective", "F4 34 12 68 68 60", 1, 1, 0),
++        ("BranchTaken", "A9 01 D0 01 EA 60", 1, 1, 0),
++        ("BranchNotTaken", "A9 00 D0 01 EA 60", 1, 1, 0),
++        ("DirectCall", "20 10 80 60 " + "EA " * 12 + "EA 60", 1, 1, 0),
++        ("LongCall", "22 20 80 00 60 " + "EA " * 27 + "EA 6B", 1, 1, 0),
++    ]
++    exits = {(pc, m, x): (m, x) for pc in (0x008010, 0x008020) for m in (0, 1) for x in (0, 1)}
++    emitted = "".join(f"RecompReturn bank_00_{pc:04X}_M{m}X{x}(CpuState *cpu);\n"
++                      for pc in (0x8010, 0x8020) for m in (0, 1) for x in (0, 1))
++    emitted += "".join(_emit(code, name, m, x, callee_exit_mx=exits) for name, code, m, x, dp in cases)
++    for name, code, m, x, dp in (case for case in cases if case[0] in {"DirectCall", "LongCall"}):
++        rom = make_lorom_bank0({0x8000: bytes.fromhex(code)})
++        for m in (0, 1):
++            for x in (0, 1):
++                pc = 0x8010 if name == "DirectCall" else 0x8020
++                emitted += emit_function(rom, 0, pc, m, x, instruction_blocks=True, region_paced=True)
++    emitted += _emit("AD 40 21 60", "Mmio") + _emit("A5 00 60", "DpMmio")
++    emitted += extra_emitted
++    bridge = (REPO / "runner/src/snes/interp_bridge.c").read_text()
++    # Compile the actual owner-aware tail helper, rather than a stub that
++    # would conceal accidentally starting a new nested interpreter frame.
++    tail_helpers = (_c_function(bridge, "interp_tier_dispatch_tail_ex") +
++                    _c_function(bridge, "interp_tier_dispatch_tail"))
++    credit_fixture = ''
++    main = ["int main(void) { int fails = 0;"]
++    for name, code, m, x, dp in cases:
++        values = ",".join(f"0x{b:02x}" for b in bytes.fromhex(code))
++        main += [f"{{ const uint8 code[] = {{{values}}};",
++                 f' for (int fast=0; fast<2; fast++) fails += check("{name}", {name}_M{m}X{x}, code, sizeof code, {m}, {x}, {dp}, fast); }}']
++    main += [r'''
++  { CpuState cpu; const uint8 code[] = {0xad,0x40,0x21,0x60};
++    s_interp_bounce_owner_depth = 1;
++    prepare(&cpu, code, sizeof code, 1, 1, 0); cpu.DB = 0;
++    Mmio_M1X1(&cpu);
++    if (cpu.cycles || cpu.master_cycles || cpu.S != 0x01FD ||
++        credited_master || g_mmio_reads || g_balanced_calls || g_other_exits != 1 || g_other_target != 0x008000) fails++;
++    prepare(&cpu, code, sizeof code, 1, 1, 0); cpu.D = 0x2140;
++    DpMmio_M1X1(&cpu);
++    if (cpu.cycles || cpu.master_cycles || g_mmio_reads || g_balanced_calls || g_other_exits != 1) fails++;
++    prepare(&cpu, code, sizeof code, 1, 1, 0); cpu.emulation = 1;
++    Mmio_M1X1(&cpu);
++    if (cpu.cycles || cpu.master_cycles || g_mmio_reads || g_balanced_calls || g_other_exits != 1) fails++;
++    s_interp_bounce_owner_depth = 0;
++    prepare(&cpu, code, sizeof code, 1, 1, 0); cpu.DB = 0;
++    Mmio_M1X1(&cpu);
++    if (cpu.cycles || cpu.master_cycles || g_mmio_reads || g_balanced_calls != 1 || g_other_exits != 1) fails++;
++  }
++''']
++    main += [extra_main]
++    main += [f'if (!fails) puts("{len(cases) * 2} synthetic native/interpreter timing cases passed"); return fails != 0; }}']
++    c_file = tmp_path / "region.c"
++    c_file.write_text(f"#define CHECK_READ_COUNTS {int(check_read_counts)}\n" + harness + paced + extra + tail_helpers + credit_fixture + emitted + "\n".join(main))
++    exe = tmp_path / ("region.exe" if os.name == "nt" else "region")
++    build = subprocess.run([compiler, "-std=c11", "-O1", "-I", str(REPO / "runner/src"),
++                            str(c_file), str(REPO / "runner/src/snes/interp816.c"), "-o", str(exe)],
++                           capture_output=True, text=True)
++    assert build.returncode == 0, build.stdout + build.stderr
++    run = subprocess.run([str(exe)], capture_output=True, text=True)
++    assert run.returncode == 0, run.stdout + run.stderr
++    assert f"{len(cases) * 2} synthetic" in run.stdout
++
++
++def test_executed_native_pacing_matches_interpreter_bus_costs(tmp_path):
++    run_region_cases(tmp_path)
+diff --git a/tests/v2/test_region_pointers.py b/tests/v2/test_region_pointers.py
+new file mode 100644
+index 0000000..c7dc3bf
+--- /dev/null
++++ b/tests/v2/test_region_pointers.py
+@@ -0,0 +1,127 @@
++"""Cached pointer instructions against the actual interpreter and bus counters."""
++import pytest
++
++from test_region_pacing import run_region_cases, _emit
++
++
++OPCODES = {
++    "dp":       {"LDA": 0xB2, "STA": 0x92, "ORA": 0x12, "AND": 0x32, "EOR": 0x52, "ADC": 0x72, "SBC": 0xF2, "CMP": 0xD2},
++    "dpx":      {"LDA": 0xA1, "STA": 0x81, "ORA": 0x01, "AND": 0x21, "EOR": 0x41, "ADC": 0x61, "SBC": 0xE1, "CMP": 0xC1},
++    "dpy":      {"LDA": 0xB1, "STA": 0x91, "ORA": 0x11, "AND": 0x31, "EOR": 0x51, "ADC": 0x71, "SBC": 0xF1, "CMP": 0xD1},
++    "long":     {"LDA": 0xA7, "STA": 0x87, "ORA": 0x07, "AND": 0x27, "EOR": 0x47, "ADC": 0x67, "SBC": 0xE7, "CMP": 0xC7},
++    "long_y":   {"LDA": 0xB7, "STA": 0x97, "ORA": 0x17, "AND": 0x37, "EOR": 0x57, "ADC": 0x77, "SBC": 0xF7, "CMP": 0xD7},
++    "stack_y":  {"LDA": 0xB3, "STA": 0x93, "ORA": 0x13, "AND": 0x33, "EOR": 0x53, "ADC": 0x73, "SBC": 0xF3, "CMP": 0xD3},
++}
++
++
++def _imm(value, m):
++    return [0xA9, value & 0xFF] + ([] if m else [(value >> 8) & 0xFF])
++
++
++def pointer_program(mode, opcode, m, target):
++    """Initialize the pointer by ordinary instructions on both execution paths."""
++    code = []
++    low = target & 0xFFFF
++    slot = 1 if mode == "dpx" else 0  # X starts at 1, Y at 2 in the shared fixture.
++    def store(value, offset):
++        code.extend(_imm(value, m))
++        if mode == "stack_y":
++            address = 0x020D + offset  # entry S=01FD, instruction operand=10.
++            code.extend([0x8D, address & 0xFF, address >> 8])
++        else:
++            code.extend([0x85, slot + offset])
++    if m:
++        store(low, 0); store(low >> 8, 1)
++    else:
++        store(low, 0)
++    if mode in {"long", "long_y"}:
++        store(target >> 16, 2)
++    code.extend(_imm(0x1234, m))
++    code.extend([opcode, 0x10 if mode == "stack_y" else 0x00, 0x60])
++    return bytes(code).hex(" ")
++
++
++@pytest.mark.parametrize("mode", list(OPCODES))
++def test_pointer_load_store_width_page_bank_and_single_fetch(tmp_path, mode):
++    cases = []
++    for name in ("LDA", "STA"):
++        for m, x in ((1, 1), (1, 0), (0, 1), (0, 0)):
++            for dp in (0x0100, 0x0101):
++                for target in (0x7E0120, 0x7E00FF, 0x7EFFFE):
++                    label = f"P_{mode}_{name}_{m}{x}_{dp:04X}_{target:06X}"
++                    cases.append((label, pointer_program(mode, OPCODES[mode][name], m, target), m, x, dp))
++    # Read-modify-register ALU cases use the same pointer recipes, not a
++    # separate expression whose duplicate pointer reads could go unnoticed.
++    for name in ("ORA", "AND", "EOR", "ADC", "SBC", "CMP"):
++        for m, x in ((1, 1), (1, 0), (0, 1), (0, 0)):
++            label = f"P_{mode}_{name}_{m}{x}"
++            cases.append((label, pointer_program(mode, OPCODES[mode][name], m, 0x7EFFFE), m, x, 0x0101))
++    # The shared harness maps banks7E/7F separately, compares every RAM byte,
++    # and counts actual byte-bus reads at the pointer locations. A duplicated
++    # observable pointer fetch fails even if the resulting value is unchanged.
++    run_region_cases(tmp_path, cases, check_read_counts=True)
++
++
++@pytest.mark.parametrize("opcode", [0xB2, 0x92, 0xA1, 0x81, 0xB1, 0x91, 0xA7, 0x87, 0xB7, 0x97, 0xB3, 0x93])
++def test_pointer_guard_precedes_charge_and_guest_pointer_fetch(opcode):
++    source = _emit(bytes([opcode, 0x10, 0x60]).hex(" "))
++    block = source.split("L_8000_M1X1:", 1)[1]
++    guard = block.index("interp_tier_dispatch_tail")
++    assert guard < block.index("cpu->cycles +=")
++    assert guard < block.index("cpu_read16_paced")
++    assert "cpu->ram[" in block  # preview is guarded plain low-WRAM only.
++    assert block.count("= cpu_read16_paced(cpu, 0x00,") == 1
++
++
++def test_executed_pointer_guards_are_side_effect_free(tmp_path):
++    generated = []
++    main = ["s_interp_bounce_owner_depth = 1;"]
++    for mode, operations in OPCODES.items():
++        post = mode in {"dpy", "long_y", "stack_y"}
++        for operation in ("LDA", "STA"):
++            opcode = operations[operation]
++            name = f"Refuse_{mode}_{operation}"
++            generated.append(_emit(f"{opcode:02x} 10 60", name))
++            # Both system-bank mirrors must fall back before pointer bus
++            # reads, MMIO access, clock credit, register or stack mutation.
++            for bank in (0, 0x80):
++                loc = "cpu.S + 0x10" if mode == "stack_y" else "cpu.D + 0x10" + (" + cpu.X" if mode == "dpx" else "")
++                target = 0x2140 - (2 if post else 0)
++                main += [f'''{{ CpuState cpu; const uint8 code[] = {{0x{opcode:02x},0x10,0x60}};
++  prepare(&cpu, code, sizeof code, 1, 1, 0); cpu.D=0x0100; cpu.DB=0x{bank:02x};
++  uint16 at = (uint16)({loc}); g_ram[at]=0x{target & 255:02x}; g_ram[at+1]=0x{target >> 8:02x}; g_ram[at+2]=0x{bank:02x};
++  {name}_M1X1(&cpu);
++  unsigned reads=0; for (unsigned i=0;i<0x40;i++) reads+=g_probe_reads[i];
++  if (cpu.cycles || cpu.master_cycles || credited_master || g_mmio_reads || reads ||
++      cpu.A!=0x1234 || cpu.X!=1 || cpu.Y!=2 || cpu.S!=0x01FD ||
++      cpu.P!=0x30 || cpu.D!=0x0100 || !cpu.m_flag || !cpu.x_flag ||
++      g_balanced_calls || g_other_exits!=1 || g_other_target!=0x008000) {{
++    fprintf(stderr,"{name} MMIO guard failed\\n"); fails++;
++  }} }}''']
++            # Pointer storage itself must remain in low WRAM. Preparing host
++            # RAM bytes does not authorize a CPU read from a device window.
++            loc = "cpu.S + 0x10" if mode == "stack_y" else "cpu.D + 0x10" + (" + cpu.X" if mode == "dpx" else "")
++            setup = "cpu.S=0x1FF0;" if mode == "stack_y" else "cpu.D=0x1FF0;"
++            main += [f'''{{ CpuState cpu; const uint8 code[] = {{0x{opcode:02x},0x10,0x60}};
++  prepare(&cpu, code, sizeof code, 1, 1, 0); {setup}
++  uint16 before=cpu.S; {name}_M1X1(&cpu);
++  if (cpu.cycles || cpu.master_cycles || credited_master || g_mmio_reads ||
++      cpu.S!=before || g_other_exits!=1) {{ fprintf(stderr,"{name} pointer-window guard failed\\n"); fails++; }}
++}}''']
++            # A 16-bit data access at xx:FFFF remains interpreter-owned even
++            # when the cached pointer and its bank are themselves ordinary RAM.
++            wide_name = name + "Wide"
++            generated.append(_emit(f"{opcode:02x} 10 60", wide_name, m=0))
++            target = 0xFFFF - (2 if post else 0)
++            main += [f'''{{ CpuState cpu; const uint8 code[] = {{0x{opcode:02x},0x10,0x60}};
++  prepare(&cpu, code, sizeof code, 0, 1, 0); cpu.D=0x0100;
++  uint16 at=(uint16)({loc}); g_ram[at]=0x{target & 255:02x}; g_ram[at+1]=0x{target >> 8:02x}; g_ram[at+2]=0x7E;
++  {wide_name}_M0X1(&cpu);
++  if (cpu.cycles || cpu.master_cycles || credited_master || g_mmio_reads ||
++      cpu.S!=0x01FD || g_other_exits!=1) {{ fprintf(stderr,"{name} word-boundary guard failed\\n"); fails++; }}
++}}''']
++    main.append("s_interp_bounce_owner_depth = 0;")
++    # One ordinary case keeps the shared driver active; guard bodies above
++    # are executed explicitly and are never passed off as native equivalence.
++    run_region_cases(tmp_path, [("GuardControl", "EA 60", 1, 1, 0)],
++                     extra_emitted="\n".join(generated), extra_main="\n".join(main))
+diff --git a/tools/generation_recipe.py b/tools/generation_recipe.py
+index 32f2758..7bfa242 100644
+--- a/tools/generation_recipe.py
++++ b/tools/generation_recipe.py
+@@ -101,7 +101,7 @@ def load_recipe(cfg_dir: Path) -> Recipe | None:
+             raise ValueError(f"{path}: Python < 3.11 requires tomli "
+                              "(python -m pip install tomli)") from exc
+     data = tomllib.loads(path.read_text(encoding="utf-8"))
+-    allowed = {"schema", "identity_file", "cfg_roots", "no_host_root_scan",
++    allowed = {"schema", "identity_file", "cfg_roots", "no_host_root_scan", "instruction_blocks", "region_paced",
+                "profiles", "historical_profiles", "bind_legacy_profiles",
+                "prepare", "postprocess"}
+     if type(data.get("schema")) is not int or data.get("schema") != 1 or data.keys() - allowed:
+@@ -109,7 +109,7 @@ def load_recipe(cfg_dir: Path) -> Recipe | None:
+     recipe = Recipe(path, cfg_dir.parent.resolve(), data)
+     if "identity_file" in data and not isinstance(data["identity_file"], str):
+         raise ValueError("recipe identity_file must be a path")
+-    for key in ("cfg_roots", "no_host_root_scan", "bind_legacy_profiles"):
++    for key in ("cfg_roots", "no_host_root_scan", "bind_legacy_profiles", "instruction_blocks", "region_paced"):
+         if key in data and not isinstance(data[key], bool):
+             raise ValueError(f"recipe {key} must be a boolean")
+     for key in ("profiles", "historical_profiles"):
+diff --git a/tools/sdk_generate.py b/tools/sdk_generate.py
+index 436ac94..cfec92b 100644
+--- a/tools/sdk_generate.py
++++ b/tools/sdk_generate.py
+@@ -15,6 +15,7 @@ from __future__ import annotations
+ 
+ import argparse
+ import contextlib
++import hashlib
+ import io
+ import os
+ import pathlib
+@@ -67,6 +68,8 @@ def _generate(
+     legacy_profile_rom_sha256: Optional[str] = None,
+     generation_recipe_digest: Optional[str] = None,
+     analysis_backend: str = "native",
++    instruction_blocks: bool = False,
++    region_paced: bool = False,
+     expected_crc32: Optional[str] = None,
+     expected_sha256: Optional[str] = None,
+     progress: Optional[ProgressReporter] = None,
+@@ -85,6 +88,8 @@ def _generate(
+     from tools import v2_emit, v2_sync_funcs_h
+ 
+     reporter = progress or ProgressReporter()
++    if region_paced and not instruction_blocks:
++        raise ValueError("region-paced emission requires instruction-blocks")
+     rom = pathlib.Path(rom).resolve()
+     cfg_dir = pathlib.Path(cfg_dir).resolve()
+     out_dir = pathlib.Path(out_dir).resolve()
+@@ -120,6 +125,10 @@ def _generate(
+     ]
+     if cfg_roots:
+         emit_args.append("--cfg-roots")
++    if instruction_blocks:
++        emit_args.append("--instruction-blocks")
++    if region_paced:
++        emit_args.append("--region-paced")
+     if no_host_root_scan:
+         emit_args.append("--no-host-root-scan")
+     for root in source_roots or ():
+@@ -209,6 +218,8 @@ def _generate(
+         "funcs_count": funcs_count,
+         "cfg_roots": bool(cfg_roots),
+         "analysis_backend": analysis_backend,
++        "instruction_blocks": bool(instruction_blocks),
++        "region_paced": bool(region_paced),
+     }
+     if _report_result:
+         reporter.phase("done", pct=1.0, message="Generate complete")
+@@ -249,13 +260,17 @@ def generate(**kwargs) -> dict:
+         if supplied and supplied.lower() != verified["sha256"].lower():
+             raise ValueError("legacy profile binding differs from verified recipe ROM")
+         options["legacy_profile_rom_sha256"] = verified["sha256"]
+-    for key in ("cfg_roots", "no_host_root_scan"):
++    for key in ("cfg_roots", "no_host_root_scan", "instruction_blocks", "region_paced"):
+         options[key] = bool(options.get(key) or recipe.data.get(key))
++    if options["region_paced"] and not options["instruction_blocks"]:
++        raise ValueError("region-paced emission requires instruction-blocks")
+     for key, recipe_key in (("profile_manifests", "profiles"),
+                             ("historical_profile_manifests", "historical_profiles")):
+         options[key] = list(dict.fromkeys(
+             [*recipe.profiles(recipe_key), *(options.get(key) or [])]))
+-    options["generation_recipe_digest"] = recipe.digest()
++    options["generation_recipe_digest"] = hashlib.sha256(
++        (recipe.digest() + "\0instruction_blocks=" + str(int(options["instruction_blocks"])) +
++         "\0region_paced=" + str(int(options["region_paced"]))).encode("ascii")).hexdigest()
+     target = pathlib.Path(options["out_dir"]).resolve()
+     header = pathlib.Path(options["funcs_h"]).resolve() if options.get("funcs_h") else None
+     recipe.run("prepare", rom=rom, cfg_dir=cfg_dir, out_dir=target, reporter=reporter)
+@@ -342,6 +357,8 @@ def generate_command(args: argparse.Namespace, progress: ProgressReporter) -> in
+             ],
+             legacy_profile_rom_sha256=getattr(args, "legacy_profile_rom_sha256", None),
+             analysis_backend=args.analysis_backend,
++            instruction_blocks=bool(getattr(args, "instruction_blocks", False)),
++            region_paced=bool(getattr(args, "region_paced", False)),
+             expected_crc32=args.expected_crc32,
+             expected_sha256=args.expected_sha256,
+             progress=progress,
+@@ -427,6 +444,10 @@ def add_generate_parser(subparsers) -> None:
+              "one (auto means native; python is an error)",
+     )
+     add_identity_args(generate_parser)
++    generate_parser.add_argument("--region-paced", action="store_true",
++                                 help="opt in to conservative per-access region timing (requires --instruction-blocks)")
++    generate_parser.add_argument("--instruction-blocks", action="store_true",
++                                 help="check host deadlines at every guest instruction boundary")
+     generate_parser.add_argument(
+         "--json-progress",
+         action="store_true",
+diff --git a/tools/v2_emit.py b/tools/v2_emit.py
+index d719320..8148de8 100644
+--- a/tools/v2_emit.py
++++ b/tools/v2_emit.py
+@@ -109,7 +109,9 @@ def _analysis_input_digest(*, rom: bytes, generator_digest: str,
+                            max_nodes: int, shard_threshold_bytes: int,
+                            shard_pc_span: int,
+                            module_id: str = "main",
+-                           module_prefix: str | None = None) -> str:
++                           module_prefix: str | None = None,
++                           instruction_blocks: bool = False,
++                           region_paced: bool = False) -> str:
+     value = {
+         "format": CACHE_FORMAT_VERSION,
+         "rom": hashlib.sha256(rom).hexdigest(),
+@@ -125,6 +127,8 @@ def _analysis_input_digest(*, rom: bytes, generator_digest: str,
+         "module": [str(module_id), str(module_prefix or "")],
+         "max_insns": int(max_insns),
+         "max_nodes": int(max_nodes),
++        "instruction_blocks": bool(instruction_blocks),
++        "region_paced": bool(region_paced),
+         "sharding": [int(shard_threshold_bytes), int(shard_pc_span)],
+     }
+     encoded = json.dumps(
+@@ -222,6 +226,8 @@ def main() -> int:
+              "generated module_namespace.h so this module can be linked "
+              "beside another generated module (content variants). Requires "
+              "a funcs.h beside the cfg files; default: no prefix")
++    parser.add_argument("--region-paced", action="store_true",
++                        help="opt in to conservative native-mode per-access region timing (requires --instruction-blocks)")
+     parser.add_argument("--no-host-root-scan", action="store_true")
+     parser.add_argument("--host-alias-header", default=None,
+                         help="funcs.h whose alias declarations name host entry "
+@@ -234,6 +240,8 @@ def main() -> int:
+     parser.add_argument("--no-hle", action="store_true")
+     parser.add_argument("--max-insns", type=int, default=4096)
+     parser.add_argument("--max-nodes", type=int, default=100_000)
++    parser.add_argument("--instruction-blocks", action="store_true",
++                        help="check host deadlines at every guest instruction boundary")
+     parser.add_argument(
+         "--analysis-backend", choices=("auto", "native", "python"),
+         default="native",
+@@ -257,6 +265,8 @@ def main() -> int:
+         help="entry-PC range per bank translation unit (default: 0x800; "
+              "0 disables sharding)")
+     args = parser.parse_args()
++    if args.region_paced and not args.instruction_blocks:
++        parser.error("--region-paced requires --instruction-blocks")
+     if args.analysis_backend == "python":
+         parser.error("the Python analyzer was retired; the native analyzer "
+                      "is the only one (drop --analysis-backend python)")
+@@ -376,6 +386,8 @@ def _generate(args, parser, cfg_dir, *, symbol_roots=()):
+         shard_threshold_bytes=shard_threshold_bytes,
+         shard_pc_span=shard_pc_span,
+         module_id=args.module_id, module_prefix=args.module_prefix,
++        instruction_blocks=args.instruction_blocks,
++        region_paced=args.region_paced,
+     )
+     cached = _verified_cached_stats(out_dir, analysis_input_digest)
+     if cached is not None and not args.no_link_closure_check:
+@@ -431,6 +443,8 @@ def _generate(args, parser, cfg_dir, *, symbol_roots=()):
+             for key, mode_set in manifest.exit_mode_sets.items()
+         },
+         enable_hle=not args.no_hle,
++        instruction_blocks=args.instruction_blocks,
++        region_paced=args.region_paced,
+         shard_threshold_bytes=shard_threshold_bytes,
+         shard_pc_span=shard_pc_span,
+         check_link_closure=not args.no_link_closure_check,
+-- 
+2.50.1.windows.1
+

@@ -1,0 +1,416 @@
+From 784c3164420a1728df19c34c7145a81f6069abc7 Mon Sep 17 00:00:00 2001
+From: "Carl Prewitt Jr." <10109900+rages4calm@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 13:59:29 -0600
+Subject: [PATCH] Credit native clock origins and flush APU at completed
+ instruction boundaries
+
+Prepared for issue #205 from the bounded Gaia consumer timing work. Based on current main 66eebe6; prerequisite PRs remain unmerged. Rebase on eventual merged heads before submission. Canonical interpretation remains available; no combined-game or hardware qualification is claimed.
+---
+ docs/REGION_PACED_TIMING.md          |  38 ++++--
+ runner/src/snes/interp_bridge.c      |  42 ++++++-
+ tests/interp816/bridge_test.c        |  10 ++
+ tests/v2/test_region_apu_boundary.py | 175 +++++++++++++++++++++++++++
+ tests/v2/test_region_pacing.py       |  46 ++++++-
+ 5 files changed, 297 insertions(+), 14 deletions(-)
+ create mode 100644 tests/v2/test_region_apu_boundary.py
+
+diff --git a/docs/REGION_PACED_TIMING.md b/docs/REGION_PACED_TIMING.md
+index b0f6de8..2199eca 100644
+--- a/docs/REGION_PACED_TIMING.md
++++ b/docs/REGION_PACED_TIMING.md
+@@ -37,17 +37,31 @@ interpreted. Prologue reads that sample the paired host-return frame are ABI
+ bookkeeping and stay unpaced.
+ 
+ Every region-mode fetch/internal/dynamic addition and each paced data helper
+-uses `cpu_add_aot_master_cycles`. It updates the master clock and invokes the
+-nullable `g_cpu_aot_master_credit_hook`. The separate nullable
+-`g_cpu_aot_instruction_boundary_hook` observes completion before the next
+-instruction/deadline check. These extension points report origins and completed
+-instructions; they never infer elapsed native time around a mixed-tier call.
+-
+-This emission change supplies the generic clock/boundary extension points, not
+-the interpreter bridge's native APU scheduling policy. The matching bridge
+-integration must be applied before qualifying a consumer's sound/device timing.
+-With null hooks, no additional APU credit or flushing occurs. The canonical
+-interpreter and default aggregate generator remain available.
++uses `cpu_add_aot_master_cycles`. That API updates the master clock and invokes
++the nullable `g_cpu_aot_master_credit_hook`. The active interpreter bridge
++installs a callback that queues native instruction time in the existing APU
++pending accumulator under the same scheduling predicate as interpretation.
++The callback ignores calls outside an active bridge, missing machines,
++shared-clock co-sim, and non-extended absolute ownership. Extended absolute
++mode retains a pending marker for scheduled syncs; the flush's existing absolute
++branch clears it without adding relative catch-up. Crediting itself does not
++flush the APU midway through an instruction.
++
++Credits originate at actual increments. They are never inferred from elapsed
++time around a call, which could include nested interpretation, nested native
++execution, DRAM refresh, DMA, or parked time. Existing interpreter opcode
++credit remains separate. The pending accumulator already belongs to bridge
++rollback state; the callback adds no independent clock counter to save.
++
++The separate nullable `g_cpu_aot_instruction_boundary_hook` observes completion
++of the preceding instruction. Paced labels call it after refresh finalization
++and before the deadline check. Paired returns with a nonempty native scheduling marker also call it after
++finalizing refresh, covering a last native return instruction without another
++label. An aggregate body without origin credit leaves this path inactive.
++The bridge applies its existing pending-clock batch threshold there, synchronizes
++the beam, and flushes the existing accumulator. It adds no credit. Flushing in
++the per-access credit callback would run the SPC midway through an instruction;
++omitting boundary flushes can defer a logged SPC event into the next host frame.
+ 
+ ## Fallback and ownership
+ 
+@@ -92,7 +106,7 @@ that decreases as host frames unwind.
+ The ROM-free [region fixture](../tests/v2/test_region_pacing.py) executes emitted
+ C against the actual interpreter core and current runtime paced-helper
+ definitions. It compares CPU/master totals, registers, flags, stack, memory,
+-and open bus across slow/FastROM cases, origin-clock totals and ownership guards.
++and open bus across slow/FastROM cases, plus credit-policy and ownership guards.
+ The [deadline fixture](../tests/v2/test_instruction_block_deadline.py) demonstrates
+ aggregate-block overshoot, and the [JSL fixture](../tests/v2/test_jsl_live_pb.py)
+ checks live-bank preservation through nested unwinds.
+diff --git a/runner/src/snes/interp_bridge.c b/runner/src/snes/interp_bridge.c
+index b0d2a46..dcb33a1 100644
+--- a/runner/src/snes/interp_bridge.c
++++ b/runner/src/snes/interp_bridge.c
+@@ -631,6 +631,35 @@ static uint64_t s_lle_master_deadline = 0;
+  * owning interpreter's guest call chain. */
+ static int      s_interp_bridge_depth = 0;
+ static int      s_interp_bounce_owner_depth = 0;
++/* Region-paced AOT reports each actual instruction-clock increment once.
++ * Queue it beside interpreted instruction credit; elapsed bounce spans also
++ * contain nested interpretation/refresh/DMA and cannot safely be re-credited.
++ * The existing bridge rollback state already owns this pending accumulator. */
++static void bridge_aot_credit_master(CpuState *cpu, uint64 clocks) {
++    (void)cpu;
++    if (!s_interp_bridge_depth || !g_snes) return;
++#ifdef SNES_COSIM
++    if (cosim_apu_shared_clock()) return;
++#endif
++    /* Match the interpreted opcode's scheduling predicate. Extended-frame
++     * absolute mode still needs a pending marker to schedule boundary sync;
++     * bridge_apu_flush owns the absolute/relative choice and does not convert
++     * this marker to relative catch-up when the absolute mapping is valid. */
++    if (!rtl_apu_extended_frame_timing() &&
++        interp_bridge_use_absolute_apu_timeline(
++            rtl_apu_frame_timeline_active(), cart_has_sa1(g_snes->cart), false)) return;
++    s_apu_pending_master += clocks;
++}
++/* The preceding native instruction is complete here. Credit callbacks run
++ * during fetch/data/stack phases and cannot flush at a safe opcode boundary.
++ * Apply the interpreter's existing batch threshold before another native
++ * instruction or a host-deadline unwind; never infer or add elapsed credit. */
++static void bridge_aot_instruction_boundary(CpuState *cpu) {
++    if (!s_interp_bridge_depth || !g_snes || !s_apu_pending_master) return;
++    if (s_apu_pending_master < bridge_bounce_flush_thresh()) return;
++    snes_sync_master_clock(g_snes, cpu->master_cycles);
++    bridge_apu_flush(cpu);
++}
+ /* Count of AOT bodies entered through the paired ABI. Exposed so a host
+  * can tell a genuinely-compiled run from one that quietly interpreted
+  * everything -- without it, a wall-clock tier comparison is unreadable. */
+@@ -2508,8 +2537,13 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
+                 if ((stop_pcs[si] & 0x7FFFFF) == pc_norm) {
+                     sync_interp_to_cpu(&in, cpu);
+                     bridge_apu_flush(cpu);
+-                    if (cpu_dispatch_has_entry(cpu, pc_before))
++                    if (cpu_dispatch_has_entry(cpu, pc_before)) {
+                         cpu_dispatch_pc_paired(cpu, pc_before, 0);
++                        if (s_apu_pending_master) {
++                            snes_refresh_charge();
++                            cpu_aot_instruction_boundary(cpu);
++                        }
++                    }
+                     return 1;
+                 }
+             }
+@@ -2925,6 +2959,10 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
+                                  (uint16_t)_sp_pre);
+                 g_interp_wlog_pc24 = 0;
+                 RecompReturn _air = cpu_dispatch_pc_paired(cpu, target, _fs);
++                if (s_apu_pending_master) {
++                    snes_refresh_charge();
++                    cpu_aot_instruction_boundary(cpu);
++                }
+                 s_interp_bounce_owner_depth = _saved_bounce_owner;
+                 s_interp_bounce_recomp_base = _saved_bounce_base;
+                 g_interp_apu_driving = _apu_drv;
+@@ -3249,6 +3287,8 @@ static int interp_bridge_run_ex2(CpuState *cpu, uint32_t entry_pc24,
+                                  int reset_cap_on_bounce,
+                                  const uint32_t *stop_pcs, int n_stop,
+                                  int stop_on_rti) {
++    g_cpu_aot_master_credit_hook = bridge_aot_credit_master;
++    g_cpu_aot_instruction_boundary_hook = bridge_aot_instruction_boundary;
+     int _saved = g_interp_apu_driving;
+ #ifdef SNES_COSIM
+     /* Shared APU clock: leave the flag clear so interpreted HW touches pace
+diff --git a/tests/interp816/bridge_test.c b/tests/interp816/bridge_test.c
+index b697e05..7dbbedc 100644
+--- a/tests/interp816/bridge_test.c
++++ b/tests/interp816/bridge_test.c
+@@ -30,6 +30,16 @@
+ #include "snes_cycles.h"
+ 
+ CpuState g_cpu;
++void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);
++void (*g_cpu_aot_instruction_boundary_hook)(CpuState *cpu);
++
++/* This fixture supplies the CPU runtime surface itself. Keep the nullable
++ * boundary relay identical to cpu_state.c so the real bridge callback still
++ * runs, without linking the unrelated production bus/dispatcher. */
++void cpu_aot_instruction_boundary(CpuState *cpu) {
++    if (g_cpu_aot_instruction_boundary_hook)
++        g_cpu_aot_instruction_boundary_hook(cpu);
++}
+ 
+ #define MEMSZ 0x1000000u
+ static uint8_t *RAM;
+diff --git a/tests/v2/test_region_apu_boundary.py b/tests/v2/test_region_apu_boundary.py
+new file mode 100644
+index 0000000..c209d27
+--- /dev/null
++++ b/tests/v2/test_region_apu_boundary.py
+@@ -0,0 +1,175 @@
++"""ROM-free region instruction boundaries preserve APU credit ownership."""
++import os
++import re
++import subprocess
++
++import pytest
++
++from _helpers import make_lorom_bank0
++from test_region_pacing import REPO, _c_function, _emit
++from v2.emit_function import emit_function
++
++
++def test_region_boundary_runs_after_refresh_before_deadline():
++    source = _emit("A9 01 85 00 D0 FA 60")
++    labels = list(re.finditer(r"(?m)^  L_[^:]+:\s*$", source))
++    assert labels
++    for index, label in enumerate(labels):
++        end = labels[index + 1].start() if index + 1 < len(labels) else len(source)
++        block = source[label.end():end]
++        assert block.count("cpu_aot_instruction_boundary(cpu);") == 1
++        assert block.index("WatchdogCheck();") < block.index("cpu_aot_instruction_boundary(cpu);")
++        assert block.index("cpu_aot_instruction_boundary(cpu);") < block.index("interp_bridge_lle_master_deadline_reached(cpu)")
++    default = emit_function(make_lorom_bank0({0x8000: bytes.fromhex("EA 60")}),
++                            0, 0x8000, 1, 1)
++    assert "cpu_aot_instruction_boundary(cpu);" not in default
++    # A final native RTS/RTL has no following native label. Both paired
++    # bridge return sites must finalize refresh and observe the boundary
++    # before another interpreted opcode can add its own clocks.
++    bridge = (REPO / "runner/src/snes/interp_bridge.c").read_text()
++    paired_calls = list(re.finditer(r"cpu_dispatch_pc_paired\([^;]+;", bridge))
++    assert len(paired_calls) == 2
++    for call in paired_calls:
++        assert re.match(r"\s*if \(s_apu_pending_master\) \{\s*snes_refresh_charge\(\);\s*cpu_aot_instruction_boundary\(cpu\);",
++                        bridge[call.end():])
++
++
++def test_actual_boundary_callback_flushes_only_completed_credit(tmp_path):
++    import test_hle_func_seam as seam
++    compiler = seam._compiler()
++    if not compiler:
++        pytest.skip("C compiler required")
++    runtime = (REPO / "runner/src/cpu_state.c").read_text()
++    bridge = (REPO / "runner/src/snes/interp_bridge.c").read_text()
++    timeline = _c_function((REPO / "runner/src/snes/interp_bridge.h").read_text(),
++                           "interp_bridge_use_absolute_apu_timeline")
++    source = r'''
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include "cpu_state.h"
++typedef struct { int portTimeValid; } FakeApu;
++typedef struct { void *cart; FakeApu *apu; double apuCatchupCycles; } Snes;
++static Snes *g_snes;
++static int s_interp_bridge_depth, timeline_on, extended_on, sa1_on, shared_on;
++static uint64 s_apu_pending_master, threshold = 32, flushed_total, relative_flushed;
++static unsigned flush_calls, sync_calls, apu_sync_calls;
++static uint64 synced_master, g_apu_last_sync_master;
++static const double kInterpApuPerMaster = 1024000.0 / 21477272.0;
++bool rtl_apu_frame_timeline_active(void) { return timeline_on; }
++bool rtl_apu_extended_frame_timing(void) { return extended_on; }
++bool cart_has_sa1(void *cart) { (void)cart; return sa1_on; }
++int cosim_apu_shared_clock(void) { return shared_on; }
++static uint64 bridge_bounce_flush_thresh(void) { return threshold; }
++static void snes_sync_master_clock(Snes *snes, uint64 master) {
++    assert(snes == g_snes); sync_calls++; synced_master = master;
++}
++static void RtlApuLock(void) {
++    assert(sync_calls > flush_calls);
++    flush_calls++; flushed_total += s_apu_pending_master;
++}
++static void RtlApuUnlock(void) {}
++static void rtl_sync_apu_to_cpu_locked(void) {
++    assert(g_apu_last_sync_master == synced_master); apu_sync_calls++;
++}
++static void snes_catchupApu(Snes *snes) {
++    assert(snes == g_snes);
++    assert(snes->apuCatchupCycles == (double)s_apu_pending_master * kInterpApuPerMaster);
++    relative_flushed += s_apu_pending_master; snes->apuCatchupCycles = 0;
++}
++void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);
++void (*g_cpu_aot_instruction_boundary_hook)(CpuState *cpu);
++#define SNES_COSIM 1
++'''
++    source += timeline
++    source += _c_function(bridge, "bridge_apu_flush")
++    source += _c_function(bridge, "bridge_aot_credit_master")
++    source += _c_function(bridge, "bridge_aot_instruction_boundary")
++    source += _c_function(runtime, "cpu_add_aot_master_cycles")
++    source += _c_function(runtime, "cpu_aot_instruction_boundary")
++    source += r'''
++int main(void) {
++    CpuState cpu; memset(&cpu, 0, sizeof cpu);
++    FakeApu apu = {0}; Snes snes = {0, &apu}; g_snes = &snes;
++    s_interp_bridge_depth = 1;
++    g_cpu_aot_master_credit_hook = bridge_aot_credit_master;
++
++    /* A nullable boundary has no state or clock effect. */
++    cpu_add_aot_master_cycles(&cpu, 24);
++    cpu_aot_instruction_boundary(&cpu);
++    assert(cpu.master_cycles == 24 && s_apu_pending_master == 24 && !flush_calls && !sync_calls);
++    g_cpu_aot_instruction_boundary_hook = bridge_aot_instruction_boundary;
++    cpu_aot_instruction_boundary(&cpu); /* complete but subthreshold */
++    assert(cpu.master_cycles == 24 && s_apu_pending_master == 24 && !flush_calls && !sync_calls);
++
++    /* Phase credit may cross the threshold, but cannot flush mid-opcode. */
++    cpu_add_aot_master_cycles(&cpu, 6);
++    cpu_add_aot_master_cycles(&cpu, 2);
++    assert(cpu.master_cycles == 32 && s_apu_pending_master == 32 && !flush_calls);
++    CpuState before = cpu;
++    cpu_aot_instruction_boundary(&cpu);
++    assert(!memcmp(&before, &cpu, sizeof cpu));
++    assert(flush_calls == 1 && sync_calls == 1 && flushed_total == 32 && !s_apu_pending_master);
++    cpu_aot_instruction_boundary(&cpu); /* nested caller label: no duplicate */
++    assert(flush_calls == 1 && sync_calls == 1 && flushed_total == 32);
++
++    /* Existing nested LLE credit is never inferred from an AOT span. */
++    cpu_add_aot_master_cycles(&cpu, 11);
++    cpu.master_cycles += 7; s_apu_pending_master += 7;
++    s_interp_bridge_depth = 2;
++    cpu_add_aot_master_cycles(&cpu, 13);
++    s_interp_bridge_depth = 1;
++    cpu_aot_instruction_boundary(&cpu);
++    assert(cpu.master_cycles == 63 && s_apu_pending_master == 31 && flushed_total == 32);
++    cpu_add_aot_master_cycles(&cpu, 1);
++    cpu_aot_instruction_boundary(&cpu);
++    assert(cpu.master_cycles == 64 && !s_apu_pending_master && flushed_total == 64 && flush_calls == 2);
++
++    /* Threshold zero means one flush per nonempty completed batch. */
++    threshold = 0;
++    cpu_aot_instruction_boundary(&cpu);
++    assert(flush_calls == 2 && sync_calls == 2);
++    cpu_add_aot_master_cycles(&cpu, 8);
++    assert(flush_calls == 2);
++    cpu_aot_instruction_boundary(&cpu);
++    cpu_aot_instruction_boundary(&cpu);
++    assert(flush_calls == 3 && sync_calls == 3 && flushed_total == 72);
++
++    /* Missing bridge/SNES cannot synchronize or consume another owner. */
++    s_apu_pending_master = 9; s_interp_bridge_depth = 0;
++    cpu_aot_instruction_boundary(&cpu);
++    assert(flush_calls == 3 && sync_calls == 3 && s_apu_pending_master == 9);
++    s_interp_bridge_depth = 1; g_snes = NULL;
++    cpu_aot_instruction_boundary(&cpu);
++    assert(flush_calls == 3 && sync_calls == 3 && s_apu_pending_master == 9);
++    g_snes = &snes; s_apu_pending_master = 0;
++
++    /* SA-1 legacy absolute ownership needs no relative marker. Extended
++     * mode DOES queue a scheduling marker, just like interpreted opcodes;
++     * the actual bridge flush must sync without relative double-credit. */
++    timeline_on = 1; sa1_on = 1;
++    cpu_add_aot_master_cycles(&cpu, 6); cpu_aot_instruction_boundary(&cpu);
++    assert(!s_apu_pending_master && relative_flushed == 72 && flush_calls == 3);
++    sa1_on = 0; extended_on = 1; apu.portTimeValid = 1;
++    cpu_add_aot_master_cycles(&cpu, 6);
++    assert(s_apu_pending_master == 6 && flush_calls == 3);
++    cpu_aot_instruction_boundary(&cpu);
++    assert(!s_apu_pending_master && flushed_total == 78 && relative_flushed == 72 && flush_calls == 4);
++    timeline_on = 0; shared_on = 1;
++    cpu_add_aot_master_cycles(&cpu, 6); cpu_aot_instruction_boundary(&cpu);
++    assert(cpu.master_cycles == 90 && !s_apu_pending_master && flushed_total == 78 && flush_calls == 4);
++    assert(apu_sync_calls == 4 && !snes.apuCatchupCycles);
++    puts("boundary credit ownership and flush ordering passed");
++    return 0;
++}
++'''
++    c_file = tmp_path / "boundary.c"
++    c_file.write_text(source)
++    exe = tmp_path / ("boundary.exe" if os.name == "nt" else "boundary")
++    build = subprocess.run([compiler, "-std=c11", "-O1", "-I", str(REPO / "runner/src"),
++                            str(c_file), "-o", str(exe)], capture_output=True, text=True)
++    assert build.returncode == 0, build.stdout + build.stderr
++    run = subprocess.run([str(exe)], capture_output=True, text=True)
++    assert run.returncode == 0, run.stdout + run.stderr
++    assert "boundary credit ownership" in run.stdout
+diff --git a/tests/v2/test_region_pacing.py b/tests/v2/test_region_pacing.py
+index 99999cb..188ca01 100644
+--- a/tests/v2/test_region_pacing.py
++++ b/tests/v2/test_region_pacing.py
+@@ -195,7 +195,23 @@ static int check(const char *name, RecompReturn (*fn)(CpuState *),
+     # would conceal accidentally starting a new nested interpreter frame.
+     tail_helpers = (_c_function(bridge, "interp_tier_dispatch_tail_ex") +
+                     _c_function(bridge, "interp_tier_dispatch_tail"))
+-    credit_fixture = ''
++    timeline = _c_function((REPO / "runner/src/snes/interp_bridge.h").read_text(),
++                           "interp_bridge_use_absolute_apu_timeline")
++    credit_fixture = r'''
++typedef struct { int portTimeValid; } FakeApu;
++struct Snes { void *cart; FakeApu *apu; };
++Snes *g_snes;
++static int s_interp_bridge_depth;
++static uint64 s_apu_pending_master;
++static int timeline_on, extended_on, sa1_on, shared_on;
++bool rtl_apu_frame_timeline_active(void) { return timeline_on; }
++bool rtl_apu_extended_frame_timing(void) { return extended_on; }
++bool cart_has_sa1(void *cart) { (void)cart; return sa1_on; }
++int cosim_apu_shared_clock(void) { return shared_on; }
++#define SNES_COSIM 1
++'''
++    credit_fixture += timeline + _c_function(bridge, "bridge_aot_credit_master")
++    credit_fixture += "\n#undef SNES_COSIM\n"
+     main = ["int main(void) { int fails = 0;"]
+     for name, code, m, x, dp in cases:
+         values = ",".join(f"0x{b:02x}" for b in bytes.fromhex(code))
+@@ -219,6 +235,34 @@ static int check(const char *name, RecompReturn (*fn)(CpuState *),
+     Mmio_M1X1(&cpu);
+     if (cpu.cycles || cpu.master_cycles || g_mmio_reads || g_balanced_calls != 1 || g_other_exits != 1) fails++;
+   }
++  { CpuState cpu; memset(&cpu, 0, sizeof cpu);
++    FakeApu apu = {0}; Snes snes = {0, &apu}; g_snes = &snes;
++    g_cpu_aot_master_credit_hook = bridge_aot_credit_master;
++    s_interp_bridge_depth = 1; s_apu_pending_master = 0;
++    cpu_add_aot_master_cycles(&cpu, 11);       /* outer AOT instruction */
++    cpu.master_cycles += 7; s_apu_pending_master += 7; /* nested LLE opcode */
++    s_interp_bridge_depth = 2;
++    cpu_add_aot_master_cycles(&cpu, 13);       /* nested AOT instruction */
++    s_interp_bridge_depth = 1;
++    if (cpu.master_cycles != 31 || s_apu_pending_master != 31) fails++;
++    s_interp_bridge_depth = 0; cpu_add_aot_master_cycles(&cpu, 5);
++    if (s_apu_pending_master != 31) fails++;
++    s_interp_bridge_depth = 1; g_snes = NULL; cpu_add_aot_master_cycles(&cpu, 5);
++    if (s_apu_pending_master != 31) fails++;
++    g_snes = &snes; timeline_on = 1; sa1_on = 1; s_apu_pending_master = 0;
++    cpu_add_aot_master_cycles(&cpu, 6); /* existing SA-1 absolute clock */
++    if (s_apu_pending_master) fails++;
++    sa1_on = 0; extended_on = 1; apu.portTimeValid = 1;
++    cpu_add_aot_master_cycles(&cpu, 6); /* absolute mode still schedules sync */
++    if (s_apu_pending_master != 6) fails++;
++    timeline_on = 0; cpu_add_aot_master_cycles(&cpu, 7);
++    if (s_apu_pending_master != 13) fails++;
++    shared_on = 1; cpu_add_aot_master_cycles(&cpu, 8);
++    if (s_apu_pending_master != 13) fails++;
++    g_cpu_aot_master_credit_hook = NULL;
++    uint64 before = cpu.master_cycles; cpu_add_aot_master_cycles(&cpu, 9);
++    if (cpu.master_cycles != before + 9 || s_apu_pending_master != 13) fails++;
++  }
+ ''']
+     main += [extra_main]
+     main += [f'if (!fails) puts("{len(cases) * 2} synthetic native/interpreter timing cases passed"); return fails != 0; }}']
+-- 
+2.50.1.windows.1
+
