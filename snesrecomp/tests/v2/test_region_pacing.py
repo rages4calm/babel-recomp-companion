@@ -64,8 +64,10 @@ def run_region_cases(tmp_path, cases=None, *, extra_main="", extra_emitted="", c
     compiler = seam._compiler()
     if not compiler:
         pytest.skip("C compiler required")
-    runtime = (REPO / "runner/src/cpu_state.c").read_text()
-    paced = "void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);\n"
+    runtime = (REPO / "runner/src/cpu_state.c").read_text(encoding="utf-8")
+    paced = "static inline bool snes_set_cpu_read_clocked(Snes *snes, bool clocked);\n"
+    paced += _c_function(runtime, "is_hw_reg")
+    paced += "void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);\n"
     paced += "void (*g_cpu_aot_instruction_boundary_hook)(CpuState *cpu);\n"
     paced += "\n".join(_c_function(runtime, name) for name in (
         "cpu_aot_instruction_boundary", "cpu_add_aot_master_cycles", "cpu_region_speed", "cpu_read8_paced", "cpu_read16_paced",
@@ -190,16 +192,16 @@ static int check(const char *name, RecompReturn (*fn)(CpuState *),
                 emitted += emit_function(rom, 0, pc, m, x, instruction_blocks=True, region_paced=True)
     emitted += _emit("AD 40 21 60", "Mmio") + _emit("A5 00 60", "DpMmio")
     emitted += extra_emitted
-    bridge = (REPO / "runner/src/snes/interp_bridge.c").read_text()
+    bridge = (REPO / "runner/src/snes/interp_bridge.c").read_text(encoding="utf-8")
     # Compile the actual owner-aware tail helper, rather than a stub that
     # would conceal accidentally starting a new nested interpreter frame.
     tail_helpers = (_c_function(bridge, "interp_tier_dispatch_tail_ex") +
                     _c_function(bridge, "interp_tier_dispatch_tail"))
-    timeline = _c_function((REPO / "runner/src/snes/interp_bridge.h").read_text(),
+    timeline = _c_function((REPO / "runner/src/snes/interp_bridge.h").read_text(encoding="utf-8"),
                            "interp_bridge_use_absolute_apu_timeline")
     credit_fixture = r'''
 typedef struct { int portTimeValid; } FakeApu;
-struct Snes { void *cart; FakeApu *apu; };
+struct Snes { void *cart; FakeApu *apu; bool cpuReadClocked; };
 Snes *g_snes;
 static int s_interp_bridge_depth;
 static uint64 s_apu_pending_master;
@@ -210,6 +212,8 @@ bool cart_has_sa1(void *cart) { (void)cart; return sa1_on; }
 int cosim_apu_shared_clock(void) { return shared_on; }
 #define SNES_COSIM 1
 '''
+    credit_fixture += _c_function((REPO / "runner/src/snes/snes.h").read_text(encoding="utf-8"),
+                                  "snes_set_cpu_read_clocked")
     credit_fixture += timeline + _c_function(bridge, "bridge_aot_credit_master")
     credit_fixture += "\n#undef SNES_COSIM\n"
     main = ["int main(void) { int fails = 0;"]
@@ -260,6 +264,13 @@ int cosim_apu_shared_clock(void) { return shared_on; }
     shared_on = 1; cpu_add_aot_master_cycles(&cpu, 8);
     if (s_apu_pending_master != 13) fails++;
     g_cpu_aot_master_credit_hook = NULL;
+    /* Real #247 scope helper must restore both unclocked and nested reads. */
+    snes.cpuReadClocked = false;
+    cpu_read8_paced(&cpu, 0, 0x4212);
+    if (snes.cpuReadClocked) fails++;
+    snes.cpuReadClocked = true;
+    cpu_read16_paced(&cpu, 0, 0x4212);
+    if (!snes.cpuReadClocked) fails++;
     uint64 before = cpu.master_cycles; cpu_add_aot_master_cycles(&cpu, 9);
     if (cpu.master_cycles != before + 9 || s_apu_pending_master != 13) fails++;
   }

@@ -1,17 +1,17 @@
-From 784c3164420a1728df19c34c7145a81f6069abc7 Mon Sep 17 00:00:00 2001
+From a6afec5beb9b4e52eb19c5d2770986bad9684c7f Mon Sep 17 00:00:00 2001
 From: "Carl Prewitt Jr." <10109900+rages4calm@users.noreply.github.com>
-Date: Tue, 3 Nov 2026 13:59:29 -0600
+Date: Tue, 3 Nov 2026 15:15:07 -0600
 Subject: [PATCH] Credit native clock origins and flush APU at completed
  instruction boundaries
 
-Prepared for issue #205 from the bounded Gaia consumer timing work. Based on current main 66eebe6; prerequisite PRs remain unmerged. Rebase on eventual merged heads before submission. Canonical interpretation remains available; no combined-game or hardware qualification is claimed.
+Prepared for timing issue #205 on merged main f6912cd74e06eb21329aeb5c929d7f374479db80. The merged bank-carry, interrupt-flag, RDNMI and caller-clocked read repairs are preserved. Instruction/region pacing remains explicitly selected; canonical interpretation stays available. Consumer gameplay, restoration and runtime-cost qualification have separate identities and limits.
 ---
  docs/REGION_PACED_TIMING.md          |  38 ++++--
  runner/src/snes/interp_bridge.c      |  42 ++++++-
  tests/interp816/bridge_test.c        |  10 ++
  tests/v2/test_region_apu_boundary.py | 175 +++++++++++++++++++++++++++
- tests/v2/test_region_pacing.py       |  46 ++++++-
- 5 files changed, 297 insertions(+), 14 deletions(-)
+ tests/v2/test_region_pacing.py       |  48 +++++++-
+ 5 files changed, 295 insertions(+), 18 deletions(-)
  create mode 100644 tests/v2/test_region_apu_boundary.py
 
 diff --git a/docs/REGION_PACED_TIMING.md b/docs/REGION_PACED_TIMING.md
@@ -348,20 +348,20 @@ index 0000000..c209d27
 +    assert run.returncode == 0, run.stdout + run.stderr
 +    assert "boundary credit ownership" in run.stdout
 diff --git a/tests/v2/test_region_pacing.py b/tests/v2/test_region_pacing.py
-index 99999cb..188ca01 100644
+index bdff9a6..f701f0c 100644
 --- a/tests/v2/test_region_pacing.py
 +++ b/tests/v2/test_region_pacing.py
-@@ -195,7 +195,23 @@ static int check(const char *name, RecompReturn (*fn)(CpuState *),
+@@ -197,12 +197,25 @@ static int check(const char *name, RecompReturn (*fn)(CpuState *),
      # would conceal accidentally starting a new nested interpreter frame.
      tail_helpers = (_c_function(bridge, "interp_tier_dispatch_tail_ex") +
                      _c_function(bridge, "interp_tier_dispatch_tail"))
--    credit_fixture = ''
-+    timeline = _c_function((REPO / "runner/src/snes/interp_bridge.h").read_text(),
++    timeline = _c_function((REPO / "runner/src/snes/interp_bridge.h").read_text(encoding="utf-8"),
 +                           "interp_bridge_use_absolute_apu_timeline")
-+    credit_fixture = r'''
+     credit_fixture = r'''
+-struct Snes { bool cpuReadClocked; };
 +typedef struct { int portTimeValid; } FakeApu;
-+struct Snes { void *cart; FakeApu *apu; };
-+Snes *g_snes;
++struct Snes { void *cart; FakeApu *apu; bool cpuReadClocked; };
+ Snes *g_snes;
 +static int s_interp_bridge_depth;
 +static uint64 s_apu_pending_master;
 +static int timeline_on, extended_on, sa1_on, shared_on;
@@ -370,16 +370,21 @@ index 99999cb..188ca01 100644
 +bool cart_has_sa1(void *cart) { (void)cart; return sa1_on; }
 +int cosim_apu_shared_clock(void) { return shared_on; }
 +#define SNES_COSIM 1
-+'''
+ '''
+     credit_fixture += _c_function((REPO / "runner/src/snes/snes.h").read_text(encoding="utf-8"),
+                                   "snes_set_cpu_read_clocked")
 +    credit_fixture += timeline + _c_function(bridge, "bridge_aot_credit_master")
 +    credit_fixture += "\n#undef SNES_COSIM\n"
      main = ["int main(void) { int fails = 0;"]
      for name, code, m, x, dp in cases:
          values = ",".join(f"0x{b:02x}" for b in bytes.fromhex(code))
-@@ -219,6 +235,34 @@ static int check(const char *name, RecompReturn (*fn)(CpuState *),
+@@ -226,15 +239,40 @@ Snes *g_snes;
      Mmio_M1X1(&cpu);
      if (cpu.cycles || cpu.master_cycles || g_mmio_reads || g_balanced_calls != 1 || g_other_exits != 1) fails++;
    }
+-''']
+-    main += [r'''
+-  { CpuState cpu = {0}; Snes snes = {0}; g_snes = &snes;
 +  { CpuState cpu; memset(&cpu, 0, sizeof cpu);
 +    FakeApu apu = {0}; Snes snes = {0, &apu}; g_snes = &snes;
 +    g_cpu_aot_master_credit_hook = bridge_aot_credit_master;
@@ -405,12 +410,19 @@ index 99999cb..188ca01 100644
 +    shared_on = 1; cpu_add_aot_master_cycles(&cpu, 8);
 +    if (s_apu_pending_master != 13) fails++;
 +    g_cpu_aot_master_credit_hook = NULL;
++    /* Real #247 scope helper must restore both unclocked and nested reads. */
++    snes.cpuReadClocked = false;
+     cpu_read8_paced(&cpu, 0, 0x4212);
+     if (snes.cpuReadClocked) fails++;
+     snes.cpuReadClocked = true;
+     cpu_read16_paced(&cpu, 0, 0x4212);
+     if (!snes.cpuReadClocked) fails++;
+-    g_snes = NULL;
 +    uint64 before = cpu.master_cycles; cpu_add_aot_master_cycles(&cpu, 9);
 +    if (cpu.master_cycles != before + 9 || s_apu_pending_master != 13) fails++;
-+  }
+   }
  ''']
      main += [extra_main]
-     main += [f'if (!fails) puts("{len(cases) * 2} synthetic native/interpreter timing cases passed"); return fails != 0; }}']
 -- 
 2.50.1.windows.1
 

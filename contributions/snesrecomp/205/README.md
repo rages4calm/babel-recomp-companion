@@ -4,19 +4,21 @@ Prepared November 3, 2026 in response to [the maintainer's requested split](http
 These are three reviewable source patches, not submitted or accepted PRs.
 The source series, passing checks, measured costs and failed restore gate were
 [delivered in the existing #205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6614160563).
-They apply in order to upstream main `66eebe6ae415b4fb2607a22e5b12352f612e1bdf`.
+The current refreshed patches apply in order to merged upstream main
+`f6912cd74e06eb21329aeb5c929d7f374479db80`.
 The serialized patches were independently replayed with `git am`; their final
-Git tree exactly matches the tested stack: `8762c81aa0123ae663e387c980c8e37cf502d062`.
+Git tree exactly matches the tested stack: `e09c0ddcfa4208dc9a2464bd1f3bb00f0029ed59`.
 
 The requested prerequisites [#243](https://github.com/RetroPortingToolKit/snesrecomp/pull/243),
 [#245](https://github.com/RetroPortingToolKit/snesrecomp/pull/245),
 [#247](https://github.com/RetroPortingToolKit/snesrecomp/pull/247) and
 [#246](https://github.com/RetroPortingToolKit/snesrecomp/pull/246) were open when
 these patches were prepared. They have now merged into main
-`f6912cd74e06eb21329aeb5c929d7f374479db80`. The maintainer requested eventual
-merged bases; rebase and rerun combined qualification before submitting these
-as PRs. Their repairs
-are not included in this series. [PR #241](https://github.com/RetroPortingToolKit/snesrecomp/pull/241)
+`f6912cd74e06eb21329aeb5c929d7f374479db80`. The series is now rebased and retested
+on that merged head, with its clocked-read wrappers preserved. Those repairs
+are inherited from the base and are not duplicated in this series. The initial
+main66 series remains available at [its original source checkpoint](https://github.com/rages4calm/babel-recomp-companion/tree/66e442618616b7086d6adf61a10f03a0adc40f98/contributions/snesrecomp/205).
+[PR #241](https://github.com/RetroPortingToolKit/snesrecomp/pull/241)
 also remains unmerged; its per-clock APU/DSP, DMA and version-11 state changes
 are not incorporated or qualified here.
 
@@ -28,12 +30,12 @@ are not incorporated or qualified here.
 | [02: Explicit emission and identity](02-region-paced-emission.patch) | Add default-false instruction blocks and region pacing through the emitter, public SDK/CLI and recipe. Include both modes in effective recipe, output and per-bank cache identities. Refuse unsupported instructions, MMIO and pointer/stack/word boundaries before instruction charging or guest mutation. Keep owning-interpreter fallback. Add neutral clock-origin/boundary extension points, without the bridge's APU policy. |
 | [03: Native APU integration](03-native-apu-integration.patch) | Queue actual native clock increments in the existing rollback-owned bridge accumulator, under the interpreter's scheduling predicate. Flush only at completed instruction boundaries. Final paired returns finalize refresh/boundary work only when a scheduling marker is pending. Add no inferred elapsed-call credit or new serialized counter. |
 
-Patch 02 also adapts pointer access matching to both current codegen and the
-pending #243 codegen. Its existing low-WRAM preview, MMIO/bank-boundary refusal
+Patch 02 also adapts pointer access matching to the merged #243 codegen and
+retains compatibility with the earlier generator. Its existing low-WRAM preview, MMIO/bank-boundary refusal
 and single architectural pointer fetch remain required. The adaptation passed
-all 864 synthetic pointer cases with both code generators. The pending #247
-clocked-read scopes must be preserved when rebasing paced helpers; replace only
-the clock increment, not their hardware-read wrapper.
+all 864 synthetic pointer cases with both code generators. Merged #247
+clocked-read scopes remain intact: only the clock increment changes to the
+neutral origin API, preserving the hardware-read wrapper.
 
 Babel-specific presentation, mods, interrupt-stop policy, generated game code,
 game assets, source-analysis expansion and private captures are excluded.
@@ -42,31 +44,33 @@ available. Region timing stays an explicit generation-time choice.
 
 ## Executed source checks
 
-- First group: 46 focused JSL/API checks and 23 focused branch/cycle checks.
+- Initial preparation of the first group: 46 focused JSL/API checks and 23 focused branch/cycle checks.
   The branch fixture executes 12 synthetic programs against the actual
   interpreter, including taken/not-taken zero-offset controls. Earlier red
   witnesses are retained privately.
-- Second group alone: 45 tests pass, including actual emitted/interpreter bus
+- Rebased second group alone: **37 focused tests pass**, including actual emitted/interpreter bus
   comparisons, exactly-once pointer reads, refusal side effects, deadline
   suspension and public SDK/output/bank-cache toggles. The folded-branch
   fixture also executes through instruction-block emission.
-- Complete stack: **640 Python tests pass, two existing compiler-path skips**.
-  The real bridge C fixture passes **432 checks in each fused-read mode**;
+- Complete rebased stack: **643 Python tests pass, two existing compiler-path skips**.
+  The separate current merged vendor integration also passes 644 Python checks.
+  Its real bridge C fixture passes **432 checks in each fused-read mode**;
   the interrupt-tail fixture passes 27 checks, and CPU bus/latch checks pass.
-- Predictive pointer compatibility: 19 tests pass with current codegen and
-  20 with pending #243 codegen, including its separate executed bank-carry
-  regression. This is not a claim that the prerequisite has merged.
+- Earlier dual-codegen compatibility checks: 19 tests passed with main66 codegen
+  and 20 with then-pending #243 codegen, including its separate bank-carry
+  regression. The current rebased matrix exercises the now-merged implementation.
 
 The isolated source suite first encountered an uninitialized nested dependency,
 then a Windows file-replace error on another run. After materializing the pinned
 dependency and using a fresh shorter scratch path, the full matrix passed.
-Those failed receipts remain retained; no production retry or timing behavior
-was changed to make tests pass.
+Those failed receipts remain retained. The rebase additionally updates the
+extracted test fixture for #247's real scoped-read helpers and explicit UTF-8
+source reads. No production wrapper or timing behavior was removed to pass.
 
 To replay the preparation base in an isolated upstream checkout:
 
 ```sh
-git checkout -b timing-205-preparation 66eebe6ae415b4fb2607a22e5b12352f612e1bdf
+git checkout -b timing-205-preparation f6912cd74e06eb21329aeb5c929d7f374479db80
 git submodule update --init --recursive
 git am /path/to/01-default-correctness.patch /path/to/02-region-paced-emission.patch /path/to/03-native-apu-integration.patch
 python -m pytest tests/v2 tests/test_generation_recipe.py tests/test_timing_generation_identity.py tests/test_snes_cycles.py tests/test_beam_events.py tests/test_rdnmi.py -q
@@ -78,8 +82,9 @@ The separate [consumer report](QUALIFICATION.md) records fresh gameplay,
 current-build restoration and matched host cost. It includes a **failed canonical
 audio-continuation check after ordinary save/load** shared by native and
 interpreted runs. That failure is not waived by their mutual parity. The source
-patch tests do not qualify the future merged prerequisite combination or PR
-#241's version-11 state layout.
+patch tests do not waive that restore failure or qualify PR #241's version-11
+state layout. New [merged-head consumer checks](../../../docs/FRAMEWORK-F691.md)
+are recorded separately from the original main66 cost/restore measurements.
 
 Original SNESRecomp author and license notices remain in place. This work comes
 from the noncommercial Illusion of Gaia Companion fork of Babel by **mr0ta /

@@ -5,6 +5,12 @@ checks, separate from the ROM-free extracted-patch tests. They do not qualify
 the future merged prerequisite stack, PR #241's per-clock model, hardware timing
 or a completed campaign.
 
+The source series has since been rebased onto merged main `f6912cd` and retested.
+The [current merged-head gameplay/control checks](../../../docs/FRAMEWORK-F691.md)
+have their own executable identity. The original `fa3a2502…` cost and restore
+measurements below retain their original identity; they are not relabeled as
+measurements of that newer executable.
+
 ## Fixed consumer identity
 
 - Tested engine source: [`1ea3ab4`](https://github.com/rages4calm/babel-recomp-companion/commit/1ea3ab4a46af8a5d39f8ab991990c88b36fd31d5).

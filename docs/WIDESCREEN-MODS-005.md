@@ -5,7 +5,11 @@ artifacts and problems using enabled mods. It is a presentation and usability
 repair, not an expansion of native CPU coverage.
 
 The selected local mixed-native executable is `build/babel-recomp.exe`, SHA-256
-`5ed0138bc855c626a2752080d4c1639d74c14e30750d1068afeb38e954dee5b8`.
+`00429989aabf5cf2d0d0ee9846fa7a2fd490185237863c5aa587c078b280e8bd`.
+It incorporates merged SNESRecomp main
+`f6912cd74e06eb21329aeb5c929d7f374479db80`, with the title's existing delta
+preserved through an inventoried three-way integration. The earlier verified
+`5ed0138b…` checkpoint remains separate; fresh checks qualify the new executable.
 The generated cohort remains batch 004's manifest
 `5322a4e3f86935b45184bad90fb01026338680287f76bf1ed84d011e9aa6af7f`.
 Its roots, interpreter guards and default interpreter-only public build are
@@ -36,6 +40,8 @@ implementation or generated game code was copied into the adapter.
 
 The shared partial-native-tile issue overlaps the pending
 [SNESRecomp PR #218](https://github.com/RetroPortingToolKit/snesrecomp/pull/218).
+The additional witness and its scope were
+[contributed there](https://github.com/RetroPortingToolKit/snesrecomp/pull/218#issuecomment-6615383804).
 The [ROM-free shared-helper witness](../scripts/repro_ws_shadow_partial_tile.c)
 reproduces seven failing fine-scroll phases and one passing aligned control
 on main `66eebe6`. It intentionally exits 1 on that baseline. The pending PR
@@ -128,6 +134,11 @@ run buttons/locks, live options, rewards and cheat eligibility. The MSU fixture
 executes the real activation/upload/frame state machine with synthetic metadata.
 The launcher passes 30 adapter, 47 importer, seven activation and 25 native-mod
 settings checks. Seven packaging-policy checks pass; no release was created.
+The merged framework integration passes 644 Python checks with two existing
+skips, 12 Rust checks, 432 real bridge checks in each bus mode, 27 interrupt-tail
+checks and CPU bus/latch checks. The first integration test run needed a
+fixture-only update for the newly scoped read helpers and explicit UTF-8 source
+loading; production clocked-read wrappers were retained.
 
 ```powershell
 python scripts/test_iog_widescreen.py

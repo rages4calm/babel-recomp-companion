@@ -4,7 +4,7 @@ Updated November 3, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
 Current local build: [widescreen/mod batch 005](docs/WIDESCREEN-MODS-005.md),
-SHA-256 `5ed0138bc855c626a2752080d4c1639d74c14e30750d1068afeb38e954dee5b8`.
+SHA-256 `00429989aabf5cf2d0d0ee9846fa7a2fd490185237863c5aa587c078b280e8bd`.
 South Cape margins now use live decoded map data; the classroom uses an explicit
 authentic-width terrain fallback. The run option was disabled in the owner's
 settings and is now exposed under Convenience. Inventory/dialogue dash leakage,
@@ -18,9 +18,12 @@ patches and current qualification limits are in
 They were [delivered upstream](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6614160563)
 with 640 passing source tests, two existing skips and 56 matched cost runs.
 The prerequisite fixes merged during batch-005 verification: upstream main is
-now `f6912cd74e06eb21329aeb5c929d7f374479db80`. Their preservation inventory,
-integration and timing-series rebase are the next checked step; the verified
-5ed0138 checkpoint below still uses main66 plus preserved local changes.
+now `f6912cd74e06eb21329aeb5c929d7f374479db80`. The changed-file preservation
+inventory and three-way integration are complete, with 644 Python tests and
+12 Rust tests passing. The verified 5ed0138 checkpoint remains private and
+separate from the freshly checked current merged-head executable. The refreshed
+three-patch timing series now applies to f691 and passes 643 source checks with
+two existing skips; it remains a reviewable patch series, not submitted PRs.
 Do not duplicate the merged repairs or present the old preparation base as the
 requested merged base. Extracted-stack source
 checks pass, but fresh ordinary current-build save/load revealed a canonical
@@ -64,9 +67,10 @@ No release was created.
 - Fork: `rages4calm/babel-recomp-companion`; original Babel author **mr0ta /
   mrOt4**, support link, full credits and licenses preserved. Lagoon, EarthBound
   and shared Companion projects were read-only references.
-- Latest SNESRecomp main checked and integrated: `66eebe6ae415b4fb2607a22e5b12352f612e1bdf`.
+- Latest SNESRecomp main checked and integrated: `f6912cd74e06eb21329aeb5c929d7f374479db80`.
   A three-way preservation audit retained Babel's game-specific changes;
   `framework_pins.txt` also records the matching nested-library versions.
+  [Current changed-file integration and fresh checks](docs/FRAMEWORK-F691.md).
   Newly opened upstream [PR #241](https://github.com/RetroPortingToolKit/snesrecomp/pull/241)
   changes APU/DSP/DMA timing but is unmerged and was not adopted in this batch;
   integration needs a delta inventory and fresh qualification after review.
@@ -99,7 +103,7 @@ No release was created.
 | Stock cold boot/input | 3,600-frame CPU/WRAM traces matched between the two configurations; final interpreter build reproduced hash `a5573d387c5a744337f72410902330e4d2c2388abf310559feafc763a599bd64`. Visible sea/intro text checked; 342x224 and 256x224 framing captured. |
 | Native execution | Batch 004: 312 roots, 1,180 variants / 1,104 eligible candidates; all earlier roots/eligible variants retained. Actual corrected-route native share **12.8307% in 4:3, 12.8268% in 16:9**. A source-verified separate math leaf was removed from the polling range; 6,224 explicit PC/alias guards and inherited function exclusions remain. Counts are not executed/qualified-function coverage. |
 | Natural gameplay comparison | 6,000 frames from cold boot through classroom dialogue, directional movement and the South Cape transition. Exact CPU/WRAM trace, CPU/master totals, 13 memory/PPU/APU/DSP/PCM-ring/port-scheduler snapshots, DMA/PPU journals, and full final output including widescreen margins. CPU audio-event stamps match; batched SPC beam tags are explicitly separated from matching event/sample/state evidence. |
-| Framework regressions | Current 694 Python tests passed, 2 existing skips, 243 subtests; actual RDNMI core/IRQ/snapshot tests and parser/ticker/replay checks pass. Current 432 bridge checks in each bus mode, CPU bus/latch and 27 interrupt-tail checks pass. Earlier 864 executed pointer cases and 12 Rust tests retain their original scope. |
+| Framework regressions | Current merged framework: 644 Python tests pass with 2 existing skips; 75 title generation/comparator/replay tests and 243 subtests pass separately. Twelve Rust checks pass. Actual scoped-read/RDNMI/IRQ/snapshot and parser/ticker checks pass, as do 432 bridge checks per bus mode, CPU bus/latch and 27 interrupt-tail checks. |
 | Assisted areas/mechanics | 23 area entries, inventory and corrected form roundtrips; six actual room-clear reward cases, two no-repeat reloads, seven original ability effects plus nine controls, and four continuous boss fights pass on one final binary. Fresh Castoth/Viper HP-zero writes are required. Four additional full-width 16:9 stress cases pass. Exact SPC cycles, full audio/PCM/queue state and output match. Explicit stats/positions/learned bits/item assistance; no earned story or normal boss difficulty claim. |
 | Launcher/mods/icons | 30 adapter +47 importer +7 activation +21 native-mod tests. Room-reward helpers/source: 136 assertions; actual callbacks with host stubs: 656 assertions. Final-engine assisted 8x/native versus 8x/interpreter comparison passed; separate 1x control passed 8 reward-effect assertions. Native launcher UI/draft/Revert and its title-bar icon reviewed. Both rebuilt PE icon groups match all nine source ICO frames. |
 | Achievements foundation | 100 synthetic checks through the actual shared core/presentation. No live unlock claim. |
@@ -136,10 +140,11 @@ python scripts/package_release.py build windows-x86_64 --companion companion/bin
 The shared launcher package feed is the sibling CompanionLauncher checkout.
 The compiled engine is `build/babel-recomp.exe`, currently the selected private
 mixed-native build (SHA-256
-`5ed0138bc855c626a2752080d4c1639d74c14e30750d1068afeb38e954dee5b8`).
+`00429989aabf5cf2d0d0ee9846fa7a2fd490185237863c5aa587c078b280e8bd`).
 Its unchanged graph/source lives only under `.local/batch-001/native-004/expanded-v2/`;
 `inputs/` there retains the earlier immutable `fa3a2502…` baseline. The current
-frozen executable is `.local/batch-001/wide-005/build/selected/babel-recomp.exe`.
+frozen executable is `.local/batch-001/wide-005/build/upstream-f691/babel-recomp.exe`.
+The earlier `5ed0138b…` checkpoint stays in `wide-005/build/selected/`.
 Fresh visual/control/music evidence is under `wide-005/`. The older proof index is
 `native-004/selected-proof-index.json`; replay plans/reports are under `replay/`.
 `./scripts/build_windows.ps1` still builds an interpreter-only package candidate;

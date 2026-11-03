@@ -1,27 +1,27 @@
-From 21836d22b83bf32f82c369da55365ab81a534c11 Mon Sep 17 00:00:00 2001
+From 7dcd7e13d2ee1733b51bd270fbb0fb3bcd22a2cb Mon Sep 17 00:00:00 2001
 From: "Carl Prewitt Jr." <10109900+rages4calm@users.noreply.github.com>
-Date: Tue, 3 Nov 2026 13:59:29 -0600
+Date: Tue, 3 Nov 2026 15:15:07 -0600
 Subject: [PATCH] Add explicit instruction and region paced emission with cache
  identity
 
-Prepared for issue #205 from the bounded Gaia consumer timing work. Based on current main 66eebe6; prerequisite PRs remain unmerged. Rebase on eventual merged heads before submission. Canonical interpretation remains available; no combined-game or hardware qualification is claimed.
+Prepared for timing issue #205 on merged main f6912cd74e06eb21329aeb5c929d7f374479db80. The merged bank-carry, interrupt-flag, RDNMI and caller-clocked read repairs are preserved. Instruction/region pacing remains explicitly selected; canonical interpretation stays available. Consumer gameplay, restoration and runtime-cost qualification have separate identities and limits.
 ---
- docs/REGION_PACED_TIMING.md                 | 106 +++++++++
+ docs/REGION_PACED_TIMING.md                 | 106 ++++++++
  recompiler/v2/emit_bank.py                  |   4 +
  recompiler/v2/emit_function.py              |  46 +++-
  recompiler/v2/program_emit.py               |  12 +-
  recompiler/v2/region_pacing.py              | 109 +++++++++
- recompiler/v2/region_pointers.py            | 101 +++++++++
+ recompiler/v2/region_pointers.py            | 101 ++++++++
  runner/src/cpu_state.c                      |  29 ++-
  runner/src/cpu_state.h                      |  17 +-
  tests/test_timing_generation_identity.py    |  87 +++++++
  tests/v2/test_instruction_block_deadline.py |  86 +++++++
- tests/v2/test_region_pacing.py              | 238 ++++++++++++++++++++
- tests/v2/test_region_pointers.py            | 127 +++++++++++
+ tests/v2/test_region_pacing.py              | 255 ++++++++++++++++++++
+ tests/v2/test_region_pointers.py            | 127 ++++++++++
  tools/generation_recipe.py                  |   4 +-
  tools/sdk_generate.py                       |  25 +-
  tools/v2_emit.py                            |  16 +-
- 15 files changed, 986 insertions(+), 21 deletions(-)
+ 15 files changed, 1003 insertions(+), 21 deletions(-)
  create mode 100644 docs/REGION_PACED_TIMING.md
  create mode 100644 recompiler/v2/region_pacing.py
  create mode 100644 recompiler/v2/region_pointers.py
@@ -543,7 +543,7 @@ index 0000000..d049cf9
 +        costs.append(str(internal * 6))
 +    return " + ".join(costs), body, prefix
 diff --git a/runner/src/cpu_state.c b/runner/src/cpu_state.c
-index ae7d7f1..3d44b57 100644
+index 97b4509..d964094 100644
 --- a/runner/src/cpu_state.c
 +++ b/runner/src/cpu_state.c
 @@ -760,16 +760,31 @@ void cpu_write16(CpuState *cpu, uint8 bank, uint16 addr, uint16 v) {
@@ -582,7 +582,7 @@ index ae7d7f1..3d44b57 100644
      {
          static int _pl = -1;
          if (_pl < 0) _pl = getenv("SNESRECOMP_PACELOG") ? 1 : 0;
-@@ -785,7 +800,7 @@ uint8_t cpu_read8_paced(CpuState *cpu, uint8_t bank, uint16_t addr) {
+@@ -791,7 +806,7 @@ uint8_t cpu_read8_paced(CpuState *cpu, uint8_t bank, uint16_t addr) {
  uint16_t cpu_read16_paced(CpuState *cpu, uint8_t bank, uint16_t addr) {
      uint32_t _sp = cpu_region_speed(((uint32_t)bank << 16) | addr) +
          cpu_region_speed(((uint32_t)bank << 16) | (uint16_t)(addr + 1));
@@ -591,7 +591,7 @@ index ae7d7f1..3d44b57 100644
      {
          static int _pl = -1;
          if (_pl < 0) _pl = getenv("SNESRECOMP_PACELOG") ? 1 : 0;
-@@ -800,7 +815,7 @@ uint16_t cpu_read16_paced(CpuState *cpu, uint8_t bank, uint16_t addr) {
+@@ -812,7 +827,7 @@ uint16_t cpu_read16_paced(CpuState *cpu, uint8_t bank, uint16_t addr) {
  
  void cpu_write8_paced(CpuState *cpu, uint8_t bank, uint16_t addr, uint8_t v) {
      uint32_t _sp = cpu_region_speed(((uint32_t)bank << 16) | addr);
@@ -600,7 +600,7 @@ index ae7d7f1..3d44b57 100644
      {
          static int _pl = -1;
          if (_pl < 0) _pl = getenv("SNESRECOMP_PACELOG") ? 1 : 0;
-@@ -816,7 +831,7 @@ void cpu_write8_paced(CpuState *cpu, uint8_t bank, uint16_t addr, uint8_t v) {
+@@ -828,7 +843,7 @@ void cpu_write8_paced(CpuState *cpu, uint8_t bank, uint16_t addr, uint8_t v) {
  void cpu_write16_paced(CpuState *cpu, uint8_t bank, uint16_t addr, uint16_t v) {
      uint32_t _sp = cpu_region_speed(((uint32_t)bank << 16) | addr) +
          cpu_region_speed(((uint32_t)bank << 16) | (uint16_t)(addr + 1));
@@ -610,7 +610,7 @@ index ae7d7f1..3d44b57 100644
          static int _pl = -1;
          if (_pl < 0) _pl = getenv("SNESRECOMP_PACELOG") ? 1 : 0;
 diff --git a/runner/src/cpu_state.h b/runner/src/cpu_state.h
-index f294715..cfd43d4 100644
+index a03fe97..66a16c5 100644
 --- a/runner/src/cpu_state.h
 +++ b/runner/src/cpu_state.h
 @@ -415,13 +415,22 @@ uint16 cpu_read16(CpuState *cpu, uint8 bank, uint16 addr);
@@ -827,10 +827,10 @@ index 0000000..0f5eda1
 +    run_folded_branch_cases(tmp_path, instruction_blocks=True)
 diff --git a/tests/v2/test_region_pacing.py b/tests/v2/test_region_pacing.py
 new file mode 100644
-index 0000000..99999cb
+index 0000000..bdff9a6
 --- /dev/null
 +++ b/tests/v2/test_region_pacing.py
-@@ -0,0 +1,238 @@
+@@ -0,0 +1,255 @@
 +"""ROM-free generated execution vs actual interp816 bus callbacks."""
 +import os
 +import re
@@ -897,8 +897,10 @@ index 0000000..99999cb
 +    compiler = seam._compiler()
 +    if not compiler:
 +        pytest.skip("C compiler required")
-+    runtime = (REPO / "runner/src/cpu_state.c").read_text()
-+    paced = "void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);\n"
++    runtime = (REPO / "runner/src/cpu_state.c").read_text(encoding="utf-8")
++    paced = "static inline bool snes_set_cpu_read_clocked(Snes *snes, bool clocked);\n"
++    paced += _c_function(runtime, "is_hw_reg")
++    paced += "void (*g_cpu_aot_master_credit_hook)(CpuState *cpu, uint64 clocks);\n"
 +    paced += "void (*g_cpu_aot_instruction_boundary_hook)(CpuState *cpu);\n"
 +    paced += "\n".join(_c_function(runtime, name) for name in (
 +        "cpu_aot_instruction_boundary", "cpu_add_aot_master_cycles", "cpu_region_speed", "cpu_read8_paced", "cpu_read16_paced",
@@ -1023,12 +1025,17 @@ index 0000000..99999cb
 +                emitted += emit_function(rom, 0, pc, m, x, instruction_blocks=True, region_paced=True)
 +    emitted += _emit("AD 40 21 60", "Mmio") + _emit("A5 00 60", "DpMmio")
 +    emitted += extra_emitted
-+    bridge = (REPO / "runner/src/snes/interp_bridge.c").read_text()
++    bridge = (REPO / "runner/src/snes/interp_bridge.c").read_text(encoding="utf-8")
 +    # Compile the actual owner-aware tail helper, rather than a stub that
 +    # would conceal accidentally starting a new nested interpreter frame.
 +    tail_helpers = (_c_function(bridge, "interp_tier_dispatch_tail_ex") +
 +                    _c_function(bridge, "interp_tier_dispatch_tail"))
-+    credit_fixture = ''
++    credit_fixture = r'''
++struct Snes { bool cpuReadClocked; };
++Snes *g_snes;
++'''
++    credit_fixture += _c_function((REPO / "runner/src/snes/snes.h").read_text(encoding="utf-8"),
++                                  "snes_set_cpu_read_clocked")
 +    main = ["int main(void) { int fails = 0;"]
 +    for name, code, m, x, dp in cases:
 +        values = ",".join(f"0x{b:02x}" for b in bytes.fromhex(code))
@@ -1051,6 +1058,16 @@ index 0000000..99999cb
 +    prepare(&cpu, code, sizeof code, 1, 1, 0); cpu.DB = 0;
 +    Mmio_M1X1(&cpu);
 +    if (cpu.cycles || cpu.master_cycles || g_mmio_reads || g_balanced_calls != 1 || g_other_exits != 1) fails++;
++  }
++''']
++    main += [r'''
++  { CpuState cpu = {0}; Snes snes = {0}; g_snes = &snes;
++    cpu_read8_paced(&cpu, 0, 0x4212);
++    if (snes.cpuReadClocked) fails++;
++    snes.cpuReadClocked = true;
++    cpu_read16_paced(&cpu, 0, 0x4212);
++    if (!snes.cpuReadClocked) fails++;
++    g_snes = NULL;
 +  }
 +''']
 +    main += [extra_main]
