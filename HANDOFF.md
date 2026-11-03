@@ -24,6 +24,7 @@ inventory and three-way integration are complete, with 644 Python tests and
 separate from the freshly checked current merged-head executable. The refreshed
 three-patch timing series now applies to f691 and passes 643 source checks with
 two existing skips; it remains a reviewable patch series, not submitted PRs.
+The [rebased source and integrated results were delivered upstream](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6615719490).
 Do not duplicate the merged repairs or present the old preparation base as the
 requested merged base. Extracted-stack source
 checks pass, but fresh ordinary current-build save/load revealed a canonical

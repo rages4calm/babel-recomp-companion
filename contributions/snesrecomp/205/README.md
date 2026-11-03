@@ -6,6 +6,7 @@ The source series, passing checks, measured costs and failed restore gate were
 [delivered in the existing #205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6614160563).
 The current refreshed patches apply in order to merged upstream main
 `f6912cd74e06eb21329aeb5c929d7f374479db80`.
+The [rebased series and new integration results were delivered upstream](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6615719490).
 The serialized patches were independently replayed with `git am`; their final
 Git tree exactly matches the tested stack: `e09c0ddcfa4208dc9a2464bd1f3bb00f0029ed59`.
 
