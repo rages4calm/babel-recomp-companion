@@ -920,22 +920,31 @@ struct ExitEquation {
 }
 
 fn truncated_noreturn_requirements(graph: &FunctionDecodeGraph) -> BTreeSet<ExitDependency> {
-    graph.insns().iter().filter_map(|decoded| {
-        let ins = &decoded.insn;
-        if !matches!(ins.mnem, "JSR" | "JSL") || ins.terminal_jsr
-            || !decoded.successors.is_empty() || ins.dispatch_entries.is_some()
-            || ins.mode == Mode::IndirX
-            || graph.unknown_callee_exit_sites.iter().any(|&(site, _, _, _)| site == ins.addr)
-        {
-            return None;
-        }
-        let target = if ins.mnem == "JSR" {
-            (ins.addr & 0xFF0000) | (ins.operand & 0xFFFF)
-        } else {
-            ins.operand & 0xFFFFFF
-        };
-        Some((target, ins.m_flag & 1, ins.x_flag & 1))
-    }).collect()
+    graph
+        .insns()
+        .iter()
+        .filter_map(|decoded| {
+            let ins = &decoded.insn;
+            if !matches!(ins.mnem, "JSR" | "JSL")
+                || ins.terminal_jsr
+                || !decoded.successors.is_empty()
+                || ins.dispatch_entries.is_some()
+                || ins.mode == Mode::IndirX
+                || graph
+                    .unknown_callee_exit_sites
+                    .iter()
+                    .any(|&(site, _, _, _)| site == ins.addr)
+            {
+                return None;
+            }
+            let target = if ins.mnem == "JSR" {
+                (ins.addr & 0xFF0000) | (ins.operand & 0xFFFF)
+            } else {
+                ins.operand & 0xFFFFFF
+            };
+            Some((target, ins.m_flag & 1, ins.x_flag & 1))
+        })
+        .collect()
 }
 
 fn equation_target(
@@ -1117,8 +1126,12 @@ fn solve_exit_equation_sccs(
                 if !complete {
                     break;
                 }
-                for dependency in equations[&key].assumptions.iter().map(|&(dep, _, _)| dep)
-                    .chain(equations[&key].noreturn_requirements.iter().copied()) {
+                for dependency in equations[&key]
+                    .assumptions
+                    .iter()
+                    .map(|&(dep, _, _)| dep)
+                    .chain(equations[&key].noreturn_requirements.iter().copied())
+                {
                     if equation_target(mapping, dependency, &tuple_to_key)
                         .is_some_and(|target| component.contains(&target))
                     {
@@ -1193,14 +1206,25 @@ fn solve_exit_equation_sccs(
                     })
             });
             let noreturn_requirements_hold = component.iter().all(|key| {
-                equations[key].noreturn_requirements.iter().all(|&dependency| {
-                    equation_target(mapping, dependency, &tuple_to_key)
-                        .filter(|target| component.contains(target))
-                        .and_then(|target| values.get(&target).cloned())
-                        .or_else(|| known_equation_modes(mapping, dependency, exact, sets,
-                                                        &tuple_to_key, &solved))
-                        .is_some_and(|modes| modes.is_empty())
-                })
+                equations[key]
+                    .noreturn_requirements
+                    .iter()
+                    .all(|&dependency| {
+                        equation_target(mapping, dependency, &tuple_to_key)
+                            .filter(|target| component.contains(target))
+                            .and_then(|target| values.get(&target).cloned())
+                            .or_else(|| {
+                                known_equation_modes(
+                                    mapping,
+                                    dependency,
+                                    exact,
+                                    sets,
+                                    &tuple_to_key,
+                                    &solved,
+                                )
+                            })
+                            .is_some_and(|modes| modes.is_empty())
+                    })
             });
             if !assumptions_hold || !noreturn_requirements_hold {
                 continue;
@@ -2085,11 +2109,21 @@ mod tests {
         };
         if indirect {
             rom[..3].copy_from_slice(&[0xFC, 0x20, 0x80]);
-            inputs.indirect_dispatch.insert(0x008000, IndirectDispatchSite {
-                count: 1, idx_reg: 'X', table_bases: vec![], ptr_call: false,
-                return_pc: None, frame_size: None, pointer_match: false,
-                popped_call_frame: false, rts_stack: false, targets: vec![0x8100],
-            });
+            inputs.indirect_dispatch.insert(
+                0x008000,
+                IndirectDispatchSite {
+                    count: 1,
+                    idx_reg: 'X',
+                    table_bases: vec![],
+                    ptr_call: false,
+                    return_pc: None,
+                    frame_size: None,
+                    pointer_match: false,
+                    popped_call_frame: false,
+                    rts_stack: false,
+                    targets: vec![0x8100],
+                },
+            );
         }
         let (nodes, exact, sets, _, _) = analyze(&inputs, &rom, 32, 32)
             .expect("closed recursive no-return component must converge");
@@ -2099,7 +2133,10 @@ mod tests {
         assert_eq!(sets.get(&(0x008100, 0, 0)), Some(&vec![]));
         // Any call leaf still rejected by lowering stays in the interpreter;
         // proving its exit contract must not override AOT safety checks.
-        assert_eq!(nodes[&VariantKey::new(0x008100, 0, 0)].disposition, "lle_only");
+        assert_eq!(
+            nodes[&VariantKey::new(0x008100, 0, 0)].disposition,
+            "lle_only"
+        );
     }
 
     #[test]
@@ -2134,13 +2171,22 @@ mod tests {
     fn unknown_call_leaf_is_not_a_noreturn_requirement() {
         let mut rom = vec![0u8; 0x8000];
         rom[..4].copy_from_slice(&[0x20, 0x00, 0x90, 0x60]);
-        let env = DecodeEnv { stop_on_unknown_callee_exit: true, ..DecodeEnv::default() };
+        let env = DecodeEnv {
+            stop_on_unknown_callee_exit: true,
+            ..DecodeEnv::default()
+        };
         let graph = decode_function(&rom, 0, 0x8000, 0, 0, None, &env);
         assert!(has_truncated_call_continuation(&graph));
         assert!(truncated_noreturn_requirements(&graph).is_empty());
         let exit_sets = HashMap::from([((0x009000, 0, 0), vec![])]);
-        let env = DecodeEnv { callee_exit_mx_modes: Some(&exit_sets), ..env };
+        let env = DecodeEnv {
+            callee_exit_mx_modes: Some(&exit_sets),
+            ..env
+        };
         let graph = decode_function(&rom, 0, 0x8000, 0, 0, None, &env);
-        assert_eq!(truncated_noreturn_requirements(&graph), BTreeSet::from([(0x009000, 0, 0)]));
+        assert_eq!(
+            truncated_noreturn_requirements(&graph),
+            BTreeSet::from([(0x009000, 0, 0)])
+        );
     }
 }

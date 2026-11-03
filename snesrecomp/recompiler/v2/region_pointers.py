@@ -15,7 +15,8 @@ NAMES = {"LDA", "STA", "ORA", "AND", "EOR", "ADC", "SBC", "CMP"}
 def plan(insn, lines, cpu_cycles):
     if insn.mode not in MODES or insn.mnem not in NAMES:
         return None
-    from v2.codegen import _segref_addr_expr
+    from v2.codegen import _emit_read, _emit_write
+    from v2.ir import Read, Write, Value
     from v2.lowering import _segref_for
     from snes_cycles import xcross_add
 
@@ -25,20 +26,32 @@ def plan(insn, lines, cpu_cycles):
     internal = cpu_cycles - insn.length - pointer_bytes - width
     if internal < 0:
         return None
-    bank, address = _segref_addr_expr(_segref_for(insn))
+    segment = _segref_for(insn)
     text = "\n".join(lines)
     name = f"_rp_{insn.addr:06X}_{insn.m_flag}{insn.x_flag}"
-    # Replace the complete outer memory access, removing duplicate nested
-    # pointer expressions rather than trusting CSE of observable CPU reads.
-    if insn.mnem == "STA":
-        original = f"cpu_write{width * 8}(cpu, {bank}, {address}, "
-        replacement = f"cpu_write{width * 8}_paced(cpu, (uint8)({name}_ea >> 16), (uint16){name}_ea, "
-    else:
-        original = f"cpu_read{width * 8}(cpu, {bank}, {address})"
-        replacement = f"cpu_read{width * 8}_paced(cpu, (uint8)({name}_ea >> 16), (uint16){name}_ea)"
-    if text.count(original) != 1:
+    # Match the current code generator's complete architectural access, not
+    # a nested address expression. Indexed-indirect lowering may cache the
+    # pointer and split a word crossing into a conditional sequence. The
+    # precharge guards below refuse that crossing, so accepted instructions
+    # replace the entire sequence with one guarded, cached paced access.
+    # Reusing the emitted Read/Write shape supports both the original and
+    # bank-carry-corrected lowering without reading the guest pointer twice.
+    matches = []
+    for vid in sorted(set(int(v) for v in re.findall(r"\b_v(\d+)\b", text))):
+        value = Value(vid)
+        if insn.mnem == "STA":
+            original = "\n".join(_emit_write(Write(segment, value, width)))
+            replacement = (f"cpu_write{width * 8}_paced(cpu, "
+                f"(uint8)({name}_ea >> 16), (uint16){name}_ea, _v{vid});")
+        else:
+            original = "\n".join(_emit_read(Read(segment, width, value)))
+            replacement = (f"uint{width * 8} _v{vid} = cpu_read{width * 8}_paced(cpu, "
+                f"(uint8)({name}_ea >> 16), (uint16){name}_ea);")
+        if text.count(original) == 1:
+            matches.append((original, replacement))
+    if len(matches) != 1:
         return None
-    text = text.replace(original, replacement)
+    text = text.replace(*matches[0])
     if re.search(r"\bcpu_(?:read|write)(?:8|16)\(", text):
         return None
 

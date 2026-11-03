@@ -43,6 +43,10 @@ struct Snes {
   // the frozen hPos..divideResult blob so older snapshots keep their layout.
   bool rdnmiPending;
 
+  // Host read scope, not guest state. The caller has charged this access to
+  // its master clock; HVBJOY must not add the legacy polling advance too.
+  bool cpuReadClocked;
+
   // Host timing anchor; excluded from savestates and reconciled after load.
   uint64_t beamMasterLast;
 
@@ -65,7 +69,7 @@ struct Snes {
    * external probe. Counted here, they are exact.
    *   dbgIrqLatches   comparator matches that asserted the IRQ line
    *   dbgIrqMissed    FIELDS that ended with the comparator armed and nothing
-   *                   latched — i.e. the beam stepped OVER the target, which
+   *                   latched â€” i.e. the beam stepped OVER the target, which
    *                   the window test (target inside [h, h+span)) turns into
    *                   no interrupt at all rather than a late one
    *   dbgLastMissedLine  the vTimer value in force when that last happened */
@@ -80,7 +84,7 @@ struct Snes {
   uint32_t dbgMissDedupe;
   uint16_t dbgLastOvershotLine;
   uint16_t dbgLastOvershotBy;
-  /* Targets programmed behind the beam — see the comment at the $4209 write. */
+  /* Targets programmed behind the beam â€” see the comment at the $4209 write. */
   uint32_t dbgTargetInPast;
   uint16_t dbgLastPastTarget;
   uint16_t dbgLastPastBeam;
@@ -136,6 +140,14 @@ void snes_saveload(Snes *snes, SaveLoadInfo *sli);
 void snes_catchupApu(Snes *snes);
 void snes_advance_master_cycles(Snes *snes, uint32_t clocks);
 void snes_sync_master_clock(Snes *snes, uint64_t master_clock);
+/* Scope an independently clocked CPU read. Restore the returned value after
+ * dispatch. The caller must synchronize the beam to the charged read clock;
+ * ReadRegOpenBus does this for HVBJOY when this scope is active. */
+static inline bool snes_set_cpu_read_clocked(Snes *snes, bool clocked) {
+  bool previous = snes->cpuReadClocked;
+  snes->cpuReadClocked = clocked;
+  return previous;
+}
 /* A host that drives the beam itself (its own per-opcode hPos/vPos walk)
  * must install this: a $420B DMA's guest time is charged through it, and the
  * default (SnesInit installs one) advances g_cpu.master_cycles and syncs the
@@ -160,10 +172,9 @@ void snes_set_hdma_beam_enabled(Snes *snes, bool enabled);
  * frame, freezing the guest. Default: enabled (the beam latches). Host policy,
  * not guest state: kept out of the Snes struct and so out of savestates. */
 void snes_set_raster_irq_beam_enabled(bool enabled);
-/* RDNMI ownership, independent of IRQ/HDMA and field observers. A frame host
- * that supplies its own vblank pulse through inNmi must disable the beam's
- * additional $4210 latch, or one host frame can expose two distinct edges.
- * Default enabled; host configuration, outside the frozen savestate layout. */
+/* RDNMI ownership is independent of IRQ/HDMA and field observers. Frame
+ * hosts supplying inNmi pulses select false at setup to avoid a second beam
+ * edge. Default true; host policy, outside serialized guest state. */
 void snes_set_rdnmi_beam_enabled(bool enabled);
 bool snes_next_irq_master(const Snes *snes, uint64_t now, uint64_t *out);
 
@@ -174,7 +185,7 @@ bool snes_next_irq_master(const Snes *snes, uint64_t now, uint64_t *out);
  * CPU only up to the next event, so it cannot execute past a raster split and
  * make the IRQ arrive late. snes_advance_beam's comparator is a window test
  * (target inside [h, h+span)), so an overshoot yields no IRQ at all rather
- * than a late one — and a split scheduled two scanlines after the one that
+ * than a late one â€” and a split scheduled two scanlines after the one that
  * scheduled it, as Gundam Wing does at $00:888E, is lost outright. */
 uint32_t snes_master_clocks_until_irq(const Snes *snes);
 
@@ -182,7 +193,7 @@ uint32_t snes_master_clocks_until_irq(const Snes *snes);
  * frame boundary on the PPU's field boundary. See the implementation. */
 uint32_t snes_master_clocks_until_line(const Snes *snes, uint32_t line);
 
-/* Freeze (1) / release (0) the beam across an IRQ handler dispatch — see the
+/* Freeze (1) / release (0) the beam across an IRQ handler dispatch â€” see the
  * comment on the implementation. The host's frame loop brackets
  * interp_bridge_run_interrupt with this for raster IRQs. */
 void snes_beam_hold(int hold);

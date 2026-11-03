@@ -4,7 +4,8 @@ import subprocess
 
 import pytest
 
-from test_region_pacing import REPO
+import pathlib
+REPO = pathlib.Path(__file__).resolve().parents[2]
 
 
 def test_host_rdnmi_ownership_preserves_core_defaults_and_irq(tmp_path):

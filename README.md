@@ -41,7 +41,7 @@ This is bounded route evidence, not a fully native game or completed campaign.
   [Controls and limits](docs/CHEATS-AND-MODS.md).
 - **Windows icons:** coordinated flute/world/comet artwork for the game and a
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
-- **Framework:** updated to SNESRecomp `66eebe6`, latest main checked November 2,
+- **Framework:** updated to SNESRecomp `f6912cd`, latest main checked November 3,
   2026, with Babel-specific integration changes preserved. RomAtlas independently
   checked 8,192 current mechanic/route instruction contexts, including 3,122 new
   independent decodes and identity-matched reuse of earlier checks.
@@ -52,6 +52,7 @@ This is bounded route evidence, not a fully native game or completed campaign.
   and duplicate vblank ownership bug [#242](https://github.com/RetroPortingToolKit/snesrecomp/issues/242)
   are reported upstream. The tested timing work is added to the existing
   [#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6589796017).
+  [Merged-head integration and preservation checks](docs/FRAMEWORK-F691.md).
   [Requested upstream patch split and qualification limits](contributions/snesrecomp/205/README.md).
 - **Evidence:** [baseline audit](docs/BASELINE-AUDIT.md),
   [current handoff](HANDOFF.md), [launcher build/use](companion/README.md),
