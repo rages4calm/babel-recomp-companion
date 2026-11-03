@@ -17,6 +17,8 @@ static unsigned frame_count;
 static struct {const char*id;SNESModActivationCallback fn;} plugins[16];
 static unsigned plugin_count;
 static int configured_multiplier=1;
+static int configured_dp=-1,configured_str=-1,configured_def=-1,configured_hp=-1;
+static const char *configured_run_button="Y";
 static char persisted_feature[40],persisted_option[40],persisted_value[40];
 static int persisted_enabled;
 #define CHECK(v) do {assertions++;if(!(v)){fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#v);exit(1);}}while(0)
@@ -39,6 +41,18 @@ int snes_mod_runtime_feature_option_value_c(const char*pkg,const char*feature,co
 {
     if(!strcmp(pkg,"iog.cheats")&&!strcmp(feature,"room_rewards")&&!strcmp(option,"multiplier"))
         return snprintf(out,cap,"%d",configured_multiplier)>0;
+    int value=-1;
+    if(!strcmp(pkg,"iog.cheats")) {
+        if(!strcmp(feature,"dp")&&!strcmp(option,"amount"))value=configured_dp;
+        if(!strcmp(feature,"stats")) {
+            if(!strcmp(option,"strength"))value=configured_str;
+            if(!strcmp(option,"defense"))value=configured_def;
+            if(!strcmp(option,"max_hp"))value=configured_hp;
+        }
+    }
+    if(value>=0)return snprintf(out,cap,"%d",value)>0;
+    if(!strcmp(pkg,"iog.enhancements")&&!strcmp(feature,"run")&&!strcmp(option,"button"))
+        return snprintf(out,cap,"%s",configured_run_button)>0;
     if(cap)out[0]=0;return 0;
 }
 int snes_mod_runtime_persist_feature_c(const char*pkg,const char*feature,int enabled,const char*option,const char*value)
@@ -134,10 +148,67 @@ static void taint_suite(const char*which)
     CHECK(IogCheatsSessionTainted());IogCheatRatesInvalidate();CHECK(IogCheatsSessionTainted());
     reset_fixture(1);CHECK(IogCheatsSessionTainted());generation++;tick();CHECK(IogCheatsSessionTainted());
 }
+static void live_cheat_suite(void)
+{
+    reset_fixture(1);
+    configured_str=20;configured_def=18;configured_hp=30;
+    CHECK(!IogCheatGet(2));IogCheatSet(2,1);tick();
+    CHECK(Rd(0x0ADE)==20&&Rd(0x0ADC)==18&&Rd(0x0ACA)==30&&Rd(0x0ACE)==30);
+    CHECK(!strcmp(persisted_feature,"stats")&&persisted_enabled&&IogCheatsSessionTainted());
+    IogCheatSet(2,0);Wr(0x0ADE,4);Wr(0x0ADC,3);Wr(0x0ACA,8);Wr(0x0ACE,5);tick();
+    CHECK(Rd(0x0ADE)==4&&Rd(0x0ADC)==3&&Rd(0x0ACA)==8&&Rd(0x0ACE)==5);
+    configured_str=25;configured_def=0;configured_hp=0;IogCheatSet(2,1);tick();
+    CHECK(Rd(0x0ADE)==25&&Rd(0x0ADC)==3&&Rd(0x0ACA)==8&&Rd(0x0ACE)==5);
+    configured_str=0;IogCheatSet(2,0);IogCheatSet(2,1);Wr(0x0ADE,4);tick();
+    CHECK(Rd(0x0ADE)==4);IogCheatSet(2,0);
+    configured_dp=321;IogCheatSet(1,1);tick();CHECK(Rd(0x0AD6)==321);
+    CHECK(!strcmp(persisted_feature,"dp")&&persisted_enabled);
+    IogCheatSet(1,0);Wr(0x0AD6,7);tick();CHECK(Rd(0x0AD6)==7);
+    configured_dp=654;IogCheatSet(1,1);tick();CHECK(Rd(0x0AD6)==654);
+    configured_dp=0;IogCheatSet(1,0);IogCheatSet(1,1);Wr(0x0AD6,7);tick();CHECK(Rd(0x0AD6)==7);
+    IogCheatSet(1,0);IogCheatSet(0,1);tick();CHECK(Rd(0x0ACE)==8);
+    Wr(0x0ACE,0);tick();CHECK(Rd(0x0ACE)==0); /* No revive or lethal-hit prevention. */
+    IogCheatSet(0,0);Wr(0x0ACE,5);tick();CHECK(Rd(0x0ACE)==5);
+    configured_str=configured_def=configured_hp=0;activate("iog.cheat.stats");tick();
+    CHECK(Rd(0x0ADE)==4&&Rd(0x0ADC)==3&&Rd(0x0ACA)==8&&Rd(0x0ACE)==5);
+    IogCheatSet(2,0);CHECK(IogCheatsSessionTainted());
+}
+static void run_suite(void)
+{
+    static const char*buttons[]={"Y","X","L","R"};
+    static const unsigned masks[]={kPadY,kPadX,kPadL,kPadR};
+    static const unsigned directions[]={kPadRight,kPadLeft,kPadDown,kPadUp};
+    for(unsigned b=0;b<4;b++)for(unsigned d=0;d<4;d++) {
+        reset_fixture(1);configured_run_button=buttons[b];activate("iog.run");CHECK(frame_count==5);
+        test_snes.input1_currentState=masks[b]|directions[d];Wr(0x09B8,17);tick();
+        CHECK(Rd(d<2?0x09B2:0x09B4)==(d&1?0xFFFD:3));CHECK(Rd(0x09B8)==0);
+        CHECK(Rd(d<2?0x09B4:0x09B2)==0);
+    }
+    for(unsigned gate=0;gate<8;gate++) {
+        reset_fixture(1);configured_run_button="Y";activate("iog.run");
+        test_snes.input1_currentState=kPadY|kPadRight;
+        if(gate==0)Wr(0x09AA,0);
+        if(gate==1)Wr(0x09AE,0x0800);
+        if(gate==2)Wr(0x09AE,0x1000);
+        if(gate==3)Wr(0x09AE,0x2000);
+        if(gate==4)test_snes.input1_currentState=kPadY;
+        if(gate==5)test_snes.input1_currentState=kPadRight;
+        if(gate==6)Wr(0x0644,0x00FF);
+        if(gate==7)Wr(0x09EC,0x2001);
+        memcpy(expected_ram,test_ram,sizeof expected_ram);tick();CHECK(!memcmp(expected_ram,test_ram,sizeof test_ram));
+    }
+    reset_fixture(1);test_snes.input1_currentState=kPadY|kPadRight;tick();CHECK(!Rd(0x09B2));
+    /* High scene IDs include real Dark Castoth gameplay: never blanket-gate. */
+    reset_fixture(1);configured_run_button="Y";activate("iog.run");Wr(0x0644,0x00F2);
+    test_snes.input1_currentState=kPadY|kPadRight;tick();CHECK(Rd(0x09B2)==3);
+}
 int main(int argc,char**argv)
 {
     CHECK(argc==2);register_iog_mods();CHECK(plugin_count==8);
-    if(!strcmp(argv[1],"rewards"))reward_suite();else taint_suite(argv[1]);
+    if(!strcmp(argv[1],"rewards"))reward_suite();
+    else if(!strcmp(argv[1],"live-cheats"))live_cheat_suite();
+    else if(!strcmp(argv[1],"run"))run_suite();
+    else taint_suite(argv[1]);
     printf("PASS %u actual iog_mods callback integration assertions: %s; ROM-free host/source-gate stubs\n",assertions,argv[1]);
     return 0;
 }

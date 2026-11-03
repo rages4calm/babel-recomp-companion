@@ -11,9 +11,11 @@ Git tree exactly matches the tested stack: `8762c81aa0123ae663e387c980c8e37cf502
 The requested prerequisites [#243](https://github.com/RetroPortingToolKit/snesrecomp/pull/243),
 [#245](https://github.com/RetroPortingToolKit/snesrecomp/pull/245),
 [#247](https://github.com/RetroPortingToolKit/snesrecomp/pull/247) and
-[#246](https://github.com/RetroPortingToolKit/snesrecomp/pull/246) are still open.
-The maintainer requested eventual merged bases. Rebase and rerun combined
-qualification after those merges before submitting these as PRs. Their repairs
+[#246](https://github.com/RetroPortingToolKit/snesrecomp/pull/246) were open when
+these patches were prepared. They have now merged into main
+`f6912cd74e06eb21329aeb5c929d7f374479db80`. The maintainer requested eventual
+merged bases; rebase and rerun combined qualification before submitting these
+as PRs. Their repairs
 are not included in this series. [PR #241](https://github.com/RetroPortingToolKit/snesrecomp/pull/241)
 also remains unmerged; its per-clock APU/DSP, DMA and version-11 state changes
 are not incorporated or qualified here.

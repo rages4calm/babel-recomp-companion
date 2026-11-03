@@ -100,6 +100,7 @@ static int g_loading;
 static int g_quiet;                /* frames since the last port 0 write */
 static int g_track;                /* MSU-1 track playing, 0: none */
 static int g_volume, g_fading;
+static uint64_t g_state_generation;
 
 static uint32_t Off24(uint32_t a) { return ((a >> 16) & 0x3F) << 16 | (a & 0xFFFF); }
 
@@ -211,13 +212,8 @@ static void Resync(void)
 
 static void Frame(void)
 {
-    static uint64_t gen;
-    static bool init;
-    if (!init) {
-        init = true;
-        gen = RtlStateGeneration();
-    } else if (gen != RtlStateGeneration()) {
-        gen = RtlStateGeneration();
+    if (g_state_generation != RtlStateGeneration()) {
+        g_state_generation = RtlStateGeneration();
         if (g_snes)
             Resync();
     }
@@ -375,6 +371,11 @@ static void Activate(void)
         return;
     }
     cart_set_overlay_bank(cart, kOverlayIndex, g_bank);
+    /* Capture before the host can load --resume-state or script slot0.
+     * Sampling on the first Frame lost that first load, leaving its silent
+     * SPC song without MSU playback. A cold boot keeps this generation and
+     * continues through its original music-upload/start protocol. */
+    g_state_generation = RtlStateGeneration();
     snes_mod_register_apu_write_callback(ApuWrite);
     snes_mod_register_frame_callback(Frame);
     fprintf(stderr, "[msu1] %d songs on MSU-1 (%d references)\n", g_ncopies, patched);

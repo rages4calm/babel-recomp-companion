@@ -71,7 +71,7 @@ def main():
         str(ROOT/'src/iog_cheat_rates.c'),'-o',str(exe)]
     subprocess.run(command,check=True)
     cases=[]
-    for name in ['rewards','taint-hp','taint-dp','taint-stats','taint-room','taint-toggle','taint-api']:
+    for name in ['rewards','taint-hp','taint-dp','taint-stats','taint-room','taint-toggle','taint-api','live-cheats','run']:
         result=subprocess.run([str(exe),name],capture_output=True,text=True,check=True)
         print(result.stdout.strip())
         assertions=int(re.search(r'PASS (\d+)',result.stdout).group(1))

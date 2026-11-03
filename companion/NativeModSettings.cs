@@ -18,16 +18,17 @@ public static class NativeModSettings
     private static NativeModField Number(string id, string label, string feature, string value, int fallback, int min, int max, string help = "") =>
         new("iog.cheats", feature, value, new(id, "Cheats", label, OptionKind.Integer, OptionValue.From(fallback), help, min, max));
     public static readonly IReadOnlyList<NativeModField> Fields = new NativeModField[] {
-        Toggle("cheat.hp", "Cheats", "Infinite HP", "iog.cheats", "infinite_hp", "Refill current HP to the current maximum. Does not revive a death already in progress."),
-        Toggle("cheat.dp", "Cheats", "Keep a minimum DP balance", "iog.cheats", "dp", "Keep at least the selected amount of Dark Power."),
+        Toggle("cheat.hp", "Cheats", "Refill HP", "iog.cheats", "infinite_hp", "Refill HP between frames. A single lethal hit can still kill you; this does not revive a death already in progress."),
+        Toggle("cheat.dp", "Cheats", "Keep a minimum DP balance", "iog.cheats", "dp", "Keep at least the selected amount of Dark Power. Continuing after death costs 100 DP; a minimum of 99 does not cover that cost."),
         Number("cheat.dp-min", "Minimum DP", "dp", "amount", 99, 0, 999),
         new("iog.cheats", "room_rewards", "multiplier", new("cheat.room-rewards", "Cheats", "Room-clear rewards", OptionKind.Choice,
-            OptionValue.From("1"), "Multiply new room-clear stat rewards (HP cap 40; strength/defense 99). Original 1x is unchanged. Inactive with Stats Boost, New Game+, randomizer or Apocalypse Gaia.",
+            OptionValue.From("1"), "Multiply new room-clear stat rewards (HP cap 40; strength/defense 99). Original 1x is unchanged. Inactive with minimum stats, New Game+, randomizer or Apocalypse Gaia.",
             Choices: Enumerable.Range(1, 8).Select(n => new ChoiceItem(n.ToString(CultureInfo.InvariantCulture), n == 1 ? "Original · 1x" : n + "x rewards")).ToArray())),
-        Toggle("cheat.stats", "Cheats", "Keep minimum stats", "iog.cheats", "stats", "Stat boosts can be saved by the game. Switching this off does not lower stats already raised. Overrides room-reward multiplication while active."),
+        Toggle("cheat.stats", "Cheats", "Keep minimum stats", "iog.cheats", "stats", "Set at least one nonzero minimum below. Raised stats can be saved; switching off does not lower them. Overrides room-reward multiplication while active."),
         Number("cheat.strength", "Minimum strength", "stats", "strength", 0, 0, 99, "0 leaves this stat unchanged."),
         Number("cheat.defense", "Minimum defense", "stats", "defense", 0, 0, 99, "0 leaves this stat unchanged."),
         Number("cheat.max-hp", "Minimum maximum HP", "stats", "max_hp", 0, 0, 40, "0 leaves maximum HP unchanged."),
+        Toggle("mod.run", "Convenience", "Hold to run", "iog.enhancements", "run", "Hold the configured run button with a direction (default Y). Uses the game's existing dash and preserves your button binding."),
         Toggle("mod.stacking", "Convenience", "Stack common items", "iog.enhancements", "stacking", "Red Jewels, Herbs and Crystals each share one inventory slot, with a counter."),
         Toggle("mod.equipped", "Convenience", "Mark the equipped item", "iog.enhancements", "equipped", "Draw the equipped-item frame in the original inventory."),
         Toggle("mod.hotswap", "Convenience", "Quick item selection", "iog.enhancements", "hotswap", "Hold the configured modifier and press L/R. Existing modifier mapping is preserved (default X)."),

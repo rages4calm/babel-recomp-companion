@@ -3,20 +3,33 @@
 Updated November 3, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
+Current local build: [widescreen/mod batch 005](docs/WIDESCREEN-MODS-005.md),
+SHA-256 `5ed0138bc855c626a2752080d4c1639d74c14e30750d1068afeb38e954dee5b8`.
+South Cape margins now use live decoded map data; the classroom uses an explicit
+authentic-width terrain fallback. The run option was disabled in the owner's
+settings and is now exposed under Convenience. Inventory/dialogue dash leakage,
+live cheat option loading and immediate-load MSU track startup are corrected.
+Owner saves/settings/bindings/music were not changed. Earlier 16:9 tier parity
+did not establish correct offscreen content; retain that distinction.
+
 The maintainer requested three focused timing PRs. Their reviewable source
 patches and current qualification limits are in
 [contributions/snesrecomp/205](contributions/snesrecomp/205/README.md).
 They were [delivered upstream](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6614160563)
 with 640 passing source tests, two existing skips and 56 matched cost runs.
-The prerequisite fixes remain unmerged; do not duplicate them or present this
-preparation base as the requested eventual merged base. Extracted-stack source
+The prerequisite fixes merged during batch-005 verification: upstream main is
+now `f6912cd74e06eb21329aeb5c929d7f374479db80`. Their preservation inventory,
+integration and timing-series rebase are the next checked step; the verified
+5ed0138 checkpoint below still uses main66 plus preserved local changes.
+Do not duplicate the merged repairs or present the old preparation base as the
+requested merged base. Extracted-stack source
 checks pass, but fresh ordinary current-build save/load revealed a canonical
 audio-continuation difference shared by both tiers. The strict failed check is
 recorded in the [consumer report](contributions/snesrecomp/205/QUALIFICATION.md).
 The game/vendor source and selected executable remain unchanged by this
 upstream contribution preparation. No new public repository or release exists.
 
-Batch 004 now has a **route-qualified private mixed-native build**, with a fixed
+Batch 004 established a **route-qualified private mixed-native baseline**, with a fixed
 combat input/vblank ownership bug and **61 matched cases / 122 fresh runs**.
 The natural
 6,000-frame classroom-to-South-Cape route matches retained interpretation in
@@ -123,9 +136,11 @@ python scripts/package_release.py build windows-x86_64 --companion companion/bin
 The shared launcher package feed is the sibling CompanionLauncher checkout.
 The compiled engine is `build/babel-recomp.exe`, currently the selected private
 mixed-native build (SHA-256
-`fa3a25028b72443f7998bc6da6a31c845f03adc4444e95ca51525f607db7ea7f`).
-Its graph/source lives only under `.local/batch-001/native-004/expanded-v2/`;
-`inputs/` there contains the immutable selected executable. The proof index is
+`5ed0138bc855c626a2752080d4c1639d74c14e30750d1068afeb38e954dee5b8`).
+Its unchanged graph/source lives only under `.local/batch-001/native-004/expanded-v2/`;
+`inputs/` there retains the earlier immutable `fa3a2502…` baseline. The current
+frozen executable is `.local/batch-001/wide-005/build/selected/babel-recomp.exe`.
+Fresh visual/control/music evidence is under `wide-005/`. The older proof index is
 `native-004/selected-proof-index.json`; replay plans/reports are under `replay/`.
 `./scripts/build_windows.ps1` still builds an interpreter-only package candidate;
 use `-NativeBatch .local/batch-001/native-004/expanded-v2 -Jobs 2` to restore

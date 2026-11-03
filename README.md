@@ -8,8 +8,8 @@ The original author's credit, support link and full acknowledgments remain below
 ## Companion development status
 
 This is an early development fork, with no Companion release yet. The default
-source build interprets the game's 65816 instructions. A private mixed-native
-build now fixes duplicate vblank input remapping and passes **61 matched cases**:
+source build interprets the game's 65816 instructions. Batch 004's private mixed-native
+baseline fixed duplicate vblank input remapping and passed **61 matched cases**:
 real assisted fights/rewards, seven ability effects, four bosses, prerequisite
 controls and earlier area/form regressions. The 6,000-frame classroom/South Cape
 route reports **12.83% native CPU cycles** in both 4:3 and 16:9 under the corrected
@@ -27,12 +27,17 @@ This is bounded route evidence, not a fully native game or completed campaign.
   observations pass synthetic tests. Live unlocks, storage, notifications and
   sound are not yet connected. RetroAchievements account/network integration
   is disabled in this edition; [policy and implementation](docs/RETROACHIEVEMENTS.md).
-- **Presentation:** inherited real 16:9 expansion, checked on the cold route and
-  four focused combat/ability stress cases. Wider actor/terrain edge coverage
-  still needs testing. 21:9, 32:9, a scenery map and journal are planned.
+- **Presentation:** map-aware 16:9 terrain margins repair South Cape's stale
+  edge tiles; the classroom uses an explicit authentic-width interior fallback.
+  Original central pixels and 4:3 output are preserved in the tested routes.
+  [Moving-edge, mod and F1 music checks](docs/WIDESCREEN-MODS-005.md).
+  Broader actor/camera coverage still needs testing. 21:9, 32:9, a scenery map
+  and journal are planned.
 - **Cheats and mods:** a dedicated launcher panel shares the native settings
   with the in-game menu. Optional room-clear stat rewards support 1x–8x;
-  movement keeps Babel's existing hold-Y run behavior.
+  **Convenience** exposes Babel's existing hold-to-run toggle (default button Y).
+  The two tabs have distinct selection states. Live minimum-stat options and
+  immediate F1 soundtrack startup are corrected; movement has no new multiplier.
   [Controls and limits](docs/CHEATS-AND-MODS.md).
 - **Windows icons:** coordinated flute/world/comet artwork for the game and a
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
