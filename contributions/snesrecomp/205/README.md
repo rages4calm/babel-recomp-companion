@@ -2,6 +2,8 @@
 
 Prepared November 3, 2026 in response to [the maintainer's requested split](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6613478058).
 These are three reviewable source patches, not submitted or accepted PRs.
+The source series, passing checks, measured costs and failed restore gate were
+[delivered in the existing #205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6614160563).
 They apply in order to upstream main `66eebe6ae415b4fb2607a22e5b12352f612e1bdf`.
 The serialized patches were independently replayed with `git am`; their final
 Git tree exactly matches the tested stack: `8762c81aa0123ae663e387c980c8e37cf502d062`.

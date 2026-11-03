@@ -6,6 +6,8 @@ Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 The maintainer requested three focused timing PRs. Their reviewable source
 patches and current qualification limits are in
 [contributions/snesrecomp/205](contributions/snesrecomp/205/README.md).
+They were [delivered upstream](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6614160563)
+with 640 passing source tests, two existing skips and 56 matched cost runs.
 The prerequisite fixes remain unmerged; do not duplicate them or present this
 preparation base as the requested eventual merged base. Extracted-stack source
 checks pass, but fresh ordinary current-build save/load revealed a canonical
