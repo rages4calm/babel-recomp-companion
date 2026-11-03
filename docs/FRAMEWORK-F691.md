@@ -54,6 +54,8 @@ The generated program remains the existing, guarded batch-004 cohort. Runtime
 integration and generator compatibility checks are not new native coverage or
 newly generated game code. All intermediate executable identities and their
 receipts remain separate. Owner saves, settings, ROM, bindings and music are
-unchanged; no release or new public repository was created.
+unchanged; no game release was created. After separate owner authorization,
+the upstream contribution series was submitted from the new framework fork;
+[PR statuses and dependency limits](../contributions/snesrecomp/205/README.md).
 
 [Visual/control repair and remaining limits](WIDESCREEN-MODS-005.md).

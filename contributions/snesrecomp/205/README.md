@@ -1,7 +1,20 @@
 # SNESRecomp timing contribution
 
 Prepared November 3, 2026 in response to [the maintainer's requested split](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6613478058).
-These are three reviewable source patches, not submitted or accepted PRs.
+The three source groups are now submitted from the separately authorized
+[framework fork](https://github.com/rages4calm/snesrecomp):
+
+- [#248: default correctness](https://github.com/RetroPortingToolKit/snesrecomp/pull/248), ready for review.
+- [#250: explicit pacing and cache identity](https://github.com/RetroPortingToolKit/snesrecomp/pull/250), stacked draft depending on #248.
+- [#251: native APU integration](https://github.com/RetroPortingToolKit/snesrecomp/pull/251), stacked draft depending on both predecessors.
+
+The drafts provide focused predecessor-to-head diff links; their branches also
+include the dependencies so the series builds. Rebase after predecessor merges
+before promotion. They are not accepted/merged changes, and the documented
+consumer restore/cost limits remain explicit.
+The [submitted series index](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6615843553)
+records all three PRs. Initial fork workflow runs report `action_required`;
+upstream CI has not passed or been represented as passing.
 The source series, passing checks, measured costs and failed restore gate were
 [delivered in the existing #205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6614160563).
 The current refreshed patches apply in order to merged upstream main

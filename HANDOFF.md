@@ -23,7 +23,13 @@ inventory and three-way integration are complete, with 644 Python tests and
 12 Rust tests passing. The verified 5ed0138 checkpoint remains private and
 separate from the freshly checked current merged-head executable. The refreshed
 three-patch timing series now applies to f691 and passes 643 source checks with
-two existing skips; it remains a reviewable patch series, not submitted PRs.
+two existing skips. The owner separately authorized the new public framework
+fork and PR submission: [#248](https://github.com/RetroPortingToolKit/snesrecomp/pull/248)
+is ready for review; [#250](https://github.com/RetroPortingToolKit/snesrecomp/pull/250)
+and [#251](https://github.com/RetroPortingToolKit/snesrecomp/pull/251) are stacked
+drafts with focused diff links and explicit dependency/qualification limits.
+Initial upstream fork CI reports `action_required`; local passing tests are
+separate from upstream workflow approval/results.
 The [rebased source and integrated results were delivered upstream](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6615719490).
 Do not duplicate the merged repairs or present the old preparation base as the
 requested merged base. Extracted-stack source
@@ -31,7 +37,8 @@ checks pass, but fresh ordinary current-build save/load revealed a canonical
 audio-continuation difference shared by both tiers. The strict failed check is
 recorded in the [consumer report](contributions/snesrecomp/205/QUALIFICATION.md).
 The game/vendor source and selected executable remain unchanged by this
-upstream contribution preparation. No new public repository or release exists.
+upstream contribution preparation. The separately authorized
+`rages4calm/snesrecomp` fork hosts the engine series. No game release exists.
 
 Batch 004 established a **route-qualified private mixed-native baseline**, with a fixed
 combat input/vblank ownership bug and **61 matched cases / 122 fresh runs**.
