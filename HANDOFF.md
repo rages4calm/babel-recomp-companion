@@ -1,7 +1,18 @@
 # Illusion of Gaia Companion — handoff
 
-Updated November 2, 2026. Development version `0.1.0-dev.1`.
+Updated November 3, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
+
+The maintainer requested three focused timing PRs. Their reviewable source
+patches and current qualification limits are in
+[contributions/snesrecomp/205](contributions/snesrecomp/205/README.md).
+The prerequisite fixes remain unmerged; do not duplicate them or present this
+preparation base as the requested eventual merged base. Extracted-stack source
+checks pass, but fresh ordinary current-build save/load revealed a canonical
+audio-continuation difference shared by both tiers. The strict failed check is
+recorded in the [consumer report](contributions/snesrecomp/205/QUALIFICATION.md).
+The game/vendor source and selected executable remain unchanged by this
+upstream contribution preparation. No new public repository or release exists.
 
 Batch 004 now has a **route-qualified private mixed-native build**, with a fixed
 combat input/vblank ownership bug and **61 matched cases / 122 fresh runs**.

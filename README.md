@@ -47,6 +47,7 @@ This is bounded route evidence, not a fully native game or completed campaign.
   and duplicate vblank ownership bug [#242](https://github.com/RetroPortingToolKit/snesrecomp/issues/242)
   are reported upstream. The tested timing work is added to the existing
   [#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6589796017).
+  [Requested upstream patch split and qualification limits](contributions/snesrecomp/205/README.md).
 - **Evidence:** [baseline audit](docs/BASELINE-AUDIT.md),
   [current handoff](HANDOFF.md), [launcher build/use](companion/README.md),
   [achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md).
