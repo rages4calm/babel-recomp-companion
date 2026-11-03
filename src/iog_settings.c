@@ -207,7 +207,7 @@ void IogSettingsInstall(void)
         snes_settings_menu_add(&it);
     }
 
-    static const char *const kCheatLabels[] = {"INFINITE HP", "DP 99", "STATS BOOST"};
+    static const char *const kCheatLabels[] = {"HP REFILL", "MINIMUM DP", "MINIMUM STATS"};
     memset(&it, 0, sizeof(it));
     it.kind = kSnesSetting_Header;
     it.label = "CHEATS (ACHIEVEMENTS OFF)";

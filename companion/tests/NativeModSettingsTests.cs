@@ -23,6 +23,7 @@ internal static class NativeModSettingsTests
             Check(first.Available.Count == NativeModSettings.Fields.Count, "supported source catalog declares controls");
             Check(first.Values["cheat.room-rewards"].GetString() == "1", "disabled multiplier reports effective original rate");
             Check(first.Values["cheat.strength"].GetInt32() == 10, "native feature.values reads established stats");
+            Check(first.Values["mod.run"].GetBoolean(), "launcher reads the existing native run selection");
             first.Values["cheat.hp"] = OptionValue.From(true); first.Values["cheat.dp"] = OptionValue.From(true); first.Values["cheat.dp-min"] = OptionValue.From(250);
             first.Values["cheat.room-rewards"] = OptionValue.From("3"); first.Values["mod.stacking"] = OptionValue.From(true);
             NativeModSettings.Apply(root, first.Values, first.Revision);
@@ -37,6 +38,13 @@ internal static class NativeModSettingsTests
             Check(File.ReadAllBytes(state).AsSpan().StartsWith(new byte[] {239,187,191}) && text.Contains("\r\n"), "BOM and CRLF retained");
             current.Values["cheat.room-rewards"] = OptionValue.From("1"); NativeModSettings.Apply(root, current.Values, current.Revision);
             Check(NativeModSettings.Read(root).Values["cheat.room-rewards"].GetString() == "1" && File.ReadAllText(state).Contains("multiplier = \"1\""), "original rate disables feature and stores one");
+            var run = NativeModSettings.Read(root); run.Values["mod.run"] = OptionValue.From(false);
+            NativeModSettings.Apply(root, run.Values, run.Revision);
+            Check(!NativeModSettings.Read(root).Values["mod.run"].GetBoolean(), "existing run feature can be disabled from launcher");
+            Check(File.ReadAllText(state).Contains("button = \"Y\""), "run toggle preserves the configured button");
+            run = NativeModSettings.Read(root); run.Values["mod.run"] = OptionValue.From(true);
+            NativeModSettings.Apply(root, run.Values, run.Revision);
+            Check(NativeModSettings.Read(root).Values["mod.run"].GetBoolean(), "existing run feature can be reenabled from launcher");
             var stale = NativeModSettings.Read(root); File.AppendAllText(state, "# in-game change\r\n"); var external = File.ReadAllBytes(state);
             stale.Values["cheat.hp"] = OptionValue.From(false);
             Throws<SettingsConflictException>(() => NativeModSettings.Apply(root, stale.Values, stale.Revision), "reject stale in-game edit");

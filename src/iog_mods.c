@@ -68,6 +68,12 @@ static void RunFrame(void)
     const uint16_t pad = Pad();
     if (!(pad & g_run_mask))
         return;
+    /* The host callback also runs in the inventory and during text.
+     * Those paths can retain a player actor and unlocked09AE. Checking only
+     * those fields is insufficient here. Never queue a dash to leak out
+     * of a menu or let a held run button move the player during dialogue. */
+    if (Rd(0x0644) == 0x00FF || (Rd(0x09EC) & 0x2000))
+        return;
     if (!Rd(0x09AA) || Rd(0x09B2) || Rd(0x09B4) || (Rd(0x09AE) & 0x3800))
         return;   /* no player, dashing already, or movement locked/ladder */
     const uint16_t dir = pad;
@@ -354,7 +360,17 @@ void IogCheatSet(int which, int on)
 {
     static const char *const kFeat[] = {"infinite_hp", "dp", "stats"};
     if (which < 0 || which > 2) return;
-    if (which == 0) g_cheat_hp = on; else if (which == 1) g_cheat_dp = on; else g_cheat_stats = on;
-    if (on) { IogCheatsMarkUsed(); SnesRa_SetBlocked(kRaCheats); }
-    snes_mod_runtime_persist_feature_c("iog.cheats", kFeat[which], on, NULL, NULL);
+    /* A feature that was disabled at launch did not run its activation
+     * plugin. Live enable must use the same authoritative option loading:
+     * otherwise Stats silently retains zero minima and DP uses stale99. */
+    if (on) {
+        if (which == 0) ActivateInfiniteHp();
+        else if (which == 1) ActivateDp();
+        else ActivateStats();
+    } else {
+        if (which == 0) g_cheat_hp = 0;
+        else if (which == 1) g_cheat_dp = 0;
+        else g_cheat_stats = 0;
+    }
+    snes_mod_runtime_persist_feature_c("iog.cheats", kFeat[which], on != 0, NULL, NULL);
 }

@@ -29,9 +29,18 @@ internal sealed class CheatsModsForm : Form
         var heading = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
         heading.RowStyles.Add(new RowStyle(SizeType.Absolute, 42)); heading.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         heading.Controls.Add(Label("Cheats and Mods", 24, Accent, FontStyle.Bold), 0, 0);
-        heading.Controls.Add(Label("Cheats change gameplay and disable local achievement eligibility for the session. Movement and running keep their existing settings.", 10, Muted), 0, 1);
+        heading.Controls.Add(Label("Cheats disable local achievement eligibility for the session. Open Convenience for hold-to-run and item controls.", 10, Muted), 0, 1);
         layout.Controls.Add(heading, 0, 0);
-        var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11) };
+        var tabs = new TabControl {
+            Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11),
+            DrawMode = TabDrawMode.OwnerDrawFixed, SizeMode = TabSizeMode.Fixed,
+            ItemSize = new Size(200, 48), Padding = new Point(20, 10),
+            AccessibleName = "Cheats and convenience sections"
+        };
+        tabs.DrawItem += (_, e) => DrawSectionTab(tabs, e);
+        tabs.SelectedIndexChanged += (_, _) => tabs.Invalidate();
+        tabs.GotFocus += (_, _) => tabs.Invalidate();
+        tabs.LostFocus += (_, _) => tabs.Invalidate();
         foreach (var section in NativeModSettings.Fields.Select(x => x.Option.Section).Distinct()) {
             var tab = new TabPage(section) { BackColor = Background, ForeColor = TextColor, Padding = new Padding(12) };
             var rows = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Margin = Padding.Empty };
@@ -67,6 +76,24 @@ internal sealed class CheatsModsForm : Form
         footer.Controls.AddRange(new Control[] { close, apply, revert }); layout.Controls.Add(footer, 0, 3);
         Reload();
     }
+    private static void DrawSectionTab(TabControl tabs, DrawItemEventArgs e)
+    {
+        bool selected = tabs.SelectedIndex == e.Index;
+        Color fill = SystemInformation.HighContrast ? (selected ? SystemColors.Highlight : SystemColors.Control) : selected ? Accent : Surface;
+        Color ink = SystemInformation.HighContrast ? (selected ? SystemColors.HighlightText : SystemColors.ControlText) : selected ? Background : TextColor;
+        using var background = new SolidBrush(SystemInformation.HighContrast ? SystemColors.Control : Background);
+        e.Graphics.FillRectangle(background, e.Bounds);
+        var bounds = Rectangle.Inflate(e.Bounds, -4, -4);
+        using var brush = new SolidBrush(fill);
+        using var border = new Pen(SystemInformation.HighContrast ? SystemColors.ControlText : selected ? Accent : Muted);
+        e.Graphics.FillRectangle(brush, bounds);
+        e.Graphics.DrawRectangle(border, bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
+        using var font = new Font(tabs.Font, FontStyle.Bold);
+        TextRenderer.DrawText(e.Graphics, tabs.TabPages[e.Index].Text, font, bounds, ink,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+        if (selected && tabs.Focused)
+            ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(bounds, -4, -4), ink, fill);
+    }
     private static Label Label(string text, float size, Color color, FontStyle style = FontStyle.Regular) => new() { Text = text, Font = new Font("Segoe UI", size, style), ForeColor = color, Dock = DockStyle.Fill, UseMnemonic = false, Margin = Padding.Empty };
     private static Button Button(string text, Action action, int width, bool primary = false) {
         var button = new Button { Text = text, Width = width, Height = 42, FlatStyle = FlatStyle.Flat, BackColor = primary ? Accent : Surface, ForeColor = primary ? Background : TextColor, Font = new Font("Segoe UI", 10, FontStyle.Bold), Margin = new Padding(10, 0, 0, 0), UseMnemonic = false };
@@ -97,7 +124,7 @@ internal sealed class CheatsModsForm : Form
         } catch (Exception ex) { syncing = false; apply.Enabled = false; Report(ex.Message, true); }
     }
     private void Apply() {
-        try { NativeModSettings.Apply(engineDirectory, Values(), saved.Revision); Reload(); Report("Native mod settings saved. Launch the game to use them. Existing saves, soundtrack and movement settings were preserved."); }
+        try { NativeModSettings.Apply(engineDirectory, Values(), saved.Revision); Reload(); Report("Native mod settings saved. Launch the game to use them. Existing saves, soundtrack and button bindings were preserved."); }
         catch (Exception ex) { Report(ex.Message, true); }
     }
     private sealed record Choice(ChoiceItem Item) { public override string ToString() => Item.Label; }

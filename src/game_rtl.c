@@ -40,6 +40,7 @@
  */
 
 #include "game_rtl.h"
+#include "iog_widescreen.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -194,6 +195,8 @@ void GameDrawPpuFrame(void)
     int trigger;
     int line, ch;
 
+    IogWidescreenBeforeDraw();
+
     /* Re-arm HDMA from the last $420C (HDMAEN) the guest wrote — typically
      * during the NMI just run. The framework records it for exactly this. */
     dma_startDma(dma, g_snesrecomp_last_hdmaen, true);
@@ -224,6 +227,7 @@ void GameDrawPpuFrame(void)
             }
             trigger = g_snes->vIrqEnabled ? (int)g_snes->vTimer : -1;
         }
+        IogWidescreenBeforeLine(line);
         ppu_runLine(g_ppu, line);
     }
 }
