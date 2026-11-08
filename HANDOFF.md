@@ -1,9 +1,89 @@
 # Illusion of Gaia Companion — handoff
 
-Updated November 3, 2026. Development version `0.1.0-dev.1`.
+Updated November 8, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
-Current local build: [widescreen/mod batch 005](docs/WIDESCREEN-MODS-005.md),
+## Current continuation — native batch 006
+
+[Batch 006](docs/NATIVE-BATCH-006.md) integrates checked SNESRecomp main
+`e98dc63b474d5469ad984490e04eb0b0496ec62e` with full preservation inventory.
+The expanded private graph has 328 roots / 1,199 variants / 1,120 eligible
+candidates; 19 new node contexts include 16 eligible candidates and three
+retained LLE contexts. All previous guards and four NMI-callee exclusions remain.
+RomAtlas independently matched 274 new instruction contexts.
+
+Private candidate: `.local/batch-001/native-006/build-expanded-v2/babel-recomp.exe`,
+SHA-256 `c028093dee06ba4ebcfbce97659ff37fe41ee87b0a98cc70edd3c31c9002dfda`;
+graph `.local/batch-001/native-006/expanded-v2/generated/program_manifest.json`,
+SHA-256 `a5acf97ce11e900aded284ef3357a3cdbb690b64b22b8607532f5ab6cf5513ba`.
+57 current same-binary pairs / 114 fresh processes pass CPU/WRAM, cycles,
+device logs, full APU/scheduler and final output. Two inventory fixtures show
+small native-cycle gains; the natural route remains 12.8307% / 12.8268%.
+An independently copied current owner RTLS v10 state also loads correctly;
+owner scene/form/HP and story flags remain intact, with strict new-tier parity.
+
+Do not overwrite the installed 005 binary automatically. Strict historical
+mechanics replay remains 17/28 passed; failed cross-version witnesses remain
+failed. A private A/B reversing only upstream #258 attributes the full natural
+route's changed CPU/WRAM/APU timing to its corrected no-overshoot scheduler.
+A 353-pixel frame-1500 presentation difference remains unisolated. Ordinary
+audio SAVE/RESTORE, physical audio/controller/GPU and current host-cost gates
+remain separate and unqualified. No release was created.
+
+The offline GaiaLabs module inspector has 17 synthetic checks and a passing
+real pinned-source preflight. The actual raw-map override/rebuild path is now
+traced; see [module integration](docs/GAIALABS-MODULE-INTEGRATION.md).
+Mesen2 MCP 0.6.0 has a private headless readiness check (81 tools, 15 checks),
+with owned process stopped; it is not external parity proof.
+[Reference operation](docs/MESEN2-REFERENCE.md).
+
+All 100 title Python tests pass. [Framework results](docs/FRAMEWORK-NOV08.md)
+retain platform/setup failures and two inherited MSU fixture failures explicitly.
+The stale local folded-branch workaround was removed; maintainer #250/#251
+heads already contain the correct shared cost handling and were not overwritten.
+The verified official Linux C-test link bug is reported as
+[#263](https://github.com/RetroPortingToolKit/snesrecomp/issues/263), with the
+one-line local test-link repair. No deferred music fix was attempted.
+
+## New GaiaLabs developer references
+
+**Pending owner DM:** on November 8 the owner was told this is the point to
+request the offered current dev patch/build, exact source commits, ordered
+module selection, dependency lock, output ROM hash and `.bso` if needed.
+Public branches are unchanged; package Git heads differ from current source,
+and the public development script selects Apocalypse Gaia while leaving the
+new minimap-v2/widescreen commented out. Do not invent the intended profile.
+No developer build has been received and no DM was sent by the agent.
+
+The owner relayed the developer's current baserom docs and patch tree on
+November 6. [Developer notes and integration queue](docs/GAIALABS-DEVELOPER-NOTES.md)
+record both links, inspected revision, the older-library warning, options menu,
+key-item auto-use, full world-map movement, new minimap and widescreen-room
+reports. Options/auto-use source was located. The later `IOGRetranslation` dev
+module link locates the new minimap, walkable-world-map and bsnes-hd widescreen
+code/maps, including `sc08`; see the notes for exact identities and dependencies.
+Its inspected rebuild script leaves minimap-v2/widescreen commented out. Native
+compatibility remains untested. Consult this before the next native batch.
+The same note also records the developer's Gaia Mapper (`maps.gaia.studio`)
+and Gaia Spriter (`sprites.gaia.studio`) links; initial page HTML was inspected,
+but editor operation and native import/export compatibility remain untested.
+Screenshot follow-up records raw editor-map import during rebuild, the request
+to work directly with current code, and `Azarem/mesen2-mcp` 0.6.0 as a reference
+testing lead. Its docs were inspected; no MCP installation or connection was made.
+No game code or owner data changed during the November 6 reference collection.
+The November 8 work is recorded above. Older checkpoint details below retain
+their original dates and are not claims about the newer candidate.
+
+## Deferred owner report — clubhouse music
+
+November 3, 2026: music stopped in the clubhouse when Erik entered with the
+message about the missing princess. Leaving the clubhouse did not restore
+music. Loading the clubhouse save with F1 restarted it. Owner explicitly asked
+to record this only and defer investigation/fixing because weekly usage is
+nearly exhausted. User-reported; not independently reproduced or diagnosed.
+No game code, save, or settings changes were made for this report.
+
+Installed local build (unchanged): [widescreen/mod batch 005](docs/WIDESCREEN-MODS-005.md),
 SHA-256 `00429989aabf5cf2d0d0ee9846fa7a2fd490185237863c5aa587c078b280e8bd`.
 South Cape margins now use live decoded map data; the classroom uses an explicit
 authentic-width terrain fallback. The run option was disabled in the owner's
@@ -11,6 +91,8 @@ settings and is now exposed under Convenience. Inventory/dialogue dash leakage,
 live cheat option loading and immediate-load MSU track startup are corrected.
 Owner saves/settings/bindings/music were not changed. Earlier 16:9 tier parity
 did not establish correct offscreen content; retain that distinction.
+
+## November 3 framework contribution checkpoint (historical)
 
 The maintainer requested three focused timing PRs. Their reviewable source
 patches and current qualification limits are in
@@ -75,7 +157,9 @@ No release was created.
 - Fork: `rages4calm/babel-recomp-companion`; original Babel author **mr0ta /
   mrOt4**, support link, full credits and licenses preserved. Lagoon, EarthBound
   and shared Companion projects were read-only references.
-- Latest SNESRecomp main checked and integrated: `f6912cd74e06eb21329aeb5c929d7f374479db80`.
+- Latest checked/integrated SNESRecomp source: `e98dc63b474d5469ad984490e04eb0b0496ec62e`.
+  Batch 006 above records current source and candidate identities. The installed
+  005 executable retains `f6912cd74e06eb21329aeb5c929d7f374479db80`.
   A three-way preservation audit retained Babel's game-specific changes;
   `framework_pins.txt` also records the matching nested-library versions.
   [Current changed-file integration and fresh checks](docs/FRAMEWORK-F691.md).
@@ -103,7 +187,7 @@ No release was created.
   [Artwork, provenance and converter](res/branding/README.md). Computer-control
   runtime was released after visual checks; previews are closed.
 
-## Verified behavior
+## Retained batch-004/005 evidence
 
 | Check | Result and boundary |
 |---|---|
@@ -188,6 +272,13 @@ game code, tokens, saves and gameplay captures are excluded. No public release
 is authorized or published. Tag builds no longer publish automatically.
 
 ## Next bounded work
+
+0. Obtain the developer's current profile identity via the pending owner DM.
+   Use `scripts/inspect_gaia_modules.py` with clean exact commits and dependency
+   metadata, then build/import that precise external profile privately. Preserve
+   module order, raw-map companion actor/warp changes and all credits/licenses.
+   The public 22-module script is not assumed to be the intended build.
+   Continue from batch-006 receipts, not the obsolete pre-rebase patch branches.
 
 1. Extend the qualified cohort from the current natural route and the 23
    source-backed area/form contexts, using

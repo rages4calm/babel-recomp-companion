@@ -242,7 +242,7 @@ struct SpcPlayer *g_spc_player;
  * renderer needs a stable target for the whole field (and the raster IRQ
  * runs guest code in the middle of it). Sized for the runner's maximum
  * side-space budget. */
-static uint8_t g_my_pixels[kPpuBufWidth * 4 * 240];
+static uint8_t g_my_pixels[kPpuMaxFrameWidth * 4 * 240];
 /* 4x4 Mode 7: the PPU's hi-res rows, and the 1x frame they are merged with.
  * 12 MB each at 4x, so allocated the first time 4x Mode 7 is switched on. */
 enum { kHiresPixels = kPpuBufWidth * 4 * 240 * 4 };
@@ -793,7 +793,7 @@ static void PreparePpuFrame(void) {
   int fh = g_game->frame_height > 0 ? g_game->frame_height : 224;
   if (g_game->prepare_frame)
     g_game->prepare_frame(drawable_width, drawable_height, &fw, &fh);
-  int max_width = g_game->native_widescreen ? kPpuBufWidth : kSnesDesktopMaxFrameWidth;
+  int max_width = g_game->native_widescreen ? kPpuMaxFrameWidth : kSnesDesktopMaxFrameWidth;
   if (fw <= 0 || fw > max_width) fw = 256;
   if (fh <= 0 || fh > 240) fh = 224;
   g_snes_width = fw;
@@ -826,7 +826,7 @@ static void PreparePpuFrame(void) {
   }
   PpuBeginDrawing(g_ppu, g_my_pixels,
                   (g_game->native_widescreen ? fw : 256) * 4, flags);
-  PpuSetExtraSpace(g_ppu, (uint8)g_ws_extra);
+  PpuSetExtraSpace(g_ppu, (uint16_t)g_ws_extra);
   if (g_config.mode7.enabled && !g_game->hd_frame &&
       g_config.output_method == kOutputMethod_OpenGL) {
     if (!g_hd_capture) g_hd_capture = SnesHdCaptureCreate();
@@ -1806,7 +1806,7 @@ static void DrawPpuFrameWithPerf(void) {
                 frame_bytes <= sizeof(g_frame_stage);
 #if defined(SNESRECOMP_HOST_HAS_BLEND)
   const bool blending = !live && g_config.frame_blend && g_blend &&
-                        frame_bytes <= (size_t)kPpuBufWidth * 4u * 240u;
+                        frame_bytes <= (size_t)kPpuMaxFrameWidth * 4u * 240u;
   staged |= blending;
 #endif
   if (staged) {

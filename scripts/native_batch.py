@@ -87,19 +87,24 @@ def bounded_run(command: list[str], log: Path, memory_mib: int, timeout_seconds:
     starter = ('import json,os,subprocess,sys\n'
                'if os.name != "nt":\n'
                ' import resource\n'
-               ' resource.setrlimit(resource.RLIMIT_AS,(int(sys.argv[2])*1048576,)*2)\n'
+               ' resource.setrlimit(resource.RLIMIT_AS,(int(sys.argv[1])*1048576,)*2)\n'
                'sys.stdin.buffer.read(1)\n'
-               'sys.exit(subprocess.call(json.loads(sys.argv[1])))\n')
+               'command=json.loads(sys.stdin.buffer.read().decode("utf-8"))\n'
+               'sys.exit(subprocess.call(command))\n')
     started = time.monotonic(); job = WindowsJob(memory_mib) if os.name == "nt" else None
     process = None; timed_out = False; peak = None
     try:
         with log.open("w", encoding="utf-8") as output:
-            process = subprocess.Popen([sys.executable, "-c", starter, json.dumps(command), str(memory_mib)], cwd=ROOT,
+            process = subprocess.Popen([sys.executable, "-c", starter, str(memory_mib)], cwd=ROOT,
                                        stdin=subprocess.PIPE, stdout=output, stderr=subprocess.STDOUT,
                                        start_new_session=os.name != "nt")
             if job:
                 job.attach(process.pid)
-            process.stdin.write(b"x"); process.stdin.flush(); process.stdin.close()
+            # Keep the gated command in the pipe. JSON on the wrapper's argv
+            # doubles Windows path backslashes and can exceed CreateProcess's
+            # limit even when the actual generation command still fits.
+            process.stdin.write(b"x" + json.dumps(command).encode("utf-8"))
+            process.stdin.flush(); process.stdin.close()
             try:
                 code = process.wait(timeout=timeout_seconds)
             except subprocess.TimeoutExpired:

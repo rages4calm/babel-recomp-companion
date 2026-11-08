@@ -36,10 +36,9 @@ set(SNESRECOMP_ENABLE_MODS ON CACHE BOOL
     "Mod package loader + trusted plugins (required for every title)" FORCE)
 # Interpreter-only by default: the game runs from the player's own ROM at
 # run time and the binary carries nothing derived from it, so it can be
-# distributed and builds without any regeneration step. Measured on this game:
-# the same frames and the same speed as with recompiled code (it runs almost
-# entirely in the interpreter tier either way). OFF + tools/regen.sh links the
-# recompiled code instead.
+# distributed and builds without any regeneration step. Private mixed-native
+# builds have separate matched-route qualification; generated source alone is
+# not execution coverage. OFF links the selected locally generated program.
 set(SNESRECOMP_INTERPRETER_ONLY ON CACHE BOOL "Interpreter-only build (no ROM-derived code)")
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 
