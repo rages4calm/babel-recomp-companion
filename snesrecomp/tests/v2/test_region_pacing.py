@@ -30,6 +30,20 @@ def test_region_pacing_requires_instruction_blocks():
                       region_paced=True)
 
 
+def test_folded_taken_and_fallthrough_zero_offset_execute_once(tmp_path):
+    """Merged shared fold costs must not retain a second paced-only charge."""
+    run_region_cases(tmp_path, cases=[
+        ("BneTaken", "A9 01 D0 01 EA 60", 1, 1, 0),
+        ("BeqTaken", "A9 00 F0 01 EA 60", 1, 1, 0),
+        ("BneZeroTaken", "A9 01 D0 00 60", 1, 1, 0),
+        ("BneZeroFall", "A9 00 D0 00 60", 1, 1, 0),
+        ("BeqZeroTaken", "A9 00 F0 00 60", 1, 1, 0),
+        ("BeqZeroFall", "A9 01 F0 00 60", 1, 1, 0),
+        ("WideTaken", "A9 01 00 D0 01 EA 60", 0, 0, 0),
+        ("WideFall", "A9 00 00 D0 01 EA 60", 0, 0, 0),
+    ])
+
+
 @pytest.mark.parametrize("code", ["A5 00 60", "BD FF 00 60", "D0 01 EA 60"])
 def test_all_region_master_charges_use_origin_credit_api(code):
     source = _emit(code)

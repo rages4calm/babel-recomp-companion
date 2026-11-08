@@ -13,7 +13,11 @@ baseline fixed duplicate vblank input remapping and passed **61 matched cases**:
 real assisted fights/rewards, seven ability effects, four bosses, prerequisite
 controls and earlier area/form regressions. The 6,000-frame classroom/South Cape
 route reports **12.83% native CPU cycles** in both 4:3 and 16:9 under the corrected
-input model. Interpreter fallback remains available.
+input model. November 8's [batch 006](docs/NATIVE-BATCH-006.md) integrates a newer
+framework and expands the private inventory/menu cohort, with **57 fresh current
+reference/native pairs passing**. Historical cross-version comparisons have
+separate documented failures; they are not waived by current tier parity.
+Interpreter fallback remains available.
 This is bounded route evidence, not a fully native game or completed campaign.
 
 - **CompanionLauncher:** Windows adapter using the shared 0.2.0 shell, verified
@@ -41,19 +45,29 @@ This is bounded route evidence, not a fully native game or completed campaign.
   [Controls and limits](docs/CHEATS-AND-MODS.md).
 - **Windows icons:** coordinated flute/world/comet artwork for the game and a
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
-- **Framework:** updated to SNESRecomp `f6912cd`, latest main checked November 3,
-  2026, with Babel-specific integration changes preserved. RomAtlas independently
-  checked 8,192 current mechanic/route instruction contexts, including 3,122 new
-  independent decodes and identity-matched reuse of earlier checks.
-  [Current native batch and limits](docs/NATIVE-BATCH-004.md),
+- **Framework:** integrated SNESRecomp `e98dc63`, main checked November 8,
+  2026, with Babel-specific changes preserved. [Integration and limits](docs/FRAMEWORK-NOV08.md).
+  Batch 006 adds 274 independent RomAtlas instruction-context checks; the earlier
+  8,192-context batch retains its original identity and scope.
+  [Current native batch and limits](docs/NATIVE-BATCH-006.md),
+  [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
   Confirmed analyzer bug [#239](https://github.com/RetroPortingToolKit/snesrecomp/issues/239),
   default indirect bank-carry bug [#240](https://github.com/RetroPortingToolKit/snesrecomp/issues/240)
   and duplicate vblank ownership bug [#242](https://github.com/RetroPortingToolKit/snesrecomp/issues/242)
   are reported upstream. The tested timing work is added to the existing
   [#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6589796017).
-  [Merged-head integration and preservation checks](docs/FRAMEWORK-F691.md).
+  The current Linux test-link failure is reported as
+  [#263](https://github.com/RetroPortingToolKit/snesrecomp/issues/263).
   [Requested upstream patch split and qualification limits](contributions/snesrecomp/205/README.md).
+- **GaiaLabs collaboration:** newer baserom/retranslation module provenance and
+  raw-map rebuild inputs have an [offline inspection tool](docs/GAIALABS-MODULE-INTEGRATION.md).
+  The current dev-build profile remains pending; its new minimap/world-map/room
+  work is not yet integrated into Companion. Thanks to **Azarem**, **Kassiven**,
+  **LThammy**, **ViewtifulSlayer**, **Igor Chagas**, and
+  **VitorVilela7 / wide-snes** for the referenced tools, content and research.
+  [Developer references](docs/GAIALABS-DEVELOPER-NOTES.md),
+  [Mesen2 reference readiness](docs/MESEN2-REFERENCE.md).
 - **Evidence:** [baseline audit](docs/BASELINE-AUDIT.md),
   [current handoff](HANDOFF.md), [launcher build/use](companion/README.md),
   [achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md).

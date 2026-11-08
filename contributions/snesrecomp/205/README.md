@@ -1,10 +1,22 @@
 # SNESRecomp timing contribution
 
+Updated November 8, 2026: [#248](https://github.com/RetroPortingToolKit/snesrecomp/pull/248)
+is merged. The maintainer refreshed the still-draft [#250](https://github.com/RetroPortingToolKit/snesrecomp/pull/250)
+and [#251](https://github.com/RetroPortingToolKit/snesrecomp/pull/251) to
+`7ff96d580ace99d8b5957d2c16466a2a9d3a9a46` and
+`0d65b8d8a0a3983ed98e0a0ff936be7fff18524c`; their executed CI jobs pass.
+Preserve those remote heads. The exported patches and preparation evidence
+below remain the historical November 3 series, not a replacement for the
+maintainer's newer branches. [Current framework integration and outstanding timing leads](../../../docs/FRAMEWORK-NOV08.md).
+The recorded consumer restore/cost limitations remain open.
+
+## November 3 preparation record
+
 Prepared November 3, 2026 in response to [the maintainer's requested split](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6613478058).
 The three source groups are now submitted from the separately authorized
 [framework fork](https://github.com/rages4calm/snesrecomp):
 
-- [#248: default correctness](https://github.com/RetroPortingToolKit/snesrecomp/pull/248), ready for review.
+- [#248: default correctness](https://github.com/RetroPortingToolKit/snesrecomp/pull/248), ready for review when submitted (now merged).
 - [#250: explicit pacing and cache identity](https://github.com/RetroPortingToolKit/snesrecomp/pull/250), stacked draft depending on #248.
 - [#251: native APU integration](https://github.com/RetroPortingToolKit/snesrecomp/pull/251), stacked draft depending on both predecessors.
 

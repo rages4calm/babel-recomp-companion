@@ -56,6 +56,12 @@ does not select, replace or modify the game runtime dependency.
 
 ## Gaia already has substantial research input
 
+November 6 follow-up: the developer supplied the newer
+[`Azarem/gaia-iog-baserom` documentation and patch tree](GAIALABS-DEVELOPER-NOTES.md).
+Use that note for the pinned revision and pending comparison with the older
+GaiaLabs inputs below. The following records the inputs actually used in the
+earlier batches; it is not a claim that they cover the current baserom patches.
+
 Do not rediscover the game from an empty map. Babel already includes
 `tools/extract_gaialabs_symbols.py`, which extracts code-prefixed symbols from
 GaiaLabs assembly and writes `recomp/bankNN.cfg`; the current twelve configs

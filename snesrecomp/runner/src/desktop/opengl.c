@@ -1,5 +1,5 @@
 /*
- * opengl.c — the shared desktop OpenGL presenter.
+ * opengl.c â€” the shared desktop OpenGL presenter.
  *
  * util.h has declared `OpenGLRenderer_Create(struct RendererFuncs *)` for a
  * long time, and mmx23_host_main.inc calls it, but the framework shipped no
@@ -18,7 +18,7 @@
  * Presentation policy comes from the framework's own config (`display_aspect`,
  * `ignore_aspect_ratio`, `linear_filtering`, `shader`) via
  * SnesDisplayAspect_ComputeViewport, which already handles all three pixel
- * aspects, integer scaling and seam suppression — the per-game helpers this
+ * aspects, integer scaling and seam suppression â€” the per-game helpers this
  * replaces mostly hardcoded 7:6.
  *
  * Vendored originally from snesrev/smw's src/opengl.c (MIT, (c) 2023 snesrev,
@@ -44,6 +44,7 @@
 #include "display_aspect.h"
 #include "present_filter.h"
 #include "hd_gpu.h"
+#include "present_shader.h"
 #if SNESRECOMP_SDL3
 #define DeleteGlContext SDL_GL_DestroyContext
 #else
@@ -383,7 +384,7 @@ static bool OpenGLRenderer_Init(SDL_Window *window) {
   }
 );
 
-  const GLchar *head = g_gles ? "#version 300 es\nprecision mediump float;\n#define SWZ rgba\n"
+  const GLchar *head = g_gles ? "#version 300 es\nprecision mediump float;\nprecision highp int;\n#define SWZ rgba\n"
                               : "#version 330 core\n#define SWZ rgba\n";
   const GLchar *vs_code[2] = {head, vs_code_body};
   unsigned int vs = glCreateShader(GL_VERTEX_SHADER);
@@ -399,15 +400,9 @@ static bool OpenGLRenderer_Init(SDL_Window *window) {
   }
 
   // fragment shader
-  const GLchar *fs_code_body = CODE(
-  out vec4 FragColor;
-  in vec2 TexCoord;
-  // texture samplers
-  uniform sampler2D texture1;
-  void main(void) {
-    FragColor = texture(texture1, TexCoord).SWZ;
-  }
-);
+  /* Keep the shared exact-nearest resolve body with Babel's desktop/GLES
+   * version preamble and texture-swizzle upload path. */
+  const GLchar *fs_code_body = strchr(SnesGlPresentFragmentShader(), '\n') + 1;
 
   unsigned int fs = glCreateShader(GL_FRAGMENT_SHADER);
   const GLchar *fs_code[2] = {head, fs_code_body};
@@ -682,7 +677,7 @@ static void OpenGLRenderer_EndDraw(void) {
     glViewport(viewport.x, viewport.y, viewport.width, viewport.height);
     /* HD scaling (present_filter.h). Smooth only redraws the 1x art: a 4x
      * frame (HD pack, Mode 7 at 4x) is already high resolution. */
-    int mode = PresentFilter_Get();
+    int mode = enhanced ? kPresentFilter_Config : PresentFilter_Get();
     if (mode == kPresentFilter_Smooth && (g_draw_width > 640 || !g_smooth_program))
       mode = kPresentFilter_Sharp;
     if (mode == kPresentFilter_Sharp && !g_sharp_program)
@@ -693,6 +688,10 @@ static void OpenGLRenderer_EndDraw(void) {
     if (prog != g_program) {
       glUniform1i(glGetUniformLocation(prog, "texture1"), 0);
       glUniform2f(glGetUniformLocation(prog, "uSrc"), (float)g_draw_width, (float)g_draw_height);
+    }
+    if (prog == g_program) {
+      glUniform1i(glGetUniformLocation(prog, "exactNearest"), enhanced && !g_config.linear_filtering);
+      glUniform4i(glGetUniformLocation(prog, "nearestViewport"), viewport.x, viewport.y, viewport.width, viewport.height);
     }
     int filter = mode == kPresentFilter_Sharp ? GL_LINEAR :
                  mode == kPresentFilter_Smooth ? GL_NEAREST :

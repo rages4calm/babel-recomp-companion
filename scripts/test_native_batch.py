@@ -187,6 +187,15 @@ class ResourceGuardTests(unittest.TestCase):
         self.assertFalse(result["timed_out"])
         self.assertIn("guarded synthetic child", self.log.read_text())
 
+    def test_long_backslash_argument_survives_guard_transport(self):
+        # This child command fits CreateProcess's limit, but passing a JSON
+        # copy through another command line doubled the slashes past 32 KiB.
+        payload = "\\" * 18000
+        result = bounded_run([sys.executable, "-c", "import sys; print(len(sys.argv[1]))", payload],
+                             self.log, 128, 5)
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(self.log.read_text().strip(), "18000")
+
     def test_timeout_stops_owned_child_tree(self):
         result = self.run_child(
             'import subprocess,sys,time\n'

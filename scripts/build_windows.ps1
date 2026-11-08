@@ -1,7 +1,18 @@
-param([switch]$PrivateAot, [string]$Rom = '', [int]$Jobs = 8, [string]$NativeBatch = '')
+param([switch]$PrivateAot, [string]$Rom = '', [int]$Jobs = 8, [string]$NativeBatch = '',
+      [string]$BuildDirectory = '')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $buildRoot = Join-Path $projectRoot 'build'
+if ($BuildDirectory) {
+    # Qualification candidates must not overwrite the owner's installed binary,
+    # mod state or build cache before matched execution has passed.
+    $candidateRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot $BuildDirectory))
+    $privateRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot '.local')) + [IO.Path]::DirectorySeparatorChar
+    if (-not $candidateRoot.StartsWith($privateRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'BuildDirectory must be beneath this project''s ignored .local directory.'
+    }
+    $buildRoot = $candidateRoot
+}
 if ($Jobs -lt 1 -or $Jobs -gt 32) { throw 'Jobs must be 1..32.' }
 $compilerC = (Get-Command clang -ErrorAction Stop).Source
 $compilerCpp = (Get-Command clang++ -ErrorAction Stop).Source
