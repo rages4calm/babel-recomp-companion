@@ -45,6 +45,22 @@ The verified official Linux C-test link bug is reported as
 [#263](https://github.com/RetroPortingToolKit/snesrecomp/issues/263), with the
 one-line local test-link repair. No deferred music fix was attempted.
 
+Completed per-run executable duplicates are compacted: 184 copies (2.51 GB)
+map to four checksum-verified payloads in the 20.3 MB private
+`native-006/completed-runtime-input-binaries.zip`, indexed by
+`native-006/runtime-input-binaries-compaction.json`. Retained build binaries,
+all receipts, scripts, states, traces and output evidence remain in place.
+Restore a copied run executable from the indexed payload if needed; do not
+recreate these completed archives.
+
+Next stock-ROM native lead: `native-006/discovery/culling-feasibility.json`
+records eight mutable immediate sites versus two mutable absolute-address
+sites. Existing `live_operand` refuses the latter. Keep the complete
+`SortActorsByDepth` range `$03C5FF..$03C714` interpreted in any experiment;
+six remaining immediate-only sprite sites could use conservative refusal.
+Paired-owner unwind and current source/cache/alias identity still need focused
+execution proof before any public guard narrowing. The current guard is intact.
+
 ## New GaiaLabs developer references
 
 **Pending owner DM:** on November 8 the owner was told this is the point to
