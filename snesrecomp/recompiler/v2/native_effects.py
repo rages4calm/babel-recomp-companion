@@ -12,11 +12,13 @@ SAFE_NAMES = frozenset("""LDA LDX LDY STA STX STY STZ ADC SBC AND ORA EOR CMP
 CPX CPY BIT TSB TRB ASL LSR ROL ROR INC DEC INX INY DEX DEY TAX TAY TXA TYA
 TXY TYX TCD TDC CLC SEC CLD SED CLV CLI SEI NOP XBA
 REP SEP PHP PLP PHA PLA PHX PLX PHY PLY PHD PLD PHK PHB PLB PEA PER PEI
-BPL BMI BVC BVS BCC BCS BNE BEQ BRA BRL JMP JML""".split())
+BPL BMI BVC BVS BCC BCS BNE BEQ BRA BRL JMP JML JSR JSL RTS RTL""".split())
 LIVE_STATUS_HELPERS = frozenset({"getFlags", "setFlags"})
 STATIC_CONTROL_NAMES = frozenset("BPL BMI BVC BVS BCC BCS BNE BEQ BRA BRL JMP JML".split())
 STATIC_CONTROL_OPCODES = frozenset({0x10, 0x30, 0x50, 0x70, 0x90, 0xB0,
                                   0xD0, 0xF0, 0x80, 0x82, 0x4C, 0x5C})
+DIRECT_CALL_RETURN_NAMES = frozenset({"JSR", "JSL", "RTS", "RTL"})
+DIRECT_CALL_RETURN_OPCODES = frozenset({0x20, 0x22, 0x60, 0x6B})
 FORBIDDEN = frozenset({"runOpcode", "doOpcode", "doInterrupt", "init", "reset",
                        "free", "saveload", "opcode_hook"})
 
@@ -118,10 +120,12 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations")
         keys.add(key)
         opcode = e["bytes"][0]
         # A mnemonic alone also admits indirect JMP/JML addressing forms.
-        # Static branches keep the same owning bridge frame; indirect targets
-        # and all call/return frames remain outside this emitter contract.
+        # Static branches and direct calls/returns keep the same owning bridge
+        # frame. Indirect opcode forms remain outside this emitter contract.
         if e["mnemonic"] in STATIC_CONTROL_NAMES and opcode not in STATIC_CONTROL_OPCODES:
             raise ValueError("Only static branch/jump effects are supported")
+        if e["mnemonic"] in DIRECT_CALL_RETURN_NAMES and opcode not in DIRECT_CALL_RETURN_OPCODES:
+            raise ValueError("Only direct call/return effects are supported")
         mnemonic, mode, size = decoder.opcode_table()[opcode]
         size = size(e["m"], e["x"]) if callable(size) else size
         if (mnemonic != e["mnemonic"] or size != len(e["bytes"])
@@ -158,6 +162,11 @@ typedef struct NiOperands {
   uint32_t base; const uint8_t *bytes; unsigned next, length; bool immediate;
 } NiOperands;
 """]
+    if 0x20 in bodies:
+        # Preserve the source JSR's opt-in AFC7 observer, including getenv's
+        # presence semantics. Other cohorts keep their exact previous bytes.
+        parts[0] = parts[0].replace("#include <stddef.h>",
+            "#include <stddef.h>\n#include <stdio.h>\n#include <stdlib.h>")
     # Helpers are specialized at generation time to the admitted M/X. Every
     # actual fetch still reaches the bus; immutable operands become constants.
     for m, x in sorted({(e["m"], e["x"]) for e in entries}):

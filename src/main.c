@@ -28,11 +28,16 @@
 #include "host_main.h"
 #include "game_rtl.h"
 #include "iog_widescreen.h"
+#include "iog_scene_view.h"
+#include "iog_randomizer.h"
 #include "iog_inventory.h"
 #include "iog_i18n.h"
 #include "iog_build_info.h"
 #include "snes_osd.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include "common_rtl.h"
+#include "snes/snes.h"
 #include "snesrecomp_rom_identity.h"  /* generated from rom_identity.txt */
 #include "desktop/config.h"
 #include "desktop/display_aspect.h"
@@ -50,12 +55,47 @@
 #define SNES_GAME_VERSION "dev"
 #endif
 
-/* Widescreen: the PPU rasterizes a field widened by 4/3 (342 px for the
+static IogSceneView s_scene_view;
+static bool s_scene_view_initialized;
+
+static void IogInitSceneView(void)
+{
+    if (s_scene_view_initialized) return;
+    s_scene_view_initialized = true;
+    IogSceneViewInit(&s_scene_view, getenv("IOG_SCENE_VIEW_PREVIEW"));
+    if (s_scene_view.enabled)
+        fprintf(stderr, "[iog_scene_view] finite preview enabled; cap=%d, no interpolation\n",
+                kIogSceneViewMaxWidth);
+}
+
+/* Default widescreen: the PPU rasterizes a field widened by 4/3 (342 px for the
  * default 4:3 pixel aspect, i.e. 16:9 on screen), centred on the authentic
  * 256 columns. Off, the field stays 256 wide and 4:3 is bit-identical. */
 static void IogPrepareFrame(int drawable_w, int drawable_h, int *frame_w, int *frame_h)
 {
-    (void)drawable_w; (void)drawable_h; (void)frame_h;
+    IogInitSceneView();
+    if (s_scene_view.enabled) {
+        IogSceneViewSource source;
+        IogSceneViewGeometry geometry;
+        IogSceneViewReadSource(g_snes ? g_snes->ram : NULL, 0x20000,
+                              g_ppu, IogRandomizerActive(), &source);
+        uint64_t generation = s_scene_view.generation;
+        if (IogSceneViewPrepare(&s_scene_view, &source, drawable_w, drawable_h,
+                               g_config.display_aspect, g_config.widescreen,
+                               &geometry)) {
+            *frame_w = geometry.width;
+            *frame_h = geometry.height;
+            IogWidescreenSetPreviewCenteredHud(geometry.centered_hud);
+            if (generation != s_scene_view.generation)
+                fprintf(stderr, "[iog_scene_view] generation=%llu scene=%04X gate=%d width=%d drawable=%dx%d\n",
+                        (unsigned long long)s_scene_view.generation, source.scene,
+                        (int)source.gate, geometry.width, drawable_w, drawable_h);
+        } else {
+            *frame_w = 256; *frame_h = kIogSceneViewHeight;
+            IogWidescreenSetPreviewCenteredHud(false);
+        }
+        return;
+    }
     if (g_config.widescreen)
         *frame_w = SnesDisplayAspect_ComputeWideFrameWidth(256);
 }
@@ -63,6 +103,7 @@ static void IogPrepareFrame(int drawable_w, int drawable_h, int *frame_w, int *f
 static void IogBeginSimFrame(unsigned number)
 {
     (void)number;
+    IogSceneViewBeginFrame(&s_scene_view);
     IogWidescreenBeginFrame();
 }
 
@@ -104,6 +145,20 @@ static void IogEndSimFrame(const uint8_t *field, unsigned number)
     (void)number;
     IogCompanionGrabMenu();
     IogInventoryOverlay();
+    if (field) IogSceneViewEndFrame(&s_scene_view, number);
+}
+
+static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
+                           int width, int height, double alpha)
+{
+    return IogSceneViewDraw(&s_scene_view, dst, pitch, field, width, height, alpha);
+}
+
+static void IogResetSceneView(void)
+{
+    IogInitSceneView();
+    IogSceneViewReset(&s_scene_view);
+    IogWidescreenSetPreviewCenteredHud(false);
 }
 
 void IogSettingsInstall(void);   /* iog_settings.c */
@@ -131,6 +186,8 @@ static const SnesDesktopHostGame kGameHost = {
     .begin_sim_frame     = IogBeginSimFrame,
     .before_run_frame    = IogBeforeRunFrame,
     .end_sim_frame       = IogEndSimFrame,
+    .draw_frame          = IogDrawSceneView,
+    .on_reset            = IogResetSceneView,
     .after_config        = IogSettingsInstall,
     .after_run_frame     = IogAfterRunFrame,
     .companion_open      = IogCompanionOpen,

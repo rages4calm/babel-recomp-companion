@@ -1381,11 +1381,12 @@ static int native_instruction_metadata_valid(const InterpNativeInstruction *d) {
     if (d->length != length) return 0;
     for (unsigned i = length; i < 4; ++i) if (d->bytes[i]) return 0;
     switch (d->bytes[0]) {
-        /* Ordinary data pushes/pulls retain the owning opcode loop. Guest
-         * calls/returns, interrupt frames, direct SP/emulation changes,
+        /* Data and direct call/return effects retain the owning opcode loop,
+         * including its existing paired-bounce and owner-boundary handling.
+         * Interrupt frames, direct SP/emulation changes,
          * indirect transfers, halts and block moves still require fallback. */
-        case 0x00: case 0x02: case 0x20: case 0x22: case 0x40:
-        case 0x44: case 0x54: case 0x60: case 0x6B: case 0x6C:
+        case 0x00: case 0x02: case 0x40:
+        case 0x44: case 0x54: case 0x6C:
         case 0x7C: case 0xCB: case 0xDB: case 0xDC: case 0xFC:
         case 0x1B: case 0x9A: case 0xFB: return 0;
         default: return 1;
@@ -3395,8 +3396,9 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
                             op, (unsigned)pc_before, (unsigned)target,
                             (unsigned)_sp_pre, (int)_air, (unsigned)in.sp);
                 const uint32_t ret =
-                    (pc_before + (uint32_t)call_len +
-                     (uint32_t)cpu_dispatch_inline_arg_bytes(target)) & 0xFFFFFF;
+                    (pc_before & 0xFF0000u) |
+                    ((pc_before + (uint32_t)call_len +
+                      (uint32_t)cpu_dispatch_inline_arg_bytes(target)) & 0xFFFFu);
                 edge_expect = ret;
                 if (_air != RECOMP_RETURN_NORMAL) {
                     if (s_lle_unwind_active) {

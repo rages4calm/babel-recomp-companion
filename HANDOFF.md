@@ -3,6 +3,34 @@
 Updated November 9, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
+## Qualified native execution / experimental renderer — batch 015
+
+Baseline `0e58f01`; private work is under `.local/batch-001/native-015`.
+Candidate `9e9f6a221b4e8a397403a16cd5a063d6daf3143145f5c9f557ee5398444154c0`
+reuses the 014 graph/all 1,248 bodies. Selection: 6,757 contexts / 27,028 aliases,
+140 opcode bodies; old 4,490 preserved, 1,267 call/return + 1,000 COP added.
+All 83 fresh pairs / 166 captures / 436,000 frames / 1,294 snapshot sets and
+four original-writer review groups pass. All 647 raw SPC host stamps remain
+distinct; canonical/full APU checks pass. SDK: 839 passed, two skipped;
+23 focused protocol checks and 14 causal fault-process rejections are retained.
+Actual new native sites: 2,235 (1,235 calls, 1,000 COP); 32 call contexts are
+unobserved, with no inferred refusal reason. All 5,921 observed sites are bound.
+Town native guest-cycle shares: 96.3806% / 96.4008%; all-83 weighted 94.853866%,
+up 4.743021 points. This is not completion, host speed or independent latency.
+The opt-in scene preview passes 16 NVIDIA transport runs / 1,128,064 texels,
+but three expanded Aqueduct center/combat controls FAIL; nine controls pass.
+Inherited flag `4000`/guest-list coupling changes AI/RNG; own-fork issue 2 is open.
+Keep the failure and build a separate visual actor list; do not restore flags
+at an arbitrary frame boundary. Classroom/menus stay 256; 32:9 is capped at 448.
+Eight Square photo runs pass with identical 398×224 fields/state; prefer
+Square+SharpPixels, optional xBR showcase. No zoom-out/new GPU world renderer.
+See [batch 015](docs/NATIVE-BATCH-015.md) and [renderer direction](docs/RENDERER-DIRECTION.md).
+Upstream main remains `d8116fac` (22:51 UTC); issue 267/PR 268 remain open.
+Host CPU (42 runs / 224,000 frames): paired medians +0.25% narrow / −2.43%
+wide / +4.26% Viper, noisy; no overall speed claim. Cleanup retires 22,643
+superseded files / 6,190,536,108 bytes; all 39 owner files/install 005 unchanged.
+Source-only update; final remote verification is recorded privately. No release/install.
+
 ## Qualified continuation — native batch 014
 
 Source baseline `b5feec7`. Work is under ignored `.local/batch-001/native-014`.

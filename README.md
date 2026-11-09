@@ -9,33 +9,35 @@ The original author's credit, support link and full acknowledgments remain below
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. November 9's private
-[batch 014](docs/NATIVE-BATCH-014.md) adds 2,500 observed instruction contexts,
-including SPC upload, camera and other system paths. Its 4,490 contexts use a
-larger, tested registry while retaining development fallback. The target is a
-faithful modern PC edition with fully native Original game code and sound,
-preserving Quintet's art direction and atmosphere. The current SPC700 driver
+[batch 015](docs/NATIVE-BATCH-015.md) adds 2,267 guarded call/return and COP
+contexts, bringing the selection to 6,757 while retaining development fallback.
+The target is a faithful modern PC edition with fully native Original game
+code and sound, preserving Quintet's art direction and atmosphere. The current SPC700 driver
 is still interpreted; native completion and presentation polish remain ahead.
 
-**83 fresh reference/native pairs pass**, including 19 new assisted boss,
-phase, reward, ceremony and teleport cases alongside the prior 64 regressions.
-Castoth, Sand Fanger and Mummy Queen now have verified original damage/death
-and reward consequences in both execution paths.
+**83 fresh reference/native pairs pass** on the new implementation: 166 captures,
+436,000 frames and 1,294 snapshot sets, with all four original-writer reviews.
+The reused cohort includes Castoth, Sand Fanger and Mummy Queen damage/death,
+rewards, phase controls, ceremonies and teleport consequences. This is bounded
+assisted coverage, not an earned campaign playthrough.
 
 The 6,000-frame classroom/South Cape route reaches
-**94.63% native CPU cycles in 4:3 / 94.65% in 16:9**, versus 90.34% / 90.36%
-with the prior selection. These measure bounded guest execution, not game
-content or project completion. Full campaign qualification remains ahead.
+**96.38% native guest CPU cycles in 4:3 / 96.40% in 16:9**, versus 94.63% / 94.65%
+in batch 014. Across all 83 routes, the weighted share is 94.85%, up from 90.11%.
+These measure bounded guest execution, not completion or host speed.
 
 The private path requires `IOG_NATIVE_CONTINUATIONS=1`; compiled poll effects
 separately require `IOG_NATIVE_RDNMI_POLL=1`. Both default off. Interpreter
 fallback remains available, and `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains
 the older lookup on the same binary. Per-PC counters separate each kind of work.
-In 42 headless timing runs, paired median CPU cost is roughly unchanged in the
-town routes (-0.14% in 4:3 / -0.48% in 16:9) and +2.55% in Viper, with substantial
-variation. This establishes no overall host-speed gain or real-GPU/input-latency
-result. [Renderer and modern PC quality direction](docs/RENDERER-DIRECTION.md)
-records the plan for smooth motion, faster interfaces, wider composition and
-measured low-latency GPU presentation. It is not an implemented new renderer.
+Batch 015's 42-run CPU check shows mixed, noisy results; no overall host-speed
+gain is claimed. Superseded private evidence was retired with all 39 protected
+owner files unchanged. [Renderer and modern PC quality direction](docs/RENDERER-DIRECTION.md)
+records the implemented finite preview and the remaining work on smooth motion,
+faster interfaces, independent scene composition and measured low-latency GPU
+presentation. A larger world view, including more scenery above and below,
+is planned separately from higher output resolution. Actual NVIDIA transport
+checks are separate from performance or combat acceptance.
 Historical cross-version failures and raw APU timestamp differences remain
 documented. Owner installations and settings are unchanged.
 
@@ -52,10 +54,18 @@ documented. Owner installations and settings are unchanged.
   is disabled in this edition; [policy and implementation](docs/RETROACHIEVEMENTS.md).
 - **Presentation:** map-aware 16:9 terrain margins repair South Cape's stale
   edge tiles; the classroom uses an explicit authentic-width interior fallback.
-  Original central pixels and 4:3 output are preserved in the tested routes.
+  The default path preserves original central pixels and 4:3 output in its tested routes.
   [Moving-edge, mod and F1 music checks](docs/WIDESCREEN-MODS-005.md).
-  Broader actor/camera coverage still needs testing. 21:9, 32:9, a scenery map
-  and journal are planned.
+  An opt-in development preview (`IOG_SCENE_VIEW_PREVIEW=1`) follows the window
+  in two scenes, capped at 448 logical columns, with centered HUD and safe
+  classroom/menu fallback. Sixteen NVIDIA transport runs pass, but three
+  expanded Aqueduct combat checks fail: inherited culling also changes enemy
+  activation/RNG. [Issue 2](https://github.com/rages4calm/babel-recomp-companion/issues/2)
+  tracks the required separation of gameplay visibility and visual composition.
+  The preview remains experimental. It is not a new GPU world renderer,
+  interpolation or full 32:9 support. Private same-pose square-pixel captures
+  verify the existing SharpPixels and optional xBR looks; higher resolution
+  alone does not reveal more scenery. A scenery map and journal remain planned.
 - **Cheats and mods:** a dedicated launcher panel shares the native settings
   with the in-game menu. Optional room-clear stat rewards support 1x–8x;
   **Convenience** exposes Babel's existing hold-to-run toggle (default button Y).
@@ -67,13 +77,17 @@ documented. Owner installations and settings are unchanged.
 - **Framework:** integrated SNESRecomp `d8116fac`, main checked November 9,
   2026, including merged timing PRs #250/#251, with Babel-specific changes
   preserved. [Integration and limits](docs/FRAMEWORK-NOV09.md).
-  Batch 014 retains all 1,246 prior emitted bodies unchanged and adds two,
-  checking all 21 new generated instruction contexts through RomAtlas.
-  Its 2,500 new continuation contexts have independent decode checks.
+  Batch 015 reuses the qualified graph and all 1,248 emitted bodies unchanged,
+  preserving the earlier 4,490 continuation contexts. The complete SDK gate
+  passes 839 tests, two skipped; guarded call/COP protocol checks are recorded
+  separately. The local paired-call bank-wrap correction is reported in
+  [issue 267](https://github.com/RetroPortingToolKit/snesrecomp/issues/267) and
+  [PR 268](https://github.com/RetroPortingToolKit/snesrecomp/pull/268), both open
+  at the November 9 check.
   All prior hard timing guards remain work to resolve with verified fixes.
-  Earlier live-WRAM,
-  sorting and decode receipts retain their original identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-014.md),
+  Earlier live-WRAM, sorting and decode receipts retain their original
+  identities and scope.
+  [Current native batch and limits](docs/NATIVE-BATCH-015.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
