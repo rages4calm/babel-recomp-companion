@@ -664,8 +664,9 @@ static void bridge_aot_instruction_boundary(CpuState *cpu) {
  * can tell a genuinely-compiled run from one that quietly interpreted
  * everything -- without it, a wall-clock tier comparison is unreadable. */
 unsigned long long g_interp_bridge_bounces = 0;
-/* Opcodes the bridge INTERPRETED. Together with the bounce count this says
- * how much of a run the AOT tier is actually carrying. */
+/* Logical opcodes retired by the bridge, including native poll islands.
+ * Interpreter-only instruction/cycle totals remain in interp816.c; generated
+ * AOT calls have their separate bounce count above. */
 unsigned long long g_interp_bridge_steps = 0;
 
 /* Optional host coverage hooks. Both are NULL by default and cost one
@@ -1249,6 +1250,38 @@ static int lle_yield_bounce_enabled(void) {
 static int s_interpret_all;
 void interp_bridge_set_interpret_all(int enabled) { s_interpret_all = enabled != 0; }
 
+enum { kNativeRdnmiPollSlots = 8 };
+static struct {
+    uint32_t pc;
+    InterpNativePollStep step;
+} s_native_rdnmi_polls[kNativeRdnmiPollSlots];
+static unsigned s_native_rdnmi_poll_count;
+static uint64_t s_native_poll_insns, s_native_poll_cycles;
+
+bool interp_bridge_add_native_rdnmi_poll(uint32_t pc, InterpNativePollStep step) {
+    /* The entire pair must fit in the same upper ROM half and program bank.
+     * Never canonicalize aliases: low/full HiROM mappings remain distinct. */
+    if (!step || pc > 0xFFFFFFu || (uint16_t)pc < 0x8000u ||
+        (uint16_t)pc > 0xFFFAu ||
+        (pc >> 16) == 0x7Eu || (pc >> 16) == 0x7Fu) return false;
+    for (unsigned i = 0; i < s_native_rdnmi_poll_count; ++i) {
+        if (s_native_rdnmi_polls[i].pc == pc) {
+            if (s_native_rdnmi_polls[i].step != step) return false;
+            return true;
+        }
+    }
+    if (s_native_rdnmi_poll_count == kNativeRdnmiPollSlots) return false;
+    s_native_rdnmi_polls[s_native_rdnmi_poll_count].pc = pc;
+    s_native_rdnmi_polls[s_native_rdnmi_poll_count++].step = step;
+    return true;
+}
+
+void interp_bridge_clear_native_rdnmi_polls(void) {
+    s_native_rdnmi_poll_count = 0;
+}
+uint64_t interp_bridge_native_poll_insns_total(void) { return s_native_poll_insns; }
+uint64_t interp_bridge_native_poll_cycles_total(void) { return s_native_poll_cycles; }
+
 static int lle_bounce_target_excluded(uint32_t target_pc24) {
     static int s_env_all = -1;   /* SNESRECOMP_INTERPRET_ALL=1: A/B against AOT */
     if (s_env_all < 0) {
@@ -1281,6 +1314,55 @@ static int lle_bounce_target_excluded(uint32_t target_pc24) {
             return 1;
     }
     return 0;
+}
+
+static InterpNativePollStep bridge_native_rdnmi_step(const Interp816 *in,
+                                                    uint32_t pc,
+                                                    int scheduler_frame,
+                                                    int stop_on_rti) {
+#ifdef SNES_COSIM
+    /* The interpreter lockstep ring is populated by runOpcode itself. Until
+     * native islands have a separate co-sim ABI, preserve that exact path. */
+    (void)in; (void)pc; (void)scheduler_frame; (void)stop_on_rti;
+    return NULL;
+#else
+    if (!s_native_rdnmi_poll_count || !scheduler_frame || stop_on_rti ||
+        s_lle_sched_depth <= 0 || in->e || !in->mf || in->waiting ||
+        in->stopped || in->nmiWanted || in->irqWanted ||
+        cpu_interrupt_context_active() ||
+        !g_snes || !g_snes->cart || g_snes->cart->type != CART_HIROM)
+        return NULL;
+    for (unsigned i = 0; i < s_native_rdnmi_poll_count; ++i) {
+        uint32_t base = s_native_rdnmi_polls[i].pc;
+        if (pc != base && pc != base + 4u) continue;
+        if (lle_bounce_target_excluded(base) || lle_bounce_target_excluded(pc))
+            return NULL;
+        /* Pure inspection: no emulated fetch, open-bus change, read epoch or
+         * device effect before accepting/rejecting. Reject overlays and
+         * noncontiguous mappings even if they happen to contain these bytes. */
+        Cart *cart = g_snes->cart;
+        unsigned canonical_bank = (base >> 16) & 0x7Fu;
+        /* cart_getRomPtr's optional overlay probe writes diagnostics. Refuse
+         * that mapping before invoking it, not merely after pointer checks. */
+        if (canonical_bank >= 0x20u && canonical_bank < 0x30u &&
+            cart->overlayBank[canonical_bank - 0x20u]) return NULL;
+        const uint8_t *p = cart_getRomPtr(cart, (uint8_t)(base >> 16),
+                                         (uint16_t)base);
+        uintptr_t start = (uintptr_t)cart->rom, mapped = (uintptr_t)p;
+        if (!cart->rom || !p || cart->romSize < 6u || mapped < start ||
+            mapped - start > cart->romSize - 6u) return NULL;
+        static const uint8_t bytes[6] = {0xAF,0x10,0x42,0x80,0x10,0xFA};
+        /* Plain HiROM is linear within this upper-half bank interval (and
+         * any overlay covers the entire upper half). Both endpoints must
+         * still refer to the same cartridge-backed six bytes. No code cache:
+         * hooks can patch any byte before the next instruction. */
+        if (cart_getRomPtr(cart, (uint8_t)(base >> 16),
+                           (uint16_t)(base + 5u)) != p + 5u ||
+            memcmp(p, bytes, sizeof bytes) != 0) return NULL;
+        return s_native_rdnmi_polls[i].step;
+    }
+    return NULL;
+#endif
 }
 
 /* Safety cap: a coverage gap must never wedge the host in an unbounded loop.
@@ -2759,7 +2841,27 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
             g_interp_bridge_pc_hook(pc_before & 0xFFFFFFu,
                                     in.mf ? 1 : 0, in.xf ? 1 : 0);
         if (s_idle_poll_count) s_idle_poll_now = bridge_is_idle_poll(pc_before);
-        int _cyc = interp816_runOpcode(&in);   /* executes the opcode; pushes/pops frames */
+        InterpNativePollStep native_poll = s_native_rdnmi_poll_count ?
+            bridge_native_rdnmi_step(&in, pc_before, auto_quiescent, stop_on_rti) : NULL;
+        /* A native callback owns instruction effects only. The exact same
+         * live interpreter frame still retires every opcode below, including
+         * its logical ring index, bus/master charge, beam/IRQ/APU phases and
+         * continuation. It adds no guest frame and never runs runOpcode. */
+        int _cyc;
+        if (native_poll) {
+            _cyc = native_poll(&in);
+            if (_cyc > 0) {
+                s_native_poll_insns++;
+                s_native_poll_cycles += (unsigned)_cyc;
+            } else {
+                /* A trusted callback may decline only before ALL effects,
+                 * including reads. Preserve the ordinary path and credit. */
+                native_poll = NULL;
+            }
+        }
+        if (!native_poll) {
+            _cyc = interp816_runOpcode(&in);
+        }
         s_idle_poll_now = 0;
         if (s_interp_pctrace && steps < 4)
             fprintf(stderr, "[pctrace] step=%ld post-runOpcode cyc=%d pc=%02X:%04X\n",
@@ -2783,7 +2885,8 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
          * catch-up delta excludes what we already advanced here. */
         if (_cyc <= 0) _cyc = 1;
         if (g_tier2_capture_active) {
-            tier2_capture_instruction(pc_before, coverage_mx, coverage_e, (unsigned)_cyc);
+            if (!native_poll)
+                tier2_capture_instruction(pc_before, coverage_mx, coverage_e, (unsigned)_cyc);
             static unsigned checkpoint_opcodes;
             if (!(++checkpoint_opcodes & 16383u)) Tier2CoverageTick(snes_frame_counter);
         }
@@ -4096,6 +4199,8 @@ void InterpExecutionShareGet(InterpExecutionShare *out) {
     out->cpu_cycles = g_cpu.cycles;
     out->master_cycles = g_cpu.master_cycles;
     out->frame = snes_frame_counter;
+    out->native_poll_insns = s_native_poll_insns;
+    out->native_poll_cycles = s_native_poll_cycles;
     double pct = out->cpu_cycles
         ? 100.0 * (double)out->interp_cycles / (double)out->cpu_cycles : 0.0;
     /* The interpreter's bus-cycle rounding can put it a hair over the total;
@@ -4111,12 +4216,15 @@ void InterpExecutionShareDumpJson(FILE *f) {
     fprintf(f, "  \"execution_share\": {\"frame\": %d, \"interp_insns\": %llu, "
                "\"interp_cycles\": %llu, \"cpu_cycles\": %llu, "
                "\"master_cycles\": %llu, \"interp_cycle_pct\": %.4f, "
-               "\"aot_cycle_pct\": %.4f},\n",
+               "\"aot_cycle_pct\": %.4f, \"native_poll_insns\": %llu, "
+               "\"native_poll_cycles\": %llu},\n",
             s.frame, (unsigned long long)s.interp_insns,
             (unsigned long long)s.interp_cycles,
             (unsigned long long)s.cpu_cycles,
             (unsigned long long)s.master_cycles,
-            s.interp_cycle_pct, s.aot_cycle_pct);
+            s.interp_cycle_pct, s.aot_cycle_pct,
+            (unsigned long long)s.native_poll_insns,
+            (unsigned long long)s.native_poll_cycles);
 }
 
 void Tier2CoverageDumpJson(FILE *f) {

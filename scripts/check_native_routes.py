@@ -56,7 +56,9 @@ def snapshots(output: Path) -> list[dict]:
 def run(binary: Path, rom: Path, route_script: Path, output: Path, frames: int,
         expect_scene: int | None = None, expect_player: bool = False,
         compare: Path | None = None, wide: bool = False, timeout: int = 180, capture: bool = False,
-        interpret_all: bool = False) -> dict:
+        interpret_all: bool = False, native_poll: bool = False) -> dict:
+    if type(native_poll) is not bool:
+        raise ValueError("native_poll must be a boolean")
     if not 60 <= frames <= 60000:
         raise ValueError("frames must be 60..60000")
     if not 1 <= timeout <= 600:
@@ -109,6 +111,8 @@ def run(binary: Path, rom: Path, route_script: Path, output: Path, frames: int,
     command = [str(local_binary), "--no-launcher", "--config", str(config), "--script", str(local_script), "--rom", str(rom)]
     if interpret_all:
         env["SNESRECOMP_INTERPRET_ALL"] = "1"
+    if native_poll:
+        env["IOG_NATIVE_RDNMI_POLL"] = "1"
     if capture:
         env.update(SNESRECOMP_TIER2_MANIFEST=str(output / "tier2-manifest.json"),
                    SNESRECOMP_TIER2_JOURNAL=str(output / "tier2-journal.jsonl"))
@@ -170,6 +174,8 @@ def run(binary: Path, rom: Path, route_script: Path, output: Path, frames: int,
                "trace_sha256": sha(trace) if rows else None,
                "comparison": comparison, "coverage": coverage_summary, "snapshots": states,
                "evidence_scope": "isolated dummy video/audio; scripted stock-ROM route; scene/player/visual evidence only; no physical input, timing or campaign certification"}
+    if native_poll:
+        receipt["native_poll_requested"] = True
     report = output / "last_run_report.json"
     if report.is_file():
         receipt["execution_share"] = json.loads(report.read_text()).get("execution_share")
@@ -189,9 +195,10 @@ if __name__ == "__main__":
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--capture", action="store_true", help="Record interpreter residual manifest/journal in the isolated fixture")
     parser.add_argument("--interpret-all", action="store_true", help="Explicitly verify retained fallback in a mixed-code executable")
+    parser.add_argument("--native-poll", action="store_true", help="Explicit private native RDNMI island request")
     args = parser.parse_args()
     receipt = run(args.binary.resolve(), args.rom.resolve(), args.route_script.resolve(), args.output.resolve(),
                   args.frames, args.expect_scene, args.expect_player, args.compare, args.wide, args.timeout, args.capture,
-                  args.interpret_all)
+                  args.interpret_all, args.native_poll)
     print(json.dumps(receipt, indent=2))
     raise SystemExit(0 if receipt["passed"] else 1)

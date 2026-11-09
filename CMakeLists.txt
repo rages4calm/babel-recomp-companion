@@ -58,6 +58,7 @@ set(IOG_SOURCES
     src/main.c
     src/host_contract.c
     src/game_rtl.c
+    src/iog_native_poll.c
     src/iog_widescreen.c
     src/iog_i18n.c
     src/iog_mods.c

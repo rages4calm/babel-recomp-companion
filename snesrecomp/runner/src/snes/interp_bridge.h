@@ -167,6 +167,32 @@ void interp_bridge_pre_opcode_redirect(uint32_t pc24);
 bool interp_bridge_set_idle_poll(uint32_t pc24);
 void interp_bridge_clear_idle_polls(void);
 
+/* Explicit, host-owned native island for one byte LDA.l $804210 / BPL -6
+ * pair. Register every execution alias separately. Admission requires an
+ * active auto-quiescent interpreter frame, plain HiROM, E0/M1 and the exact
+ * six cartridge bytes. They are checked again before EACH native opcode.
+ * All pre-opcode hooks, IRQ/deadline/quiescent checks and normal retirement
+ * remain owned by that frame; no guest/host call frame is introduced.
+ *
+ * The trusted compiled callback executes exactly ONE opcode on the live
+ * Interp816 (including every fetch/data read through in->read), updates pc,
+ * a/N/Z or the BPL target, and returns its ordinary CPU cycle count. It must
+ * not call interp816_runOpcode, update clocks/tallies, retain `in`, nest a
+ * bridge, register policies, or refuse after effects. Returning <=0 declines
+ * only before ANY effect (including reads), preserving ordinary execution.
+ * The callback runs only
+ * at the LDA or BPL PC. It is not an interpreter extension/replay shortcut.
+ * Registration is not serialized; clear it when changing cartridge policy.
+ * Forced-interpreter/excluded targets always retain ordinary interpretation.
+ */
+typedef struct Interp816 Interp816;
+typedef int (*InterpNativePollStep)(Interp816 *in);
+bool interp_bridge_add_native_rdnmi_poll(uint32_t lda_pc24,
+                                        InterpNativePollStep step);
+void interp_bridge_clear_native_rdnmi_polls(void);
+uint64_t interp_bridge_native_poll_insns_total(void);
+uint64_t interp_bridge_native_poll_cycles_total(void);
+
 /*
  * Run the interpreter over guest code at entry_pc24, in the context of `cpu`.
  * `cpu` is updated in place. Returns:
@@ -317,6 +343,9 @@ typedef struct {
     uint64_t interp_insns, interp_cycles, cpu_cycles, master_cycles;
     int frame;
     double interp_cycle_pct, aot_cycle_pct;
+    /* Included in non-interpreted work above, but separate from generated
+     * AOT functions: true compiled opcode effects, reference retirement. */
+    uint64_t native_poll_insns, native_poll_cycles;
 } InterpExecutionShare;
 void InterpExecutionShareGet(InterpExecutionShare *out);
 /* Post-mortem section "execution_share", with the trailing comma the other

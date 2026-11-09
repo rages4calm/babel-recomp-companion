@@ -41,6 +41,7 @@
 
 #include "game_rtl.h"
 #include "iog_widescreen.h"
+#include "iog_native_poll.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -71,6 +72,7 @@ static uint32_t g_resume_pc;
 
 static void GameInitialize(void)
 {
+    IogNativePollInitialize();
     /* This frame host pulses inNmi below. A second beam-owned RDNMI edge
      * lets the original vblank wait return twice before NMI refreshes the
      * raw pad, so the game remaps an already-remapped controller word. */

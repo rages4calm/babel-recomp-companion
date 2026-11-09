@@ -9,11 +9,15 @@ The original author's credit, support link and full acknowledgments remain below
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. November 8's private
-[batch 009](docs/NATIVE-BATCH-009.md) adds guarded live WRAM-address reads and
-native actor sorting on the current framework. **77 fresh reference/native
-pairs pass**, including 20 new assisted combat cases. The 6,000-frame
-classroom/South Cape route reaches **40.28% native CPU cycles in 4:3 / 40.32%
-in 16:9**, up from batch 008's 31.43% / 31.44%.
+[batch 010](docs/NATIVE-BATCH-010.md) adds explicitly enabled compiled poll
+effects while retaining the bridge's interrupt, yield and timing protocol.
+**107 fresh reference/native pairs pass**, including 30 additional assisted
+cases. The 6,000-frame classroom/South Cape route reaches **82.99% native CPU
+cycles in 4:3 / 83.02% in 16:9**, up from batch 009's 40.28% / 40.32%.
+This private path requires `IOG_NATIVE_RDNMI_POLL=1`; separate counters identify
+its compiled poll work, and disabling it preserves the previous path.
+Same-binary headless tests show roughly 2% higher CPU cost with it enabled,
+so it remains an experimental opt-in.
 Interpreter fallback remains available. These are bounded execution results,
 not percentages of game content or completed campaign proof. Historical
 cross-version failures and raw APU timestamp differences remain documented.
@@ -43,12 +47,12 @@ cross-version failures and raw APU timestamp differences remain documented.
   [Controls and limits](docs/CHEATS-AND-MODS.md).
 - **Windows icons:** coordinated flute/world/comet artwork for the game and a
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
-- **Framework:** integrated SNESRecomp `e98dc63`, main checked November 8,
+- **Framework:** integrated SNESRecomp `e98dc63`, main checked November 9,
   2026, with Babel-specific changes preserved. [Integration and limits](docs/FRAMEWORK-NOV08.md).
-  Batch 009 inspects 889 new RomAtlas contexts, including all 277 sorting bytes
-  in 135 observed width contexts, and tests all twelve supported live ABS read
-  operations. Earlier decode receipts retain their original identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-009.md),
+  Batch 010 retains all 1,163 prior emitted bodies unchanged and adds 56,
+  checking all 486 new instruction contexts through RomAtlas. Earlier live-WRAM,
+  sorting and decode receipts retain their original identities and scope.
+  [Current native batch and limits](docs/NATIVE-BATCH-010.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).

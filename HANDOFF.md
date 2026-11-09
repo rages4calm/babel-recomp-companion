@@ -1,9 +1,82 @@
 # Illusion of Gaia Companion — handoff
 
-Updated November 8, 2026. Development version `0.1.0-dev.1`.
+Updated November 9, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
-## Current continuation — native batch 009
+## Current continuation — native batch 010
+
+[Batch010](docs/NATIVE-BATCH-010.md) enables compiled effects for the two RDNMI
+poll instructions inside the existing bridge's exact per-opcode event loop.
+It does not skip iterations, fake a latch, call the opcode interpreter and
+relabel it, or remove the generated MMIO/boot/NMI guards. `interp816` and guest
+state layouts are unchanged; separate native-poll counters identify the work.
+Private AOT build + clean stock identity + `IOG_NATIVE_RDNMI_POLL=1` are required.
+Forced interpretation, unsupported modes/mappings/context and default builds
+keep fallback. See the actual-core production-callback proof and negative
+interpreter-relabel control in `native-010/poll-protocol/FINAL-RECEIPT.json`.
+
+Final candidate `.local/batch-001/native-010/build-poll-final/babel-recomp.exe`
+SHA-256 `52cb4078f679f9dad90fbfd256bef41753bca188398c3888bc1ad955c09dc7e8`;
+graph `native-010/poll-v2/generated/program_manifest.json`, SHA-256
+`8b0dbafbba97053c61b3775b3874d6fbc1d09054e0e1ff68d489ca8816b5bc82`.
+Graph:358 roots/1,300 contexts/1,219 eligible/81 LLE. All1,163 old bodies are
+byte-identical;56 added bodies/486 new contexts independently decoded.
+107 current +194 historical inputs preserve all prior source-root lineage.
+V1 omitted22 older observations/eight native bodies; retain its superseded
+5be918... build/receipts, and do not call it the qualified final graph.
+
+Natural native share is **82.9903% narrow /83.0169% wide**; poll disabled gives
+40.2820%/40.3216% in the same binary. Natural narrow poll attribution is
+23,596,023 instructions/94,378,505 cycles; generated-native89,016,872 cycles
+and other per-PC costs remain unchanged. This is guest-cycle execution on
+bounded routes, not campaign/content coverage or a host-speed guarantee.
+
+107 fresh pairs/214 complete loss-free captures/314,040 frames/1,924 snapshot
+sets pass canonical CPU/WRAM/devices/full APU+scheduler/output. Independent
+official-loader, cost-partition and saved-binary/frame/trace proof is in
+`native-010/counter-audit/fresh107-capture-audit.json`. Groups:
+`qualification-final-v2`29, `mechanics-final-v2`28, `previous20-final-v2`20,
+`new-mechanics-final-v2`30. All154 same-tier009 controls pass; all prior77 gain
+native share. Owner-copy and aspect checks pass, including67 same-binary and
+134 cross009 presented frames. Feature-off controls preserve fallback.
+
+New30 spans27 new rooms, allthree forms,16 widescreen cases,28 original HP/death
+contracts,3 no-A controls, Solid Arm death, both Vampire deaths and a settled
+Great Wall DEF40→41 reward. Partial fights stay partial; boss death is not
+quest/ending completion. New30 source witnesses are interpreted009 only, so
+their68.4582–84.8273% native shares do not establish an old-native gain.
+
+Preserve961 raw APU-clock differences in the current107 cohort,19 raw aspect
+failures, word/byte log-grouping distinctions and old004 strict17/28. Canonical
+equality does not waive them. The deferred clubhouse/Erik music report remains
+untouched. GaiaLabs dev-build identity/module selection is still pending;
+separate Original/GaiaLabs edition constraints and credits remain.
+
+Protocol proof:2,633 paired scenarios/52,709 checks pass, with every deadline
+1..160 acrossaliases/FastROM/Xwidth and realIRQ/NMI/RTI/ownership/refusal cases.
+The decoder-relabel negative correctly fails3,374 counter checks;009 guard
+regression still passes70. 753 existing v2 tests pass(two skips), plus both
+frozen new protocol tests and145 title tests. Initial broad collection captured
+a changing test fixture and retained two fixture failures; final focused source
+passes. No production source changed after the frozen candidate/proof.
+
+Next targets: actual RTL/deadline continuation ownership for actor and Quintet
+LZ loops, not more fake roots. `native-010/discovery/CONTINUATION-DESIGN.md`
+binds actual009 diagnostic routes and required inherited guest/host watermarks.
+Official main remains e98dc63; no vendor replacement or new upstream defect.
+
+Same-binary poll OFF/ON host cohort passes all56 runs/336,000 frames and exact
+counter/fingerprint gates. Enabled mixed-native CPU cost is **+2.22% narrow /
++1.97% wide**; forced-reference controls are +1.45%/+1.28%. This is compiled
+execution progress with a measured host-cost penalty, so keep the explicit
+opt-in/default-off decision. Do not promote it as a speed fix. Receipts:
+`native-010/host-cost/summary.json` and `post-audit.json`.
+294 completed executable copies/4,151,687,680bytes are compacted to four verified
+payloads/20,793,797bytes with restore index. Retain source/superseded builds and
+all other evidence; do not recreate old archives. All39 owner inputs and005
+remain protected, no new release or installed-game replacement.
+
+## Previous continuation — native batch 009
 
 [Batch 009](docs/NATIVE-BATCH-009.md) qualifies explicit private `--sprite-sorting`
 and guarded live WRAM-address reads. Main remains inventoried `e98dc63b`.
