@@ -732,7 +732,8 @@ def _bank_cache_key(bank: int, manifest: ProgramManifest, rom_digest: str,
                     module_prefix: str | None = None,
                     instruction_blocks: bool = False,
                     region_paced: bool = False,
-                    region_live_immediates: bool = False) -> str:
+                    region_live_immediates: bool = False,
+                    region_live_wram_addresses: bool = False) -> str:
     nodes = [
         (key.manifest_key, node.digest, node.disposition.value)
         for key, node in sorted(manifest.nodes.items())
@@ -770,6 +771,7 @@ def _bank_cache_key(bank: int, manifest: ProgramManifest, rom_digest: str,
         "instruction_blocks": bool(instruction_blocks),
         "region_paced": bool(region_paced),
         "region_live_immediates": bool(region_live_immediates),
+        **({"region_live_wram_addresses": True} if region_live_wram_addresses else {}),
         "sharding": [int(shard_threshold_bytes), int(shard_pc_span)],
         "module_prefix": module_prefix or "",
     })
@@ -786,6 +788,7 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
                  instruction_blocks: bool = False,
                  region_paced: bool = False,
                  region_live_immediates: bool = False,
+                 region_live_wram_addresses: bool = False,
                  shard_threshold_bytes: int = 4 * 1024 * 1024,
                  shard_pc_span: int = 0x0800,
                  check_link_closure: bool = True,
@@ -796,6 +799,8 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
                  host_alias_header=None) -> EmissionResult:
     if region_live_immediates and not (region_paced and instruction_blocks):
         raise ValueError("region-live-immediates requires region-paced instruction-blocks")
+    if region_live_wram_addresses and not (region_paced and instruction_blocks):
+        raise ValueError("region-live-wram-addresses requires region-paced instruction-blocks")
     validate_module_identity(module_id, module_prefix)
     # Identity of the IMAGE the module was generated from. The caller passes
     # both when its `rom` already carries materialized ram_routine blobs (the
@@ -863,7 +868,7 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
                 bank, manifest, rom_digest, generator_digest, config_digest,
                 dispatch_helpers, inline_arg_map, enable_hle,
                 host_alias_entries, shard_threshold_bytes, shard_pc_span,
-                module_prefix, instruction_blocks, region_paced, region_live_immediates)
+                module_prefix, instruction_blocks, region_paced, region_live_immediates, region_live_wram_addresses)
             new_bank_keys[f"{bank:02X}"] = cache_key
             previous_names = old_bank_outputs.get(f"{bank:02X}", ())
             reusable_output = bool(previous_names) and all(
@@ -947,6 +952,7 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
                 instruction_blocks=instruction_blocks,
                 region_paced=region_paced,
                 region_live_immediates=region_live_immediates,
+                region_live_wram_addresses=region_live_wram_addresses,
                 dispatch_helpers=dict(dispatch_helpers) or None,
                 indirect_call_tables=indirect_call_tables,
                 indirect_dispatch=indirect_dispatch or None,

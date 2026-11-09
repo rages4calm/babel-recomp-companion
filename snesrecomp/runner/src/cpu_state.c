@@ -422,6 +422,23 @@ static uint16 cpu_latch_read16(CpuState *cpu, uint16 value) {
     return value;
 }
 
+bool cpu_preview_code16(const CpuState *cpu, uint8 bank, uint16 addr, uint16 *out) {
+    const Cart *cart = g_snes ? g_snes->cart : NULL;
+    if (!cpu || !out || !cart || !cart->rom || !cart->romSize ||
+        addr < 0x8000 || addr == 0xFFFF || bank == 0x7E || bank == 0x7F ||
+        (cart->type != CART_LOROM && cart->type != CART_HIROM)) return false;
+    const uint8 canonical = bank & 0x7F;
+    /* Even an optional overlay probe can change diagnostic state. Reject
+     * overlays before entering the otherwise pure plain-ROM mapping path. */
+    if (cart->type == CART_HIROM && canonical >= 0x20 && canonical < 0x30 &&
+        cart->overlayBank[canonical - 0x20]) return false;
+    const uint8 *low = cart_getRomPtr((Cart *)cart, bank, addr);
+    const uint8 *high = cart_getRomPtr((Cart *)cart, bank, (uint16)(addr + 1));
+    if (!low || !high) return false;
+    *out = (uint16)*low | ((uint16)*high << 8);
+    return true;
+}
+
 bool cpu_read8_plain_rom(CpuState *cpu, uint8 bank, uint16 addr, uint8 *out) {
     Cart *cart = g_snes ? g_snes->cart : NULL;
     /* Restrict to the high ROM window. Below $8000, SRAM/WRAM and MMIO take

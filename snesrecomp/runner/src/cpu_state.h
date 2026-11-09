@@ -661,6 +661,10 @@ int cpu_dispatch_has_entry(CpuState *cpu, uint32 pc24);
 const char *cpu_dispatch_entry_reason(uint32_t pc24, uint8_t mx);
 /* Side-effect-free fetch mapping guard for generated banked-ROM code. */
 int cpu_aot_rom_mapping_matches(uint32 pc24, uint32 rom_offset, unsigned length);
+/* Pure preview for guarded live-address emission. Only plain-cart high ROM,
+ * excluding overlays and bank wrap. No bus/access/latch/clock side effects;
+ * false leaves *out unchanged. Host code edits must occur between opcodes. */
+bool cpu_preview_code16(const CpuState *cpu, uint8 bank, uint16 addr, uint16 *out);
 
 /* Balanced abandon of the current function invocation at an UNRESOLVED
  * control-transfer site (unresolved indirect dispatch / OOB index,

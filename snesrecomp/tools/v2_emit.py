@@ -112,7 +112,8 @@ def _analysis_input_digest(*, rom: bytes, generator_digest: str,
                            module_prefix: str | None = None,
                            instruction_blocks: bool = False,
                            region_paced: bool = False,
-                           region_live_immediates: bool = False) -> str:
+                           region_live_immediates: bool = False,
+                           region_live_wram_addresses: bool = False) -> str:
     value = {
         "format": CACHE_FORMAT_VERSION,
         "rom": hashlib.sha256(rom).hexdigest(),
@@ -131,6 +132,7 @@ def _analysis_input_digest(*, rom: bytes, generator_digest: str,
         "instruction_blocks": bool(instruction_blocks),
         "region_paced": bool(region_paced),
         "region_live_immediates": bool(region_live_immediates),
+        **({"region_live_wram_addresses": True} if region_live_wram_addresses else {}),
         "sharding": [int(shard_threshold_bytes), int(shard_pc_span)],
     }
     encoded = json.dumps(
@@ -232,6 +234,8 @@ def main() -> int:
                         help="opt in to conservative native-mode per-access region timing (requires --instruction-blocks)")
     parser.add_argument("--region-live-immediates", action="store_true",
                         help="opt in to paced mutable data-immediate fetches (requires --region-paced)")
+    parser.add_argument("--region-live-wram-addresses", action="store_true",
+                        help="opt in to guarded paced mutable ABS reads targeting WRAM (requires --region-paced)")
     parser.add_argument("--no-host-root-scan", action="store_true")
     parser.add_argument("--host-alias-header", default=None,
                         help="funcs.h whose alias declarations name host entry "
@@ -273,6 +277,8 @@ def main() -> int:
         parser.error("--region-paced requires --instruction-blocks")
     if args.region_live_immediates and not args.region_paced:
         parser.error("--region-live-immediates requires --region-paced")
+    if args.region_live_wram_addresses and not args.region_paced:
+        parser.error("--region-live-wram-addresses requires --region-paced")
     if args.analysis_backend == "python":
         parser.error("the Python analyzer was retired; the native analyzer "
                      "is the only one (drop --analysis-backend python)")
@@ -395,6 +401,7 @@ def _generate(args, parser, cfg_dir, *, symbol_roots=()):
         instruction_blocks=args.instruction_blocks,
         region_paced=args.region_paced,
         region_live_immediates=args.region_live_immediates,
+        region_live_wram_addresses=args.region_live_wram_addresses,
     )
     cached = _verified_cached_stats(out_dir, analysis_input_digest)
     if cached is not None and not args.no_link_closure_check:
@@ -453,6 +460,7 @@ def _generate(args, parser, cfg_dir, *, symbol_roots=()):
         instruction_blocks=args.instruction_blocks,
         region_paced=args.region_paced,
         region_live_immediates=args.region_live_immediates,
+        region_live_wram_addresses=args.region_live_wram_addresses,
         shard_threshold_bytes=shard_threshold_bytes,
         shard_pc_span=shard_pc_span,
         check_link_closure=not args.no_link_closure_check,

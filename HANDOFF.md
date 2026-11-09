@@ -3,7 +3,75 @@
 Updated November 8, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
-## Current continuation — native batch 008
+## Current continuation — native batch 009
+
+[Batch 009](docs/NATIVE-BATCH-009.md) qualifies explicit private `--sprite-sorting`
+and guarded live WRAM-address reads. Main remains inventoried `e98dc63b`.
+Graph: **339 roots / 1,242 contexts / 1,163 eligible / 79 LLE**, SHA-256
+`921769c084482ba9c2362338f29cf99bfc1dfa0a91edb4dae01fe05b0d18f28f`.
+All 1,154 old emitted bodies are byte-identical; nine bodies are added.
+Public CFG/policy and the other interrupt/boot guards remain unchanged.
+
+Private candidate: `.local/batch-001/native-009/build-sort-v2/babel-recomp.exe`,
+SHA-256 `8c584f0d841f31c406fbf59265137ba61270cd25ef834e01bbf62d0d5523e7fe`.
+Natural native CPU-cycle share: **40.2820% narrow / 40.3216% wide**. Sort's
+19,554,714-cycle interpreter reduction accounts for the entire natural gain;
+all other per-PC costs are unchanged. Sort retains 1,299 interpreted cycles /
+325 instructions under guards/resume boundaries. Do not claim universal AOT.
+
+**77 fresh pairs / 154 complete loss-free captures / 211,440 frames / 1,294
+snapshot sets pass** the executed-cycle CPU/WRAM/device/full APU+scheduler/output
+contract. New20 covers 16 melee/death rooms, three no-attack controls, one real
+player-contact damage case and nine original room-clear rewards. Assistance is
+explicit; enemy HP/count/death/clear/rewards were not fabricated. Those new
+witnesses are interpreted008 only: no measured008-native gain is claimed there.
+All 114 tier-specific controls against008 match; all 57 existing cases gain
+native coverage. Private receipt groups are `native-009/qualification-sort-v1`
+(29 pairs using the final v2 executable despite the folder name),
+`mechanics-sort-v2` (28), `new-mechanics-v2` (20), and
+`current-008-comparison/summary.json`. Independent capture/Sort review is in
+`native-009/sort-execution-audit/`; do not recreate its completed audits.
+
+Preserve old004 strict failures (17/28 pass). All 191 new native raw APU-clock
+files differ from the source witness while canonical full APU/scheduler/state
+passes. Broad no-attack actor logs require byte normalization for generated word
+versus interpreted byte stores; raw log identity is not claimed. Required fresh
+HP/death write contracts are unchanged and pass. The aspect test retains its
+19 raw strict differences; all 67 same-binary and 134 cross008 presented frames
+match. Copied owner RTLSv10 load passes. No ordinary fresh SAVE/RESTORE,
+music/hardware or campaign qualification follows.
+
+49 new live-address tests pass all 12 operations/four M/X combinations, with
+27,648 accepted scenarios, 2,304 guarded refusals, 18,432 negative controls,
+32 relocated-stack scans and 32 deadline/interrupt continuations. Purity,
+cache/CLI, actual-core polling and integration checks pass; 698 existing v2
+tests pass (two existing skips), plus all 144 title tests. Invalid fixture/
+reviewer attempts and the Windows command-limit failure remain retained.
+
+The largest RDNMI loop **stays LLE**: guard removal fails cooperative quiescence
+and real comparator-IRQ retirement. A future native island needs shared exact
+per-opcode ring/step, IRQ/deadline/hook/retirement bookkeeping and guest-frame
+ownership; private proposal:
+`.local/batch-001/native-009/poll-feasibility/PROPOSAL.md`.
+Do not fake the latch or skip the wait. Actor script/RTL ownership and Quintet
+LZ are separate remaining targets; SPC upload is a hardware audio handshake.
+
+Await Kass's matching dev build, commit, dependencies and selected modules
+before GaiaLabs runtime qualification. Keep the two game editions distinct.
+The deferred clubhouse/Erik music report remains untouched. No desktop control
+is active; installed005 and owner settings/soundtrack remain protected.
+
+Quiet host-cost cohort: all 56 runs / 336,000 frames match exact-build guest
+counters and witness fingerprints. Median paired009-vs008 native frame-service
+CPU cost is **−5.01% narrow / −3.81% wide**; forced-interpreter controls drift
++2.04% / +0.93%. This is six-pair dummy-SDL software-rendered route evidence,
+not general FPS or isolated raster CPU. Private `native-009/host-cost/` retains
+all timing, preflight failure and independent post-audit receipts.
+209 completed runtime executables (2,906,378,240 bytes) are compacted to two
+verified payloads in a 10,315,461-byte archive plus restore index. Source builds
+and all other successful/failed evidence remain; no old archive was recreated.
+
+## Previous continuation — native batch 008
 
 [Batch 008](docs/NATIVE-BATCH-008.md) extends execution through the existing
 sprite pipeline using opt-in timed live immediate reads. The graph remains
