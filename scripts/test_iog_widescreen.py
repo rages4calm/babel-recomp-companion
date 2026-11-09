@@ -27,6 +27,8 @@ int snes_frame_counter;
 static bool randomizer;
 static bool fail_shadow_alloc;
 static unsigned reset_calls;
+static unsigned hud_height, preview_clip_calls;
+static bool hud_always;
 void IogTestRealReset(void);
 void WsShadowReset(void) { reset_calls++; IogTestRealReset(); }
 void *IogTestCalloc(size_t count, size_t size) {
@@ -37,9 +39,16 @@ void PpuSetExtraSideSpace(Ppu *p, int left, int right, int bottom) {
     (void)bottom; p->extraLeftCur=left; p->extraRightCur=right;
 }
 void PpuSetWidescreenHudSplit(Ppu *p, uint8_t h, uint8_t l, uint8_t r) {
-    (void)p; (void)h; (void)l; (void)r;
+    (void)p; (void)l; (void)r; hud_height=h;
 }
-void PpuSetWidescreenHudAlwaysVisible(Ppu *p, bool on) { (void)p; (void)on; }
+void PpuSetWidescreenHudAlwaysVisible(Ppu *p, bool on) { (void)p; hud_always=on; }
+void PpuSetWidescreenLayerWorldClipBand(Ppu *p,uint8_t layer,uint8_t y0,
+                                      uint8_t y1,uint8_t reference,
+                                      uint16_t left,uint16_t right) {
+    (void)p;
+    assert(layer==2 && y0==0 && y1==224 && reference==2 && left==0 && right==256);
+    preview_clip_calls++;
+}
 static unsigned assertions;
 #define CHECK(x) do { assertions++; assert(x); } while (0)
 static void word(unsigned at, unsigned value) {
@@ -97,6 +106,19 @@ static void check_reset_pairing(void) {
     /* A direct restored outdoor frame builds from its new live descriptors. */
     setup(true); IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(64);
     CHECK(reset_calls==before+8 && WsShadowLayerActive(0) && WsShadowLayerActive(1));
+}
+static void check_preview_hud_policy(void) {
+    setup(false);
+    unsigned row=PPU_bgTilemapAdr(g_ppu,2)+32;
+    g_ppu->vram[row+11]=0x0ef;g_ppu->vram[row+20]=0x0ef;
+    g_ppu->vram[row+15]=0x01e;
+    unsigned before=preview_clip_calls;
+    IogWidescreenSetPreviewCenteredHud(false);IogWidescreenBeforeDraw();
+    CHECK(hud_height==32 && hud_always && preview_clip_calls==before);
+    IogWidescreenSetPreviewCenteredHud(true);IogWidescreenBeforeDraw();
+    CHECK(hud_height==0 && !hud_always && preview_clip_calls==before+1);
+    IogWidescreenSetPreviewCenteredHud(false);IogWidescreenBeforeDraw();
+    CHECK(hud_height==32 && hud_always && preview_clip_calls==before+1);
 }
 static void check_layers(bool swapped) {
     setup(swapped);
@@ -170,6 +192,7 @@ int main(void) {
     CHECK(!WsShadowLayerActive(0) && !WsShadowLayerActive(1));
     CHECK(!g_ppu->extraLeftCur && !g_ppu->extraRightCur);
     fail_shadow_alloc=false;
+    check_preview_hud_policy();
     check_layers(false); check_layers(true);
     check_reset_pairing();
     check_native_edges();

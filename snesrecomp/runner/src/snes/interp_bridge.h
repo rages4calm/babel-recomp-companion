@@ -194,11 +194,13 @@ uint64_t interp_bridge_native_poll_insns_total(void);
 uint64_t interp_bridge_native_poll_cycles_total(void);
 
 /* One compiled architectural instruction at an exact, source-qualified
- * continuation boundary. No call/return ABI or guest stack frame is created:
- * the existing auto-quiescent interpreter frame keeps all event/retirement
- * ownership. Register aliases/modes separately. Initial support is plain
- * LoROM/HiROM upper ROM, E0, ordinary data/width/static branch effects;
- * stack/frame operations, indirect jumps, calls/returns, interrupt/power and
+ * continuation boundary. Real direct call/return stack effects belong to the
+ * instruction; no separate host frame or synthetic native root is created.
+ * The existing auto-quiescent interpreter frame keeps event/retirement,
+ * paired-bounce and return-boundary ownership. Register aliases/modes
+ * separately. Support is plain LoROM/HiROM upper ROM, E0, ordinary data/status/
+ * stack/static branch/direct call/return effects. Interrupt frames, indirect
+ * transfers, direct SP/emulation changes, power and
  * block-move operations remain interpreted. Every instruction byte and live
  * mode is checked again AFTER hooks, without emulated reads or diagnostics.
  *

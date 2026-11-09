@@ -9,9 +9,11 @@
  * end of the map). Those pixels stay black instead.
  *
  * This is the zelda3 model (PpuSetExtraSideSpace): margins are recomputed
- * every frame from the camera and the map bounds. Presentation only: no
- * emulated register or WRAM byte is written, and with widescreen off the
- * budget is 0 and nothing here runs.
+ * every frame from the camera and the map bounds. Terrain/HUD composition
+ * leaves guest graphics/register memory untouched. The culling path below
+ * separately checks/patches ten in-memory ROM operands and writes a scratch
+ * WRAM camera word; it restores stock operands when the margin goes to0.
+ * These policies remain finite scene/presentation work, not full widescreen.
  */
 
 #include "iog_widescreen.h"
@@ -64,7 +66,13 @@ static MapLayer s_map_layers[2];
 static bool s_map_frame;
 static uint16_t s_map_scene;
 static bool s_reset_for_draw;
+static bool s_preview_centered_hud;
 static int Clamp(int v, int lo, int hi);
+
+void IogWidescreenSetPreviewCenteredHud(bool enabled)
+{
+    s_preview_centered_hud = enabled;
+}
 
 /* Source: $82:ADA2..AF5E. Arrangement bytes are grouped into 256x256px
  * pages. Each byte selects four 8x8 SNES entries (TL,TR,BL,BR). The decoded
@@ -290,6 +298,14 @@ void IogWidescreenBeforeDraw(void)
         PpuSetWidescreenHudSplit(g_ppu, 0, 0, 0);
         PpuSetWidescreenHudAlwaysVisible(g_ppu, false);
     }
+    if (s_preview_centered_hud) {
+        /* The preview keeps source UI centered. Do not combine a copied
+         * original center with the legacy edge anchors: that duplicates HUD.
+         * Clip only BG3 margin ink, leaving the real native256 unchanged. */
+        PpuSetWidescreenHudSplit(g_ppu, 0, 0, 0);
+        PpuSetWidescreenHudAlwaysVisible(g_ppu, false);
+        PpuSetWidescreenLayerWorldClipBand(g_ppu, 2, 0, 224, 2, 0, 256);
+    }
     /* The renderer only writes the live span of each line; what lies outside
      * it would keep an older frame's pixels, so blank it first. */
     if (g_ppu->renderBuffer) {
@@ -319,9 +335,11 @@ void IogWidescreenBeforeDraw(void)
 /* ---- sprite culling --------------------------------------------------------
  *
  * Two routines of bank $03 drop what lies outside the native 256 columns.
- * Both are run by the interpreter (no compiled variant for the M/X state
- * they are called in), so their immediates can be retargeted in the ROM
- * image; the originals are checked first and restored when the margin goes.
+ * Operands are retargeted in the in-memory ROM image; originals are checked
+ * first and restored when the margin goes. Qualified native sprite paths
+ * read these changing operands at execution time, including live absolute
+ * WRAM addresses. That proof does not imply all actors/extra-list parts or
+ * arbitrary ultrawide layouts are qualified.
  *
  *  - Actor list (func_03C5FF): keeps an actor whose box overlaps
  *    [camera, camera+256):  SBC $068A ; CMP #$0100.  The camera operand is

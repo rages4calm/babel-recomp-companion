@@ -8,7 +8,8 @@ from pathlib import Path
 import hashlib,json,os,re,shutil,subprocess,sys
 import pytest
 import snes65816 as d
-from v2.native_effects import emit,SAFE_NAMES,STATIC_CONTROL_NAMES,STATIC_CONTROL_OPCODES
+from v2.native_effects import (emit,SAFE_NAMES,STATIC_CONTROL_NAMES,STATIC_CONTROL_OPCODES,
+    DIRECT_CALL_RETURN_NAMES,DIRECT_CALL_RETURN_OPCODES)
 
 REPO=Path(__file__).resolve().parents[2]
 CORE=REPO/'runner/src/snes/interp816.c'
@@ -20,6 +21,8 @@ def entries(bank,small=False):
         if name not in SAFE_NAMES or(small and opcode not in(0xA9,0xAD,0xBD,0xB2,0xA7,0xED,0xE9,0x85,0xE6,0xEE,0xEB,0x5B)):
             continue
         if name in STATIC_CONTROL_NAMES and opcode not in STATIC_CONTROL_OPCODES:
+            continue
+        if name in DIRECT_CALL_RETURN_NAMES and opcode not in DIRECT_CALL_RETURN_OPCODES:
             continue
         for m,x in((0,0),(0,1),(1,0),(1,1)):
             length=size(m,x)if callable(size)else size
@@ -239,6 +242,46 @@ def test_indirect_jump_descriptors_refused(opcode):
     entry=dict(pc24=0x838100,m=0,x=0,e=0,bytes=bytes([opcode,0x00,0x80]),mnemonic=name,immediate=False)
     with pytest.raises(ValueError,match='static branch/jump'):
         emit(CORE.read_text(),[entry])
+
+
+def test_indirect_jsr_descriptor_refused():
+    entry=dict(pc24=0x838000,m=0,x=0,e=0,bytes=bytes.fromhex('fc0090'),mnemonic='JSR',immediate=False)
+    with pytest.raises(ValueError,match='direct call/return'):
+        emit(CORE.read_text(),[entry])
+
+
+def test_jsr_afc7_diagnostic_preserves_environment_presence(tmp_path):
+    """Babel's optional trace is part of the extracted JSR behavior too."""
+    row=dict(pc24=0x838000,m=1,x=1,e=0,bytes=bytes.fromhex('20c7af'),mnemonic='JSR',immediate=False)
+    generated,receipt=emit(CORE.read_text(),[row],registration_name='RegisterEffects')
+    harness=HARNESS[:HARNESS.index('int main(void){')]+r'''
+int main(void){
+ CHECK(RegisterEffects(),"registration");Bus a={0},b={0};a.code=b.code=&registered[0];
+ Interp816 ref=initial_cpu(&a,a.code,3,1,0),got=initial_cpu(&b,b.code,3,1,0);a.cpu=&ref;b.cpu=&got;
+ int rc=interp816_runOpcode(&ref);uint64_t n=interp816_insns_total();int nc=registered[0].step(&got);
+ CHECK(rc==nc&&cpu_equal(ref,got)&&bus_equal(&a,&b),"trace retains actual JSR effects and ordered stack accesses");
+ CHECK(interp816_insns_total()==n,"trace does not decode native instruction");return failures?1:0;
+}
+'''
+    source=tmp_path/'trace.c';source.write_text(generated+harness,encoding='utf-8')
+    cc=os.environ.get('CC')or shutil.which('clang')or shutil.which('cc')
+    if not cc:pytest.skip('C11 compiler required')
+    exe=tmp_path/('trace.exe'if os.name=='nt'else'trace')
+    command=[cc,'-std=c11','-O1','-I',str(REPO/'runner/src'),str(source),str(CORE),'-o',str(exe)]
+    p=subprocess.run(command,capture_output=True,text=True,timeout=60)
+    (tmp_path/'compile.json').write_text(json.dumps(dict(command=command,returncode=p.returncode,stdout=p.stdout,stderr=p.stderr),indent=2))
+    assert p.returncode==0,p.stdout+p.stderr
+    results=[]
+    for value in (None,'','0','1'):
+        env=dict(os.environ);env.pop('SNESRECOMP_JSR_AFC7_TRACE',None)
+        if value is not None:env['SNESRECOMP_JSR_AFC7_TRACE']=value
+        p=subprocess.run([str(exe)],capture_output=True,text=True,env=env,timeout=10)
+        results.append(dict(value=value,returncode=p.returncode,stdout=p.stdout,stderr=p.stderr))
+        assert p.returncode==0,p.stdout+p.stderr
+        lines=p.stderr.splitlines()
+        assert len(lines)==(0 if value is None else 2)
+        if lines:assert lines[0]==lines[1]and lines[0].startswith('[jsr_afc7] from=83:8000')
+    (tmp_path/'diagnostic-presence.json').write_text(json.dumps(dict(emission=receipt,runs=results),indent=2))
 
 
 def test_code_operand_bank_wrap_remains_refused():
