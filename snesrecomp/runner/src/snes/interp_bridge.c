@@ -1309,7 +1309,9 @@ void interp_bridge_clear_native_rdnmi_polls(void) {
 uint64_t interp_bridge_native_poll_insns_total(void) { return s_native_poll_insns; }
 uint64_t interp_bridge_native_poll_cycles_total(void) { return s_native_poll_cycles; }
 
-enum { kNativeInstructionSlots = 8192 };
+/* Descriptor IDs store index+1 in uint16_t, reserving zero for a miss.
+ * This bounded capacity fits both those IDs and the legacy page starts. */
+enum { kNativeInstructionSlots = 32768 };
 typedef struct {
     InterpNativeInstruction descriptor;
     uint64_t insns, cycles;
@@ -1421,8 +1423,11 @@ bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
     }
     if (used > kNativeInstructionSlots) { free(next); return false; }
     /* Construct BOTH lookup representations before committing anything.
-     * 8192 distinct pages is the worst case:128KiB IDs +16MiB slots, in
-     * addition to the retained256KiB legacy ranges. Allocation failure leaves
+     * At most32768 populated pages require128KiB IDs +64MiB slots, in
+     * addition to the retained256KiB legacy ranges and entry allocations.
+     * Rebuilds temporarily retain old and new allocations; duplicate batches
+     * can leave an entry allocation larger than the deduplicated count.
+     * Allocation failure leaves
      * every old descriptor, index, statistic and launch-mode cache intact. */
     uint16_t *next_ids = (uint16_t *)calloc(65536, sizeof *next_ids);
     if (!next_ids) { free(next); return false; }

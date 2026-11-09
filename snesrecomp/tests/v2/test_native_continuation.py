@@ -48,6 +48,7 @@ static int native_rep(Interp816 *in){(void)fetch(in);uint8 mask=fetch(in);interp
 static int native_sep(Interp816 *in){(void)fetch(in);uint8 mask=fetch(in);interp816_setFlags(in,interp816_getFlags(in)|mask);return in->cyclesUsed=3;}
 static int forbidden_handler(Interp816 *in){(void)in;++handler_entries;return 0;}
 static int pure_decline(Interp816 *in){(void)in;return 0;}
+static int native_capacity_nop(Interp816 *in){(void)fetch(in);return in->cyclesUsed=2;}
 static InterpNativeInstruction descriptor(uint32 pc,int m,int x,int length,InterpNativeInstructionStep step){
   InterpNativeInstruction out={0};out.pc24=pc;out.m=m;out.x=x;out.length=length;out.step=step;
   memcpy(out.bytes,RAM+pc,length);return out;
@@ -247,15 +248,35 @@ def _metadata_source():
     d.pc24=0x1828000;CHECK(!interp_bridge_add_native_instructions(&d,1),"invalid PC bits refused");
     CHECK(!interp_bridge_add_native_instructions(NULL,1),"NULL batch refused");
     interp_bridge_clear_native_instructions();
-    InterpNativeInstruction *full=calloc(8192,sizeof *full);CHECK(full!=NULL,"registry capacity allocation");
+    setup(1,0x82,1,1,0,7,0,0);interp_bridge_clear_native_instructions();
+    InterpNativeInstruction *full=calloc(32768,sizeof *full);CHECK(full!=NULL,"registry capacity allocation");
     if(full){
-      for(unsigned i=0;i<8192;i++){full[i]=d;full[i].pc24=0x828000+i;full[i].length=1;memset(full[i].bytes,0,4);full[i].bytes[0]=0xea;}
-      CHECK(interp_bridge_add_native_instructions(full,8192),"full registry accepted");
-      CHECK(interp_bridge_native_instruction_stats(NULL,0)==8192,"all page buckets retained");
-      CHECK(interp_bridge_add_native_instructions(full,8192),"full registry idempotent batch");
+      const unsigned banks[]={0x02,0x42,0x82,0xc2};
+      for(unsigned i=0;i<32768;i++){
+        full[i]=d;full[i].pc24=(banks[i/8192]<<16)| (0xe000u+i%8192);
+        full[i].length=1;full[i].step=native_capacity_nop;memset(full[i].bytes,0,4);full[i].bytes[0]=0xea;RAM[full[i].pc24]=0xea;
+      }
+      CHECK(full[32767].pc24==0xc2ffff,"full capacity ends on valid bank-final opcode");
+      CHECK(interp_bridge_add_native_instructions(full,32768),"full registry accepted");
+      CHECK(interp_bridge_native_instruction_stats(NULL,0)==32768,"all page buckets retained");
+      InterpNativeInstructionStats *stats=calloc(32768,sizeof *stats);CHECK(stats!=NULL,"full registry stats allocation");
+      uint64 ni=interp_bridge_native_continuation_insns_total(),nc=interp_bridge_native_continuation_cycles_total();
+      uint64 ii=interp816_insns_total(),ic=interp816_cycles_total();uint16 sp=g_c.S;
+      interp_bridge_set_master_deadline(g_c.master_cycles+1);
+      CHECK(interp_bridge_run_until_quiescent(&g_c,full[32767].pc24)==1,"owning bridge executes descriptor ID32768");
+      interp_bridge_set_master_deadline(0);
+      CHECK(interp_bridge_native_continuation_insns_total()==ni+1&&interp_bridge_native_continuation_cycles_total()==nc+2,"last descriptor exact native attribution");
+      CHECK(interp816_insns_total()==ii&&interp816_cycles_total()==ic&&g_c.S==sp,"last descriptor neither interpreted nor changes owner stack");
+      if(stats){CHECK(interp_bridge_native_instruction_stats(stats,32768)==32768&&stats[32767].pc24==0xc2ffff&&stats[32767].insns==1&&stats[32767].cycles==2,"last descriptor ID and per-site counters retained");}
+      CHECK(interp_bridge_add_native_instructions(full,32768),"full registry idempotent batch");
       d=full[0];d.pc24=0x838000;
       CHECK(!interp_bridge_add_native_instructions(&d,1),"unique capacity overflow atomic refusal");
-      CHECK(interp_bridge_native_instruction_stats(NULL,0)==8192,"capacity refusal preserves registry");free(full);
+      InterpNativeInstruction conflict=full[32767];conflict.step=pure_decline;
+      CHECK(!interp_bridge_add_native_instructions(&conflict,1),"full registry conflicting callback refusal");
+      CHECK(!interp_bridge_add_native_instructions(full,32769),"oversized batch refused before input traversal");
+      CHECK(interp_bridge_native_instruction_stats(NULL,0)==32768,"capacity refusal preserves registry");
+      if(stats){CHECK(interp_bridge_native_instruction_stats(stats,32768)==32768&&stats[32767].pc24==0xc2ffff&&stats[32767].insns==1&&stats[32767].cycles==2,"idempotence and all refusals preserve used last descriptor");free(stats);}
+      CHECK(interp_bridge_native_continuation_insns_total()==ni+1&&interp_bridge_native_continuation_cycles_total()==nc+2,"idempotence and refusals preserve global counters");free(full);
     }
     interp_bridge_clear_native_instructions();
     ''', "}"]
@@ -297,7 +318,7 @@ void cpu_write8(CpuState *cpu,uint8 bank,uint16 addr,uint8 value){
     return '#include "cpu_state.h"\n#include "snes/interp816.h"\nstatic uint64_t bus_hash,bus_reads,bus_writes;static uint32_t last_data_ipc;static int interrupt_scope;static unsigned overlay_probes;\n'+source+body
 
 
-def _run(tmp_path, negative=None):
+def _run(tmp_path, negative=None, lookup=None):
     cc = os.environ.get("CC") or shutil.which("clang") or shutil.which("cc") or shutil.which("gcc")
     if not cc: pytest.skip("C11 compiler required")
     source=tmp_path/"continuation.c";source.write_text(_source(negative),encoding="utf-8")
@@ -310,14 +331,17 @@ def _run(tmp_path, negative=None):
     compiled=subprocess.run(command,capture_output=True,text=True,timeout=60)
     (tmp_path/"compile.json").write_text(json.dumps(dict(command=command,exit_code=compiled.returncode,stdout=compiled.stdout,stderr=compiled.stderr),indent=2),encoding="utf-8")
     assert compiled.returncode==0,compiled.stdout+compiled.stderr
-    result=subprocess.run([str(exe)],capture_output=True,text=True,timeout=60,cwd=tmp_path)
-    (tmp_path/"execution.json").write_text(json.dumps(dict(exit_code=result.returncode,source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+    environment=os.environ.copy()
+    if lookup is not None: environment['SNESRECOMP_NATIVE_INSTRUCTION_INDEX']=lookup
+    result=subprocess.run([str(exe)],capture_output=True,text=True,timeout=60,cwd=tmp_path,env=environment)
+    (tmp_path/"execution.json").write_text(json.dumps(dict(exit_code=result.returncode,lookup=lookup,source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
       binary_sha256=hashlib.sha256(exe.read_bytes()).hexdigest(),stdout=result.stdout,stderr=result.stderr),indent=2),encoding="utf-8")
     return result
 
 
-def test_native_continuations_share_actual_core_retirement(tmp_path):
-    result=_run(tmp_path)
+@pytest.mark.parametrize("lookup",["0","1"])
+def test_native_continuations_share_actual_core_retirement(tmp_path,lookup):
+    result=_run(tmp_path,lookup=lookup)
     assert result.returncode==0,result.stdout+result.stderr
     assert "failures=0" in result.stdout
     line=next(s.removeprefix("SHARE ").strip().removesuffix(",")for s in result.stdout.splitlines()if s.startswith("SHARE "))

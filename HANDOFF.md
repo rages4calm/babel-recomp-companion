@@ -3,7 +3,85 @@
 Updated November 9, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
+## Qualified continuation — native batch 014
+
+Source baseline `b5feec7`. Work is under ignored `.local/batch-001/native-014`.
+Final worktree, staged and full remote-tree checks are recorded in that batch's
+`final-verify-worktree.json`, `final-verify-staged.json` and
+`final-verify-published.json`. This is a source update, not a release/install.
+The finite selection retains 1,990 contexts and adds 2,500 observed contexts,
+giving 4,490 canonical / 17,960 aliases / 127 fixed opcode bodies. Capacity is
+32,768 with atomic/refusal/direct/legacy proof; no runtime guard is relaxed.
+RomAtlas checks cover 2,308 new and 192 exact reused decodes. SDK qualification
+passes 811 tests, two skipped, plus six new MMIO tests with actual SPC/DMA.
+Source/module and initial same-core probes are in [batch 014](docs/NATIVE-BATCH-014.md).
+
+Candidate SHA `d8cc01020aadeff92012d5498aa0c172dc7097171300db32271526f913b9530a`
+is frozen at `native-014/build/babel-final.exe`; graph
+`0e8b5c3deb57023e93f539607bc7fd871a559a6ea821d1bb65f6dee4b464c021`:
+415 roots / 1,333 contexts / 1,248 eligible / 85 LLE. All 1,246 prior bodies
+are byte-identical; two new bodies and 21 new instruction contexts pass checks.
+The final 83-case plan passes under
+`qualification-final/{old-new,old-reg,old-root,new14}`: **83 pairs / 166 captures /
+436,000 frames / 1,294 snapshot sets**, with independent saved-state/device,
+APU/scheduler/output, loss-free capture, counter and original-writer reviews.
+It carries 64 exact reused v11 source cases plus 19 new source observations,
+including Castoth, Sand Fanger and Mummy Queen damage/death, rewards, phase
+controls, ceremonies/catch-up and original teleport-pad movement.
+Inputs are 825 historical and 81 current-core profiles (62 reused / 19 new).
+Actual execution reaches 3,686 sites, including 1,983 of the 2,500 additions;
+the unobserved remainder is not inferred to be qualified. All 647 raw SPC
+host-stamp differences are retained; canonical/full APU checks pass. Strict
+word-operation grouping does not claim physical intraword bus-order proof.
+Source/helper scripts are frozen; no hardware state conversion or inferred
+phases were used. Full campaign and independent hardware proof remain ahead.
+
+Town-route native guest-cycle shares are 94.6280% / 94.6488% in 4:3 / 16:9,
+versus 90.3353% / 90.3575% on the same-core prior selection. These are bounded
+execution measures, not completion percentages. All 42 sequential host runs /
+224,000 frames and the post-audit pass. Median paired CPU costs change -0.14% /
+-0.48% in town and +2.55% in Viper, with substantial variation; no overall host
+speed gain is established. The separate aspect-block ratio is not an isolated
+widescreen-cost result. Real-GPU FPS and physical input latency are unmeasured.
+
+The private first prepare attempt stopped before generation when it assumed a
+retired historical journal existed. The corrected binder explicitly records
+missing historical peers as null, as batch 013 did. Its failed log/receipt are
+retained; the actual bounded SDK generation succeeds on its first attempt.
+After all consumers finish, direct cleanup removes 19,659 superseded batch-013
+raw files / 6.73 GB. The project measures 25.869 GiB afterward. All 64 exact
+source witnesses still consumed by 014 remain pinned: 7,684 artifacts and
+receipts match their frozen inventories. All 39 protected owner files,
+installed batch 005, current 014 evidence and master builds remain; no archive
+is created or modified. Do not retire those source pins while a later consumer
+still uses them. CUA is off; all owned test/benchmark workers are stopped.
+
+Owner clarification: fully native Original is the goal, including game logic
+and the sound-driver replacement. The broad source-module filter was our
+conservative development choice, not an upstream author's requirement. Treat
+exclusions and interpreter-dependent paths as unfinished work. Known timing
+guards require fixing and verifying their underlying failure before removal;
+they are not permanent product requirements. Keep the interpreter/reference
+available for development comparison while eliminating required fallback from
+the eventual qualified native game. GaiaLabs integration follows separately.
+The owner's quality target is a faithful remake with the finish of a modern
+official PC edition: preserve Quintet's identity and atmosphere while validating
+rendering/widescreen composition, controls, menus, audio and integrated QoL.
+Native execution is the foundation, not a substitute for those quality checks.
+The owner explicitly wants inherited sluggish menus/transitions, stepping,
+jitter and input lag improved rather than preserved as authenticity. Enhanced
+PC behavior should be the finished default, with optional retro presentation.
+See [renderer/performance direction](docs/RENDERER-DIRECTION.md). Its proposed
+shared SDL3 GPU core and separate Gaia adapter follow actual source inspection;
+implementation and real hardware measurements remain pending. The former local
+StarFox checkout was unavailable, so only pinned official source was inspected.
+Other projects remain read-only references. A confirmed stale widescreen-comment
+defect is tracked in [issue 1](https://github.com/rages4calm/babel-recomp-companion/issues/1).
+
 ## Qualified continuation — native batch 013
+
+Historical qualification below remains unchanged; its superseded raw outputs
+were retired after batch 014 passed, except the 64 pinned source witnesses.
 
 [Batch 013](docs/NATIVE-BATCH-013.md) follows published baseline `4499fce`.
 Private receipts are under ignored `.local/batch-001/native-013`; final source

@@ -211,7 +211,7 @@ uint64_t interp_bridge_native_poll_cycles_total(void);
  * equality alone is not source/ABI or campaign qualification.
  *
  * Registration copies a batch atomically, accepting identical duplicates and
- * refusing conflicts/invalid metadata/capacity. Up to8192 descriptors. Host
+ * refusing conflicts/invalid metadata/capacity. Up to 32768 descriptors. Host
  * setup only, outside ALL active bridge frames. clear likewise does nothing
  * inside an active frame. Nothing is serialized or enabled by default.
  */
