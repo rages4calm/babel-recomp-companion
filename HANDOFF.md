@@ -23,6 +23,16 @@ bound batch-006/007 tier controls match. Natural native CPU-cycle coverage
 rises from 12.8307% to 14.9396% in 4:3 and 12.8268% to 14.9394% in 16:9.
 Coverage is not host speed, per-entry execution proof or campaign completion.
 
+The separate five-fixture whole-build CPU benchmark completes 120 measured
+processes plus 20 warmups with every final-state/tier control passing. Median
+new/old native process-CPU changes: natural 4:3 −1.63%, wide +4.73%, inventory
+−2.20%, Shadow Aura −1.50%, Viper −2.82%. Wide has observed higher median cost;
+pair spread/interpreter drift prevent a general speedup claim. Startup/layout
+and diagnostic support are included, so this is not isolated graph attribution.
+All owned workloads are stopped. `native-007/host-cost/completion.json` and
+`control-analysis.json` retain full pairs/control ranges; contended warmups
+are excluded. Keep the preset opt-in; profile/isolate widescreen cost next.
+
 An additional copied-owner F1 pair preserves observed state/flags. Two
 6,065-frame in-session 4:3/wide/4:3 runs match, including all 67 presented
 frames. Separate TRACE diagnostic `aa71ee49...` checks all ten live cartridge

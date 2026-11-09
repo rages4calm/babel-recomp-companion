@@ -76,6 +76,45 @@ progression, visual correctness outside the tested routes or campaign completion
 All 57 current cases increase their measured native CPU-cycle share. These
 percentages describe guest execution coverage, not host speed or per-entry hits.
 
+## Whole-build host CPU comparison
+
+A separate sequential benchmark compares batch-006 `c028...` with batch-007
+`4ccb...`: five fixtures, each build in mixed-native and forced-interpreter
+mode, one warmup per build/tier/case and six balanced pairs (three AB, three BA).
+All **120 measured processes plus 20 warmups** pass final CPU/sampled-WRAM,
+frame and guest-cycle controls against their exact-build/tier witnesses. All
+20 execution-share groups exactly match the witnesses; interpretation reports
+zero native share. These reduced diagnostic runs supplement the complete state
+comparisons above rather than replacing them.
+
+Primary cost is Windows `GetProcessTimes` kernel plus user CPU time for all
+threads in the complete process. Dumps/captures/profile output are disabled;
+inputs/waits and private mod settings remain identical, with dummy SDL,
+audio off, VSync off and no frame delay. Startup/shutdown, binary layout,
+unused script-command support and newer CMake qualification are included.
+This does not isolate the sprite graph's cost or measure physical GPU/audio FPS.
+
+Negative percentages below mean lower process CPU cost. Values are medians of
+six paired new/old ratios; they are not ratios of separately computed medians.
+
+| Fixture | Mixed-native cost change | Observed pair range | Forced-interpreter control change |
+|---|---:|---:|---:|
+| Natural 4:3 | −1.63% | −17.57% to +7.94% | +0.13% |
+| Natural 16:9 | +4.73% | −5.03% to +11.85% | −0.05% |
+| Inventory | −2.20% | −14.00% to +12.20% | −1.82% |
+| Shadow Aura | −1.50% | −12.62% to +2.04% | 0.00% |
+| Viper | −2.82% | −7.56% to −0.48% | +0.92% |
+
+The widescreen fixture has observed higher median whole-build cost. Most
+effects are small relative to pair spread/control drift. Viper's six raw
+native pairs are all lower, but its interpreter-normalized range still crosses
+zero. Short inventory runs also make startup cost and accounting quantization
+material. **No general speedup is qualified.** The preset remains opt-in;
+isolating/profile-guiding widescreen cost is the next performance task.
+The interrupted contended setup contains warmups only and is excluded.
+Private receipts: `host-cost/completion.json`, `summary.json` and
+`control-analysis.json`; all owned benchmark processes are stopped.
+
 ## Retained limits and failed checks
 
 Strict replay against old batch-004 mechanics witnesses remains **17/28**
