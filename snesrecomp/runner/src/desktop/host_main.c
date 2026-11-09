@@ -1005,6 +1005,7 @@ static ScriptEntry *NewScriptEntry(int *cap) {
  *   reset                   the Reset hotkey's console reset
  *   turbo on|off            change the held-Turbo state at this frame boundary
  *   renderer toggle         invoke the renderer hotkey at this boundary
+ *   widescreen 0|1          set per-title widescreen; persists active config
  *   poke <addr> <hex>       write WRAM bytes for one frame
  *   pokefor <addr> <hex> N  write WRAM bytes for N frames
  *   forcepoke <addr> <hex>  write WRAM bytes every frame from now on
@@ -1048,6 +1049,19 @@ static void LoadScript(const char *path) {
       }
       ScriptEntry *e = NewScriptEntry(&cap);
       e->mask = kScriptHostControl | (strcmp(arg1, "on") == 0 ? 1u : 0u);
+      e->wait_frames = pending_wait;
+      pending_wait = 0;
+    } else if (strcmp(cmd, "widescreen") == 0) {
+      char extra;
+      if (sscanf(line, "%*s %63s %c", arg1, &extra) != 1 ||
+          (strcmp(arg1, "0") != 0 && strcmp(arg1, "1") != 0)) {
+        fprintf(stderr, "script: expected 'widescreen 0' or 'widescreen 1': %s", line);
+        g_script_failed = g_script_quit = 1;
+        break;
+      }
+      ScriptEntry *e = NewScriptEntry(&cap);
+      e->mask = kScriptHostControl | (arg1[0] == '1' ? 1u : 0u);
+      e->host_command = kKeys_ToggleWidescreen;
       e->wait_frames = pending_wait;
       pending_wait = 0;
     } else if (strcmp(cmd, "renderer") == 0) {
@@ -1232,7 +1246,13 @@ static uint32 TickScript(void) {
     } else if (e->mask & kScriptDump) {
       ScriptDump(e->dump_tag, frame);
     } else if (e->mask & kScriptHostControl) {
-      if (e->host_command) {
+      if (e->host_command == kKeys_ToggleWidescreen) {
+        /* Use the launcher's setter, not the informational hotkey. Geometry
+         * still changes at normal frame preparation, after this simulation. */
+        const int enabled = (e->mask & 1u) != 0;
+        snesrecomp_desktop_set_widescreen(enabled);
+        fprintf(stderr, "script f=%u widescreen=%d\n", frame, enabled);
+      } else if (e->host_command) {
         HandleCommand(e->host_command, true);
         fprintf(stderr, "script f=%u renderer=%s\n", frame,
                 snesrecomp_desktop_new_renderer() ? "new" : "reference");

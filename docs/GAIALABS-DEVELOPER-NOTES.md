@@ -182,6 +182,16 @@ No message has been sent and no build has been received through this offer.
 
 ### Integration queue
 
+November 8 follow-up: Kassiven asked whether the request is specifically for
+widescreen or other features, and warned that the in-development work could
+take a month to clean up. The useful request is an available rough snapshot,
+with its actual build recipe and known issues, rather than a polished release.
+The integration interests also include the current retranslation, options,
+key-item auto-use, world-map movement and minimap. None is assumed enabled
+until the supplied build/module selection identifies it. Original Gaia and
+GaiaLabs remain separate editions; see [their identity contract](GAME-EDITIONS.md).
+No new build has been received, and the agent has sent no DM.
+
 1. Read the current core/build configuration and map the inherited Babel
    patches against this pinned baserom revision. Preserve existing deltas.
 2. Use the newer game documentation to review native entry boundaries,

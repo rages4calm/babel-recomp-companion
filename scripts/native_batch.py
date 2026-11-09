@@ -9,6 +9,7 @@ changes runtime state, disables fallback or declares native execution qualified.
 """
 from __future__ import annotations
 import argparse
+import copy
 from collections import Counter
 import hashlib
 import json
@@ -23,6 +24,19 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "recomp/native/policy.json"
 DEFAULT_WORK = ROOT / ".local/batch-001/native-002/large-batch"
+SPRITE_IMMEDIATES = (0xC728, 0xC7BD, 0xC8E4, 0xC8E9, 0xC9C1, 0xC9C6)
+# Host patch contract, not extracted game code. Absolute-address operands and
+# both actor-list comparisons remain inside the complete protected function.
+SPRITE_PATCH_CONTRACT = {
+    0xC616: (0xED, 0x068A, 0, 1), 0xC619: (0xC9, 0x0100, 2, 0),
+    0xC629: (0xED, 0x068A, 0, 1), 0xC62C: (0xC9, 0x0100, 2, 0),
+    0xC728: (0xE9, 0x0010, 1, 0), 0xC7BD: (0xC9, 0x0110, 1, 0),
+    0xC8E4: (0xC9, 0x0110, 2, 0), 0xC8E9: (0xE9, 0x000F, 1, 0),
+    0xC9C1: (0xC9, 0x0110, 2, 0), 0xC9C6: (0xE9, 0x000F, 1, 0),
+}
+SPRITE_GUARD_REASON = ("Private candidate: complete SortActorsByDepth including both mutable ABS operands; "
+                       "later six immediate-only sites require pre-effect interpreter refusal.")
+SPRITE_CFG_COMMENT = "\n# PRIVATE sprite-prefix experiment: changed immediates must refuse before effects.\n"
 
 
 class WindowsJob:
@@ -131,6 +145,154 @@ def bounded_run(command: list[str], log: Path, memory_mib: int, timeout_seconds:
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def json_digest(value) -> str:
+    return digest(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
+def cfg_identity(directory: Path) -> dict:
+    paths = list(directory.glob("bank*.cfg"))
+    paths.extend(directory / name for name in ("symbols.toml", "disassembly-layout.json")
+                 if (directory / name).is_file())
+    return {p.name: digest(p.read_bytes()) for p in sorted(paths)}
+
+
+def sprite_prefix_policy(policy: dict, image: bytes) -> dict:
+    """Validate the stock host-patch boundary before narrowing a private guard."""
+    source = (ROOT / "src/iog_widescreen.c").read_text(encoding="utf-8")
+    match = re.search(r"static\s+const\s+CullSite\s+kCullSites\[\]\s*=\s*\{(.*?)\};", source, re.S)
+    if not match:
+        raise ValueError("Sprite-prefix patch contract: missing kCullSites table")
+    body = re.sub(r"/\*.*?\*/|//[^\n]*", "", match[1], flags=re.S)
+    rows = re.findall(r"\{\s*(0x[0-9A-Fa-f]+)\s*,\s*(0x[0-9A-Fa-f]+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*\}\s*,?", body)
+    remainder = re.sub(r"\{\s*0x[0-9A-Fa-f]+\s*,\s*0x[0-9A-Fa-f]+\s*,\s*-?\d+\s*,\s*\d+\s*\}\s*,?", "", body)
+    expected = {0x30000 + pc + 1: (stock, margin, camera)
+                for pc, (_, stock, margin, camera) in SPRITE_PATCH_CONTRACT.items()}
+    observed = {int(offset, 16): (int(stock, 16), int(margin), int(camera))
+                for offset, stock, margin, camera in rows}
+    if (remainder.strip() or len(rows) != len(expected) or observed != expected or
+            not re.search(r"\bkWramCullCamera\s*=\s*0x1E00\b", source, re.I)):
+        raise ValueError("Sprite-prefix patch contract differs from iog_widescreen.c")
+    for pc, (opcode, stock, _, _) in SPRITE_PATCH_CONTRACT.items():
+        offset = 0x30000 + pc
+        if image[offset:offset + 3] != bytes((opcode, stock & 255, stock >> 8)):
+            raise ValueError(f"Sprite-prefix stock opcode/operand mismatch at 03{pc:04X}")
+    effective = copy.deepcopy(policy)
+    cull = [item for item in effective["guard_ranges"] if item["start"] == "03C5FF"]
+    if len(cull) != 1 or cull[0]["end_exclusive"] != "03CA00":
+        raise ValueError("Sprite-prefix preset requires the original complete culling guard")
+    cull[0].update(end_exclusive="03C714", reason=SPRITE_GUARD_REASON)
+    return effective
+
+
+def generator_identity() -> dict:
+    """Bind source inputs and analyzer selection; SDK still owns cache validation.
+
+    Source hashes exclude bytecode, generated C, Cargo targets and game inputs.
+    An existing analyzer's binary/stamp identity is recorded as well. The SDK
+    checks/rebuilds its default analyzer; explicit overrides require a matching
+    source stamp here because the SDK deliberately trusts explicit binaries.
+    """
+    sdk = ROOT / "snesrecomp"
+    if os.environ.get("SNESRECOMP_ROOT") and Path(os.environ["SNESRECOMP_ROOT"]).resolve() != sdk.resolve():
+        raise ValueError("Sprite-prefix preparation requires this project's SDK source root")
+    paths = {Path(__file__).resolve(), sdk / "snesrecomp_cli.py"}
+    for directory, suffix in ((sdk / "recompiler", ".py"), (sdk / "tools", ".py"),
+                              (sdk / "recompiler-rs/src", ".rs")):
+        paths.update(p for p in directory.rglob("*" + suffix) if p.is_file())
+    paths.update(sdk / "recompiler-rs" / name for name in ("Cargo.toml", "Cargo.lock")
+                 if (sdk / "recompiler-rs" / name).is_file())
+    # __file__ can be outside a synthetic test project; retain a stable label.
+    files = {(p.relative_to(ROOT).as_posix() if p.is_relative_to(ROOT) else "scripts/native_batch.py"):
+             digest(p.read_bytes()) for p in sorted(paths)}
+    analyzer = Path(os.environ.get("SNESRECOMP_NATIVE_ANALYZER") or
+                    sdk / "recompiler-rs/target/release" /
+                    ("snesrecomp-analyze.exe" if os.name == "nt" else "snesrecomp-analyze")).resolve()
+    stamp = analyzer.with_name(analyzer.name + ".source-sha256")
+    crate = sdk / "recompiler-rs"
+    analyzer_sources = [p for p in (crate / "src").rglob("*") if p.is_file()]
+    analyzer_sources.extend(crate / name for name in ("Cargo.toml", "Cargo.lock") if (crate / name).is_file())
+    source_hash = hashlib.sha256()
+    for path in sorted(analyzer_sources, key=lambda p: p.relative_to(crate).as_posix()):
+        source_hash.update(path.relative_to(crate).as_posix().encode() + b"\0" + path.read_bytes() + b"\0")
+    analyzer_source_sha256 = source_hash.hexdigest() if analyzer_sources else None
+    if os.environ.get("SNESRECOMP_NATIVE_ANALYZER") and (
+            not analyzer.is_file() or not analyzer_source_sha256 or not stamp.is_file() or
+            stamp.read_text(encoding="ascii").strip() != analyzer_source_sha256):
+        raise ValueError("Sprite-prefix explicit analyzer needs a matching source stamp")
+    identity = {"source_files_sha256": files, "source_tree_sha256": json_digest(files),
+            "analyzer_sources_sha256": analyzer_source_sha256,
+            "analyzer_selection": "explicit" if os.environ.get("SNESRECOMP_NATIVE_ANALYZER") else "default",
+            "analyzer_path": str(analyzer),
+            "emit_environment": {key: value for key, value in sorted(os.environ.items())
+                                 if key.startswith("SNESRECOMP_EMIT_")}}
+    # Default bootstrap/rebuild is intentional SDK behavior. Its actual binary
+    # is an observation, not an immutable preparation input. Explicit overrides
+    # are trusted by the SDK, so keep their verified binary/stamp strictly pinned.
+    if identity["analyzer_selection"] == "explicit":
+        identity.update(analyzer_sha256=digest(analyzer.read_bytes()),
+                        analyzer_source_stamp_sha256=digest(stamp.read_bytes()))
+    return identity
+
+
+def analyzer_observation(identity: dict) -> dict:
+    analyzer = Path(identity["analyzer_path"])
+    stamp = analyzer.with_name(analyzer.name + ".source-sha256")
+    return {"path": str(analyzer), "binary_sha256": digest(analyzer.read_bytes()) if analyzer.is_file() else None,
+            "source_stamp_sha256": digest(stamp.read_bytes()) if stamp.is_file() else None,
+            "source_stamp": stamp.read_text(encoding="ascii").strip() if stamp.is_file() else None}
+
+
+def sprite_cache_inputs(receipt: dict) -> str:
+    """Preparation binding; distinct from SDK analysis/bank cache digests."""
+    keys = ("rom_sha256", "policy_sha256", "framework_pins_sha256", "prepared_cfg_sha256",
+            "profiles", "historical_profiles", "analysis_limits", "cfg_roots", "all_width_hypotheses",
+            "instruction_blocks", "region_paced", "generation_command")
+    inputs = {key: receipt.get(key) for key in keys}
+    inputs["generator_identity"] = receipt["sprite_prefixes"]["generator_identity"]
+    return json_digest(inputs)
+
+
+def sprite_receipt_policy(receipt: dict, work: Path) -> dict:
+    """Validate immutable preset preparation before launching or using a cache."""
+    preset = receipt["sprite_prefixes"]
+    expected_aliases = [f"{pc:06X}" for site in SPRITE_IMMEDIATES for pc in sorted(aliases(0x030000 | site))]
+    if (preset.get("schema") != "gaia sprite-prefix preparation v1" or
+            preset.get("effective_policy_file") != "effective-policy.json" or
+            preset.get("effective_policy_sha256") != receipt["policy_sha256"] or
+            preset.get("protected_function") != ["03C5FF", "03C714"] or
+            preset.get("live_immediate_sites") != [f"{pc:04X}" for pc in SPRITE_IMMEDIATES] or
+            preset.get("live_alias_sites") != expected_aliases or
+            preset.get("cache_inputs_sha256") != sprite_cache_inputs(receipt) or
+            not receipt.get("instruction_blocks") or not receipt.get("region_paced")):
+        raise ValueError("Sprite-prefix preparation identity or prerequisites changed")
+    policy_path = work / "effective-policy.json"
+    policy_data = policy_path.read_bytes()
+    command = receipt["generation_command"]
+    rom = Path(command[command.index("--rom") + 1]).read_bytes()
+    image = rom[512:] if len(rom) == 2097664 else rom
+    public = POLICY.read_bytes()
+    effective = sprite_prefix_policy(json.loads(public), image)
+    if (digest(public) != preset["public_policy_sha256"] or
+            digest(policy_data) != receipt["policy_sha256"] or
+            json.loads(policy_data) != effective or
+            receipt["rom_sha256"] != digest(image) or
+            cfg_identity(ROOT / "recomp") != receipt["source_cfg_sha256"] or
+            cfg_identity(work / "cfg") != receipt["prepared_cfg_sha256"] or
+            generator_identity() != preset["generator_identity"] or
+            digest((ROOT / "src/iog_widescreen.c").read_bytes()) != preset["source_widescreen_sha256"] or
+            digest((ROOT / "framework_pins.txt").read_bytes()) != receipt["framework_pins_sha256"] or
+            json_digest(command) != preset["generation_command_sha256"]):
+        raise ValueError("Sprite-prefix preparation identity changed; use a fresh --work directory")
+    for capture in receipt["profiles"]["captures"]:
+        if digest(Path(capture["path"]).read_bytes()) != capture["sha256"]:
+            raise ValueError("Sprite-prefix profile identity changed")
+    for historical in receipt.get("historical_profiles", []):
+        for capture in historical["profile"]["captures"]:
+            if digest(Path(capture["path"]).read_bytes()) != capture["sha256"]:
+                raise ValueError("Sprite-prefix historical profile identity changed")
+    return effective
 
 
 def canonical(pc: int) -> int:
@@ -248,15 +410,24 @@ def read_historical_profiles(paths: list[Path], rom_sha256: str) -> list[dict]:
 
 def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profile_only: bool,
             max_insns: int = 1024, max_nodes: int = 12000, instruction_blocks: bool = False, region_paced: bool = False,
-            historical_profiles: list[Path] | None = None) -> dict:
+            historical_profiles: list[Path] | None = None, sprite_prefixes: bool = False) -> dict:
     if max_insns <= 0 or max_nodes <= 0 or (region_paced and not instruction_blocks):
         raise ValueError("Positive analysis limits and instruction-blocks for region-paced emission are required")
-    policy = json.loads(POLICY.read_text(encoding="utf-8")); blocked, ranges = guards(policy)
+    if sprite_prefixes and not (instruction_blocks and region_paced):
+        raise ValueError("--sprite-prefixes requires --instruction-blocks and --region-paced")
+    public_policy = POLICY.read_bytes()
+    policy = json.loads(public_policy)
+    blocked, ranges = guards(policy)
     image = rom.read_bytes()
     if len(image) == 2097664:
         image = image[512:]
     if len(image) != 2097152 or digest(image) != policy["rom_sha256"]:
         raise ValueError("The ROM does not match the supported unmodified USA image")
+    if sprite_prefixes:
+        private_path(work)
+        policy = sprite_prefix_policy(policy, image)
+        blocked, ranges = guards(policy)
+    policy_data = (json.dumps(policy, indent=2) + "\n").encode("utf-8") if sprite_prefixes else public_policy
     evidence = read_profiles(profiles, policy["rom_sha256"])
     historical = read_historical_profiles(historical_profiles or [], policy["rom_sha256"])
     source = ROOT / "recomp"; prepared = work / "cfg"
@@ -271,9 +442,12 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
             bool(previous.get("instruction_blocks")) != instruction_blocks or
             bool(previous.get("region_paced")) != region_paced or
             previous.get("analysis_limits", {"max_insns": 4096, "max_nodes": 100000}) != {"max_insns": max_insns, "max_nodes": max_nodes} or
-            previous["policy_sha256"] != digest(POLICY.read_bytes()) or
+            bool(previous.get("sprite_prefixes")) != sprite_prefixes or
+            previous["policy_sha256"] != digest(policy_data) or
             previous["framework_pins_sha256"] != digest((ROOT / "framework_pins.txt").read_bytes())):
             raise ValueError("This private batch is immutable and its inputs changed. Choose a new --work directory.")
+        if sprite_prefixes:
+            sprite_receipt_policy(previous, work)
         return previous
     prepared.mkdir(parents=True, exist_ok=True)
     inputs = {}; outputs = {}; declarations = 0
@@ -288,6 +462,12 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
             existing = {int(v, 16) for v in re.findall(r"^force_lle\s+([0-9a-fA-F]+)", text, re.M)}
             text += "\n# Private native batch safety policy: every guarded byte and HiROM alias.\n"
             text += "".join(f"force_lle {pc:06X}\n" for pc in sorted(blocked - existing))
+        if sprite_prefixes and path.name.lower() == "bank03.cfg":
+            existing_live = {int(v, 16) for v in re.findall(r"^live_operand\s+([0-9a-fA-F]+)", text, re.M)}
+            if existing_live.intersection(SPRITE_PATCH_CONTRACT):
+                raise ValueError("Sprite-prefix patch sites already have live_operand directives")
+            text += SPRITE_CFG_COMMENT
+            text += "".join(f"live_operand {pc:04X}\n" for pc in SPRITE_IMMEDIATES)
         data = text.replace("\r\n", "\n").encode("utf-8")
         (prepared / path.name).write_bytes(data); outputs[path.name] = digest(data)
     for name in ("symbols.toml", "disassembly-layout.json"):
@@ -310,7 +490,7 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
     for profile in historical_profiles or []:
         command.extend(("--historical-profile-manifest", str(profile)))
     receipt = {"schema": "gaia native batch preparation v1", "rom_sha256": policy["rom_sha256"],
-               "policy_sha256": digest(POLICY.read_bytes()), "framework_pins_sha256": digest((ROOT / "framework_pins.txt").read_bytes()),
+               "policy_sha256": digest(policy_data), "framework_pins_sha256": digest((ROOT / "framework_pins.txt").read_bytes()),
                "declared_functions": declarations, "cfg_roots": not profile_only, "all_width_hypotheses": all_widths,
                "analysis_limits": {"max_insns": max_insns, "max_nodes": max_nodes},
                "instruction_blocks": instruction_blocks, "region_paced": region_paced,
@@ -319,11 +499,34 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
                "evidence_scope": "Private analysis/generation candidates; no native execution qualification."}
     if historical:
         receipt["historical_profiles"] = historical
+    if sprite_prefixes:
+        if not (prepared / "bank03.cfg").is_file():
+            raise ValueError("Sprite-prefix preset requires bank03.cfg")
+        (work / "effective-policy.json").write_bytes(policy_data)
+        receipt["sprite_prefixes"] = {
+            "schema": "gaia sprite-prefix preparation v1", "experimental": True,
+            "public_policy_sha256": digest(public_policy),
+            "effective_policy_file": "effective-policy.json", "effective_policy_sha256": digest(policy_data),
+            "protected_function": ["03C5FF", "03C714"],
+            "live_immediate_sites": [f"{pc:04X}" for pc in SPRITE_IMMEDIATES],
+            "live_alias_sites": [f"{pc:06X}" for site in SPRITE_IMMEDIATES for pc in sorted(aliases(0x030000 | site))],
+            "source_widescreen_sha256": digest((ROOT / "src/iog_widescreen.c").read_bytes()),
+            "generator_identity": generator_identity(),
+            "generation_command_sha256": json_digest(command),
+            "scope": "Opt-in private sprite-prefix analysis; complete SortActorsByDepth and every other guard retained. "
+                     "Six live immediates require pre-effect interpreter refusal; no campaign qualification."}
+        receipt["sprite_prefixes"]["cache_inputs_sha256"] = sprite_cache_inputs(receipt)
+        receipt["sprite_prefixes"]["analyzer_at_prepare"] = analyzer_observation(receipt["sprite_prefixes"]["generator_identity"])
     (work / "prepare-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     return receipt
 
 
 def generate(receipt: dict, work: Path, memory_mib: int = 4096, timeout_seconds: int = 300) -> dict:
+    policy = (sprite_receipt_policy(receipt, work) if receipt.get("sprite_prefixes")
+              else json.loads(POLICY.read_text(encoding="utf-8")))
+    cache_before = work / "generated/.snesrecomp-cache.json"
+    cache_before_sha256 = digest(cache_before.read_bytes()) if receipt.get("sprite_prefixes") and cache_before.is_file() else None
+    analyzer_before = analyzer_observation(receipt["sprite_prefixes"]["generator_identity"]) if receipt.get("sprite_prefixes") else None
     index = 1
     log = work / "generation.log"
     while log.exists():
@@ -336,7 +539,7 @@ def generate(receipt: dict, work: Path, memory_mib: int = 4096, timeout_seconds:
                "qualified": False, "evidence_scope": "Generation/link-closure only; root must compile, execute and compare matched guest state."}
     manifest_path = work / "generated/program_manifest.json"
     if exit_code == 0:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8")); policy = json.loads(POLICY.read_text(encoding="utf-8")); _, ranges = guards(policy)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8")); _, ranges = guards(policy)
         violations = []; dispositions = Counter(); nodes = manifest["nodes"]
         for key, node in nodes.items():
             dispositions[node["disposition"]] += 1
@@ -350,6 +553,26 @@ def generate(receipt: dict, work: Path, memory_mib: int = 4096, timeout_seconds:
                        generated_bytes=sum(p.stat().st_size for p in (work / "generated").glob("*.c")))
         if violations:
             summary["exit_code"] = 3
+        if receipt.get("sprite_prefixes"):
+            cache_path = work / "generated/.snesrecomp-cache.json"
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            identity_keys = ("generator_digest", "config_digest", "analysis_input_digest")
+            if (type(cache.get("format_version")) is not int or cache["format_version"] <= 0 or
+                    any(not re.fullmatch(r"[0-9a-f]{64}", str(cache.get(key, ""))) for key in identity_keys)):
+                raise ValueError("Sprite-prefix generation lacks complete SDK cache identities")
+            generator_after = generator_identity()
+            if generator_after != receipt["sprite_prefixes"]["generator_identity"]:
+                raise ValueError("Sprite-prefix generator source/selection changed during generation")
+            summary["sprite_prefixes"] = {"effective_policy_sha256": receipt["policy_sha256"],
+                                           "preparation_sha256": json_digest(receipt),
+                                           "cache_inputs_sha256": receipt["sprite_prefixes"]["cache_inputs_sha256"],
+                                           "cache_before_sha256": cache_before_sha256,
+                                           "cache_sha256": digest(cache_path.read_bytes()),
+                                           "cache_format_version": cache.get("format_version"),
+                                           **{key: cache[key] for key in identity_keys},
+                                           "generator_after": generator_after,
+                                           "analyzer_before": analyzer_before,
+                                           "analyzer_after": analyzer_observation(generator_after)}
     content = json.dumps(summary, indent=2) + "\n"
     (work / f"generation-receipt-attempt-{index:03}.json").write_text(content, encoding="utf-8")
     (work / "generation-receipt.json").write_text(content, encoding="utf-8")
@@ -373,14 +596,17 @@ def main() -> int:
     parser.add_argument("--max-nodes", type=int, default=12000, help="Maximum analyzed program variants")
     parser.add_argument("--region-paced", action="store_true", help="Opt in to conservative per-access region timing (requires --instruction-blocks)")
     parser.add_argument("--instruction-blocks", action="store_true", help="Check host deadlines at each guest instruction boundary")
+    parser.add_argument("--sprite-prefixes", action="store_true", help="Opt in to private sprite prefixes with six live immediate refusals; requires --instruction-blocks --region-paced and retains complete SortActorsByDepth fallback")
     args = parser.parse_args()
     if not (args.prepare or args.generate):
         parser.error("choose --prepare or --generate")
     if args.region_paced and not args.instruction_blocks:
         parser.error("--region-paced requires --instruction-blocks")
+    if args.sprite_prefixes and not (args.instruction_blocks and args.region_paced):
+        parser.error("--sprite-prefixes requires --instruction-blocks and --region-paced")
     work = private_path(args.work); work.mkdir(parents=True, exist_ok=True)
     receipt = prepare(args.rom.resolve(), work, [p.resolve() for p in args.profile], args.all_widths, args.profile_only, args.max_insns, args.max_nodes, args.instruction_blocks, args.region_paced,
-                      [p.resolve() for p in args.historical_profile])
+                      [p.resolve() for p in args.historical_profile], args.sprite_prefixes)
     print(json.dumps({"work": str(work), "declared_functions": receipt["declared_functions"],
                       "guarded_addresses_with_aliases": receipt["guarded_addresses_with_aliases"],
                       "profile_counts": receipt["profiles"]["counts"]}))

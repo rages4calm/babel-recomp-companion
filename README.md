@@ -13,9 +13,10 @@ baseline fixed duplicate vblank input remapping and passed **61 matched cases**:
 real assisted fights/rewards, seven ability effects, four bosses, prerequisite
 controls and earlier area/form regressions. The 6,000-frame classroom/South Cape
 route reports **12.83% native CPU cycles** in both 4:3 and 16:9 under the corrected
-input model. November 8's [batch 006](docs/NATIVE-BATCH-006.md) integrates a newer
-framework and expands the private inventory/menu cohort, with **57 fresh current
-reference/native pairs passing**. Historical cross-version comparisons have
+input model. November 8's [batch 007](docs/NATIVE-BATCH-007.md) adds conservative
+sprite prefixes on the current framework, with **57 fresh current
+reference/native pairs passing** and natural-route native coverage reaching
+**14.94%** in both aspects. Historical cross-version comparisons have
 separate documented failures; they are not waived by current tier parity.
 Interpreter fallback remains available.
 This is bounded route evidence, not a fully native game or completed campaign.
@@ -47,9 +48,10 @@ This is bounded route evidence, not a fully native game or completed campaign.
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
 - **Framework:** integrated SNESRecomp `e98dc63`, main checked November 8,
   2026, with Babel-specific changes preserved. [Integration and limits](docs/FRAMEWORK-NOV08.md).
-  Batch 006 adds 274 independent RomAtlas instruction-context checks; the earlier
+  Batch 007 adds 379 independent RomAtlas instruction-context checks; the earlier
   8,192-context batch retains its original identity and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-006.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-007.md),
+  [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
   Confirmed analyzer bug [#239](https://github.com/RetroPortingToolKit/snesrecomp/issues/239),
@@ -59,11 +61,14 @@ This is bounded route evidence, not a fully native game or completed campaign.
   [#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6589796017).
   The current Linux test-link failure is reported as
   [#263](https://github.com/RetroPortingToolKit/snesrecomp/issues/263).
+  Windows debug screenshot JSON escaping is reported as
+  [#264](https://github.com/RetroPortingToolKit/snesrecomp/issues/264).
   [Requested upstream patch split and qualification limits](contributions/snesrecomp/205/README.md).
 - **GaiaLabs collaboration:** newer baserom/retranslation module provenance and
   raw-map rebuild inputs have an [offline inspection tool](docs/GAIALABS-MODULE-INTEGRATION.md).
   The current dev-build profile remains pending; its new minimap/world-map/room
-  work is not yet integrated into Companion. Thanks to **Azarem**, **Kassiven**,
+  work is not yet integrated into Companion. [Original and GaiaLabs identities](docs/GAME-EDITIONS.md)
+  are separate; the edition picker/import adapter is pending. Thanks to **Azarem**, **Kassiven**,
   **LThammy**, **ViewtifulSlayer**, **Igor Chagas**, and
   **VitorVilela7 / wide-snes** for the referenced tools, content and research.
   [Developer references](docs/GAIALABS-DEVELOPER-NOTES.md),
