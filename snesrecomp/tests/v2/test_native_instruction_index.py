@@ -127,17 +127,43 @@ int main(void){
   for(unsigned i=0;i<65536;i++)CHECK(!s_native_page_start[i]&&!s_native_page_count[i],"clear zeros legacy ranges");
   CHECK(interp_bridge_native_continuation_insns_total()==1&&interp_bridge_native_continuation_cycles_total()==2,"clear preserves process-global attribution");
   CHECK(interp_bridge_native_instruction_index_enabled()==mode,"clear preserves launch mode");
-  /* Worst-case8192distinctpages (not the compact consecutive-PC case). */
-  InterpNativeInstruction *full=calloc(8192,sizeof *full);CHECK(full!=NULL,"capacity descriptor allocation");
+  /* Four M/X modes on each of8192 valid sparse pages fill32768 slots.
+   * The direct page storage remains16MiB; entries have grown separately. */
+  InterpNativeInstruction *full=calloc(32768,sizeof *full);CHECK(full!=NULL,"capacity descriptor allocation");
   if(full){
-    for(unsigned i=0;i<8192;i++){full[i]=nop_descriptor(((i/128)<<16)|((0x80+i%128)<<8));RAM[full[i].pc24]=0xea;}
-    CHECK(interp_bridge_add_native_instructions(full,8192),"8192 sparse pages supported");
-    CHECK(live_bytes==8192*sizeof(NativeInstructionEntry)+131072+16777216,"worst sparse allocation bound");
-    for(unsigned i=0;i<8192;i+=127)CHECK(lookup(full[i].pc24,1,0,0)!=NULL,"sparse page descriptor lookup");
-    CHECK(interp_bridge_add_native_instructions(full,8192),"full idempotent batch");
+    for(unsigned i=0;i<32768;i++){
+      unsigned page=i/4;
+      full[i]=nop_descriptor(((page/128)<<16)|((0x80+page%128)<<8));
+      full[i].m=(i>>1)&1;full[i].x=i&1;RAM[full[i].pc24]=0xea;
+    }
+    CHECK(interp_bridge_add_native_instructions(full,32768),"32768 mode descriptors on8192 sparse pages supported");
+    CHECK(live_bytes==32768*sizeof(NativeInstructionEntry)+131072+16777216,"exact sparse allocation bound");
+    for(unsigned i=0;i<32768;i+=127)CHECK(lookup(full[i].pc24,full[i].m,full[i].x,0)!=NULL,"sparse page descriptor lookup");
+    NativeInstructionEntry *last=lookup(full[32767].pc24,1,1,0);
+    CHECK(last==s_native_instructions+32767&&last->descriptor.pc24==0x3fff00,"last uint16 descriptor ID32768 resolves exactly");
+    unsigned page_id=s_native_page_ids[full[32767].pc24>>8];
+    CHECK(s_native_page_slots[(page_id-1u)*1024u+3u]==32768,"direct slot stores32768 without truncation");
+    g_c.m_flag=1;g_c.x_flag=1;cpu_mirrors_to_p(&g_c);
+    uint64_t before_insns=interp_bridge_native_continuation_insns_total();
+    interp_bridge_set_master_deadline(g_c.master_cycles+1);
+    CHECK(interp_bridge_run_until_quiescent(&g_c,full[32767].pc24)==1,"actual owner executes last sparse native descriptor");
+    interp_bridge_set_master_deadline(0);
+    CHECK(last->insns==1&&last->cycles==2&&interp_bridge_native_continuation_insns_total()==before_insns+1,"last sparse descriptor exact native counters");
+    old=s_native_instructions;ids=s_native_page_ids;slots=s_native_page_slots;bytes=live_bytes;
+    for(unsigned failure=1;failure<=3;failure++){
+      alloc_calls=0;fail_at=failure;
+      CHECK(!interp_bridge_add_native_instructions(full,32768),"full registry allocation refusal");
+      CHECK(s_native_instructions==old&&s_native_page_ids==ids&&s_native_page_slots==slots&&s_native_instruction_count==32768,"full registry allocation failure preserves both lookups");
+      CHECK(live_bytes==bytes&&live_allocations==3&&last->insns==1&&last->cycles==2,"full allocation failure preserves memory and per-site counters");
+      CHECK(s_native_instruction_index==mode&&interp_bridge_native_continuation_insns_total()==before_insns+1,"full allocation refusal preserves launch setting and global counters");
+    }
+    fail_at=0;
+    CHECK(interp_bridge_add_native_instructions(full,32768),"full idempotent batch");
+    last=lookup(full[32767].pc24,1,1,0);
+    CHECK(last==s_native_instructions+32767&&last->insns==1&&last->cycles==2,"full idempotent rebuild preserves last ID and statistics");
     InterpNativeInstruction overflow=nop_descriptor(0x408000);
     CHECK(!interp_bridge_add_native_instructions(&overflow,1),"unique capacity overflow refused");
-    CHECK(interp_bridge_native_instruction_stats(NULL,0)==8192,"capacity refusal retains full indexes");
+    CHECK(interp_bridge_native_instruction_stats(NULL,0)==32768&&lookup(full[32767].pc24,1,1,0)==last&&last->insns==1&&last->cycles==2,"capacity refusal retains full indexes and used statistics");
     free(full);
   }
   interp_bridge_clear_native_instructions();

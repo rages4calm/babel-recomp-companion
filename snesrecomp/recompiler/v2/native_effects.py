@@ -102,7 +102,7 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations")
     if len(cycles) != 256:
         raise ValueError("Malformed cycle table")
     entries = sorted(entries, key=lambda e: (e["pc24"], e["m"], e["x"], e["e"]))
-    if not entries or len(entries) > 8192:
+    if not entries or len(entries) > 32768:
         raise ValueError("A bounded nonempty descriptor set is required")
     keys = set()
     bodies, helpers = {}, {}
@@ -127,7 +127,10 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations")
         if (mnemonic != e["mnemonic"] or size != len(e["bytes"])
                 or (mode == decoder.IMM) != e["immediate"]):
             raise ValueError("Descriptor disagrees with canonical instruction metadata")
-        bodies[opcode] = _body(source, opcode)
+        # The source case is shared by every PC/MX descriptor for this opcode.
+        # Extract it once; specialization below still uses each exact entry.
+        if opcode not in bodies:
+            bodies[opcode] = _body(source, opcode)
         pending = _calls(bodies[opcode]) | {"readOpcode"}
         while pending:
             name = min(pending)

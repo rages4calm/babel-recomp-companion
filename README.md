@@ -9,25 +9,33 @@ The original author's credit, support link and full acknowledgments remain below
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. November 9's private
-[batch 013](docs/NATIVE-BATCH-013.md) adds 750 observed instruction contexts,
-including status and ordinary data-stack effects, on the updated framework.
-**64 fresh reference/native pairs pass** across fights, bosses, rewards,
-abilities, inventory and two natural aspect routes, using new version 11 states.
+[batch 014](docs/NATIVE-BATCH-014.md) adds 2,500 observed instruction contexts,
+including SPC upload, camera and other system paths. Its 4,490 contexts use a
+larger, tested registry while retaining development fallback. The target is a
+faithful modern PC edition with fully native Original game code and sound,
+preserving Quintet's art direction and atmosphere. The current SPC700 driver
+is still interpreted; native completion and presentation polish remain ahead.
+
+**83 fresh reference/native pairs pass**, including 19 new assisted boss,
+phase, reward, ceremony and teleport cases alongside the prior 64 regressions.
+Castoth, Sand Fanger and Mummy Queen now have verified original damage/death
+and reward consequences in both execution paths.
+
 The 6,000-frame classroom/South Cape route reaches
-**90.34% native CPU cycles in 4:3 / 90.36% in 16:9**, versus 89.45% / 89.47%
-with the prior context selection on the same updated core. These measure
-bounded guest execution, not game content or
-project completion. Full campaign qualification remains ahead.
+**94.63% native CPU cycles in 4:3 / 94.65% in 16:9**, versus 90.34% / 90.36%
+with the prior selection. These measure bounded guest execution, not game
+content or project completion. Full campaign qualification remains ahead.
 
 The private path requires `IOG_NATIVE_CONTINUATIONS=1`; compiled poll effects
 separately require `IOG_NATIVE_RDNMI_POLL=1`. Both default off. Interpreter
 fallback remains available, and `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains
 the older lookup on the same binary. Per-PC counters separate each kind of work.
-In 28 headless timing runs, paired median CPU cost is roughly unchanged versus
-the prior context selection (+0.25% in 4:3 / -0.32% in 16:9). The final build's
-widescreen route uses about 6.18% more frame-service CPU than its 4:3 route.
-This measures the whole route, not renderer cost alone. Timing variation remains;
-this is native execution progress, without an overall game-speedup claim.
+In 42 headless timing runs, paired median CPU cost is roughly unchanged in the
+town routes (-0.14% in 4:3 / -0.48% in 16:9) and +2.55% in Viper, with substantial
+variation. This establishes no overall host-speed gain or real-GPU/input-latency
+result. [Renderer and modern PC quality direction](docs/RENDERER-DIRECTION.md)
+records the plan for smooth motion, faster interfaces, wider composition and
+measured low-latency GPU presentation. It is not an implemented new renderer.
 Historical cross-version failures and raw APU timestamp differences remain
 documented. Owner installations and settings are unchanged.
 
@@ -59,11 +67,13 @@ documented. Owner installations and settings are unchanged.
 - **Framework:** integrated SNESRecomp `d8116fac`, main checked November 9,
   2026, including merged timing PRs #250/#251, with Babel-specific changes
   preserved. [Integration and limits](docs/FRAMEWORK-NOV09.md).
-  Batch 013 retains all 1,244 prior emitted bodies unchanged and adds two,
-  checking all 31 new generated instruction contexts through RomAtlas.
-  Its 750 continuation contexts have independent decode checks. Earlier live-WRAM,
+  Batch 014 retains all 1,246 prior emitted bodies unchanged and adds two,
+  checking all 21 new generated instruction contexts through RomAtlas.
+  Its 2,500 new continuation contexts have independent decode checks.
+  All prior hard timing guards remain work to resolve with verified fixes.
+  Earlier live-WRAM,
   sorting and decode receipts retain their original identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-013.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-014.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
