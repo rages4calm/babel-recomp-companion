@@ -13,10 +13,10 @@ baseline fixed duplicate vblank input remapping and passed **61 matched cases**:
 real assisted fights/rewards, seven ability effects, four bosses, prerequisite
 controls and earlier area/form regressions. The 6,000-frame classroom/South Cape
 route reports **12.83% native CPU cycles** in both 4:3 and 16:9 under the corrected
-input model. November 8's [batch 007](docs/NATIVE-BATCH-007.md) adds conservative
-sprite prefixes on the current framework, with **57 fresh current
-reference/native pairs passing** and natural-route native coverage reaching
-**14.94%** in both aspects. Historical cross-version comparisons have
+input model. November 8's [batch 008](docs/NATIVE-BATCH-008.md) adds opt-in
+timed live sprite operands on the current framework, with **57 fresh current
+reference/native pairs passing** and natural-route native CPU-cycle coverage reaching
+**31.43% in 4:3 / 31.44% in 16:9**. Historical cross-version comparisons have
 separate documented failures; they are not waived by current tier parity.
 Interpreter fallback remains available.
 This is bounded route evidence, not a fully native game or completed campaign.
@@ -48,9 +48,10 @@ This is bounded route evidence, not a fully native game or completed campaign.
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
 - **Framework:** integrated SNESRecomp `e98dc63`, main checked November 8,
   2026, with Babel-specific changes preserved. [Integration and limits](docs/FRAMEWORK-NOV08.md).
-  Batch 007 adds 379 independent RomAtlas instruction-context checks; the earlier
+  Batch 008 verifies 16 timed-live blocks and reuses batch 007's 379 independently
+  checked RomAtlas instruction contexts under identical source identities; the earlier
   8,192-context batch retains its original identity and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-007.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-008.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
@@ -63,6 +64,9 @@ This is bounded route evidence, not a fully native game or completed campaign.
   [#263](https://github.com/RetroPortingToolKit/snesrecomp/issues/263).
   Windows debug screenshot JSON escaping is reported as
   [#264](https://github.com/RetroPortingToolKit/snesrecomp/issues/264).
+  Profile-validation cost and existing first-entry-hook bus observations are
+  reported as [#265](https://github.com/RetroPortingToolKit/snesrecomp/issues/265)
+  and [#266](https://github.com/RetroPortingToolKit/snesrecomp/issues/266).
   [Requested upstream patch split and qualification limits](contributions/snesrecomp/205/README.md).
 - **GaiaLabs collaboration:** newer baserom/retranslation module provenance and
   raw-map rebuild inputs have an [offline inspection tool](docs/GAIALABS-MODULE-INTEGRATION.md).

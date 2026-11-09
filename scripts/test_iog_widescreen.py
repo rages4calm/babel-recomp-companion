@@ -26,6 +26,9 @@ Ppu *g_ppu;
 int snes_frame_counter;
 static bool randomizer;
 static bool fail_shadow_alloc;
+static unsigned reset_calls;
+void IogTestRealReset(void);
+void WsShadowReset(void) { reset_calls++; IogTestRealReset(); }
 void *IogTestCalloc(size_t count, size_t size) {
     return fail_shadow_alloc ? NULL : calloc(count,size);
 }
@@ -62,6 +65,38 @@ static void setup(bool swapped) {
         for (int n=0;n<256;n++) for (int q=0;q<4;q++)
             word(0x2000 + i*0x800 + n*8+q*2,(n*4+q)&0x3ff);
     }
+}
+static void check_reset_pairing(void) {
+    setup(false);
+    unsigned before=reset_calls;
+    IogWidescreenBeginFrame();
+    CHECK(reset_calls==before+1);
+    IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(64);
+    CHECK(reset_calls==before+1);
+    CHECK(WsShadowLayerActive(0));
+    uint16_t old; CHECK(WsShadowLookupWorldTile(0,8,16,&old));
+    /* Direct redraw/restore cannot reuse the consumed reset or stale map. */
+    g_snes->ram[0xa000+132]^=1;
+    IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(64);
+    uint16_t fresh; CHECK(WsShadowLookupWorldTile(0,8,16,&fresh));
+    CHECK(reset_calls==before+2 && fresh!=old);
+    /* Every new capture resets again, including paired narrow/fallback paths. */
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw();
+    CHECK(reset_calls==before+3);
+    setup(false); g_ppu->extraLeftRight=0;
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw();
+    CHECK(reset_calls==before+4 && !WsShadowLayerActive(0));
+    IogWidescreenBeforeDraw(); CHECK(reset_calls==before+5);
+    setup(false); randomizer=true;
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw();
+    CHECK(reset_calls==before+6 && !WsShadowLayerActive(0));
+    randomizer=false;
+    setup(false); word(0x644,8);
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw();
+    CHECK(reset_calls==before+7 && !WsShadowLayerActive(0));
+    /* A direct restored outdoor frame builds from its new live descriptors. */
+    setup(true); IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(64);
+    CHECK(reset_calls==before+8 && WsShadowLayerActive(0) && WsShadowLayerActive(1));
 }
 static void check_layers(bool swapped) {
     setup(swapped);
@@ -136,6 +171,7 @@ int main(void) {
     CHECK(!g_ppu->extraLeftCur && !g_ppu->extraRightCur);
     fail_shadow_alloc=false;
     check_layers(false); check_layers(true);
+    check_reset_pairing();
     check_native_edges();
     setup(false); g_ppu->extraLeftRight=0;
     IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(12);
@@ -191,7 +227,7 @@ def main():
                "-I", str(ROOT / "src"), "-I", str(ROOT / "snesrecomp/runner/src"),
                ]
     shadow = out / "ws_shadow.o"
-    allocation_command = common + ["-Dcalloc=IogTestCalloc", "-c", str(inputs[1]), "-o", str(shadow)]
+    allocation_command = common + ["-Dcalloc=IogTestCalloc", "-DWsShadowReset=IogTestRealReset", "-c", str(inputs[1]), "-o", str(shadow)]
     allocation = subprocess.run(allocation_command, capture_output=True, text=True)
     (out / "allocator-build.log").write_text(allocation.stdout + allocation.stderr, encoding="utf-8")
     allocation.check_returncode()

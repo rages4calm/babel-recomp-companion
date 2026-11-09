@@ -16,6 +16,61 @@ _RMW = {"ASL", "LSR", "ROL", "ROR", "INC", "DEC", "TSB", "TRB"}
 _DIRECT = {d.DP, d.DP_X, d.DP_Y, d.ABS, d.ABS_X, d.ABS_Y, d.LONG, d.LONG_X, d.STK}
 _SPECIAL = {"COP", "BRK", "RTI", "MVN", "MVP", "WAI", "STP", "PEI", "XCE"}
 _BUS_CALL = re.compile(r"\bcpu_(?:read|write)(8|16)\(")
+_LIVE_READ = re.compile(
+    r"^(\s*)uint(8|16)\s+(_v\d+)\s*=\s*cpu_read\2\(cpu,\s*"
+    r"0x([0-9A-Fa-f]+),\s*\(uint16\)\(0x([0-9A-Fa-f]+)\)\);$")
+
+
+def live_immediate_plan(insn, lines, cpu_cycles):
+    """Fetch mutable data bytes once, at their real live-PB bus speeds.
+
+    Only the opcode fetch is precharged. Operand bytes use paced reads in
+    program-bank order, wrapping PC16 independently for each byte. The reads
+    supply both the live value and final open bus; no folded fetch latch may
+    overwrite it. Shape mismatches retain pre-effect interpreter fallback.
+    """
+    from v2.emit_function import LIVE_OPERAND_MNEMONICS
+    width = insn.length - 1
+    if (insn.mode != d.IMM or insn.mnem not in LIVE_OPERAND_MNEMONICS or
+            width not in (1, 2) or cpu_cycles < insn.length):
+        return None
+    text = "\n".join(lines)
+    if _BUS_CALL.findall(text) != [str(width * 8)]:
+        return None
+    matches = [(i, _LIVE_READ.fullmatch(line)) for i, line in enumerate(lines)]
+    matches = [(i, match) for i, match in matches if match]
+    if len(matches) != 1:
+        return None
+    i, match = matches[0]
+    indent, bits, dest, bank, address = match.groups()
+    pc = insn.addr & 0xFFFF
+    if (int(bits) != width * 8 or int(bank, 16) != (insn.addr >> 16) & 0xFF or
+            int(address, 16) != (pc + 1) & 0xFFFF):
+        return None
+    low = f"cpu_read8_paced(cpu, cpu->PB, 0x{(pc + 1) & 0xFFFF:04X}u)"
+    if width == 1:
+        replacement = [f"{indent}uint8 {dest} = {low};"]
+    else:
+        # Separate statements specify low-before-high even on C compilers
+        # whose binary-expression operand evaluation order is unspecified.
+        replacement = [f"{indent}uint16 {dest} = {low};",
+                       f"{indent}{dest} |= (uint16)cpu_read8_paced(cpu, cpu->PB, "
+                       f"0x{(pc + 2) & 0xFFFF:04X}u) << 8;"]
+    body = list(lines[:i]) + replacement + list(lines[i + 1:])
+    body = re.sub(r"cpu->master_cycles\s*\+=\s*([^;]+);",
+                  r"cpu_add_aot_master_cycles(cpu, \1);", "\n".join(body)).split("\n")
+    fetch = f"cpu_region_speed(((uint32)cpu->PB << 16) | 0x{pc:04X}u)"
+    internal = cpu_cycles - insn.length
+    if internal:
+        fetch += f" + {internal * 6}"
+    prefix = []
+    if any(((pc + n) & 0xFFFF) < 0x8000 for n in range(insn.length)):
+        # A HiROM full-bank body may be reused at a partial-bank mirror.
+        # Never treat its low-half WRAM/MMIO operand/continuation as ROM.
+        if d.get_rom_mapping() != d.ROM_MAP_HIROM:
+            return None
+        prefix.append("if ((cpu->PB & 0x7Fu) < 0x40u || cpu->PB == 0x7Eu || cpu->PB == 0x7Fu) { @FALLBACK@ }")
+    return fetch, body, prefix
 
 
 def data_bytes(insn):
@@ -44,7 +99,7 @@ def data_bytes(insn):
     return None
 
 
-def plan(insn, lines, cpu_cycles, *, live_operand=False):
+def plan(insn, lines, cpu_cycles, *, live_operand=False, live_immediates=False):
     """Return fetch/internal precharge and paced body, or None.
 
     Checking the emitted byte-access count prevents an optimization or new
@@ -53,6 +108,8 @@ def plan(insn, lines, cpu_cycles, *, live_operand=False):
     dispatch/pointer/control helpers deliberately remain authoritative LLE.
     """
     from v2.region_pointers import MODES, plan as pointer_plan
+    if live_operand:
+        return live_immediate_plan(insn, lines, cpu_cycles) if live_immediates else None
     if insn.mode in MODES and not live_operand:
         return pointer_plan(insn, lines, cpu_cycles)
     count = data_bytes(insn)

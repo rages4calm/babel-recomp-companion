@@ -225,6 +225,59 @@ class SpritePrefixPresetTests(unittest.TestCase):
                 self.prep(instruction_blocks=blocks, region_paced=paced)
         self.assertFalse(self.work.exists())
 
+    def test_region_live_immediates_requires_sprite_prefixes_and_both_pacing_flags(self):
+        for options in (dict(sprite_prefixes=False), dict(instruction_blocks=False), dict(region_paced=False)):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                self.prep(region_live_immediates=True, **options)
+        self.assertFalse(self.work.exists())
+
+    def test_live_immediate_flag_is_explicit_and_default_cache_shape_is_unchanged(self):
+        ordinary = self.prep()
+        self.assertNotIn("region_live_immediates", ordinary)
+        self.assertNotIn("--region-live-immediates", ordinary["generation_command"])
+        self.assertEqual(ordinary, self.prep(region_live_immediates=False))
+        explicit_false = json.loads(json.dumps(ordinary))
+        explicit_false["region_live_immediates"] = False
+        self.assertEqual(native_batch.sprite_cache_inputs(ordinary), native_batch.sprite_cache_inputs(explicit_false))
+        toggled = json.loads(json.dumps(ordinary)); toggled["region_live_immediates"] = True
+        self.assertNotEqual(native_batch.sprite_cache_inputs(ordinary), native_batch.sprite_cache_inputs(toggled))
+        with self.assertRaisesRegex(ValueError, "immutable"):
+            self.prep(region_live_immediates=True)
+        self.work = self.project / ".local/live-immediates"
+        enabled = self.prep(region_live_immediates=True)
+        self.assertIs(enabled["region_live_immediates"], True)
+        self.assertEqual(enabled["generation_command"].count("--region-live-immediates"), 1)
+        self.assertEqual(enabled["prepared_cfg_sha256"], ordinary["prepared_cfg_sha256"])
+        self.assertNotEqual(enabled["policy_sha256"], ordinary["policy_sha256"])
+        disabled_policy = json.loads((self.project / ".local/preset/effective-policy.json").read_text())
+        enabled_policy = json.loads((self.work / "effective-policy.json").read_text())
+        self.assertEqual(disabled_policy["guard_ranges"][-1]["reason"], native_batch.SPRITE_GUARD_REASON)
+        self.assertIn("timed live fetches", enabled_policy["guard_ranges"][-1]["reason"])
+        self.assertIn("fallback when unsupported", enabled["sprite_prefixes"]["scope"])
+        self.assertIn("require pre-effect interpreter refusal", ordinary["sprite_prefixes"]["scope"])
+        enabled_policy["guard_ranges"][-1]["reason"] = disabled_policy["guard_ranges"][-1]["reason"]
+        self.assertEqual(enabled_policy, disabled_policy)  # Only metadata changes, guards do not.
+        self.assertEqual(enabled, self.prep(region_live_immediates=True))
+        with self.assertRaisesRegex(ValueError, "immutable"):
+            self.prep()
+
+    def test_live_immediate_receipt_prerequisites_and_command_cannot_be_unbound(self):
+        enabled = self.prep(region_live_immediates=True)
+        for value in (False, 1, "true", None):
+            changed = json.loads(json.dumps(enabled)); changed["region_live_immediates"] = value
+            with self.subTest(value=value), patch.object(native_batch, "bounded_run") as launch:
+                with self.assertRaises(ValueError): native_batch.generate(changed, self.work)
+                launch.assert_not_called()
+        changed = json.loads(json.dumps(enabled)); changed["generation_command"].remove("--region-live-immediates")
+        with patch.object(native_batch, "bounded_run") as launch:
+            with self.assertRaises(ValueError): native_batch.generate(changed, self.work)
+            launch.assert_not_called()
+        for field in ("sprite_prefixes", "instruction_blocks", "region_paced"):
+            changed = json.loads(json.dumps(enabled)); changed[field] = False
+            with self.subTest(prerequisite=field), patch.object(native_batch, "bounded_run") as launch:
+                with self.assertRaises(ValueError): native_batch.generate(changed, self.work)
+                launch.assert_not_called()
+
     def test_default_policy_and_source_cfg_stay_unchanged_and_only_exact_sites_change(self):
         before_policy = self.policy.read_bytes()
         before_cfg = {p.name: p.read_bytes() for p in (self.project / "recomp").glob("bank*.cfg")}

@@ -86,6 +86,7 @@ def emit_bank(rom: bytes, bank: int,
               brk_rti_sites=None,
               instruction_blocks: bool = False,
               region_paced: bool = False,
+              region_live_immediates: bool = False,
               suppressed_collector=None,
               const_z_fold_collector=None,
               dispatch_target_suppressed_collector=None,
@@ -112,6 +113,8 @@ def emit_bank(rom: bytes, bank: int,
     Returns:
         Complete C source file as a string. Caller writes it to disk.
     """
+    if region_live_immediates and not (region_paced and instruction_blocks):
+        raise ValueError("region-live-immediates requires region-paced instruction-blocks")
     if file_header is None:
         file_header = _default_file_header(bank)
 
@@ -214,6 +217,7 @@ def emit_bank(rom: bytes, bank: int,
             brk_rti_sites=brk_rti_sites,
             instruction_blocks=instruction_blocks,
             region_paced=region_paced,
+            region_live_immediates=region_live_immediates,
             suppressed_collector=suppressed_collector,
             const_z_fold_collector=const_z_fold_collector,
             dispatch_target_suppressed_collector=

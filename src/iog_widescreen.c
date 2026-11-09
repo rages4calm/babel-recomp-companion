@@ -63,6 +63,7 @@ typedef struct MapLayer {
 static MapLayer s_map_layers[2];
 static bool s_map_frame;
 static uint16_t s_map_scene;
+static bool s_reset_for_draw;
 static int Clamp(int v, int lo, int hi);
 
 /* Source: $82:ADA2..AF5E. Arrangement bytes are grouped into 256x256px
@@ -117,10 +118,12 @@ static int BlankTile(int physical)
 
 void IogWidescreenBeginFrame(void)
 {
-    /* Do not capture writes made by the next simulation under the previous
-     * present's camera. BeforeDraw also resets, covering a direct F1 restore. */
+    /* CaptureSimulationFrame calls this immediately before GameDrawPpuFrame:
+     * no shadow consumer or writer runs before its BeforeDraw. That draw may
+     * consume this reset once. A direct/repeated draw still resets below. */
     WsShadowReset();
     s_map_frame = false;
+    s_reset_for_draw = true;
 }
 
 static int PhysicalMapLayer(void)
@@ -205,7 +208,9 @@ static int Clamp(int v, int lo, int hi)
 
 void IogWidescreenBeforeDraw(void)
 {
-    WsShadowReset();
+    if (!s_reset_for_draw)
+        WsShadowReset();
+    s_reset_for_draw = false;
     s_map_frame = false;
     if (!g_ppu || !g_snes || g_ppu->extraLeftRight == 0)
         return;

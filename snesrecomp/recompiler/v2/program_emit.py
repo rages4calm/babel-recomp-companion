@@ -454,7 +454,8 @@ def discover_profile_roots(manifest_paths: Iterable[pathlib.Path],
                            *, expected_rom=None, expected_module=None,
                            legacy_rom=None, historical_paths=()) -> tuple[VariantKey, ...]:
     """Observe -> analyze -> validate. A profile never supplies decoding facts."""
-    from .coverage_profile import load_profiles, promotion_reason, execution_pc as canonical_pc, pc
+    from .coverage_profile import (load_profiles, promotion_reason, _promotion_boundary_lookup,
+                                   execution_pc as canonical_pc, pc)
     # Historical builds retain their own capture identities and eligibility
     # checks. Only their analysis seeds and conservative exclusions survive;
     # costs/outcomes are never combined across different executable builds.
@@ -467,6 +468,7 @@ def discover_profile_roots(manifest_paths: Iterable[pathlib.Path],
     profile = load_profiles(manifest_paths, expected_rom=expected_rom,
                             expected_module=expected_module, legacy_rom=legacy_rom)
     mapper = profile.identity.get("mapper")
+    boundary_lookup = _promotion_boundary_lookup(declared_entry_pcs, mapper)
     canonical = lambda value: canonical_pc(value, mapper)
     unsafe = {canonical(v) for v in profile.unsafe_targets}
     for row in profile.discoveries:
@@ -492,7 +494,7 @@ def discover_profile_roots(manifest_paths: Iterable[pathlib.Path],
         mx = row.get("entry_mx")
         if canonical(target) in unsafe or (canonical(target), mx) in failed_variants:
             continue
-        if promotion_reason(row, declared_entry_pcs, profile.identity) != \
+        if promotion_reason(row, declared_entry_pcs, profile.identity, boundary_lookup=boundary_lookup) != \
                 "candidate_requires_analysis_and_replay":
             continue
         if qualified is not None and canonical(target) not in qualified and force_lle_out is not None:
@@ -729,7 +731,8 @@ def _bank_cache_key(bank: int, manifest: ProgramManifest, rom_digest: str,
                     shard_threshold_bytes: int, shard_pc_span: int,
                     module_prefix: str | None = None,
                     instruction_blocks: bool = False,
-                    region_paced: bool = False) -> str:
+                    region_paced: bool = False,
+                    region_live_immediates: bool = False) -> str:
     nodes = [
         (key.manifest_key, node.digest, node.disposition.value)
         for key, node in sorted(manifest.nodes.items())
@@ -766,6 +769,7 @@ def _bank_cache_key(bank: int, manifest: ProgramManifest, rom_digest: str,
         "hle": bool(enable_hle),
         "instruction_blocks": bool(instruction_blocks),
         "region_paced": bool(region_paced),
+        "region_live_immediates": bool(region_live_immediates),
         "sharding": [int(shard_threshold_bytes), int(shard_pc_span)],
         "module_prefix": module_prefix or "",
     })
@@ -781,6 +785,7 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
                  enable_hle: bool = True,
                  instruction_blocks: bool = False,
                  region_paced: bool = False,
+                 region_live_immediates: bool = False,
                  shard_threshold_bytes: int = 4 * 1024 * 1024,
                  shard_pc_span: int = 0x0800,
                  check_link_closure: bool = True,
@@ -789,6 +794,8 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
                  rom_sha256_hex: str | None = None,
                  rom_size: int | None = None,
                  host_alias_header=None) -> EmissionResult:
+    if region_live_immediates and not (region_paced and instruction_blocks):
+        raise ValueError("region-live-immediates requires region-paced instruction-blocks")
     validate_module_identity(module_id, module_prefix)
     # Identity of the IMAGE the module was generated from. The caller passes
     # both when its `rom` already carries materialized ram_routine blobs (the
@@ -856,7 +863,7 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
                 bank, manifest, rom_digest, generator_digest, config_digest,
                 dispatch_helpers, inline_arg_map, enable_hle,
                 host_alias_entries, shard_threshold_bytes, shard_pc_span,
-                module_prefix, instruction_blocks, region_paced)
+                module_prefix, instruction_blocks, region_paced, region_live_immediates)
             new_bank_keys[f"{bank:02X}"] = cache_key
             previous_names = old_bank_outputs.get(f"{bank:02X}", ())
             reusable_output = bool(previous_names) and all(
@@ -939,6 +946,7 @@ def emit_program(*, rom: bytes, parsed, manifest: ProgramManifest,
                 rom, bank, entries_by_bank.get(bank, []),
                 instruction_blocks=instruction_blocks,
                 region_paced=region_paced,
+                region_live_immediates=region_live_immediates,
                 dispatch_helpers=dict(dispatch_helpers) or None,
                 indirect_call_tables=indirect_call_tables,
                 indirect_dispatch=indirect_dispatch or None,
