@@ -204,6 +204,27 @@ static void bridge_timing_bus(uint32_t adr) {
     s_interp_bus_master+=bridge_region_speed(adr);
 }
 
+/* Where in the running instruction an I/O access samples or lands: master
+ * clocks from the instruction's start to 2 clocks into the access's own bus
+ * cycle (MesenCE's sample point), for the low and high byte of the access the
+ * interpreter is making. Valid while s_interp_bus_timing_active. */
+static uint16_t s_access_adr;
+static uint32_t s_access_lead_lo, s_access_lead_hi;
+static void bridge_note_access(uint32_t adrl, int word) {
+    if (!s_interp_bus_timing_active) { s_access_adr = 0; return; }
+    const unsigned sl = bridge_region_speed(adrl);
+    const unsigned sh = word ? bridge_region_speed(adrl + 1) : 0;
+    s_access_adr = (uint16_t)adrl;
+    s_access_lead_lo = (uint32_t)(s_interp_bus_master - sl - sh + 2);
+    s_access_lead_hi = s_access_lead_lo + sl;
+}
+uint32_t interp_bridge_access_lead(uint16_t adr, uint32_t fallback) {
+    if (!s_interp_bus_timing_active || !s_access_adr) return fallback;
+    if (adr == s_access_adr) return s_access_lead_lo;
+    if (adr == (uint16_t)(s_access_adr + 1)) return s_access_lead_hi;
+    return fallback;
+}
+
 /* interp_bridge_set_idle_poll: the opcodes declared as a pure interrupt
  * wait's poll, and whether the one executing now is one of them. Host
  * configuration, not guest state: it lasts until cleared and is not saved. */
@@ -308,14 +329,17 @@ static int bridge_read_is_stable(uint32_t adr) {
 static uint8_t bridge_bus_read(void *mem, uint32_t adr) {
     CpuState *cpu = (CpuState *)mem;
     bridge_timing_bus(adr);
+    bridge_note_access(adr, 0);
     uint8_t value;
     int stable_rom = 0;
 #if SNESRECOMP_INTERP_FUSED_ROM_READ
     /* A ROM fetch used to decode the same mapping twice: once to establish
      * stable-poll eligibility, then again inside cpu_read8 -> RomPtr. Claim
      * the immutable plain-cart case once. Device and invalid reads retain the
-     * reference classifier/bus, including synchronization and diagnostics. */
-    if ((uint16_t)adr >= 0x8000)
+     * reference classifier/bus, including synchronization and diagnostics.
+     * Below $8000 only the non-system banks can hold ROM (HiROM full banks,
+     * LoROM mirrors); the claim itself rejects WRAM and SRAM there. */
+    if ((uint16_t)adr >= 0x8000 || (adr & 0x400000))
         stable_rom = cpu_read8_plain_rom(cpu, (uint8_t)(adr >> 16),
                                          (uint16_t)adr, &value);
 #endif
@@ -378,6 +402,7 @@ static void bridge_bus_write(void *mem, uint32_t adr, uint8_t val) {
           fprintf(stderr, "[regwrite] -> $%04X = %02X\n", (unsigned)a16,
                   (unsigned)val); } }
     bridge_timing_bus(adr);
+    bridge_note_access(adr, 0);
     g_interp_bridge_write_epoch++;
     CpuState *cpu = (CpuState *)mem;
     const int is_apu_port = bridge_is_apu_port(adr);
@@ -430,6 +455,7 @@ static bool bridge_bus_read_word(void *mem, uint32_t adrl, uint32_t adrh,
     if (!bridge_hw_word(adrl, adrh)) return false;
     bridge_timing_bus(adrl);
     bridge_timing_bus(adrh);
+    bridge_note_access(adrl, 1);
     s_interp_volatile_read_epoch++;  /* a claimed word is always MMIO */
     if (bridge_continuous_read(adrl) || bridge_continuous_read(adrh))
         s_interp_continuous_read_epoch++;
@@ -464,6 +490,7 @@ static bool bridge_bus_write_word(void *mem, uint32_t adrl, uint32_t adrh,
     if (reversed || !bridge_hw_word(adrl, adrh)) return false;
     bridge_timing_bus(adrl);
     bridge_timing_bus(adrh);
+    bridge_note_access(adrl, 1);
     g_interp_bridge_write_epoch++;
     CpuState *cpu = (CpuState *)mem;
     const int is_apu_port = bridge_is_apu_port(adrl);
@@ -1352,15 +1379,13 @@ static int native_instruction_metadata_valid(const InterpNativeInstruction *d) {
     if (d->length != length) return 0;
     for (unsigned i = length; i < 4; ++i) if (d->bytes[i]) return 0;
     switch (d->bytes[0]) {
-        /* No frame construction/consumption, indirect transfer, interrupt,
-         * halt or multi-step block move in this first continuation contract. */
+        /* Ordinary data pushes/pulls retain the owning opcode loop. Guest
+         * calls/returns, interrupt frames, direct SP/emulation changes,
+         * indirect transfers, halts and block moves still require fallback. */
         case 0x00: case 0x02: case 0x20: case 0x22: case 0x40:
         case 0x44: case 0x54: case 0x60: case 0x6B: case 0x6C:
         case 0x7C: case 0xCB: case 0xDB: case 0xDC: case 0xFC:
-        case 0x08: case 0x0B: case 0x28: case 0x2B: case 0x48:
-        case 0x4B: case 0x5A: case 0x62: case 0x68: case 0x7A:
-        case 0x8B: case 0xAB: case 0xD4: case 0xDA: case 0xF4:
-        case 0xFA: case 0x1B: case 0x9A: case 0xFB: return 0;
+        case 0x1B: case 0x9A: case 0xFB: return 0;
         default: return 1;
     }
 }
@@ -2881,8 +2906,10 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
                     bridge_apu_flush(cpu);
                     if (cpu_dispatch_has_entry(cpu, pc_before)) {
                         cpu_dispatch_pc_paired(cpu, pc_before, 0);
-                        snes_refresh_charge();
-                        cpu_aot_instruction_boundary(cpu);
+                        if (s_apu_pending_master) {
+                            snes_refresh_charge();
+                            cpu_aot_instruction_boundary(cpu);
+                        }
                     }
                     return 1;
                 }
@@ -3053,6 +3080,7 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
         s_interp_bus_master=0;
         s_interp_bus_cycles=0;
         s_interp_bus_timing_active=1;
+        s_access_adr=0;
         /* Optional first-divergence observability: bus callbacks receive only
          * CpuState, while the live interpreter registers normally stay in the
          * local Interp816 struct until a bridge boundary.  Publish the pre-op
@@ -3190,7 +3218,7 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
             extern int snes_frame_counter;
             fprintf(stderr,
                     "[cyc] f=%d pc=$%06X op=$%02X cyc=%d bus_xfers=%u "
-                    "bus_master=%llu internal=%u master_delta=%llu\n",
+                    "bus_master=%llu internal=%u master_delta=%llu now=%llu\n",
                     snes_frame_counter, (unsigned)pc_before, (unsigned)op,
                     _cyc, s_interp_bus_cycles,
                     (unsigned long long)s_interp_bus_master,
@@ -3199,7 +3227,8 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
                     (unsigned long long)(s_interp_bus_master +
                         (uint64_t)((unsigned)_cyc > s_interp_bus_cycles
                                        ? (unsigned)_cyc - s_interp_bus_cycles
-                                       : 0) * 6u));
+                                       : 0) * 6u),
+                    (unsigned long long)cpu->master_cycles);
         }
 
         if (auto_quiescent &&
@@ -3347,8 +3376,10 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
                                  (uint16_t)_sp_pre);
                 g_interp_wlog_pc24 = 0;
                 RecompReturn _air = cpu_dispatch_pc_paired(cpu, target, _fs);
-                snes_refresh_charge();
-                cpu_aot_instruction_boundary(cpu);
+                if (s_apu_pending_master) {
+                    snes_refresh_charge();
+                    cpu_aot_instruction_boundary(cpu);
+                }
                 s_interp_bounce_owner_depth = _saved_bounce_owner;
                 s_interp_bounce_recomp_base = _saved_bounce_base;
                 g_interp_apu_driving = _apu_drv;

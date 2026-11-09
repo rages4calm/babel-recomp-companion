@@ -11,13 +11,14 @@ import snes65816 as decoder
 SAFE_NAMES = frozenset("""LDA LDX LDY STA STX STY STZ ADC SBC AND ORA EOR CMP
 CPX CPY BIT TSB TRB ASL LSR ROL ROR INC DEC INX INY DEX DEY TAX TAY TXA TYA
 TXY TYX TCD TDC CLC SEC CLD SED CLV CLI SEI NOP XBA
+REP SEP PHP PLP PHA PLA PHX PLX PHY PLY PHD PLD PHK PHB PLB PEA PER PEI
 BPL BMI BVC BVS BCC BCS BNE BEQ BRA BRL JMP JML""".split())
+LIVE_STATUS_HELPERS = frozenset({"getFlags", "setFlags"})
 STATIC_CONTROL_NAMES = frozenset("BPL BMI BVC BVS BCC BCS BNE BEQ BRA BRL JMP JML".split())
 STATIC_CONTROL_OPCODES = frozenset({0x10, 0x30, 0x50, 0x70, 0x90, 0xB0,
                                   0xD0, 0xF0, 0x80, 0x82, 0x4C, 0x5C})
 FORBIDDEN = frozenset({"runOpcode", "doOpcode", "doInterrupt", "init", "reset",
-                       "free", "saveload", "opcode_hook", "pushByte", "pullByte",
-                       "pushWord", "pullWord", "setFlags", "getFlags"})
+                       "free", "saveload", "opcode_hook"})
 
 
 def _end_block(source, opening):
@@ -138,8 +139,8 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations")
             text = _function(source, name)
             if re.search(r"\b(?:g_|s_)\w+|\b(?:fprintf|getenv|malloc|free|exit)\s*\(", text):
                 raise ValueError(f"Unsupported nonlocal helper {name}")
-            if re.search(r"cpu->(?:mf|xf)\s*=(?!=)", text):
-                raise ValueError("Width-changing helpers are not specialized")
+            if name != "setFlags" and re.search(r"cpu->(?:mf|xf)\s*=(?!=)", text):
+                raise ValueError("Only the status setter may change instruction widths")
             helpers[name] = text
             pending |= _calls(text) - set(helpers)
     parts = ["""/* PRIVATE ROM-derived continuations; never distribute this file.
@@ -161,7 +162,11 @@ typedef struct NiOperands {
         definitions = {}
         for name, original in sorted(helpers.items()):
             text = _rename(original, prefix)
-            text = text.replace("cpu->mf", str(m)).replace("cpu->xf", str(x))
+            # REP/SEP/PLP change live widths for the NEXT instruction. Preserve
+            # status reads/writes and index-high truncation in these helpers;
+            # ordinary addressing/ALU/stack widths still specialize the entry M/X.
+            if name not in LIVE_STATUS_HELPERS:
+                text = text.replace("cpu->mf", str(m)).replace("cpu->xf", str(x))
             text = re.sub(r"^(?:static\s+)?", "static inline ", text, count=1)
             if name == "readOpcode":
                 text = f"""static inline uint8_t {prefix}readOpcode(Interp816 *cpu, NiOperands *_ni) {{

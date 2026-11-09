@@ -55,8 +55,9 @@ rollback state; the callback adds no independent clock counter to save.
 
 The separate nullable `g_cpu_aot_instruction_boundary_hook` observes completion
 of the preceding instruction. Paced labels call it after refresh finalization
-and before the deadline check. Paired returns also call it after finalizing
-refresh, covering a last native return instruction without another label.
+and before the deadline check. Paired returns with a nonempty native scheduling marker also call it after
+finalizing refresh, covering a last native return instruction without another
+label. An aggregate body without origin credit leaves this path inactive.
 The bridge applies its existing pending-clock batch threshold there, synchronizes
 the beam, and flushes the existing accumulator. It adds no credit. Flushing in
 the per-access credit callback would run the SPC midway through an instruction;

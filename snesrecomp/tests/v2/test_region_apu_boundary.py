@@ -30,7 +30,7 @@ def test_region_boundary_runs_after_refresh_before_deadline():
     paired_calls = list(re.finditer(r"cpu_dispatch_pc_paired\([^;]+;", bridge))
     assert len(paired_calls) == 2
     for call in paired_calls:
-        assert re.match(r"\s*snes_refresh_charge\(\);\s*cpu_aot_instruction_boundary\(cpu\);",
+        assert re.match(r"\s*if \(s_apu_pending_master\) \{\s*snes_refresh_charge\(\);\s*cpu_aot_instruction_boundary\(cpu\);",
                         bridge[call.end():])
 
 

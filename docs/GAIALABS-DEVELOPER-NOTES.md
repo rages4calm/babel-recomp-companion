@@ -8,7 +8,7 @@ November 8 follow-up: [module/source preflight](GAIALABS-MODULE-INTEGRATION.md)
 and [Mesen2 runtime readiness](MESEN2-REFERENCE.md) now have actual private
 checks. [Batch 006](NATIVE-BATCH-006.md) records native/framework work separately.
 The reference-collection observations below retain their November 6 scope;
-the current developer build/profile is still pending the owner's DM.
+the developer build/profile was still pending at that inspection.
 
 November 9 fixture calibration: newer baserom assembly uses logical button
 masks that differ from the verified stock USA instructions. Its comments are
@@ -187,7 +187,8 @@ build and the matching source revision, dependency versions and selected
 modules/build configuration. Prefer a patch or build instructions usable with
 the owner's ROM. Keep received game-derived files private. Do not infer
 current dev-build contents from the lagging generator or older public files.
-No message has been sent and no build has been received through this offer.
+The agent has sent no message. The owner subsequently received a private
+developer build; see the November 9 follow-up below.
 
 ### Integration queue
 
@@ -199,7 +200,7 @@ The integration interests also include the current retranslation, options,
 key-item auto-use, world-map movement and minimap. None is assumed enabled
 until the supplied build/module selection identifies it. Original Gaia and
 GaiaLabs remain separate editions; see [their identity contract](GAME-EDITIONS.md).
-No new build has been received, and the agent has sent no DM.
+This was the November 8 status; the agent has sent no DM.
 
 1. Read the current core/build configuration and map the inherited Babel
    patches against this pinned baserom revision. Preserve existing deltas.
@@ -218,3 +219,41 @@ No new build has been received, and the agent has sent no DM.
 
 Keep interpreter/reference paths and owner saves/settings intact. This note
 does not reopen paused game fixes or authorize a release.
+
+## November 9: private build and audio references
+
+The owner received the developer's current patched build. The developer calls
+it the "everything" build and says public GitHub is mostly current, with a
+handful of changes still uncommitted. These are developer-reported contents;
+the exact source/module correspondence and GaiaLabs native compatibility remain
+unqualified. Keep received files private. No private archive, ROM or bsnes-hd
+override is included in this repository. The stock native batch 013 does not
+use these private inputs. Original and GaiaLabs remain separate profiles.
+
+The developer also supplied:
+
+- [SoundFont/MIDI working output](https://github.com/Azarem/gaia-iog-baserom/tree/main/temp/audio).
+- [Audio documentation](https://github.com/Azarem/gaia-iog-baserom/tree/main/docs/audio),
+  including the [pipeline](https://github.com/Azarem/gaia-iog-baserom/blob/main/docs/audio/midi-sf2-pipeline.md),
+  [SPC driver and upload protocol](https://github.com/Azarem/gaia-iog-baserom/blob/main/docs/audio/spc-engine.md)
+  and [export gaps](https://github.com/Azarem/gaia-iog-baserom/blob/main/docs/audio/gap-analysis.md).
+- [Gaia core audio source](https://github.com/Azarem/gaia-core/tree/main/src/audio):
+  BRR decoding, music-sequence parsing and SoundFont/MIDI export.
+
+Inspected baserom revision remains
+`0dcd500c5142ca4fd8639d6cd41a53442a0b62f6`; audio core main is
+`d90d2b2864de69960fb6d9e1c4334546a532da5b`, checked November 9.
+The TypeScript sequence parser and MIDI mapper were read alongside the docs.
+The exporter is an offline pipeline, not a complete interactive game audio
+runtime. Fades, modulation and echo still need faithful handling; sample export
+alone does not establish sound-effect sequencing or game command compatibility.
+
+For future native audio, investigate using the existing formats/parser with a
+real-time sequencer and sample mixer, including the game's command handshake,
+music/SFX priority, looping, fades, timing and save-state behavior. Compare
+against the retained SPC reference before replacing it. Current Companion still
+interprets SPC700 instructions and models the DSP; native APU clock accounting
+does not remove that interpreter. No native audio replacement is implemented
+in batch 013, and no ROM-derived SoundFont, MIDI, sample or driver data was
+copied into the source update. Review licenses and preserve GaiaLabs credits
+before importing implementation.

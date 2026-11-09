@@ -164,6 +164,14 @@ bool cart_replace_rom(Cart *cart, const uint8_t *rom, uint32_t size) {
   return true;
 }
 
+/* Mirror a linear offset into the image. Every interpreted ROM byte passes
+ * here, and the division dominated the lookup; power-of-two images (nearly
+ * all) wrap by mask, the rest keep the remainder. */
+static inline uint8_t *cart_rom_at(const Cart *cart, uint32_t off) {
+  const uint32_t size = cart->romSize;
+  return &cart->rom[(size & (size - 1)) == 0 ? off & (size - 1) : off % size];
+}
+
 uint8_t *cart_getRomPtr(Cart *cart, uint8_t bank, uint16_t adr) {
   if (!cart || !cart->rom || cart->romSize == 0) return NULL;
   if (bank == 0x7e || bank == 0x7f) return NULL;
@@ -249,7 +257,7 @@ case CART_CX4: {
                         (unsigned)g_interp816_cur_pc, bank, adr, off, cart->rom[off % cart->romSize]);
             }
 #endif
-            return &cart->rom[off % cart->romSize];
+            return cart_rom_at(cart, off);
           }
         }
         return NULL;
@@ -260,7 +268,7 @@ case CART_CX4: {
       if (cart->sdd1) {
         uint32_t off2 = sdd1_lorom_window_offset(cart->sdd1, bank, adr);
         if (off2 != UINT32_MAX)
-          return &cart->rom[off2 % cart->romSize];
+          return cart_rom_at(cart, off2);
       }
       /* Legacy LoROM mapping for the remaining banks (40-7F, or no chip) */
       uint8_t canonical = bank & 0x7f;
@@ -273,9 +281,7 @@ case CART_CX4: {
     default:
       return NULL;
   }
-  /* Mirroring is the rare case: no division (a library call on CPUs without
-   * a divide instruction, such as the 3DS's ARM11) on every ROM access. */
-  return &cart->rom[off < cart->romSize ? off : off % cart->romSize];
+  return cart_rom_at(cart, off);
 }
 
 uint8_t cart_read(Cart* cart, uint8_t bank, uint16_t adr) {
