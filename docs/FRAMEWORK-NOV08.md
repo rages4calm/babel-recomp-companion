@@ -188,3 +188,28 @@ prior body. No prior cost corpus was merged or rebound to the new build.
 Existing263–266 reports and250/251 drafts remain open; their maintainer heads
 were not overwritten. Continuation-related coverage limits are documented as
 limits, not filed as an unproven functional regression.
+
+## Batch 011 local additions, November 9
+
+[Batch 011](NATIVE-BATCH-011.md) adds a bounded descriptor registry for fixed
+single-instruction native effects at observed continuation PCs. The bridge
+retains scheduler ownership, per-opcode event service and logical retirement;
+unsupported contexts interpret normally. A page index, complete byte/mode/live-PC
+guards, atomic registration and separate global/per-PC counters bind the new
+path. `cpu_state.h` only clarifies the write-PC diagnostic contract; guest
+layouts and `interp816.c/h` are unchanged.
+
+The reusable emitter specializes admitted ALU/address helpers at generation
+time. It emits neither a decoder nor interpreter calls. Actual bus fetches
+and live interpreter data/address registers are preserved. The title setup
+admits only a clean stock ROM, private generated source and an explicit
+`IOG_NATIVE_CONTINUATIONS=1`; build receipts bind the emitter/helper/driver.
+Its optional exit diagnostic is separate from frame service. This is not
+general RTI or arbitrary-frame continuation support, and no NMI/boot/MMIO
+guard is removed.
+
+Actual-core protocol and effect tests include negative controls for decoder
+relabeling, clock/frame changes and missing/duplicate/stale fetch behavior.
+The graph retains all 1,219 previous bodies unchanged. Early local fixture,
+newline-hash and stale-PC-hook failures remain in private evidence; they were
+corrected before the final candidate. They do not establish upstream defects.

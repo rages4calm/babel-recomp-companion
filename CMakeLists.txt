@@ -59,6 +59,7 @@ set(IOG_SOURCES
     src/host_contract.c
     src/game_rtl.c
     src/iog_native_poll.c
+    src/iog_native_continuations.c
     src/iog_widescreen.c
     src/iog_i18n.c
     src/iog_mods.c
@@ -108,6 +109,20 @@ set(IOG_GENERATED_DIR "${CMAKE_SOURCE_DIR}/src/gen" CACHE PATH
 set(IOG_GENERATED_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/recomp" CACHE PATH
     "Matching generated function declarations for the selected private program")
 snesrecomp_target_generated_code(IllusionOfGaiaUsaSNESRecomp ${IOG_GENERATED_DIR})
+set(IOG_NATIVE_EFFECTS_SOURCE "" CACHE FILEPATH "Private generated continuation effects")
+if(IOG_NATIVE_EFFECTS_SOURCE)
+    if(SNESRECOMP_INTERPRETER_ONLY)
+        message(FATAL_ERROR "Native effects require a private AOT build")
+    endif()
+    file(REAL_PATH "${IOG_NATIVE_EFFECTS_SOURCE}" _iog_effects)
+    file(REAL_PATH "${CMAKE_SOURCE_DIR}/.local" _iog_private)
+    string(FIND "${_iog_effects}" "${_iog_private}/" _iog_private_index)
+    if(NOT _iog_private_index EQUAL 0 OR NOT EXISTS "${_iog_effects}")
+        message(FATAL_ERROR "Native effects source must exist beneath this project's .local")
+    endif()
+    target_sources(IllusionOfGaiaUsaSNESRecomp PRIVATE "${_iog_effects}")
+    target_compile_definitions(IllusionOfGaiaUsaSNESRecomp PRIVATE IOG_HAS_NATIVE_CONTINUATIONS=1)
+endif()
 
 # The mod catalog. This names WHERE the packages are; the framework owns the
 # layout they are staged into beside the executable, and stages them on every

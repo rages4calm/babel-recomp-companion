@@ -270,8 +270,10 @@ def validate_plan(plan: Path, output: Path) -> dict:
     return {**data, "cases": normalized, "plan_path": str(plan), "plan_sha256": sha(plan), "output": str(output)}
 
 
-def replay(binary: Path, rom: Path, plan: Path, output: Path, timeout: int = 180, *, native_poll: bool = False) -> dict:
+def replay(binary: Path, rom: Path, plan: Path, output: Path, timeout: int = 180, *, native_poll: bool = False, native_continuations: bool = False) -> dict:
     """Execute a fully validated plan; leave every failed comparison in place."""
+    if type(native_continuations) is not bool:
+        raise ValueError("native_continuations must be a boolean")
     if type(native_poll) is not bool:
         raise ValueError("native_poll must be a boolean")
     _integer(timeout, 1, 300, "timeout")
@@ -296,6 +298,8 @@ def replay(binary: Path, rom: Path, plan: Path, output: Path, timeout: int = 180
               "lineage": validated, "cases": []}
     if native_poll:
         report["native_poll_requested"] = True
+    if native_continuations:
+        report["native_continuations_requested"] = True
     def save():
         (output / "replay-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     save()
@@ -313,7 +317,8 @@ def replay(binary: Path, rom: Path, plan: Path, output: Path, timeout: int = 180
                               interpret_all=mode == "reference", expect_scene=case["expect_scene"],
                               timeout=timeout, capture=True, wide=case["wide"], infinite_hp=case["infinite_hp"],
                               watch_wram=tuple(case["watch_wram"]) if case.get("watch_wram") is not None else None,
-                              **({"native_poll": True} if native_poll else {}))
+                              **({"native_poll": True} if native_poll else {}),
+                              **({"native_continuations": True} if native_continuations else {}))
                 row[mode + "_passed"] = receipt.get("passed") is True
                 row[mode + "_receipt_sha256"] = sha(path / "receipt.json")
             witness = Path(case["witness_dir"])
@@ -362,8 +367,9 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--native-poll", action="store_true")
+    parser.add_argument("--native-continuations", action="store_true")
     args = parser.parse_args()
-    result = replay(args.binary, args.rom, args.plan, args.output, args.timeout, native_poll=args.native_poll)
+    result = replay(args.binary, args.rom, args.plan, args.output, args.timeout, native_poll=args.native_poll, native_continuations=args.native_continuations)
     print(json.dumps({"passed": result["passed"], "cases": len(result["cases"]),
                       "report": str(args.output / "replay-report.json")}))
     return 0 if result["passed"] else 1

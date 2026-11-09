@@ -664,7 +664,7 @@ static void bridge_aot_instruction_boundary(CpuState *cpu) {
  * can tell a genuinely-compiled run from one that quietly interpreted
  * everything -- without it, a wall-clock tier comparison is unreadable. */
 unsigned long long g_interp_bridge_bounces = 0;
-/* Logical opcodes retired by the bridge, including native poll islands.
+/* Logical opcodes retired by the bridge, including native poll/continuation islands.
  * Interpreter-only instruction/cycle totals remain in interp816.c; generated
  * AOT calls have their separate bounce count above. */
 unsigned long long g_interp_bridge_steps = 0;
@@ -1282,6 +1282,138 @@ void interp_bridge_clear_native_rdnmi_polls(void) {
 uint64_t interp_bridge_native_poll_insns_total(void) { return s_native_poll_insns; }
 uint64_t interp_bridge_native_poll_cycles_total(void) { return s_native_poll_cycles; }
 
+enum { kNativeInstructionSlots = 8192 };
+typedef struct {
+    InterpNativeInstruction descriptor;
+    uint64_t insns, cycles;
+} NativeInstructionEntry;
+static NativeInstructionEntry *s_native_instructions;
+static size_t s_native_instruction_count;
+/* A zero/empty-page check precedes lookup on the per-opcode hot path. Each
+ * exact24-bit execution page has its own tiny sorted range; aliases differ. */
+static uint16_t s_native_page_start[65536], s_native_page_count[65536];
+static uint64_t s_native_continuation_insns, s_native_continuation_cycles;
+
+static uint32_t native_instruction_key(const InterpNativeInstruction *d) {
+    return (d->pc24 << 3) | (d->m << 2) | (d->x << 1) | d->e;
+}
+static int native_instruction_compare(const void *aa, const void *bb) {
+    const NativeInstructionEntry *a = (const NativeInstructionEntry *)aa;
+    const NativeInstructionEntry *b = (const NativeInstructionEntry *)bb;
+    uint32_t ka = native_instruction_key(&a->descriptor);
+    uint32_t kb = native_instruction_key(&b->descriptor);
+    return ka < kb ? -1 : ka != kb;
+}
+static int native_instruction_metadata_valid(const InterpNativeInstruction *d) {
+    /* Canonical65816 opcode lengths in M1/X1, matching snes65816.opcode_table.
+     * Immediate M/X forms grow by one in the corresponding16-bit mode. */
+    static const uint8_t lengths[256] = {
+        2,2,2,2,2,2,2,2,1,2,1,1,3,3,3,4,
+        2,2,2,2,2,2,2,2,1,3,1,1,3,3,3,4,
+        3,2,4,2,2,2,2,2,1,2,1,1,3,3,3,4,
+        2,2,2,2,2,2,2,2,1,3,1,1,3,3,3,4,
+        1,2,2,2,3,2,2,2,1,2,1,1,3,3,3,4,
+        2,2,2,2,3,2,2,2,1,3,1,1,4,3,3,4,
+        1,2,3,2,2,2,2,2,1,2,1,1,3,3,3,4,
+        2,2,2,2,2,2,2,2,1,3,1,1,3,3,3,4,
+        2,2,3,2,2,2,2,2,1,2,1,1,3,3,3,4,
+        2,2,2,2,2,2,2,2,1,3,1,1,3,3,3,4,
+        2,2,2,2,2,2,2,2,1,2,1,1,3,3,3,4,
+        2,2,2,2,2,2,2,2,1,3,1,1,3,3,3,4,
+        2,2,2,2,2,2,2,2,1,2,1,1,3,3,3,4,
+        2,2,2,2,2,2,2,2,1,3,1,1,3,3,3,4,
+        2,2,2,2,2,2,2,2,1,2,1,1,3,3,3,4,
+        2,2,2,2,3,2,2,2,1,3,1,1,3,3,3,4
+    };
+    if (!d->step || d->pc24 > 0xFFFFFFu || d->m > 1 || d->x > 1 ||
+        d->e != 0 || !d->length || d->length > 4 ||
+        (uint16_t)d->pc24 < 0x8000u ||
+        (uint32_t)(uint16_t)d->pc24 + d->length > 0x10000u ||
+        (d->pc24 >> 16) == 0x7Eu || (d->pc24 >> 16) == 0x7Fu)
+        return 0;
+    unsigned length = lengths[d->bytes[0]];
+    switch (d->bytes[0]) {
+        case 0x09: case 0x29: case 0x49: case 0x69: case 0x89:
+        case 0xA9: case 0xC9: case 0xE9: length += !d->m; break;
+        case 0xA0: case 0xA2: case 0xC0: case 0xE0: length += !d->x; break;
+        default: break;
+    }
+    if (d->length != length) return 0;
+    for (unsigned i = length; i < 4; ++i) if (d->bytes[i]) return 0;
+    switch (d->bytes[0]) {
+        /* No frame construction/consumption, indirect transfer, interrupt,
+         * halt or multi-step block move in this first continuation contract. */
+        case 0x00: case 0x02: case 0x20: case 0x22: case 0x40:
+        case 0x44: case 0x54: case 0x60: case 0x6B: case 0x6C:
+        case 0x7C: case 0xCB: case 0xDB: case 0xDC: case 0xFC:
+        case 0x08: case 0x0B: case 0x28: case 0x2B: case 0x48:
+        case 0x4B: case 0x5A: case 0x62: case 0x68: case 0x7A:
+        case 0x8B: case 0xAB: case 0xD4: case 0xDA: case 0xF4:
+        case 0xFA: case 0x1B: case 0x9A: case 0xFB: return 0;
+        default: return 1;
+    }
+}
+
+bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
+                                            size_t count) {
+    if (s_interp_bridge_depth || s_lle_sched_depth ||
+        (count && !items) || count > kNativeInstructionSlots)
+        return false;
+    if (!count) return true;
+    for (size_t i = 0; i < count; ++i)
+        if (!native_instruction_metadata_valid(&items[i])) return false;
+    size_t total = s_native_instruction_count + count;
+    NativeInstructionEntry *next = (NativeInstructionEntry *)calloc(total, sizeof *next);
+    if (!next) return false;
+    if (s_native_instruction_count)
+        memcpy(next, s_native_instructions, s_native_instruction_count * sizeof *next);
+    for (size_t i = 0; i < count; ++i)
+        next[s_native_instruction_count + i].descriptor = items[i];
+    qsort(next, total, sizeof *next, native_instruction_compare);
+    size_t used = 0;
+    for (size_t i = 0; i < total; ++i) {
+        if (used && native_instruction_key(&next[used - 1].descriptor) ==
+                    native_instruction_key(&next[i].descriptor)) {
+            NativeInstructionEntry *a = &next[used - 1], *b = &next[i];
+            if (a->descriptor.length != b->descriptor.length ||
+                a->descriptor.step != b->descriptor.step ||
+                memcmp(a->descriptor.bytes, b->descriptor.bytes, 4)) {
+                free(next); return false;
+            }
+            a->insns += b->insns; a->cycles += b->cycles;
+        } else next[used++] = next[i];
+    }
+    if (used > kNativeInstructionSlots) { free(next); return false; }
+    free(s_native_instructions);
+    s_native_instructions = next;
+    s_native_instruction_count = used;
+    memset(s_native_page_count, 0, sizeof s_native_page_count);
+    for (size_t i = 0; i < used; ++i) {
+        unsigned page = next[i].descriptor.pc24 >> 8;
+        if (!s_native_page_count[page]) s_native_page_start[page] = (uint16_t)i;
+        s_native_page_count[page]++;
+    }
+    return true;
+}
+void interp_bridge_clear_native_instructions(void) {
+    if (s_interp_bridge_depth || s_lle_sched_depth) return;
+    free(s_native_instructions); s_native_instructions = NULL;
+    s_native_instruction_count = 0;
+    memset(s_native_page_count, 0, sizeof s_native_page_count);
+}
+uint64_t interp_bridge_native_continuation_insns_total(void) { return s_native_continuation_insns; }
+uint64_t interp_bridge_native_continuation_cycles_total(void) { return s_native_continuation_cycles; }
+size_t interp_bridge_native_instruction_stats(InterpNativeInstructionStats *out,
+                                              size_t capacity) {
+    if (out) for (size_t i = 0; i < capacity && i < s_native_instruction_count; ++i) {
+        const NativeInstructionEntry *a = &s_native_instructions[i];
+        out[i].pc24 = a->descriptor.pc24; out[i].m = a->descriptor.m;
+        out[i].x = a->descriptor.x; out[i].e = a->descriptor.e;
+        out[i].insns = a->insns; out[i].cycles = a->cycles;
+    }
+    return s_native_instruction_count;
+}
+
 static int lle_bounce_target_excluded(uint32_t target_pc24) {
     static int s_env_all = -1;   /* SNESRECOMP_INTERPRET_ALL=1: A/B against AOT */
     if (s_env_all < 0) {
@@ -1327,6 +1459,7 @@ static InterpNativePollStep bridge_native_rdnmi_step(const Interp816 *in,
     return NULL;
 #else
     if (!s_native_rdnmi_poll_count || !scheduler_frame || stop_on_rti ||
+        (((uint32_t)in->k << 16) | in->pc) != pc ||
         s_lle_sched_depth <= 0 || in->e || !in->mf || in->waiting ||
         in->stopped || in->nmiWanted || in->irqWanted ||
         cpu_interrupt_context_active() ||
@@ -1360,6 +1493,52 @@ static InterpNativePollStep bridge_native_rdnmi_step(const Interp816 *in,
                            (uint16_t)(base + 5u)) != p + 5u ||
             memcmp(p, bytes, sizeof bytes) != 0) return NULL;
         return s_native_rdnmi_polls[i].step;
+    }
+    return NULL;
+#endif
+}
+
+static NativeInstructionEntry *bridge_native_instruction_step(
+        const Interp816 *in, uint32_t pc, int scheduler_frame, int stop_on_rti) {
+#ifdef SNES_COSIM
+    (void)in; (void)pc; (void)scheduler_frame; (void)stop_on_rti;
+    return NULL;
+#else
+    if (!scheduler_frame || stop_on_rti || s_lle_sched_depth <= 0 ||
+        (((uint32_t)in->k << 16) | in->pc) != pc ||
+        in->e || in->waiting || in->stopped || in->nmiWanted || in->irqWanted ||
+        cpu_interrupt_context_active() || !g_snes || !g_snes->cart ||
+        (g_snes->cart->type != CART_HIROM && g_snes->cart->type != CART_LOROM))
+        return NULL;
+    unsigned page = pc >> 8;
+    size_t lo = s_native_page_start[page];
+    size_t hi = lo + s_native_page_count[page];
+    uint32_t key = (pc << 3) | (in->mf << 2) | (in->xf << 1);
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        uint32_t candidate = native_instruction_key(&s_native_instructions[mid].descriptor);
+        if (candidate < key) lo = mid + 1;
+        else if (candidate > key) hi = mid;
+        else {
+            NativeInstructionEntry *entry = &s_native_instructions[mid];
+            const InterpNativeInstruction *d = &entry->descriptor;
+            if (lle_bounce_target_excluded(pc)) return NULL;
+            Cart *cart = g_snes->cart;
+            unsigned bank = (pc >> 16) & 0x7Fu;
+            if (cart->type == CART_HIROM && bank >= 0x20u && bank < 0x30u &&
+                cart->overlayBank[bank - 0x20u]) return NULL;
+            const uint8_t *p = cart_getRomPtr(cart, (uint8_t)(pc >> 16), (uint16_t)pc);
+            uintptr_t start = (uintptr_t)cart->rom, mapped = (uintptr_t)p;
+            if (!cart->rom || !p || cart->romSize < d->length || mapped < start ||
+                mapped - start > cart->romSize - d->length) return NULL;
+            /* Plain LoROM/HiROM upper halves are linear inside this bounded
+             * bank interval; code is revalidated after EVERY pre-opcode hook. */
+            if ((d->length > 1 &&
+                 cart_getRomPtr(cart, (uint8_t)(pc >> 16),
+                    (uint16_t)(pc + d->length - 1)) != p + d->length - 1) ||
+                memcmp(p, d->bytes, d->length)) return NULL;
+            return entry;
+        }
     }
     return NULL;
 #endif
@@ -2843,23 +3022,41 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
         if (s_idle_poll_count) s_idle_poll_now = bridge_is_idle_poll(pc_before);
         InterpNativePollStep native_poll = s_native_rdnmi_poll_count ?
             bridge_native_rdnmi_step(&in, pc_before, auto_quiescent, stop_on_rti) : NULL;
-        /* A native callback owns instruction effects only. The exact same
+        NativeInstructionEntry *native_continuation =
+            !native_poll && s_native_instruction_count &&
+            s_native_page_count[pc_before >> 8] ?
+            bridge_native_instruction_step(&in, pc_before, auto_quiescent, stop_on_rti) : NULL;
+        /* Native callbacks own instruction effects only. The exact same
          * live interpreter frame still retires every opcode below, including
          * its logical ring index, bus/master charge, beam/IRQ/APU phases and
          * continuation. It adds no guest frame and never runs runOpcode. */
         int _cyc;
-        if (native_poll) {
-            _cyc = native_poll(&in);
+        if (native_poll || native_continuation) {
+            /* Same architectural write attribution as runOpcode, without
+             * publishing stale registers or charging another instruction. */
+            uint32_t previous_ipc = g_interp816_cur_pc;
+            g_interp816_cur_pc = pc_before;
+            _cyc = native_poll ? native_poll(&in) :
+                                native_continuation->descriptor.step(&in);
             if (_cyc > 0) {
-                s_native_poll_insns++;
-                s_native_poll_cycles += (unsigned)_cyc;
+                if (native_poll) {
+                    s_native_poll_insns++;
+                    s_native_poll_cycles += (unsigned)_cyc;
+                } else {
+                    native_continuation->insns++;
+                    native_continuation->cycles += (unsigned)_cyc;
+                    s_native_continuation_insns++;
+                    s_native_continuation_cycles += (unsigned)_cyc;
+                }
             } else {
                 /* A trusted callback may decline only before ALL effects,
                  * including reads. Preserve the ordinary path and credit. */
                 native_poll = NULL;
+                native_continuation = NULL;
+                g_interp816_cur_pc = previous_ipc;
             }
         }
-        if (!native_poll) {
+        if (!native_poll && !native_continuation) {
             _cyc = interp816_runOpcode(&in);
         }
         s_idle_poll_now = 0;
@@ -2885,7 +3082,7 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
          * catch-up delta excludes what we already advanced here. */
         if (_cyc <= 0) _cyc = 1;
         if (g_tier2_capture_active) {
-            if (!native_poll)
+            if (!native_poll && !native_continuation)
                 tier2_capture_instruction(pc_before, coverage_mx, coverage_e, (unsigned)_cyc);
             static unsigned checkpoint_opcodes;
             if (!(++checkpoint_opcodes & 16383u)) Tier2CoverageTick(snes_frame_counter);
@@ -4201,6 +4398,8 @@ void InterpExecutionShareGet(InterpExecutionShare *out) {
     out->frame = snes_frame_counter;
     out->native_poll_insns = s_native_poll_insns;
     out->native_poll_cycles = s_native_poll_cycles;
+    out->native_continuation_insns = s_native_continuation_insns;
+    out->native_continuation_cycles = s_native_continuation_cycles;
     double pct = out->cpu_cycles
         ? 100.0 * (double)out->interp_cycles / (double)out->cpu_cycles : 0.0;
     /* The interpreter's bus-cycle rounding can put it a hair over the total;
@@ -4217,14 +4416,17 @@ void InterpExecutionShareDumpJson(FILE *f) {
                "\"interp_cycles\": %llu, \"cpu_cycles\": %llu, "
                "\"master_cycles\": %llu, \"interp_cycle_pct\": %.4f, "
                "\"aot_cycle_pct\": %.4f, \"native_poll_insns\": %llu, "
-               "\"native_poll_cycles\": %llu},\n",
+               "\"native_poll_cycles\": %llu, \"native_continuation_insns\": %llu, "
+               "\"native_continuation_cycles\": %llu},\n",
             s.frame, (unsigned long long)s.interp_insns,
             (unsigned long long)s.interp_cycles,
             (unsigned long long)s.cpu_cycles,
             (unsigned long long)s.master_cycles,
             s.interp_cycle_pct, s.aot_cycle_pct,
             (unsigned long long)s.native_poll_insns,
-            (unsigned long long)s.native_poll_cycles);
+            (unsigned long long)s.native_poll_cycles,
+            (unsigned long long)s.native_continuation_insns,
+            (unsigned long long)s.native_continuation_cycles);
 }
 
 void Tier2CoverageDumpJson(FILE *f) {

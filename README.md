@@ -8,19 +8,22 @@ The original author's credit, support link and full acknowledgments remain below
 ## Companion development status
 
 This is an early development fork, with no Companion release yet. The default
-source build interprets the game's 65816 instructions. November 8's private
-[batch 010](docs/NATIVE-BATCH-010.md) adds explicitly enabled compiled poll
-effects while retaining the bridge's interrupt, yield and timing protocol.
-**107 fresh reference/native pairs pass**, including 30 additional assisted
-cases. The 6,000-frame classroom/South Cape route reaches **82.99% native CPU
-cycles in 4:3 / 83.02% in 16:9**, up from batch 009's 40.28% / 40.32%.
-This private path requires `IOG_NATIVE_RDNMI_POLL=1`; separate counters identify
-its compiled poll work, and disabling it preserves the previous path.
-Same-binary headless tests show roughly 2% higher CPU cost with it enabled,
-so it remains an experimental opt-in.
-Interpreter fallback remains available. These are bounded execution results,
-not percentages of game content or completed campaign proof. Historical
-cross-version failures and raw APU timestamp differences remain documented.
+source build interprets the game's 65816 instructions. November 9's private
+[batch 011](docs/NATIVE-BATCH-011.md) compiles selected actor and decompression
+instructions at real continuation boundaries, retaining the existing bridge's
+interrupt, yield and timing protocol. **136 fresh reference/native pairs pass**,
+including 29 additional assisted cases. The 6,000-frame classroom/South Cape
+route reaches **86.51% native CPU cycles in 4:3 / 86.53% in 16:9**, up from
+batch 010's 82.99% / 83.02%. These are bounded guest-execution measurements,
+not percentages of game content or campaign completion.
+
+The private path requires `IOG_NATIVE_CONTINUATIONS=1`; the earlier compiled
+poll effects separately require `IOG_NATIVE_RDNMI_POLL=1`. Both default off.
+Separate per-PC counters identify the new work, and interpreter fallback
+remains available. Headless same-binary timing shows about 0.76% more CPU cost in 4:3 and
+0.71% in 16:9 with continuations enabled; this is native execution progress,
+not a demonstrated speedup. Historical cross-version failures
+and raw APU timestamp differences remain documented.
 
 - **CompanionLauncher:** Windows adapter using the shared 0.2.0 shell, verified
   USA ROM selection, native display/audio/gamepad settings, and direct Play.
@@ -49,10 +52,10 @@ cross-version failures and raw APU timestamp differences remain documented.
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
 - **Framework:** integrated SNESRecomp `e98dc63`, main checked November 9,
   2026, with Babel-specific changes preserved. [Integration and limits](docs/FRAMEWORK-NOV08.md).
-  Batch 010 retains all 1,163 prior emitted bodies unchanged and adds 56,
-  checking all 486 new instruction contexts through RomAtlas. Earlier live-WRAM,
+  Batch 011 retains all 1,219 prior emitted bodies unchanged and adds 14,
+  checking all 231 new instruction contexts through RomAtlas. Earlier live-WRAM,
   sorting and decode receipts retain their original identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-010.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-011.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
