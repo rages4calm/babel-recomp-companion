@@ -1,6 +1,8 @@
 """Resource guards exercised with synthetic child trees, never game inputs."""
 from pathlib import Path
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -478,6 +480,138 @@ class SpritePrefixPresetTests(unittest.TestCase):
             native_batch.generate(receipt, self.work)
 
 
+    def sorting_prep(self, **kwargs):
+        return self.prep(**(dict(region_live_immediates=True, region_live_wram_addresses=True,
+                                sprite_sorting=True) | kwargs))
+
+    def test_sorting_and_wram_capability_require_the_explicit_full_chain(self):
+        for flag in ("sprite_prefixes", "instruction_blocks", "region_paced", "region_live_immediates", "region_live_wram_addresses"):
+            with self.subTest(missing=flag), self.assertRaises(ValueError):
+                self.sorting_prep(**{flag: False})
+        for flag in ("region_live_immediates", "region_live_wram_addresses", "sprite_sorting"):
+            for value in (1, "true", None):
+                with self.subTest(flag=flag, value=value), self.assertRaises(ValueError):
+                    self.sorting_prep(**{flag: value})
+        self.assertFalse(self.work.exists())
+
+    def test_sorting_disabled_preserves_legacy_cache_shape_and_cannot_reuse_other_modes(self):
+        legacy = self.prep(region_live_immediates=True)
+        self.assertEqual(legacy, self.prep(region_live_immediates=True, region_live_wram_addresses=False, sprite_sorting=False))
+        for flag in ("region_live_wram_addresses", "sprite_sorting"):
+            self.assertNotIn(flag, legacy)
+            explicit_false = json.loads(json.dumps(legacy)); explicit_false[flag] = False
+            self.assertEqual(native_batch.sprite_cache_inputs(legacy), native_batch.sprite_cache_inputs(explicit_false))
+            explicit_true = json.loads(json.dumps(legacy)); explicit_true[flag] = True
+            self.assertNotEqual(native_batch.sprite_cache_inputs(legacy), native_batch.sprite_cache_inputs(explicit_true))
+        with self.assertRaisesRegex(ValueError, "immutable"):
+            self.sorting_prep()
+        self.work = self.project / ".local/wram-capability"
+        capability = self.prep(region_live_immediates=True, region_live_wram_addresses=True)
+        self.assertEqual(capability["prepared_cfg_sha256"], legacy["prepared_cfg_sha256"])
+        self.assertEqual(capability["policy_sha256"], legacy["policy_sha256"])
+        self.assertEqual(capability["sprite_prefixes"]["protected_function"], ["03C5FF", "03C714"])
+        with self.assertRaisesRegex(ValueError, "immutable"):
+            self.sorting_prep()
+        self.work = self.project / ".local/sorting"
+        sorting = self.sorting_prep()
+        self.assertEqual(sorting, self.sorting_prep())
+        with self.assertRaisesRegex(ValueError, "immutable"):
+            self.sorting_prep(sprite_sorting=False)
+
+    def test_sorting_removes_only_validated_sort_guard_and_real_cfg_expands_all_ten_sites(self):
+        before_policy = self.policy.read_bytes(); before_cfg = self.cfg03.read_bytes()
+        ordinary = self.prep(region_live_immediates=True)
+        old_work = self.work; self.work = self.project / ".local/sort"
+        receipt = self.sorting_prep()
+        self.assertEqual(self.policy.read_bytes(), before_policy)
+        self.assertEqual(self.cfg03.read_bytes(), before_cfg)
+        original = json.loads(before_policy)
+        effective = json.loads((self.work / "effective-policy.json").read_text())
+        self.assertEqual(effective["guard_ranges"], [row for row in original["guard_ranges"] if row["start"] != "03C5FF"])
+        def blocked(work):
+            return {int(line.split()[1], 16) for line in (work / "cfg/bank00.cfg").read_text().splitlines()
+                    if line.startswith("force_lle ")}
+        self.assertEqual(blocked(old_work) - blocked(self.work),
+                         {alias for pc in range(0x03C5FF, 0x03C714) for alias in native_batch.aliases(pc)})
+        self.assertFalse(blocked(self.work) - blocked(old_work))
+        self.assertEqual(receipt["sprite_prefixes"]["promoted_function"], ["03C5FF", "03C714"])
+        self.assertEqual(receipt["sprite_prefixes"]["live_wram_address_sites"], ["C616", "C629"])
+        self.assertEqual(len(receipt["sprite_prefixes"]["live_immediate_sites"]), 8)
+        self.assertEqual(len(receipt["sprite_prefixes"]["live_alias_sites"]), 40)
+        self.assertEqual(receipt["generation_command"].count("--region-live-wram-addresses"), 1)
+        self.assertNotIn("--sprite-sorting", receipt["generation_command"])  # Game policy, not an SDK flag.
+        sdk = Path(__file__).resolve().parents[1] / "snesrecomp/recompiler"
+        with patch.object(sys, "path", [str(sdk), *sys.path]):
+            from snes65816 import get_rom_mapping, set_rom_mapping
+            from v2.cfg_loader import load_bank_cfg
+            from v2.hirom_cfg import expand_hirom_cfgs
+            path = self.work / "cfg/bank03.cfg"; cfg = load_bank_cfg(str(path)); old = get_rom_mapping()
+            try:
+                set_rom_mapping("hirom"); expanded = expand_hirom_cfgs([(3, path, cfg)])
+            finally:
+                set_rom_mapping(old)
+            self.assertEqual({bank for bank, _, _ in expanded}, {3, 0x43, 0x83, 0xC3})
+            for bank, _, row in expanded:
+                with self.subTest(bank=bank): self.assertEqual(row.live_operand, set(native_batch.SPRITE_PATCH_CONTRACT))
+        self.assertNotEqual(ordinary["policy_sha256"], receipt["policy_sha256"])
+
+    def test_sorting_receipt_tampering_refuses_before_launch_even_with_rebound_cache_digest(self):
+        receipt = self.sorting_prep()
+        mutations = [lambda row, flag=flag, value=value: row.update({flag: value})
+                     for flag in ("region_live_wram_addresses", "sprite_sorting") for value in (False, 1, "true", None)]
+        mutations += [lambda row: row["generation_command"].remove("--region-live-wram-addresses"),
+                      lambda row: row["generation_command"].append("--region-live-wram-addresses"),
+                      lambda row: row["sprite_prefixes"].update(promoted_function=["03C600", "03C714"]),
+                      lambda row: row["sprite_prefixes"].update(live_wram_address_sites=["C616"]),
+                      lambda row: row["sprite_prefixes"]["live_alias_sites"].pop(),
+                      lambda row: row["sprite_prefixes"]["live_immediate_sites"].pop(),
+                      lambda row: row["sprite_prefixes"].update(protected_function=["03C5FF", "03C714"]),
+                      lambda row: row.update(region_live_immediates=False)]
+        for index, mutate in enumerate(mutations):
+            changed = json.loads(json.dumps(receipt)); mutate(changed)
+            changed["sprite_prefixes"]["cache_inputs_sha256"] = native_batch.sprite_cache_inputs(changed)
+            changed["sprite_prefixes"]["generation_command_sha256"] = native_batch.json_digest(changed["generation_command"])
+            with self.subTest(mutation=index), patch.object(native_batch, "bounded_run") as launch:
+                with self.assertRaises(ValueError): native_batch.generate(changed, self.work)
+                launch.assert_not_called()
+
+    def test_sorting_checks_stock_hostpatch_contract_before_guard_removal(self):
+        source = self.source.read_text(); policy = self.policy.read_bytes(); image = self.rom.read_bytes()
+        for changed in (source.replace("kWramCullCamera = 0x1E00", "kWramCullCamera = 0x1E02"),
+                        source.replace("0x03C617", "0x03C618")):
+            self.source.write_text(changed, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "patch contract"): self.sorting_prep()
+        self.source.write_text(source, encoding="utf-8")
+        for pc in native_batch.SPRITE_PATCH_CONTRACT:
+            changed = bytearray(image); changed[0x30000 + pc + 1] ^= 1; self.rom.write_bytes(changed)
+            rebound = json.loads(policy); rebound["rom_sha256"] = native_batch.digest(changed)
+            self.policy.write_text(json.dumps(rebound), encoding="utf-8")
+            with self.subTest(pc=hex(pc)), self.assertRaisesRegex(ValueError, "opcode/operand"): self.sorting_prep()
+        self.rom.write_bytes(image); self.policy.write_bytes(policy)
+        changed = json.loads(policy); changed["guard_ranges"][-1]["end_exclusive"] = "03C714"
+        self.policy.write_text(json.dumps(changed), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "complete culling guard"): self.sorting_prep()
+        self.assertFalse(self.work.exists())
+
+    def test_sorting_manifest_allows_sort_but_still_rejects_other_guards(self):
+        receipt = self.sorting_prep(); generated = self.work / "generated"; generated.mkdir()
+        cache = dict(format_version=5, generator_digest="a" * 64, config_digest="b" * 64, analysis_input_digest="c" * 64)
+        (generated / ".snesrecomp-cache.json").write_text(json.dumps(cache), encoding="utf-8")
+        manifest = {"roots": ["sort"], "nodes": {"sort": {
+            "disposition": "aot_eligible", "min_pc24": 0x83C5FF, "max_pc24": 0x83C713}}}
+        path = generated / "program_manifest.json"; path.write_text(json.dumps(manifest), encoding="utf-8")
+        with patch.object(native_batch, "bounded_run", return_value={"exit_code": 0}):
+            result = native_batch.generate(receipt, self.work)
+        self.assertEqual(result["exit_code"], 0)
+        other = json.loads((self.work / "effective-policy.json").read_text())["guard_ranges"][0]
+        manifest["nodes"]["sort"].update(min_pc24=int(other["start"], 16), max_pc24=int(other["start"], 16))
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        with patch.object(native_batch, "bounded_run", return_value={"exit_code": 0}):
+            result = native_batch.generate(receipt, self.work)
+        self.assertEqual(result["exit_code"], 3)
+        self.assertEqual(result["guarded_range_violations"], ["sort"])
+
+
 class ResourceGuardTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -501,6 +635,32 @@ class ResourceGuardTests(unittest.TestCase):
                              self.log, 128, 5)
         self.assertEqual(result["exit_code"], 0)
         self.assertEqual(self.log.read_text().strip(), "18000")
+
+    @unittest.skipUnless(os.name == "nt", "Windows CreateProcess command limit")
+    def test_overlong_python_script_preserves_exact_argv_import_path_and_exit_status(self):
+        script = Path(self.temp.name) / "entry point.py"
+        helper = script.with_name("local_helper.py")
+        helper.write_text("VALUE = 731\n", encoding="utf-8")
+        script.write_text('import hashlib,json,sys,local_helper\n'
+                          'print(json.dumps({"argv":sys.argv,"helper":local_helper.VALUE,"main":__name__}))\n'
+                          'raise SystemExit(37)\n', encoding="utf-8")
+        arguments = ["C:\\private folder\\" + ("ab\\cd \"quoted\" " * 2400), "final value"]
+        command = [sys.executable, str(script), *arguments]
+        self.assertGreater(len(subprocess.list2cmdline(command)), 32767)
+        result = bounded_run(command, self.log, 128, 5)
+        self.assertEqual(result["exit_code"], 37, self.log.read_text())
+        self.assertFalse(result["timed_out"])
+        output = json.loads(self.log.read_text())
+        self.assertEqual(output, {"argv": [str(script), *arguments], "helper": 731, "main": "__main__"})
+
+    @unittest.skipUnless(os.name == "nt", "Windows CreateProcess command limit")
+    def test_overlong_non_script_command_fails_without_executing_child(self):
+        marker = Path(self.temp.name) / "must-not-exist.txt"
+        command = [sys.executable, "-c", f"open({str(marker)!r},'w').write('unexpected')", "x" * 34000]
+        result = bounded_run(command, self.log, 128, 5)
+        self.assertNotEqual(result["exit_code"], 0)
+        self.assertFalse(marker.exists())
+        self.assertIn("Overlong Windows command requires", self.log.read_text())
 
     def test_timeout_stops_owned_child_tree(self):
         result = self.run_child(

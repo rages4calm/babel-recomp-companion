@@ -142,3 +142,25 @@ reported as [#266](https://github.com/RetroPortingToolKit/snesrecomp/issues/266)
 it remains unfixed in this batch and is separate from the live operand result.
 All new private source/cache/build/control identities are retained under
 `native-008/`; published files contain no ROM-derived generated game code.
+
+## Batch 009 local additions
+
+[Batch 009](NATIVE-BATCH-009.md) keeps the same explicitly inventoried official
+main revision. Its delta adds an opt-in guarded live ABS WRAM-read emission
+plan, a pure plain-cart code-preview helper, matching CLI/recipe/cache plumbing,
+ROM-free execution tests and an actual-core polling fallback regression. No
+existing runtime instruction handler, state layout or cartridge tree is replaced.
+The private title preset additionally validates all ten existing sprite patch
+contracts before promoting sorting; ordinary policy and CFG remain unchanged.
+
+The Windows batch wrapper handles overlong Python-file commands in its already
+resource-limited child, preserving the exact argument-vector receipt and exit
+status. This fixes the local orchestration failure without combining historical
+costs or omitting profile inputs.
+
+The larger RDNMI loop remains interpreted: an independently executed guard-only
+native hypothesis fails quiescent-yield and comparator-IRQ parity. This is a
+qualification failure for an unsupported optimization, not a recurrence of the
+fixed #242 ownership bug. Existing #263–#266 remain open without new replies
+at the November 8 closeout check; #250 and #251 remain open and their maintainer
+heads are preserved. No duplicate upstream issue was filed.

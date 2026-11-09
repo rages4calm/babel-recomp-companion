@@ -8,18 +8,15 @@ The original author's credit, support link and full acknowledgments remain below
 ## Companion development status
 
 This is an early development fork, with no Companion release yet. The default
-source build interprets the game's 65816 instructions. Batch 004's private mixed-native
-baseline fixed duplicate vblank input remapping and passed **61 matched cases**:
-real assisted fights/rewards, seven ability effects, four bosses, prerequisite
-controls and earlier area/form regressions. The 6,000-frame classroom/South Cape
-route reports **12.83% native CPU cycles** in both 4:3 and 16:9 under the corrected
-input model. November 8's [batch 008](docs/NATIVE-BATCH-008.md) adds opt-in
-timed live sprite operands on the current framework, with **57 fresh current
-reference/native pairs passing** and natural-route native CPU-cycle coverage reaching
-**31.43% in 4:3 / 31.44% in 16:9**. Historical cross-version comparisons have
-separate documented failures; they are not waived by current tier parity.
-Interpreter fallback remains available.
-This is bounded route evidence, not a fully native game or completed campaign.
+source build interprets the game's 65816 instructions. November 8's private
+[batch 009](docs/NATIVE-BATCH-009.md) adds guarded live WRAM-address reads and
+native actor sorting on the current framework. **77 fresh reference/native
+pairs pass**, including 20 new assisted combat cases. The 6,000-frame
+classroom/South Cape route reaches **40.28% native CPU cycles in 4:3 / 40.32%
+in 16:9**, up from batch 008's 31.43% / 31.44%.
+Interpreter fallback remains available. These are bounded execution results,
+not percentages of game content or completed campaign proof. Historical
+cross-version failures and raw APU timestamp differences remain documented.
 
 - **CompanionLauncher:** Windows adapter using the shared 0.2.0 shell, verified
   USA ROM selection, native display/audio/gamepad settings, and direct Play.
@@ -48,10 +45,10 @@ This is bounded route evidence, not a fully native game or completed campaign.
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
 - **Framework:** integrated SNESRecomp `e98dc63`, main checked November 8,
   2026, with Babel-specific changes preserved. [Integration and limits](docs/FRAMEWORK-NOV08.md).
-  Batch 008 verifies 16 timed-live blocks and reuses batch 007's 379 independently
-  checked RomAtlas instruction contexts under identical source identities; the earlier
-  8,192-context batch retains its original identity and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-008.md),
+  Batch 009 inspects 889 new RomAtlas contexts, including all 277 sorting bytes
+  in 135 observed width contexts, and tests all twelve supported live ABS read
+  operations. Earlier decode receipts retain their original identities and scope.
+  [Current native batch and limits](docs/NATIVE-BATCH-009.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).

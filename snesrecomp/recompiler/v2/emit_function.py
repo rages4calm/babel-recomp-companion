@@ -43,7 +43,7 @@ from snes_cycles import (  # noqa: E402
     block_static_cycles, instr_runtime_charges,
 )
 from snes65816 import (  # noqa: E402
-    ABS_X as _MODE_ABS_X, ABS_Y as _MODE_ABS_Y, IMM as _MODE_IMM,
+    ABS as _MODE_ABS, ABS_X as _MODE_ABS_X, ABS_Y as _MODE_ABS_Y, IMM as _MODE_IMM,
     get_rom_mapping, ROM_MAP_SA1, rom_offset,
 )
 from v2.ir import (  # noqa: E402
@@ -89,8 +89,11 @@ LIVE_OPERAND_MNEMONICS = frozenset({
 })
 
 
-def _live_operand(insn, ops: List[IROp]) -> List[IROp]:
-    """`live_operand`: replace the folded immediate with a ROM read of it.
+def _live_operand(insn, ops: List[IROp], *, live_wram_addresses=False) -> List[IROp]:
+    """Preserve an explicitly mutable data operand.
+
+    The opt-in ABS case keeps its architectural read for the guarded paced
+    address plan; it must not be treated as an immediate constant.
 
     The operand bytes follow the opcode in the program bank, so the read is
     PB:(pc+1) at the instruction's own width -- exactly the bytes the CPU
@@ -98,6 +101,8 @@ def _live_operand(insn, ops: List[IROp]) -> List[IROp]:
     charge, stays the IMM form.
     """
     pc = insn.addr & 0xFFFFFF
+    if live_wram_addresses and insn.mode == _MODE_ABS and insn.mnem in LIVE_OPERAND_MNEMONICS:
+        return ops  # guarded dynamic-address bus plan replaces the data read later
     if insn.mode != _MODE_IMM:
         raise ValueError(
             f"live_operand at ${pc:06X}: {insn.mnem} is not "
@@ -539,6 +544,7 @@ def emit_function(rom: bytes, bank: int, start: int,
                   instruction_blocks: bool = False,
                   region_paced: bool = False,
                   region_live_immediates: bool = False,
+                  region_live_wram_addresses: bool = False,
                   entry_s_offset: int = 0) -> str:
     """Emit a complete v2 C function source for one 65816 function.
 
@@ -554,6 +560,8 @@ def emit_function(rom: bytes, bank: int, start: int,
         raise ValueError("region-paced emission requires instruction-blocks")
     if region_live_immediates and not (region_paced and instruction_blocks):
         raise ValueError("region-live-immediates requires region-paced instruction-blocks")
+    if region_live_wram_addresses and not (region_paced and instruction_blocks):
+        raise ValueError("region-live-wram-addresses requires region-paced instruction-blocks")
     base_func_name = func_name if func_name is not None else _default_func_name(bank, start)
     # HLE bypass: if cfg declared this function's PC as the SPC upload
     # entry (`hle_spc_upload <pc>` in the bank cfg), replace the entire
@@ -889,7 +897,7 @@ def emit_function(rom: bytes, bank: int, start: int,
             ops = lower(di.insn, value_factory=vf)
             if (live_operand_sites
                     and (di.insn.addr & 0xFFFFFF) in live_operand_sites):
-                ops = _live_operand(di.insn, ops)
+                ops = _live_operand(di.insn, ops, live_wram_addresses=region_live_wram_addresses)
             pairs.append((di.insn, ops))
             flat.extend(ops)
         block_per_insn_ir[key] = pairs
@@ -2269,8 +2277,12 @@ def emit_function(rom: bytes, bank: int, start: int,
         # advances the frame clock to the end of the block before its emitted
         # operations run; exposing that future timestamp to DSP-1 can let
         # firmware consume a word before the CPU has written it.
-        src.append(
-            '    cpu->coprocessor_master_cycles = cpu->master_cycles;')
+        _live_wram_site = bool(region_live_wram_addresses and live_operand_sites and
+                               block_pc24 in live_operand_sites and
+                               len(block_per_insn_ir.get(key, [])) == 1 and
+                               block_per_insn_ir[key][0][0].mode == _MODE_ABS)
+        if not _live_wram_site:
+            src.append('    cpu->coprocessor_master_cycles = cpu->master_cycles;')
         # Axis-2: charge this block's static 65816 CPU cycles as one constant
         # add (recompiler/snes_cycles.py). Near-free. Runtime-only modifiers
         # (D.l/page-cross/branch-taken) are charged dynamically in block_lines.
@@ -2288,7 +2300,8 @@ def emit_function(rom: bytes, bank: int, start: int,
                 # matching jump/fall PCs cannot classify offset-zero branches.
                 _paced_plan = plan(_insn, block_lines[key], _cyc_const,
                                    live_operand=bool(live_operand_sites and block_pc24 in live_operand_sites),
-                                   live_immediates=region_live_immediates)
+                                   live_immediates=region_live_immediates,
+                                   live_wram_addresses=region_live_wram_addresses)
             if _paced_plan is None:
                 src.append('    RecompStackPop();')
                 src.append(f'    return interp_tier_dispatch_tail(cpu, {_transfer_target_expr(block_pc24, False)}, '
@@ -2300,13 +2313,15 @@ def emit_function(rom: bytes, bank: int, start: int,
                 f'0x{block_pc24:06X}u, _entry_s, _hrv);')
             for _prefix_line in _paced_plan[2]:
                 src.append('    ' + _prefix_line.replace('@FALLBACK@', _pointer_fallback))
-            _guard = mmio_guard(_insn)
+            if _live_wram_site:
+                src.append('    cpu->coprocessor_master_cycles = cpu->master_cycles;')
+            _guard = None if _live_wram_site else mmio_guard(_insn)
             if _guard:
                 src.append(f'    if ({_guard}) {{ RecompStackPop();')
                 src.append(f'      return interp_tier_dispatch_tail(cpu, {_transfer_target_expr(block_pc24, False)}, '
                            f'0x{block_pc24:06X}u, _entry_s, _hrv); }} /* MMIO remains authoritative LLE */')
-            _live_fetch = bool(region_live_immediates and live_operand_sites and
-                               block_pc24 in live_operand_sites)
+            _live_fetch = bool(live_operand_sites and block_pc24 in live_operand_sites and
+                               ((region_live_immediates and _insn.mode == _MODE_IMM) or _live_wram_site))
             _fetch_last = rom_offset(bank, (_insn.addr + (0 if _live_fetch else _insn.length - 1)) & 0xFFFF)
             _fetch_note = "opcode fetch; paced live operands follow" if _live_fetch else "last opcode/operand fetch"
             src.append(f'    cpu->open_bus = 0x{rom[_fetch_last]:02X}u; /* {_fetch_note} */')

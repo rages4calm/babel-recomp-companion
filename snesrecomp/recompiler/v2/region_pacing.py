@@ -99,7 +99,7 @@ def data_bytes(insn):
     return None
 
 
-def plan(insn, lines, cpu_cycles, *, live_operand=False, live_immediates=False):
+def plan(insn, lines, cpu_cycles, *, live_operand=False, live_immediates=False, live_wram_addresses=False):
     """Return fetch/internal precharge and paced body, or None.
 
     Checking the emitted byte-access count prevents an optimization or new
@@ -108,6 +108,9 @@ def plan(insn, lines, cpu_cycles, *, live_operand=False, live_immediates=False):
     dispatch/pointer/control helpers deliberately remain authoritative LLE.
     """
     from v2.region_pointers import MODES, plan as pointer_plan
+    if live_operand and live_wram_addresses and insn.mode == d.ABS:
+        from v2.region_live_wram import plan as live_wram_plan
+        return live_wram_plan(insn, lines, cpu_cycles)
     if live_operand:
         return live_immediate_plan(insn, lines, cpu_cycles) if live_immediates else None
     if insn.mode in MODES and not live_operand:

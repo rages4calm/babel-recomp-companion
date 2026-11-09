@@ -25,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "recomp/native/policy.json"
 DEFAULT_WORK = ROOT / ".local/batch-001/native-002/large-batch"
 SPRITE_IMMEDIATES = (0xC728, 0xC7BD, 0xC8E4, 0xC8E9, 0xC9C1, 0xC9C6)
-# Host patch contract, not extracted game code. Absolute-address operands and
-# both actor-list comparisons remain inside the complete protected function.
+# Host patch contract, not extracted game code. The ordinary prefix preset
+# retains the complete sorting function; its separate promotion is explicit.
 SPRITE_PATCH_CONTRACT = {
     0xC616: (0xED, 0x068A, 0, 1), 0xC619: (0xC9, 0x0100, 2, 0),
     0xC629: (0xED, 0x068A, 0, 1), 0xC62C: (0xC9, 0x0100, 2, 0),
@@ -34,6 +34,9 @@ SPRITE_PATCH_CONTRACT = {
     0xC8E4: (0xC9, 0x0110, 2, 0), 0xC8E9: (0xE9, 0x000F, 1, 0),
     0xC9C1: (0xC9, 0x0110, 2, 0), 0xC9C6: (0xE9, 0x000F, 1, 0),
 }
+SPRITE_SORT_IMMEDIATES = tuple(pc for pc, row in SPRITE_PATCH_CONTRACT.items() if row[0] != 0xED)
+SPRITE_SORT_WRAM_ADDRESSES = (0xC616, 0xC629)
+SPRITE_SORT_SITES = tuple(sorted(SPRITE_PATCH_CONTRACT))
 SPRITE_GUARD_REASON = ("Private candidate: complete SortActorsByDepth including both mutable ABS operands; "
                        "later six immediate-only sites require pre-effect interpreter refusal.")
 SPRITE_LIVE_GUARD_REASON = ("Private candidate: complete SortActorsByDepth including both mutable ABS operands; "
@@ -106,6 +109,15 @@ def bounded_run(command: list[str], log: Path, memory_mib: int, timeout_seconds:
                ' resource.setrlimit(resource.RLIMIT_AS,(int(sys.argv[1])*1048576,)*2)\n'
                'sys.stdin.buffer.read(1)\n'
                'command=json.loads(sys.stdin.buffer.read().decode("utf-8"))\n'
+               'if os.name == "nt" and len(subprocess.list2cmdline(command)) > 30000:\n'
+               ' if (len(command) < 2 or os.path.normcase(os.path.realpath(command[0])) != os.path.normcase(os.path.realpath(sys.executable))\n'
+               '     or not command[1].lower().endswith(".py") or not os.path.isfile(command[1])):\n'
+               '  raise ValueError("Overlong Windows command requires this Python interpreter and an existing .py entry point")\n'
+               ' import runpy\n'
+               ' sys.argv=command[1:]\n'
+               ' sys.path.insert(0,os.path.dirname(os.path.abspath(command[1])))\n'
+               ' runpy.run_path(command[1],run_name="__main__")\n'
+               ' sys.exit(0)\n'
                'sys.exit(subprocess.call(command))\n')
     started = time.monotonic(); job = WindowsJob(memory_mib) if os.name == "nt" else None
     process = None; timed_out = False; peak = None
@@ -160,8 +172,9 @@ def cfg_identity(directory: Path) -> dict:
     return {p.name: digest(p.read_bytes()) for p in sorted(paths)}
 
 
-def sprite_prefix_policy(policy: dict, image: bytes, region_live_immediates: bool = False) -> dict:
-    """Validate the stock host-patch boundary before narrowing a private guard."""
+def sprite_prefix_policy(policy: dict, image: bytes, region_live_immediates: bool = False,
+                         sprite_sorting: bool = False) -> dict:
+    """Validate stock host patches before narrowing/removing the private guard."""
     source = (ROOT / "src/iog_widescreen.c").read_text(encoding="utf-8")
     match = re.search(r"static\s+const\s+CullSite\s+kCullSites\[\]\s*=\s*\{(.*?)\};", source, re.S)
     if not match:
@@ -184,7 +197,10 @@ def sprite_prefix_policy(policy: dict, image: bytes, region_live_immediates: boo
     cull = [item for item in effective["guard_ranges"] if item["start"] == "03C5FF"]
     if len(cull) != 1 or cull[0]["end_exclusive"] != "03CA00":
         raise ValueError("Sprite-prefix preset requires the original complete culling guard")
-    cull[0].update(end_exclusive="03C714", reason=SPRITE_LIVE_GUARD_REASON if region_live_immediates else SPRITE_GUARD_REASON)
+    if sprite_sorting:
+        effective["guard_ranges"].remove(cull[0])
+    else:
+        cull[0].update(end_exclusive="03C714", reason=SPRITE_LIVE_GUARD_REASON if region_live_immediates else SPRITE_GUARD_REASON)
     return effective
 
 
@@ -253,8 +269,9 @@ def sprite_cache_inputs(receipt: dict) -> str:
             "instruction_blocks", "region_paced", "generation_command")
     inputs = {key: receipt.get(key) for key in keys}
     # Preserve the 007 cache-input wire shape when the new capability is off.
-    if receipt.get("region_live_immediates"):
-        inputs["region_live_immediates"] = True
+    for flag in ("region_live_immediates", "region_live_wram_addresses", "sprite_sorting"):
+        if receipt.get(flag):
+            inputs[flag] = True
     inputs["generator_identity"] = receipt["sprite_prefixes"]["generator_identity"]
     return json_digest(inputs)
 
@@ -263,15 +280,32 @@ def sprite_receipt_policy(receipt: dict, work: Path) -> dict:
     """Validate immutable preset preparation before launching or using a cache."""
     preset = receipt["sprite_prefixes"]
     region_live_immediates = receipt.get("region_live_immediates", False)
+    region_live_wram_addresses = receipt.get("region_live_wram_addresses", False)
+    sprite_sorting = receipt.get("sprite_sorting", False)
+    for flag, value in (("region_live_wram_addresses", region_live_wram_addresses), ("sprite_sorting", sprite_sorting)):
+        if type(value) is not bool:
+            raise ValueError(f"{flag} receipt must be an explicit boolean")
+    if (receipt["generation_command"].count("--region-live-wram-addresses") != int(region_live_wram_addresses) or
+            region_live_wram_addresses and not region_live_immediates or
+            sprite_sorting and not region_live_wram_addresses):
+        raise ValueError("Sprite-sorting capability prerequisites or command identity disagree")
     if (type(region_live_immediates) is not bool or
             receipt["generation_command"].count("--region-live-immediates") != int(region_live_immediates)):
         raise ValueError("Region-live-immediates receipt and command identity disagree")
-    expected_aliases = [f"{pc:06X}" for site in SPRITE_IMMEDIATES for pc in sorted(aliases(0x030000 | site))]
+    sites = SPRITE_SORT_SITES if sprite_sorting else SPRITE_IMMEDIATES
+    immediates = SPRITE_SORT_IMMEDIATES if sprite_sorting else SPRITE_IMMEDIATES
+    expected_aliases = [f"{pc:06X}" for site in sites for pc in sorted(aliases(0x030000 | site))]
+    if sprite_sorting:
+        if (preset.get("promoted_function") != ["03C5FF", "03C714"] or
+                preset.get("live_wram_address_sites") != [f"{pc:04X}" for pc in SPRITE_SORT_WRAM_ADDRESSES]):
+            raise ValueError("Sprite-sorting promotion identity changed")
+    elif "promoted_function" in preset or "live_wram_address_sites" in preset:
+        raise ValueError("Sprite-sorting promotion requires the explicit preset")
     if (preset.get("schema") != "gaia sprite-prefix preparation v1" or
             preset.get("effective_policy_file") != "effective-policy.json" or
             preset.get("effective_policy_sha256") != receipt["policy_sha256"] or
-            preset.get("protected_function") != ["03C5FF", "03C714"] or
-            preset.get("live_immediate_sites") != [f"{pc:04X}" for pc in SPRITE_IMMEDIATES] or
+            preset.get("protected_function") != ([] if sprite_sorting else ["03C5FF", "03C714"]) or
+            preset.get("live_immediate_sites") != [f"{pc:04X}" for pc in immediates] or
             preset.get("live_alias_sites") != expected_aliases or
             preset.get("cache_inputs_sha256") != sprite_cache_inputs(receipt) or
             not receipt.get("instruction_blocks") or not receipt.get("region_paced")):
@@ -282,7 +316,7 @@ def sprite_receipt_policy(receipt: dict, work: Path) -> dict:
     rom = Path(command[command.index("--rom") + 1]).read_bytes()
     image = rom[512:] if len(rom) == 2097664 else rom
     public = POLICY.read_bytes()
-    effective = sprite_prefix_policy(json.loads(public), image, region_live_immediates)
+    effective = sprite_prefix_policy(json.loads(public), image, region_live_immediates, sprite_sorting)
     if (digest(public) != preset["public_policy_sha256"] or
             digest(policy_data) != receipt["policy_sha256"] or
             json.loads(policy_data) != effective or
@@ -420,13 +454,20 @@ def read_historical_profiles(paths: list[Path], rom_sha256: str) -> list[dict]:
 def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profile_only: bool,
             max_insns: int = 1024, max_nodes: int = 12000, instruction_blocks: bool = False, region_paced: bool = False,
             historical_profiles: list[Path] | None = None, sprite_prefixes: bool = False,
-            region_live_immediates: bool = False) -> dict:
+            region_live_immediates: bool = False, region_live_wram_addresses: bool = False,
+            sprite_sorting: bool = False) -> dict:
+    if any(type(flag) is not bool for flag in (region_live_immediates, region_live_wram_addresses, sprite_sorting)):
+        raise ValueError("Live-operand and sprite-sorting options must be booleans")
     if max_insns <= 0 or max_nodes <= 0 or (region_paced and not instruction_blocks):
         raise ValueError("Positive analysis limits and instruction-blocks for region-paced emission are required")
     if sprite_prefixes and not (instruction_blocks and region_paced):
         raise ValueError("--sprite-prefixes requires --instruction-blocks and --region-paced")
     if region_live_immediates and not (sprite_prefixes and instruction_blocks and region_paced):
         raise ValueError("--region-live-immediates requires --sprite-prefixes, --instruction-blocks and --region-paced")
+    if region_live_wram_addresses and not (sprite_prefixes and region_live_immediates and instruction_blocks and region_paced):
+        raise ValueError("--region-live-wram-addresses requires --sprite-prefixes, --region-live-immediates, --instruction-blocks and --region-paced")
+    if sprite_sorting and not region_live_wram_addresses:
+        raise ValueError("--sprite-sorting requires --region-live-wram-addresses and its prerequisites")
     public_policy = POLICY.read_bytes()
     policy = json.loads(public_policy)
     blocked, ranges = guards(policy)
@@ -437,7 +478,7 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
         raise ValueError("The ROM does not match the supported unmodified USA image")
     if sprite_prefixes:
         private_path(work)
-        policy = sprite_prefix_policy(policy, image, region_live_immediates)
+        policy = sprite_prefix_policy(policy, image, region_live_immediates, sprite_sorting)
         blocked, ranges = guards(policy)
     policy_data = (json.dumps(policy, indent=2) + "\n").encode("utf-8") if sprite_prefixes else public_policy
     evidence = read_profiles(profiles, policy["rom_sha256"])
@@ -456,6 +497,8 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
             previous.get("analysis_limits", {"max_insns": 4096, "max_nodes": 100000}) != {"max_insns": max_insns, "max_nodes": max_nodes} or
             bool(previous.get("sprite_prefixes")) != sprite_prefixes or
             bool(previous.get("region_live_immediates")) != region_live_immediates or
+            bool(previous.get("region_live_wram_addresses")) != region_live_wram_addresses or
+            bool(previous.get("sprite_sorting")) != sprite_sorting or
             previous["policy_sha256"] != digest(policy_data) or
             previous["framework_pins_sha256"] != digest((ROOT / "framework_pins.txt").read_bytes())):
             raise ValueError("This private batch is immutable and its inputs changed. Choose a new --work directory.")
@@ -480,7 +523,7 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
             if existing_live.intersection(SPRITE_PATCH_CONTRACT):
                 raise ValueError("Sprite-prefix patch sites already have live_operand directives")
             text += SPRITE_CFG_COMMENT
-            text += "".join(f"live_operand {pc:04X}\n" for pc in SPRITE_IMMEDIATES)
+            text += "".join(f"live_operand {pc:04X}\n" for pc in (SPRITE_SORT_SITES if sprite_sorting else SPRITE_IMMEDIATES))
         data = text.replace("\r\n", "\n").encode("utf-8")
         (prepared / path.name).write_bytes(data); outputs[path.name] = digest(data)
     for name in ("symbols.toml", "disassembly-layout.json"):
@@ -498,6 +541,8 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
         command.append("--region-paced")
     if region_live_immediates:
         command.append("--region-live-immediates")
+    if region_live_wram_addresses:
+        command.append("--region-live-wram-addresses")
     if not profile_only:
         command.append("--cfg-roots")
     for profile in profiles:
@@ -516,6 +561,10 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
         receipt["historical_profiles"] = historical
     if region_live_immediates:
         receipt["region_live_immediates"] = True
+    if region_live_wram_addresses:
+        receipt["region_live_wram_addresses"] = True
+    if sprite_sorting:
+        receipt["sprite_sorting"] = True
     if sprite_prefixes:
         if not (prepared / "bank03.cfg").is_file():
             raise ValueError("Sprite-prefix preset requires bank03.cfg")
@@ -524,9 +573,9 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
             "schema": "gaia sprite-prefix preparation v1", "experimental": True,
             "public_policy_sha256": digest(public_policy),
             "effective_policy_file": "effective-policy.json", "effective_policy_sha256": digest(policy_data),
-            "protected_function": ["03C5FF", "03C714"],
-            "live_immediate_sites": [f"{pc:04X}" for pc in SPRITE_IMMEDIATES],
-            "live_alias_sites": [f"{pc:06X}" for site in SPRITE_IMMEDIATES for pc in sorted(aliases(0x030000 | site))],
+            "protected_function": [] if sprite_sorting else ["03C5FF", "03C714"],
+            "live_immediate_sites": [f"{pc:04X}" for pc in (SPRITE_SORT_IMMEDIATES if sprite_sorting else SPRITE_IMMEDIATES)],
+            "live_alias_sites": [f"{pc:06X}" for site in (SPRITE_SORT_SITES if sprite_sorting else SPRITE_IMMEDIATES) for pc in sorted(aliases(0x030000 | site))],
             "source_widescreen_sha256": digest((ROOT / "src/iog_widescreen.c").read_bytes()),
             "generator_identity": generator_identity(),
             "generation_command_sha256": json_digest(command),
@@ -534,6 +583,12 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
                      + ("Six live immediates use timed live fetches with pre-effect interpreter fallback when unsupported; "
                         "no campaign qualification." if region_live_immediates else
                         "Six live immediates require pre-effect interpreter refusal; no campaign qualification.")}
+        if sprite_sorting:
+            receipt["sprite_prefixes"].update(
+                promoted_function=["03C5FF", "03C714"],
+                live_wram_address_sites=[f"{pc:04X}" for pc in SPRITE_SORT_WRAM_ADDRESSES],
+                scope="Opt-in private SortActorsByDepth and sprite-prefix analysis: ten live operand sites, "
+                      "including two WRAM addresses; all other guards and interpreter fallback retained. No execution or campaign qualification.")
         receipt["sprite_prefixes"]["cache_inputs_sha256"] = sprite_cache_inputs(receipt)
         receipt["sprite_prefixes"]["analyzer_at_prepare"] = analyzer_observation(receipt["sprite_prefixes"]["generator_identity"])
     (work / "prepare-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
@@ -541,8 +596,11 @@ def prepare(rom: Path, work: Path, profiles: list[Path], all_widths: bool, profi
 
 
 def generate(receipt: dict, work: Path, memory_mib: int = 4096, timeout_seconds: int = 300) -> dict:
-    if receipt.get("region_live_immediates") and not receipt.get("sprite_prefixes"):
-        raise ValueError("Region-live-immediates generation requires the sprite-prefix preset")
+    if any(type(receipt.get(flag, False)) is not bool for flag in
+           ("region_live_immediates", "region_live_wram_addresses", "sprite_sorting")):
+        raise ValueError("Live-operand and sprite-sorting receipt flags must be booleans")
+    if any(receipt.get(flag) for flag in ("region_live_immediates", "region_live_wram_addresses", "sprite_sorting")) and not receipt.get("sprite_prefixes"):
+        raise ValueError("Live-operand generation requires the sprite-prefix preset")
     policy = (sprite_receipt_policy(receipt, work) if receipt.get("sprite_prefixes")
               else json.loads(POLICY.read_text(encoding="utf-8")))
     cache_before = work / "generated/.snesrecomp-cache.json"
@@ -619,6 +677,8 @@ def main() -> int:
     parser.add_argument("--instruction-blocks", action="store_true", help="Check host deadlines at each guest instruction boundary")
     parser.add_argument("--sprite-prefixes", action="store_true", help="Opt in to private sprite prefixes with six live immediate refusals; requires --instruction-blocks --region-paced and retains complete SortActorsByDepth fallback")
     parser.add_argument("--region-live-immediates", action="store_true", help="Opt in to SDK region-paced live immediate reads; requires --sprite-prefixes --instruction-blocks --region-paced")
+    parser.add_argument("--region-live-wram-addresses", action="store_true", help="Opt in to SDK live WRAM address reads; requires the sprite-prefix/live-immediate pacing chain; keeps Sort protected unless --sprite-sorting is explicit")
+    parser.add_argument("--sprite-sorting", action="store_true", help="Private SortActorsByDepth candidate with all ten live patch sites; requires --region-live-wram-addresses and its prerequisites")
     args = parser.parse_args()
     if not (args.prepare or args.generate):
         parser.error("choose --prepare or --generate")
@@ -628,9 +688,14 @@ def main() -> int:
         parser.error("--sprite-prefixes requires --instruction-blocks and --region-paced")
     if args.region_live_immediates and not (args.sprite_prefixes and args.instruction_blocks and args.region_paced):
         parser.error("--region-live-immediates requires --sprite-prefixes, --instruction-blocks and --region-paced")
+    if args.region_live_wram_addresses and not (args.sprite_prefixes and args.region_live_immediates and args.instruction_blocks and args.region_paced):
+        parser.error("--region-live-wram-addresses requires --sprite-prefixes, --region-live-immediates, --instruction-blocks and --region-paced")
+    if args.sprite_sorting and not args.region_live_wram_addresses:
+        parser.error("--sprite-sorting requires --region-live-wram-addresses and its prerequisites")
     work = private_path(args.work); work.mkdir(parents=True, exist_ok=True)
     receipt = prepare(args.rom.resolve(), work, [p.resolve() for p in args.profile], args.all_widths, args.profile_only, args.max_insns, args.max_nodes, args.instruction_blocks, args.region_paced,
-                      [p.resolve() for p in args.historical_profile], args.sprite_prefixes, args.region_live_immediates)
+                      [p.resolve() for p in args.historical_profile], args.sprite_prefixes, args.region_live_immediates,
+                      args.region_live_wram_addresses, args.sprite_sorting)
     print(json.dumps({"work": str(work), "declared_functions": receipt["declared_functions"],
                       "guarded_addresses_with_aliases": receipt["guarded_addresses_with_aliases"],
                       "profile_counts": receipt["profiles"]["counts"]}))
