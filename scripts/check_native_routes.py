@@ -56,7 +56,9 @@ def snapshots(output: Path) -> list[dict]:
 def run(binary: Path, rom: Path, route_script: Path, output: Path, frames: int,
         expect_scene: int | None = None, expect_player: bool = False,
         compare: Path | None = None, wide: bool = False, timeout: int = 180, capture: bool = False,
-        interpret_all: bool = False, native_poll: bool = False) -> dict:
+        interpret_all: bool = False, native_poll: bool = False, native_continuations: bool = False) -> dict:
+    if type(native_continuations) is not bool:
+        raise ValueError("native_continuations must be a boolean")
     if type(native_poll) is not bool:
         raise ValueError("native_poll must be a boolean")
     if not 60 <= frames <= 60000:
@@ -113,6 +115,9 @@ def run(binary: Path, rom: Path, route_script: Path, output: Path, frames: int,
         env["SNESRECOMP_INTERPRET_ALL"] = "1"
     if native_poll:
         env["IOG_NATIVE_RDNMI_POLL"] = "1"
+    if native_continuations:
+        env["IOG_NATIVE_CONTINUATIONS"] = "1"
+        env["IOG_NATIVE_CONTINUATION_STATS"] = str(output / "native-continuations.json")
     if capture:
         env.update(SNESRECOMP_TIER2_MANIFEST=str(output / "tier2-manifest.json"),
                    SNESRECOMP_TIER2_JOURNAL=str(output / "tier2-journal.jsonl"))
@@ -176,9 +181,17 @@ def run(binary: Path, rom: Path, route_script: Path, output: Path, frames: int,
                "evidence_scope": "isolated dummy video/audio; scripted stock-ROM route; scene/player/visual evidence only; no physical input, timing or campaign certification"}
     if native_poll:
         receipt["native_poll_requested"] = True
+    if native_continuations:
+        receipt["native_continuations_requested"] = True
     report = output / "last_run_report.json"
     if report.is_file():
         receipt["execution_share"] = json.loads(report.read_text()).get("execution_share")
+    if native_continuations:
+        stats = output / "native-continuations.json"
+        checks["continuation_stats_present"] = stats.is_file()
+        if stats.is_file():
+            receipt["continuation_stats_sha256"] = sha(stats)
+        receipt["passed"] = all(checks.values())
     (output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     return receipt
 
@@ -196,9 +209,10 @@ if __name__ == "__main__":
     parser.add_argument("--capture", action="store_true", help="Record interpreter residual manifest/journal in the isolated fixture")
     parser.add_argument("--interpret-all", action="store_true", help="Explicitly verify retained fallback in a mixed-code executable")
     parser.add_argument("--native-poll", action="store_true", help="Explicit private native RDNMI island request")
+    parser.add_argument("--native-continuations", action="store_true")
     args = parser.parse_args()
     receipt = run(args.binary.resolve(), args.rom.resolve(), args.route_script.resolve(), args.output.resolve(),
                   args.frames, args.expect_scene, args.expect_player, args.compare, args.wide, args.timeout, args.capture,
-                  args.interpret_all, args.native_poll)
+                  args.interpret_all, args.native_poll, args.native_continuations)
     print(json.dumps(receipt, indent=2))
     raise SystemExit(0 if receipt["passed"] else 1)

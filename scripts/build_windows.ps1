@@ -1,5 +1,5 @@
 param([switch]$PrivateAot, [string]$Rom = '', [int]$Jobs = 8, [string]$NativeBatch = '',
-      [string]$BuildDirectory = '', [string]$CMake = 'cmake')
+      [string]$BuildDirectory = '', [string]$CMake = 'cmake', [string]$NativeEffects = '')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $buildRoot = Join-Path $projectRoot 'build'
@@ -50,9 +50,30 @@ if ($NativeBatch) {
     if ($LASTEXITCODE -ne 0) { throw 'Private generation failed.' }
 }
 $executionMode = if ($PrivateAot) { 'OFF' } else { 'ON' }
+$effectsSource = ''
+if ($NativeEffects) {
+    if (-not $PrivateAot) { throw 'NativeEffects requires a private AOT build.' }
+    $effectsRoot = (Resolve-Path -LiteralPath $NativeEffects).Path
+    $privateEffectsRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot '.local')) + [IO.Path]::DirectorySeparatorChar
+    if (-not $effectsRoot.StartsWith($privateEffectsRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'NativeEffects must stay beneath project .local.'
+    }
+    $effects = Get-Content -LiteralPath (Join-Path $effectsRoot 'receipt.json') -Raw | ConvertFrom-Json
+    if ($effects.source_file -ne 'native_continuations.c') { throw 'Unexpected native effects source name.' }
+    $effectsSource = Join-Path $effectsRoot $effects.source_file
+    $effectsHash = (Get-FileHash -LiteralPath $effectsSource -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($effectsHash -ne $effects.generated_source_sha256) { throw 'Native effects receipt/source mismatch.' }
+    $helperHash = (Get-FileHash -LiteralPath (Join-Path $projectRoot 'snesrecomp/runner/src/snes/interp816.c') -Algorithm SHA256).Hash.ToLowerInvariant()
+    $emitterHash = (Get-FileHash -LiteralPath (Join-Path $projectRoot 'snesrecomp/recompiler/v2/native_effects.py') -Algorithm SHA256).Hash.ToLowerInvariant()
+    $driverHash = (Get-FileHash -LiteralPath (Join-Path $projectRoot 'scripts/native_effects.py') -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($helperHash -ne $effects.helper_file_sha256 -or $emitterHash -ne $effects.emitter_sha256 -or $driverHash -ne $effects.driver_sha256) {
+        throw 'Native effects helper/emitter changed; regenerate before building.'
+    }
+}
 & $cmakeExe -S $projectRoot -B $buildRoot -G Ninja -DCMAKE_BUILD_TYPE=Release `
     "-DCMAKE_C_COMPILER=$compilerC" "-DCMAKE_CXX_COMPILER=$compilerCpp" `
     "-DSNESRECOMP_INTERPRETER_ONLY=$executionMode" `
+    "-DIOG_NATIVE_EFFECTS_SOURCE=$effectsSource" `
     "-DIOG_GENERATED_DIR=$generatedRoot" "-DIOG_GENERATED_INCLUDE_DIR=$generatedIncludes"
 if ($LASTEXITCODE -ne 0) { throw 'Engine configuration failed.' }
 & $cmakeExe --build $buildRoot -j $Jobs

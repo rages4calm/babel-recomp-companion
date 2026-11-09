@@ -1,0 +1,189 @@
+"""ROM-free fixed-case effects versus the actual interp816 opcode engine.
+
+The sparse bus defines every24-bit byte and records every access/word claim.
+Only CPU-local effect semantics are tested here. Registry admission, ownership,
+IRQ/NMI/deadlines and shared retirement have separate real-bridge proofs.
+"""
+from pathlib import Path
+import hashlib,json,os,re,shutil,subprocess,sys
+import pytest
+import snes65816 as d
+from v2.native_effects import emit,SAFE_NAMES
+
+REPO=Path(__file__).resolve().parents[2]
+CORE=REPO/'runner/src/snes/interp816.c'
+
+
+def entries(bank,small=False):
+    result=[];slot=0
+    for opcode,(name,mode,size)in sorted(d.opcode_table().items()):
+        if name not in SAFE_NAMES or(small and opcode not in(0xA9,0xAD,0xBD,0xB2,0xA7,0xED,0xE9,0x85,0xE6,0xEE,0xEB,0x5B)):
+            continue
+        for m,x in((0,0),(0,1),(1,0),(1,1)):
+            length=size(m,x)if callable(size)else size
+            for variant in range(1 if length==1 else 2):
+                operand=({2:0x99,3:0x9999,4:0xFFFFFF}.get(length,0)if mode==d.IMM else
+                    {2:0xFF,3:0xFFFF,4:0xFFFFFF}.get(length,0))if not variant else(
+                    {2:0x01,3:0xFFFF}.get(length,0)if mode==d.IMM else{2:0x74,3:0x2140,4:0x804210}.get(length,0))
+                code=bytes([opcode])+operand.to_bytes(length-1,'little')
+                result.append(dict(pc24=bank<<16|0x8000+slot*4,m=m,x=x,e=0,bytes=code,mnemonic=name,immediate=mode==d.IMM))
+                slot+=1
+    for m,x in((0,0),(0,1),(1,0),(1,1)):
+        for opcode,pc,operand in((0xA9,0xFFFD,0x9999),(0xAF,0xFFFC,0xFFFFFF),(0x0A,0xFFFF,0)):
+            name,mode,size=d.opcode_table()[opcode];length=size(m,x)if callable(size)else size
+            result.append(dict(pc24=bank<<16|pc,m=m,x=x,e=0,bytes=bytes([opcode])+(operand&((1<<(8*(length-1)))-1)).to_bytes(length-1,'little'),mnemonic=name,immediate=mode==d.IMM))
+    return result
+
+
+HARNESS=r'''
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "snes/snes_cycles.h"
+static const InterpNativeInstruction *registered;static size_t count;
+bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,size_t n){registered=items;count=n;return true;}
+int interp816_opcode_hook(uint32_t pc){(void)pc;return 0;}
+typedef struct {uint32_t adr;uint16_t value,pc,sp,dp;uint8_t kind,db,m,x,cycles;} Event;
+typedef struct {uint32_t adr;uint8_t value;} Byte;
+typedef struct {
+ const InterpNativeInstruction *code;Interp816 *cpu;unsigned seed,fast,hook;
+ Event events[40];unsigned n;Byte writes[8];unsigned nw;
+ uint64_t master;unsigned accesses,read_hooks,write_hooks,claims;uint8_t openbus;
+} Bus;
+static int failures;static unsigned long long scenarios,checks,negatives,wordclaims;
+#define CHECK(ok,...) do{checks++;if(!(ok)){if(failures++<12){printf("FAIL ");printf(__VA_ARGS__);puts("");}}}while(0)
+static uint8_t initial(Bus *b,uint32_t a){
+ for(unsigned i=b->nw;i;i--)if(b->writes[i-1].adr==a)return b->writes[i-1].value;
+ if(a>=b->code->pc24&&a-b->code->pc24<b->code->length)return b->code->bytes[a-b->code->pc24];
+ return(uint8_t)((a*1337u)^(a>>8)^(a>>17)^(b->seed*0x91919191u));
+}
+static void note(Bus *b,uint8_t kind,uint32_t a,uint16_t v){
+ if(b->n>=40){puts("event overflow");exit(2);}Event *e=&b->events[b->n++];memset(e,0,sizeof *e);
+ e->kind=kind;e->adr=a;e->value=v;e->pc=b->cpu->pc;e->sp=b->cpu->sp;e->dp=b->cpu->dp;e->db=b->cpu->db;
+ e->m=b->cpu->mf;e->x=b->cpu->xf;e->cycles=b->cpu->cyclesUsed;
+}
+static uint8_t read8(void *mem,uint32_t a){Bus*b=mem;a&=0xFFFFFF;uint8_t v=initial(b,a);note(b,'r',a,v);b->openbus=v;b->accesses++;b->master+=snes_region_speed(a,b->fast);return v;}
+static void write8(void *mem,uint32_t a,uint8_t v){Bus*b=mem;a&=0xFFFFFF;note(b,'w',a,v);b->openbus=v;b->accesses++;b->master+=snes_region_speed(a,b->fast);
+ if(b->nw>=8){puts("write overflow");exit(2);}Byte*w=&b->writes[b->nw++];w->adr=a;w->value=v;}
+static bool hw(uint32_t lo,uint32_t hi){return((lo>>16)&0x7F)<0x40&&(lo&65535)>=0x2000&&(lo&65535)+1<0x6000&&hi==lo+1;}
+static bool readword(void *mem,uint32_t lo,uint32_t hi,uint16_t *out){Bus*b=mem;b->read_hooks++;
+ if(b->hook!=2||!hw(lo,hi))return false;b->claims++;note(b,'R',lo,0);uint8_t a=read8(mem,lo);*out=a|((uint16_t)read8(mem,hi)<<8);return true;}
+static bool writeword(void *mem,uint32_t lo,uint32_t hi,uint16_t value,bool reversed){Bus*b=mem;b->write_hooks++;
+ if(b->hook!=2||reversed||!hw(lo,hi))return false;b->claims++;note(b,'W',lo,value);write8(mem,lo,value);write8(mem,hi,value>>8);return true;}
+static Interp816 initial_cpu(Bus *b,const InterpNativeInstruction *desc,unsigned seed,unsigned carry,unsigned decimal){
+ static const uint16_t values[]={0,1,0x99,0x7FFF,0x8000,0x9999,0xFF00,0xFFFF};
+ static const uint16_t dps[]={0,1,0x1000,0x1FB0,0x1FFF,0xFF80,0xFFF0,0xFFFF};
+ static const uint16_t sps[]={0x1FF,0x1F9,0x201,0xBFF,0x1FFF,0xFFFC,0,0xFFFF};
+ static const uint8_t dbs[]={0,0x3F,0x7E,0x7F,0x80,0xBF,0xFE,0xFF};
+ Interp816 c={0};c.mem=b;c.read=read8;c.write=write8;if(b->hook){c.read_word=readword;c.write_word=writeword;}
+ c.a=values[seed];c.x=values[(seed+1)&7];c.y=values[(seed+3)&7];if(desc->x){c.x&=255;c.y&=255;}
+ c.pc=desc->pc24;c.k=desc->pc24>>16;c.db=dbs[seed];c.dp=dps[seed];c.sp=sps[seed];c.mf=desc->m;c.xf=desc->x;
+ c.c=carry;c.d=decimal;c.n=seed&1;c.z=seed&2;c.v=seed&4;c.i=seed&1;c.cyclesUsed=0xCC;return c;
+}
+static int cpu_equal(Interp816 a,Interp816 b){a.mem=b.mem=NULL;return!memcmp(&a,&b,sizeof a);}
+static int bus_equal(const Bus*a,const Bus*b){
+ return a->n==b->n&&a->nw==b->nw&&!memcmp(a->events,b->events,a->n*sizeof(Event))&&
+ !memcmp(a->writes,b->writes,a->nw*sizeof(Byte))&&a->openbus==b->openbus&&a->master==b->master&&
+ a->accesses==b->accesses&&a->read_hooks==b->read_hooks&&a->write_hooks==b->write_hooks&&a->claims==b->claims;
+}
+int main(void){
+ CHECK(RegisterEffects(),"registration");CHECK(count>0,"descriptors");
+ for(size_t i=0;i<count;i++)for(unsigned seed=0;seed<8;seed++)for(unsigned carry=0;carry<2;carry++)for(unsigned decimal=0;decimal<2;decimal++)for(unsigned fast=0;fast<2;fast++)for(unsigned hook=0;hook<3;hook++){
+  const InterpNativeInstruction*d=&registered[i];Bus a={0},b={0};a.code=b.code=d;a.seed=b.seed=seed;a.fast=b.fast=fast;a.hook=b.hook=hook;
+  Interp816 ref=initial_cpu(&a,d,seed,carry,decimal),got=initial_cpu(&b,d,seed,carry,decimal);a.cpu=&ref;b.cpu=&got;
+  int rc=interp816_runOpcode(&ref);uint64_t before_i=interp816_insns_total(),before_c=interp816_cycles_total();int nc=d->step(&got);scenarios++;
+  wordclaims+=b.claims;
+  a.master+=(unsigned)rc>a.accesses?((unsigned)rc-a.accesses)*6u:0;b.master+=(unsigned)nc>b.accesses?((unsigned)nc-b.accesses)*6u:0;
+  CHECK(rc==nc&&cpu_equal(ref,got),"CPU op%02x M%uX%u seed%u C%uD%u hook%u pc%04x/%04x cycles%d/%d",d->bytes[0],d->m,d->x,seed,carry,decimal,hook,ref.pc,got.pc,rc,nc);
+  CHECK(bus_equal(&a,&b),"bus/order/virtual memory/master op%02x M%uX%u seed%u hook%u events%u/%u",d->bytes[0],d->m,d->x,seed,hook,a.n,b.n);
+  CHECK(before_i==interp816_insns_total()&&before_c==interp816_cycles_total(),"native must never execute decoder");
+ }
+ /* Negative control: substituting the real opcode engine preserves effects
+  * but MUST be detected as interpreted work by the accounting oracle. */
+ {const InterpNativeInstruction*d=&registered[0];Bus b={0};b.code=d;Interp816 c=initial_cpu(&b,d,0,0,0);b.cpu=&c;
+  uint64_t before=interp816_insns_total();(void)interp816_runOpcode(&c);CHECK(interp816_insns_total()==before+1,"decoder relabel negative detects instruction");negatives++;}
+ for(size_t i=0;i<count;i++){
+  const InterpNativeInstruction*d=&registered[i];Bus b={0};b.code=d;Interp816 c=initial_cpu(&b,d,0,0,0);b.cpu=&c;
+  c.mf=!d->m;Interp816 before=c;CHECK(d->step(&c)==0&&cpu_equal(c,before)&&!b.n,"wrongM pure decline");
+  c.mf=d->m;c.xf=!d->x;before=c;CHECK(d->step(&c)==0&&cpu_equal(c,before)&&!b.n,"wrongX pure decline");
+  c.xf=d->x;c.e=1;before=c;CHECK(d->step(&c)==0&&cpu_equal(c,before)&&!b.n,"E1 pure decline");
+  c.e=0;c.k^=0x80;before=c;CHECK(d->step(&c)==0&&cpu_equal(c,before)&&!b.n,"wrongPB pure decline");
+  c.k=d->pc24>>16;c.pc++;before=c;CHECK(d->step(&c)==0&&cpu_equal(c,before)&&!b.n,"wrongPC pure decline");
+ }
+ CHECK(wordclaims>0,"claimed hardware word paths executed");
+ printf("descriptors=%zu scenarios=%llu negatives=%llu wordclaims=%llu checks=%llu failures=%d\n",count,scenarios,negatives,wordclaims,checks,failures);
+#ifdef EXPECT_FETCH_MUTANT
+ return failures?0:1;
+#else
+ return failures?1:0;
+#endif
+}
+'''
+
+
+def run_fixture(tmp_path,bank,small=False,mutant=None):
+    compiler=os.environ.get('CC')or shutil.which('clang')or shutil.which('cc')
+    if not compiler:pytest.skip('C11 compiler required')
+    generated,receipt=emit(CORE.read_text(),entries(bank,small),registration_name='RegisterEffects')
+    assert not re.search(r'\b(?:interp816_|ni_\d\d_)(?:runOpcode|doOpcode)\s*\(',generated)
+    fetch='(void)cpu->read(cpu->mem, _ni->base + n);'
+    if mutant=='skip_fetch':
+        assert fetch in generated
+        generated=generated.replace(fetch,'(void)0; /* deliberate missing bus fetch */')
+    elif mutant=='double_fetch':
+        assert fetch in generated
+        generated=generated.replace(fetch,fetch+'\n  '+fetch)
+    elif mutant=='stale_operand':
+        pattern=r'(static const uint8_t code\[\] = \{0xA9,)0x99'
+        generated,n=re.subn(pattern,r'\g<1>0x98',generated,count=1)
+        assert n==1
+    elif mutant is not None:raise AssertionError(mutant)
+    if mutant:generated='#define EXPECT_FETCH_MUTANT 1\n'+generated
+    source=tmp_path/'effects.c';source.write_text(generated+HARNESS)
+    exe=tmp_path/('effects.exe'if os.name=='nt'else'effects')
+    command=[compiler,'-std=c11','-O1','-I',str(REPO/'runner/src'),'-I',str(REPO/'runner/src/snes'),str(source),str(CORE),'-o',str(exe)]
+    compiled=subprocess.run(command,capture_output=True,text=True,timeout=90)
+    (tmp_path/'compile.json').write_text(json.dumps(dict(command=command,exit_code=compiled.returncode,stdout=compiled.stdout,stderr=compiled.stderr),indent=2))
+    assert compiled.returncode==0,compiled.stdout+compiled.stderr
+    result=subprocess.run([str(exe)],capture_output=True,text=True,timeout=45)
+    (tmp_path/'execution.json').write_text(json.dumps(dict(source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),binary_sha256=hashlib.sha256(exe.read_bytes()).hexdigest(),emission=receipt,expected_negative_mutant=mutant,exit_code=result.returncode,stdout=result.stdout,stderr=result.stderr),indent=2))
+    assert result.returncode==0,result.stdout+result.stderr
+    failures=int(re.search(r'failures=(\d+)',result.stdout)[1])
+    assert failures>0 if mutant else failures==0
+
+
+def test_first_generated_effects_real_core(tmp_path):
+    run_fixture(tmp_path,0x83,True)
+
+
+@pytest.mark.parametrize('bank',[0x03,0x43,0x83,0xC3])
+def test_all_safe_effects_real_core(tmp_path,bank):
+    run_fixture(tmp_path,bank)
+
+
+@pytest.mark.parametrize('mutant',['skip_fetch','double_fetch','stale_operand'])
+def test_oracle_rejects_missing_duplicate_fetch_and_stale_operand(tmp_path,mutant):
+    run_fixture(tmp_path,0x83,True,mutant)
+
+
+def test_repeatable_across_process_hash_randomization(tmp_path):
+    script='''import sys,hashlib,json;from pathlib import Path
+sys.path.insert(0,sys.argv[1]);import snes65816 as d
+from v2.native_effects import emit
+e=[dict(pc24=0x838100,m=0,x=0,e=0,bytes=bytes.fromhex("6D FF FF"),mnemonic="ADC",immediate=False),dict(pc24=0x838200,m=1,x=0,e=0,bytes=bytes.fromhex("A7 74"),mnemonic="LDA",immediate=False)]
+s,r=emit(Path(sys.argv[2]).read_text(),e);print(json.dumps(dict(hash=hashlib.sha256(s.encode()).hexdigest(),salt=hash("native effects"))))'''
+    results=[]
+    for seed in('13','37','91'):
+        env=dict(os.environ,PYTHONHASHSEED=seed)
+        p=subprocess.run([sys.executable,'-X','utf8','-c',script,str(REPO/'recompiler'),str(CORE)],env=env,capture_output=True,text=True,timeout=20)
+        assert p.returncode==0,p.stderr
+        results.append(json.loads(p.stdout))
+    (tmp_path/'repeatability.json').write_text(json.dumps(results,indent=2))
+    assert len({x['hash']for x in results})==1
+
+
+@pytest.mark.parametrize('change',[{'mnemonic':'NOP'},{'bytes':b'\xA9'},{'immediate':False},{'e':1},{'m':True},{'bytes':[0xA9,0x99,0x99]}])
+def test_invalid_descriptor_refused(change):
+    entry=dict(pc24=0x838100,m=0,x=0,e=0,bytes=b'\xA9\x99\x99',mnemonic='LDA',immediate=True)
+    entry.update(change)
+    with pytest.raises(ValueError):emit(CORE.read_text(),[entry])

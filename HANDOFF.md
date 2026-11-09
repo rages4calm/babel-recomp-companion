@@ -3,7 +3,92 @@
 Updated November 9, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
-## Current continuation — native batch 010
+## Current continuation — native batch 011
+
+[Batch 011](docs/NATIVE-BATCH-011.md) compiles selected actor/LZ instruction
+effects at actual continuation PCs inside the existing owning interpreter
+event loop. It does not manufacture call roots/stack frames, call the decoder
+and relabel it, skip bus fetches, or remove boot/MMIO/NMI fallback guards.
+The generation-time helper closure specializes fixed opcodes and operands;
+data/address state remains live. Complete byte/mode/live-PC, plain-mapper,
+owner/interrupt and policy guards precede execution. Interpreter/state layouts
+are unchanged. All unsupported work retains interpretation.
+
+Requires private AOT + full clean stock identity +
+`IOG_NATIVE_CONTINUATIONS=1`; the separate poll switch remains
+`IOG_NATIVE_RDNMI_POLL=1`. Both default off. No public launcher option or
+installed-game replacement. Optional `IOG_NATIVE_CONTINUATION_STATS` writes
+per-PC/mode totals only at exit; timing runs omit it.
+
+Final candidate `native-011/build-final/babel-recomp.exe`, SHA-256
+`7bb1dc8882b7061a36858c748d5d3fbc55576b67fc26d020a1535250831fc2bb`;
+graph `native-011/graph-final/generated/program_manifest.json`, SHA-256
+`52a2e75e753440e4d2f468dd38c21a4a67b607271c7afde7dbb2aaf60bf3608d`.
+Graph:366 roots/1,316 contexts/1,233 eligible/83 LLE. All1,219 previous bodies
+are byte-identical;14 added,231 new instruction contexts independently decoded
+through RomAtlas. All301 historical source observations retained with136
+current inputs. Continuation plan:240 source contexts/960 physical aliases/
+31 fixed opcode bodies; compiled/planned sites are distinct from executed ones.
+
+136 fresh pairs pass, including29 new cases. Natural6,000-frame shares:
+**86.5089% narrow /86.5343% wide**, up from82.9903%/83.0169% in010.
+Narrow continuation work:2,002,405 instructions/7,775,406cycles. Controlled
+probe attribution: LZ1,182,998insns/4,530,132cycles and actors819,407insns/
+3,245,274cycles; unrelated costs/poll/generated-body totals unchanged.
+Guest execution shares are not content coverage or host-speed evidence.
+
+Independent final136 audit:272 complete loss-free captures/409,680frames/
+2,550snapshot sets, all960 site counters exact, zero reference native counts.
+222 actually observed contexts: bank82LZ/bank83actors. Generic continuation
+73,332,779insns/288,940,458cycles; actors60,192,022/238,592,992 and
+LZ13,140,757/50,347,466. All107 old cases have exact per-PC substitution,
+unrelated costs/poll totals unchanged. Selected actor residual26,355insns/
+98,921cycles remains guarded; no universal selected-site execution claim.
+See `native-011/counter-audit/fresh136-capture-audit.json`.
+
+New29:21 additional combat rooms, two Aura successes/two no-item controls,
+Vampire catch-up rewards+guarded8x, Solid Arm authored return/walking and a
+bounded logical reload/resumed-input case. All29+independent source observation/
+store contracts pass. Fresh SAVE/RESTORE raw core/APU/scheduler identity and
+Vampire bomb rescue remain unqualified; failed probes retained. Source witnesses
+are interpreted010 only; no earlier native-gain claim for new29.
+
+Retain1,273 raw APU-clock file differences,19 aspect raw failures, log-grouping
+limits and strictold00417/28. Passive copied-owner300frames passes; aspect
+67same-binary/134cross010 fullframes pass. Continuation-off controls (poll fixed on)
+preserve the exact010 counters/path. All214 actual same-tier010 controls pass.
+
+Same-binary continuationOFF/ON hostcost:56 sequential runs/336,000frames,
+all fingerprints and exact counters pass. Mixed-native frame-service CPU
+**+0.7609% narrow /+0.7126% wide**; forced-reference controls+1.0657%/+1.0905%.
+Wider/narrower native median cost is+7.0194% withcontinuations/+6.9565% without;
+descriptive headless/software cohorts, not isolated raster CPU or physicalFPS.
+Keep explicitopt-in/defaultoff; no speedup claim. Receipts `native-011/host-cost/`.
+345 completed executable copies/5,003,156,992bytes compacted tothree verified
+payloads/15,843,710bytes with restore index; all builds/other evidence retained.
+No release or installed-game replacement.
+
+Protocol proof:3,979pairs/98,107checks; emitter proof:1,204,992scenarios/
+3,646,376checks across205 opcode forms,53,200 hardware word paths.
+Decoder-relabel, clock/frame and missing/double/stale-fetch mutations fail as
+intended. Final frozen SDK suite774pass/two skips; its one Windows child-output
+encoding warning remains recorded, and affected5 tests pass inheritedUTF8
+with warnings-as-errors. Final title146pass. No production edits after the
+qualified final candidate.
+
+Official main remains inventoried e98dc63 at the November9 closeout refresh.
+263–266 have no new replies;250/251 remain open/unmerged, maintainer heads
+preserved. No new confirmed upstream defect. All work remains Original stock;
+GaiaLabs dev-build identity/module selection is still pending. The clubhouse/
+Erik music report remains deferred. Installed005/all39 owner inputs protected.
+
+Next work should start from the actual final residual/cost and host timing
+receipts. Profile the wider renderer separately before choosing a speed fix.
+Broader/compound continuation execution needs new ownership and
+per-instruction event proof; do not invent call roots or relax the four NMI
+floors. Do not rebuild old validation archives or repeat completed audits.
+
+## Previous continuation — native batch 010
 
 [Batch010](docs/NATIVE-BATCH-010.md) enables compiled effects for the two RDNMI
 poll instructions inside the existing bridge's exact per-opcode event loop.

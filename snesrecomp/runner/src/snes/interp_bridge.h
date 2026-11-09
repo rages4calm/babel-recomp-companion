@@ -193,6 +193,51 @@ void interp_bridge_clear_native_rdnmi_polls(void);
 uint64_t interp_bridge_native_poll_insns_total(void);
 uint64_t interp_bridge_native_poll_cycles_total(void);
 
+/* One compiled architectural instruction at an exact, source-qualified
+ * continuation boundary. No call/return ABI or guest stack frame is created:
+ * the existing auto-quiescent interpreter frame keeps all event/retirement
+ * ownership. Register aliases/modes separately. Initial support is plain
+ * LoROM/HiROM upper ROM, E0, ordinary data/width/static branch effects;
+ * stack/frame operations, indirect jumps, calls/returns, interrupt/power and
+ * block-move operations remain interpreted. Every instruction byte and live
+ * mode is checked again AFTER hooks, without emulated reads or diagnostics.
+ *
+ * `step` has the same effect/fetch/cycle/pure-decline contract as the native
+ * poll callback above. No interpreter decoder, clock/tally updates, nesting,
+ * retained `in`, or host registration changes inside a callback. Writes use
+ * the live bus, preserving classification, timing, epochs and architectural
+ * write IPC. Existing poll registration takes priority if both policies match.
+ * Caller qualifies immutable source/boundaries and callback semantics; byte
+ * equality alone is not source/ABI or campaign qualification.
+ *
+ * Registration copies a batch atomically, accepting identical duplicates and
+ * refusing conflicts/invalid metadata/capacity. Up to8192 descriptors. Host
+ * setup only, outside ALL active bridge frames. clear likewise does nothing
+ * inside an active frame. Nothing is serialized or enabled by default.
+ */
+typedef int (*InterpNativeInstructionStep)(Interp816 *in);
+typedef struct {
+    uint32_t pc24;
+    uint8_t m, x, e, length;
+    uint8_t bytes[4];
+    InterpNativeInstructionStep step;
+} InterpNativeInstruction;
+typedef struct {
+    uint32_t pc24;
+    uint8_t m, x, e;
+    uint64_t insns, cycles;
+} InterpNativeInstructionStats;
+bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
+                                            size_t count);
+void interp_bridge_clear_native_instructions(void);
+uint64_t interp_bridge_native_continuation_insns_total(void);
+uint64_t interp_bridge_native_continuation_cycles_total(void);
+/* Returns active descriptor count; copies min(count,capacity) when out!=NULL.
+ * Per-descriptor statistics live until clear; whole-run totals are monotonic,
+ * like the interpreter/poll counters, and are not reset by configuration. */
+size_t interp_bridge_native_instruction_stats(InterpNativeInstructionStats *out,
+                                              size_t capacity);
+
 /*
  * Run the interpreter over guest code at entry_pc24, in the context of `cpu`.
  * `cpu` is updated in place. Returns:
@@ -346,6 +391,7 @@ typedef struct {
     /* Included in non-interpreted work above, but separate from generated
      * AOT functions: true compiled opcode effects, reference retirement. */
     uint64_t native_poll_insns, native_poll_cycles;
+    uint64_t native_continuation_insns, native_continuation_cycles;
 } InterpExecutionShare;
 void InterpExecutionShareGet(InterpExecutionShare *out);
 /* Post-mortem section "execution_share", with the trailing comma the other
