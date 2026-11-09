@@ -21,6 +21,17 @@ class GaiaGuardTests(unittest.TestCase):
                            0x008000, 0x0082F8, 0x008386, 0x03C5FF, 0x03C9FF):
                 self.assertIn(base | offset, blocked)
 
+    def test_legacy_generation_receipt_still_uses_complete_public_guard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory); (work / "generated").mkdir()
+            (work / "generated/program_manifest.json").write_text(json.dumps({"roots": [], "nodes": {
+                "legacy": {"disposition": "aot_eligible", "min_pc24": 0x83C728, "max_pc24": 0x83C730}}}), encoding="utf-8")
+            with patch.object(native_batch, "bounded_run", return_value={"exit_code": 0}):
+                result = native_batch.generate({"generation_command": ["synthetic"]}, work)
+            self.assertEqual(result["exit_code"], 3)
+            self.assertNotIn("sprite_prefixes", result)
+            self.assertEqual(result["guarded_range_violations"], ["legacy"])
+
 
 class ProfileRecordTests(unittest.TestCase):
     def setUp(self):
@@ -170,6 +181,248 @@ class ProfileRecordTests(unittest.TestCase):
         self.read()
         with self.assertRaisesRegex(ValueError, "immutable"):
             self.prepare_fixture("without-history", [self.path])
+
+
+class SpritePrefixPresetTests(unittest.TestCase):
+    """Synthetic stock contract and tiny manifests; never load the owner's ROM."""
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.project = Path(self.temp.name)
+        for directory in ("recomp", "src", "snesrecomp/tools"):
+            (self.project / directory).mkdir(parents=True)
+        self.cfg00 = self.project / "recomp/bank00.cfg"
+        self.cfg03 = self.project / "recomp/bank03.cfg"
+        self.cfg00.write_text("bank = 0\nfunc Synthetic 8000\n", encoding="utf-8")
+        self.cfg03.write_text("bank = 3\nfunc SyntheticSprite C714\n", encoding="utf-8")
+        (self.project / "framework_pins.txt").write_text("synthetic pins\n", encoding="utf-8")
+        self.source = self.project / "src/iog_widescreen.c"
+        self.source.write_bytes((native_batch.ROOT / "src/iog_widescreen.c").read_bytes())
+        (self.project / "snesrecomp/snesrecomp_cli.py").write_text("# synthetic generator\n", encoding="utf-8")
+        self.rom = self.project / "synthetic.sfc"
+        image = bytearray(2097152)
+        for pc, (opcode, stock, _, _) in native_batch.SPRITE_PATCH_CONTRACT.items():
+            image[0x30000 + pc:0x30000 + pc + 3] = bytes((opcode, stock & 255, stock >> 8))
+        self.rom.write_bytes(image)
+        self.policy = self.project / "policy.json"
+        policy = json.loads(native_batch.POLICY.read_text(encoding="utf-8"))
+        policy["rom_sha256"] = native_batch.digest(image)
+        self.policy.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
+        self.work = self.project / ".local/preset"
+        self.root_patch = patch.object(native_batch, "ROOT", self.project)
+        self.policy_patch = patch.object(native_batch, "POLICY", self.policy)
+        self.root_patch.start(); self.policy_patch.start()
+        self.addCleanup(self.root_patch.stop); self.addCleanup(self.policy_patch.stop)
+
+    def prep(self, **kwargs):
+        options = dict(instruction_blocks=True, region_paced=True, sprite_prefixes=True)
+        options.update(kwargs)
+        return prepare(self.rom, self.work, [], False, True, **options)
+
+    def test_both_pacing_prerequisites_are_mandatory(self):
+        for blocks, paced in ((False, False), (True, False), (False, True)):
+            with self.subTest(blocks=blocks, paced=paced), self.assertRaises(ValueError):
+                self.prep(instruction_blocks=blocks, region_paced=paced)
+        self.assertFalse(self.work.exists())
+
+    def test_default_policy_and_source_cfg_stay_unchanged_and_only_exact_sites_change(self):
+        before_policy = self.policy.read_bytes()
+        before_cfg = {p.name: p.read_bytes() for p in (self.project / "recomp").glob("bank*.cfg")}
+        preset = self.prep()
+        default_work = self.project / ".local/default"
+        default = prepare(self.rom, default_work, [], False, True, instruction_blocks=True, region_paced=True)
+        self.assertNotIn("sprite_prefixes", default)
+        self.assertEqual(default["policy_sha256"], native_batch.digest(before_policy))
+        self.assertFalse((default_work / "effective-policy.json").exists())
+        self.assertEqual(before_policy, self.policy.read_bytes())
+        self.assertEqual(before_cfg, {p.name: p.read_bytes() for p in (self.project / "recomp").glob("bank*.cfg")})
+        effective = json.loads((self.work / "effective-policy.json").read_text())
+        original = json.loads(before_policy)
+        self.assertEqual(effective["guard_ranges"][:-1], original["guard_ranges"][:-1])
+        self.assertEqual(effective["guard_ranges"][-1]["end_exclusive"], "03C714")
+        self.assertEqual(effective["guard_ranges"][-1]["start"], "03C5FF")
+        live = "".join(f"live_operand {pc:04X}\n" for pc in native_batch.SPRITE_IMMEDIATES)
+        self.assertEqual((self.work / "cfg/bank03.cfg").read_text(),
+                         before_cfg["bank03.cfg"].decode().replace("\r\n", "\n") + native_batch.SPRITE_CFG_COMMENT + live)
+        def force(work):
+            return {int(line.split()[1], 16) for line in (work / "cfg/bank00.cfg").read_text().splitlines()
+                    if line.startswith("force_lle ")}
+        removed = {alias for pc in range(0x03C714, 0x03CA00) for alias in native_batch.aliases(pc)}
+        self.assertEqual(force(default_work) - force(self.work), removed)
+        self.assertFalse(force(self.work) - force(default_work))
+        self.assertEqual(len(preset["sprite_prefixes"]["live_alias_sites"]), 24)
+        self.assertEqual(preset["sprite_prefixes"]["cache_inputs_sha256"], native_batch.sprite_cache_inputs(preset))
+        self.assertEqual(preset, self.prep())
+        with self.assertRaisesRegex(ValueError, "immutable"):
+            self.prep(sprite_prefixes=False)
+
+    def test_real_cfg_parser_expands_all_four_hirom_live_site_contexts(self):
+        # Execute the actual loader/alias expansion, not a mirror implemented here.
+        sdk = Path(__file__).resolve().parents[1] / "snesrecomp/recompiler"
+        with patch.object(sys, "path", [str(sdk), *sys.path]):
+            from snes65816 import get_rom_mapping, set_rom_mapping
+            from v2.cfg_loader import load_bank_cfg
+            from v2.hirom_cfg import expand_hirom_cfgs
+            self.prep()
+            path = self.work / "cfg/bank03.cfg"
+            cfg = load_bank_cfg(str(path))
+            old = get_rom_mapping()
+            try:
+                set_rom_mapping("hirom")
+                expanded = expand_hirom_cfgs([(3, path, cfg)])
+            finally:
+                set_rom_mapping(old)
+            banks = {bank: row for bank, _, row in expanded}
+            self.assertEqual(set(banks), {3, 0x43, 0x83, 0xC3})
+            for bank, row in banks.items():
+                with self.subTest(bank=bank):
+                    self.assertEqual(row.live_operand, set(native_batch.SPRITE_IMMEDIATES))
+                    self.assertNotIn(0xC616, row.live_operand)
+                    self.assertNotIn(0xC629, row.live_operand)
+
+    def test_stock_opcode_and_operand_must_match_even_if_rom_identity_is_rebound(self):
+        original = self.rom.read_bytes()
+        for offset in (0x3C728, 0x3C729, 0x3C616, 0x3C617):
+            image = bytearray(original); image[offset] ^= 1; self.rom.write_bytes(image)
+            policy = json.loads(self.policy.read_text()); policy["rom_sha256"] = native_batch.digest(image)
+            self.policy.write_text(json.dumps(policy), encoding="utf-8")
+            with self.subTest(offset=hex(offset)), self.assertRaisesRegex(ValueError, "opcode/operand"):
+                self.prep()
+
+    def test_changed_patch_source_or_cull_guard_fails_closed(self):
+        source = self.source.read_text()
+        for changed in (source.replace("0x0010, 1, 0", "0x0011, 1, 0"),
+                        source.replace("kWramCullCamera = 0x1E00", "kWramCullCamera = 0x1E02")):
+            self.source.write_text(changed, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "patch contract"):
+                self.prep()
+        self.source.write_text(source, encoding="utf-8")
+        policy = json.loads(self.policy.read_text()); policy["guard_ranges"][-1]["end_exclusive"] = "03C900"
+        self.policy.write_text(json.dumps(policy), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "complete culling guard"):
+            self.prep()
+
+    def test_existing_patch_directive_does_not_silently_add_duplicate_or_abs_site(self):
+        for pc in (0xC728, 0xC616):
+            self.cfg03.write_text(f"bank = 3\nlive_operand {pc:04X}\n", encoding="utf-8")
+            with self.subTest(pc=hex(pc)), self.assertRaisesRegex(ValueError, "already have live_operand"):
+                self.prep()
+
+    def test_each_preparation_identity_change_refuses_before_process_launch(self):
+        receipt = self.prep()
+        paths = (self.cfg00, self.work / "cfg/bank03.cfg", self.work / "effective-policy.json",
+                 self.policy, self.source, self.project / "snesrecomp/snesrecomp_cli.py",
+                 self.project / "framework_pins.txt", self.rom)
+        for path in paths:
+            raw = path.read_bytes()
+            path.write_bytes(raw + (b" " if path.suffix == ".json" else b"\n"))
+            try:
+                with self.subTest(path=path.name), patch.object(native_batch, "bounded_run") as launch:
+                    with self.assertRaises(ValueError): native_batch.generate(receipt, self.work)
+                    launch.assert_not_called()
+            finally:
+                path.write_bytes(raw)
+        with patch.dict("os.environ", {"SNESRECOMP_EMIT_AOT_DENY_GATE": "1"}), \
+                patch.object(native_batch, "bounded_run") as launch:
+            with self.assertRaises(ValueError): native_batch.generate(receipt, self.work)
+            launch.assert_not_called()
+        receipt["generation_command"].append("--unexpected-change")
+        with patch.object(native_batch, "bounded_run") as launch:
+            with self.assertRaises(ValueError): native_batch.generate(receipt, self.work)
+            launch.assert_not_called()
+
+    def test_unbound_sdk_or_explicit_analyzer_override_is_refused(self):
+        with patch.dict("os.environ", {"SNESRECOMP_ROOT": str(self.project / "other-sdk")}):
+            with self.assertRaisesRegex(ValueError, "SDK source root"):
+                self.prep()
+        analyzer = self.project / "explicit-analyzer.exe"
+        analyzer.write_bytes(b"synthetic executable identity, never executed")
+        with patch.dict("os.environ", {"SNESRECOMP_NATIVE_ANALYZER": str(analyzer)}):
+            with self.assertRaisesRegex(ValueError, "matching source stamp"):
+                self.prep()
+
+    def test_default_analyzer_cold_build_and_stale_rebuild_preserve_reuse(self):
+        crate = self.project / "snesrecomp/recompiler-rs"
+        (crate / "src").mkdir(parents=True)
+        (crate / "src/main.rs").write_text("// synthetic analyzer source\n", encoding="utf-8")
+        for cold in (True, False):
+            with self.subTest(cold_build=cold):
+                self.work = self.project / (".local/cold" if cold else ".local/rebuild")
+                identity = native_batch.generator_identity()
+                analyzer = Path(identity["analyzer_path"]); analyzer.parent.mkdir(parents=True, exist_ok=True)
+                stamp = analyzer.with_name(analyzer.name + ".source-sha256")
+                if not cold:
+                    analyzer.write_bytes(b"synthetic stale analyzer")
+                    stamp.write_text("stale source stamp", encoding="ascii")
+                receipt = self.prep()
+                initial = receipt["sprite_prefixes"]["analyzer_at_prepare"]
+                generated = self.work / "generated"; generated.mkdir()
+                (generated / "program_manifest.json").write_text(json.dumps({"roots": [], "nodes": {}}), encoding="utf-8")
+                (generated / ".snesrecomp-cache.json").write_text(json.dumps(dict(
+                    format_version=5, generator_digest="a" * 64, config_digest="b" * 64,
+                    analysis_input_digest="c" * 64)), encoding="utf-8")
+                def synthetic_sdk_build(*args):
+                    # Reproduce the SDK's documented cold/stale default behavior.
+                    analyzer.write_bytes(b"synthetic current analyzer, never executed")
+                    stamp.write_text(identity["analyzer_sources_sha256"] + "\n", encoding="ascii")
+                    return {"exit_code": 0}
+                with patch.object(native_batch, "bounded_run", side_effect=synthetic_sdk_build):
+                    first = native_batch.generate(receipt, self.work)
+                self.assertEqual(first["exit_code"], 0)
+                self.assertEqual(first["sprite_prefixes"]["analyzer_before"], initial)
+                self.assertNotEqual(first["sprite_prefixes"]["analyzer_before"], first["sprite_prefixes"]["analyzer_after"])
+                self.assertEqual(identity, native_batch.generator_identity())
+                self.assertEqual(receipt, self.prep())
+                with patch.object(native_batch, "bounded_run", return_value={"exit_code": 0}):
+                    second = native_batch.generate(receipt, self.work)
+                self.assertEqual(second["exit_code"], 0)
+                self.assertEqual(second["sprite_prefixes"]["analyzer_before"], second["sprite_prefixes"]["analyzer_after"])
+
+    def test_explicit_analyzer_binary_and_stamp_remain_pinned(self):
+        crate = self.project / "snesrecomp/recompiler-rs"
+        (crate / "src").mkdir(parents=True)
+        (crate / "src/main.rs").write_text("// synthetic analyzer source\n", encoding="utf-8")
+        source_hash = native_batch.generator_identity()["analyzer_sources_sha256"]
+        analyzer = self.project / "explicit.exe"; analyzer.write_bytes(b"synthetic analyzer")
+        stamp = analyzer.with_name(analyzer.name + ".source-sha256")
+        stamp.write_text(source_hash + "\n", encoding="ascii")
+        with patch.dict("os.environ", {"SNESRECOMP_NATIVE_ANALYZER": str(analyzer)}):
+            receipt = self.prep()
+            for path in (analyzer, stamp):
+                raw = path.read_bytes(); path.write_bytes(raw + b"x")
+                try:
+                    with self.subTest(path=path.name), patch.object(native_batch, "bounded_run") as launch:
+                        with self.assertRaises(ValueError): native_batch.generate(receipt, self.work)
+                        launch.assert_not_called()
+                finally:
+                    path.write_bytes(raw)
+
+    def test_generation_validates_against_effective_guard_and_records_cache_identity(self):
+        receipt = self.prep()
+        generated = self.work / "generated"; generated.mkdir()
+        manifest = {"roots": ["synthetic"], "nodes": {"synthetic": {
+            "disposition": "aot_eligible", "min_pc24": 0x83C714, "max_pc24": 0x83C750}}}
+        cache = dict(format_version=5, generator_digest="a" * 64, config_digest="b" * 64,
+                     analysis_input_digest="c" * 64)
+        (generated / ".snesrecomp-cache.json").write_text(json.dumps(cache), encoding="utf-8")
+        (generated / "program_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        with patch.object(native_batch, "bounded_run", return_value={"exit_code": 0}):
+            result = native_batch.generate(receipt, self.work)
+        self.assertEqual(result["exit_code"], 0)  # Global policy would reject it.
+        self.assertFalse(result["guarded_range_violations"])
+        self.assertEqual(result["sprite_prefixes"]["generator_digest"], "a" * 64)
+        self.assertEqual(result["sprite_prefixes"]["effective_policy_sha256"], receipt["policy_sha256"])
+        manifest["nodes"]["synthetic"].update(min_pc24=0x83C616, max_pc24=0x83C619)
+        (generated / "program_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        with patch.object(native_batch, "bounded_run", return_value={"exit_code": 0}):
+            result = native_batch.generate(receipt, self.work)
+        self.assertEqual(result["exit_code"], 3)
+        self.assertEqual(result["guarded_range_violations"], ["synthetic"])
+        del cache["analysis_input_digest"]
+        (generated / ".snesrecomp-cache.json").write_text(json.dumps(cache), encoding="utf-8")
+        with patch.object(native_batch, "bounded_run", return_value={"exit_code": 0}), \
+                self.assertRaisesRegex(ValueError, "cache identities"):
+            native_batch.generate(receipt, self.work)
 
 
 class ResourceGuardTests(unittest.TestCase):

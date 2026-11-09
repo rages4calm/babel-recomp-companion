@@ -1,5 +1,5 @@
 param([switch]$PrivateAot, [string]$Rom = '', [int]$Jobs = 8, [string]$NativeBatch = '',
-      [string]$BuildDirectory = '')
+      [string]$BuildDirectory = '', [string]$CMake = 'cmake')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $buildRoot = Join-Path $projectRoot 'build'
@@ -16,6 +16,7 @@ if ($BuildDirectory) {
 if ($Jobs -lt 1 -or $Jobs -gt 32) { throw 'Jobs must be 1..32.' }
 $compilerC = (Get-Command clang -ErrorAction Stop).Source
 $compilerCpp = (Get-Command clang++ -ErrorAction Stop).Source
+$cmakeExe = (Get-Command -Name $CMake -ErrorAction Stop).Source
 $generatedRoot = Join-Path $projectRoot 'src/gen'
 $generatedIncludes = Join-Path $projectRoot 'recomp'
 if ($NativeBatch) {
@@ -49,12 +50,12 @@ if ($NativeBatch) {
     if ($LASTEXITCODE -ne 0) { throw 'Private generation failed.' }
 }
 $executionMode = if ($PrivateAot) { 'OFF' } else { 'ON' }
-cmake -S $projectRoot -B $buildRoot -G Ninja -DCMAKE_BUILD_TYPE=Release `
+& $cmakeExe -S $projectRoot -B $buildRoot -G Ninja -DCMAKE_BUILD_TYPE=Release `
     "-DCMAKE_C_COMPILER=$compilerC" "-DCMAKE_CXX_COMPILER=$compilerCpp" `
     "-DSNESRECOMP_INTERPRETER_ONLY=$executionMode" `
     "-DIOG_GENERATED_DIR=$generatedRoot" "-DIOG_GENERATED_INCLUDE_DIR=$generatedIncludes"
 if ($LASTEXITCODE -ne 0) { throw 'Engine configuration failed.' }
-cmake --build $buildRoot -j $Jobs
+& $cmakeExe --build $buildRoot -j $Jobs
 if ($LASTEXITCODE -ne 0) { throw 'Engine build failed.' }
 if ($PrivateAot) {
     Write-Output 'Private mixed AOT build: contains ROM-derived code; public packaging will reject it.'

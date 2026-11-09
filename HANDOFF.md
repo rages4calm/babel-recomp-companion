@@ -3,7 +3,71 @@
 Updated November 8, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
-## Current continuation — native batch 006
+## Current continuation — native batch 007
+
+[Batch 007](docs/NATIVE-BATCH-007.md) qualifies a conservative sprite-prefix
+candidate against unchanged integrated SNESRecomp main `e98dc63`.
+Its graph has 331 roots / 1,233 variants / 1,154 eligible contexts, retaining
+all previous 1,120 eligible contexts. RomAtlas matches all 379 new instruction
+contexts; all 3,232 retained guard/alias addresses and four NMI exclusions pass.
+The full Sort interval `[03C5FF,03C714)` remains interpreted. Six later mutable
+immediates tail to the interpreter before effects; no mutable ABS promotion.
+
+Private gameplay binary: `.local/batch-001/native-007/build-sprite-prefix-v2/babel-recomp.exe`,
+SHA-256 `4ccb4637e80307c6f4a6a29a4df4da7f4d8968b84b807fec44896fa6840110f6`;
+graph `native-007/sprite-prefix-v2/generated/program_manifest.json`,
+SHA-256 `ac3c4cc24cc3e65359f8e4d20878c9230e00c97bb58f9645cd760e929577ed2b`.
+57 fresh same-binary pairs / 114 processes / 148,240 frames / 912 snapshots
+pass the existing executed-cycle comparison contract; all 114 separately
+bound batch-006/007 tier controls match. Natural native CPU-cycle coverage
+rises from 12.8307% to 14.9396% in 4:3 and 12.8268% to 14.9394% in 16:9.
+Coverage is not host speed, per-entry execution proof or campaign completion.
+
+An additional copied-owner F1 pair preserves observed state/flags. Two
+6,065-frame in-session 4:3/wide/4:3 runs match, including all 67 presented
+frames. Separate TRACE diagnostic `aa71ee49...` checks all ten live cartridge
+words at seven stable checkpoints and confirms the existing one-frame latch.
+Its identity is separate from the TRACE-disabled gameplay binary.
+Raw strict aspect comparison remains failed on 19 SPC host-beam logs;
+canonical executed-cycle/full APU/scheduler comparison passes. Historical
+mechanics replay remains 17/28 passed. Retain every failure and its scope.
+Ordinary audio SAVE/RESTORE and physical hardware gates remain open.
+
+The public `--sprite-prefixes` preset is opt-in and leaves default/public
+policy/CFG guards intact. 133 title tests and 44 focused SDK tests pass with
+the [updated isolated tools](docs/TOOLS-NOV08.md). The installed 005 game,
+owner settings/saves/music remain separate; no release was created and the
+deferred clubhouse music report was not investigated. New confirmed Windows
+TCP screenshot JSON escaping bug is reported upstream as
+[#264](https://github.com/RetroPortingToolKit/snesrecomp/issues/264).
+
+[Edition identity contract](docs/GAME-EDITIONS.md): at least Original and
+GaiaLabs, with separate future save/settings/native namespaces. No edition
+picker/import adapter is enabled. Kassiven says his work is in development
+and may take a month to clean up; a rough current snapshot with source/module
+recipe is sufficient to start compatibility work. The owner has a suggested
+DM reply, but no agent sent a DM and no dev build has arrived.
+
+Private receipts: `native-007/current-006-comparison/summary.json`,
+`native-007/structural/`, `native-007/refusal-proof/`,
+`native-007/aspect-transition-runtime/FINAL-RECEIPT.json`,
+`native-007/owner-load-check/attempt-001/summary.json`, and
+`native-007/public-preset/`. Keep all evidence beneath the single ignored
+`.local/batch-001`. Do not recreate the completed batch-006 archives below.
+Final fixed-driver reproduction receipt is
+`native-007/public-preset/fixed-driver-cache-hit-receipt-attempt-003.json`:
+48 banks reused, zero emitted, all 88 outputs plus `funcs.h` exactly match
+the executed graph's inputs. Earlier short timeouts and different-analyzer
+metadata remain separate failed/nonmatching evidence.
+
+Completed batch-007 run binaries are deduplicated separately: 121 copies
+(1,670,158,848 bytes) map to two verified payloads in the 10,547,919-byte
+`native-007/completed-runtime-input-binaries.zip`. The adjacent
+`runtime-input-binaries-compaction.json` maps original relative paths and
+receipt hashes to archive members. Build executables, all receipts, scripts,
+states/captures and failed evidence remain; no old archive was recreated.
+
+## Previous checkpoint — native batch 006
 
 [Batch 006](docs/NATIVE-BATCH-006.md) integrates checked SNESRecomp main
 `e98dc63b474d5469ad984490e04eb0b0496ec62e` with full preservation inventory.
