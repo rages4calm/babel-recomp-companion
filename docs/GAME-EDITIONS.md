@@ -42,6 +42,9 @@ carry the exact ROM, framework, program-manifest and generation identities;
 an Original graph cannot be rebound to GaiaLabs merely because symbols or
 addresses happen to look similar. These descriptors are not save files and
 are not proof that a generated graph is qualified.
+The generation identity must bind the complete input/options recipe, not only
+the generator's source hash: conservative and timed-live emission can share
+the same ROM and structural manifest while producing different executable code.
 `graph-id` is one full SHA-256 over those binding fields, avoiding three nested
 hash directories in a normal Windows workspace.
 

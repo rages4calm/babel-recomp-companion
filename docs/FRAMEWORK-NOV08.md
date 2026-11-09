@@ -125,3 +125,20 @@ commands, successful and failed logs are retained under the single ignored
 `.local/batch-001/native-006/framework-update/` evidence folder. No ROM,
 generated game code, music, save, gameplay capture or private receipt belongs
 in the public source change.
+
+## Batch 008 local additions
+
+[Batch 008](NATIVE-BATCH-008.md) keeps the same inventoried main revision and
+adds explicitly opt-in timed live data-immediate reads. Function/bank/program
+emission, SDK CLI/recipe forwarding and both cache layers bind the new mode;
+the old conservative mode remains available. No guest runtime ABI/state version
+or vendor runtime tree is replaced. New ROM-free execution tests and fresh game
+pairs qualify the stated bounded routes, not all hardware timing.
+
+The scoped profile-boundary lookup optimization preserves exact validation
+outcomes and is reported as [#265](https://github.com/RetroPortingToolKit/snesrecomp/issues/265).
+An independently reproduced pre-existing first-entry-hook bus observation is
+reported as [#266](https://github.com/RetroPortingToolKit/snesrecomp/issues/266);
+it remains unfixed in this batch and is separate from the live operand result.
+All new private source/cache/build/control identities are retained under
+`native-008/`; published files contain no ROM-derived generated game code.

@@ -3,7 +3,78 @@
 Updated November 8, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
-## Current continuation — native batch 007
+## Current continuation — native batch 008
+
+[Batch 008](docs/NATIVE-BATCH-008.md) extends execution through the existing
+sprite pipeline using opt-in timed live immediate reads. The graph remains
+331 roots / 1,233 contexts / 1,154 eligible contexts, manifest SHA-256
+`ac3c4cc24cc3e65359f8e4d20878c9230e00c97bb58f9645cd760e929577ed2b`.
+Nine function bodies/16 live blocks change; all 1,145 other bodies are unchanged.
+The 3,232 effective guard/alias bytes, full Sort interval, mutable ABS refusal,
+four NMI-callee exclusions and WRAM restrictions remain. Public policy/CFG unchanged.
+
+Private candidate: `.local/batch-001/native-008/build-live-v3/babel-recomp.exe`,
+SHA-256 `10759ef65bbd734b7f6a8601a060e775cddcfbd0a18a91b7a37cdb38686e2f7e`.
+Natural native CPU-cycle share rises **14.9396% → 31.4331%** in 4:3 and
+**14.9394% → 31.4404%** in wide mode. All 57 current fixtures gain native
+cycle share. This is measured execution, not new graph eligibility or campaign proof.
+
+57 current same-binary pairs / 114 processes / 148,240 frames / 912 snapshots
+pass the executed-cycle CPU/WRAM/device/full APU/scheduler/output contract.
+All 114 separately tier-bound controls against 007 match. A copied-owner pair
+and aspect-transition pair add 12,730 frames; 67 same-binary plus 134 cross-007
+presented-frame comparisons match. RTLS v10 owner scene/form/HP/flags remain
+intact. Raw strict SPC-stamp files retain the same 19 differences; old004 strict
+mechanics remains 17/28. Do not waive those failed contracts or infer ordinary
+canonical audio SAVE/RESTORE/hardware/campaign qualification.
+
+Independent proof: 59 new execution tests pass across all 12 data-immediate
+mnemonics, widths, aliases, decimal/carry, patch/restore and interrupt/wrap
+boundaries; 639 other SDK v2 tests pass with 2 existing skips. Title checks and
+current policy/option tests pass. Reuse of 007's 379 RomAtlas decodes is bound
+to unchanged ROM/manifest/decoder identities; 16 new live bus plans are inspected.
+
+Widescreen candidate removes only the duplicate ~10 MiB reset between adjacent
+BeginFrame/BeforeDraw calls. Direct/repeated draws still reset. Reset-only007
+control is `d915c2c1...`, identical-current-engine006 control `e934c101...`;
+their settings/flags/resources and the final008 build are independently bound.
+Keep the interpreter-only default and conservative sprite-prefix option;
+`--region-live-immediates` is an additional explicit generation opt-in.
+
+The isolated four-build CPU cohort passes all 64 measured +16 warmup runs
+(480,000 frames). Final008 versus original007 median frame-service CPU cost
+is **−9.10% narrow / −11.86% wide**, ranges −9.52..−8.83 / −12.17..−11.54.
+Reset-only wide improves −3.40%; timed-live versus reset-only improves
+−9.18% narrow / −8.66% wide. Same-engine graph007/006 is −0.38% / −0.43%,
+so the earlier +4.73% whole-build result does not reproduce in this controlled
+frame-window test. Stage CSVs are WALL measurements; frame-service CPU excludes
+startup/shutdown/export. Limits and full ranges remain in batch008's report.
+
+Profile validation is also improved: an isolated 229-input pair uses
+131.234375 → 5.75 CPU seconds with identical 19,332 decisions/341 raw roots and
+all identities/metadata. This is generator cost, not game speed. Reported
+official-source bugs: [#265](https://github.com/RetroPortingToolKit/snesrecomp/issues/265)
+(repeated boundary canonicalization) and
+[#266](https://github.com/RetroPortingToolKit/snesrecomp/issues/266)
+(existing first-entry-hook open-bus observation; no demonstrated final-state
+corruption). New exact pre-live snapshots use a preceding NOP and do not fix266.
+
+Receipts: `native-008/current-007-comparison/summary.json`, `structural/`,
+`live-immediate-proof/FINAL-RECEIPT.json`, `profile-validation/actual-profile-parity.json`,
+`aspect-transition/completion.json`, `owner-load/attempt-001/summary.json`, and
+`widescreen-cost/`. Installed005 and owner settings/saves/music stay separate;
+the deferred clubhouse report remains untouched. No GaiaLabs dev build has
+arrived; its edition adapter still awaits the exact recipe/identity. No release.
+
+All 136 title tests pass on final source; SDK v2 is 639 passing +59 separately
+executed new cases, with 2 existing skips. Independent source review found no
+new actionable bug. Keep the known first-hook/raw-stamp/audio gates explicit.
+Completed executable copies are compacted:129copies/1,787,511,296bytes into
+four payloads/20,511,733bytes in `native-008/completed-runtime-input-binaries.zip`,
+with `runtime-input-binaries-compaction.json` restore map. Builds and all other
+evidence remain; no old archive was recreated.
+
+## Previous checkpoint — native batch 007
 
 [Batch 007](docs/NATIVE-BATCH-007.md) qualifies a conservative sprite-prefix
 candidate against unchanged integrated SNESRecomp main `e98dc63`.

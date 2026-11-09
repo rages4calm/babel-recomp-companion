@@ -538,6 +538,7 @@ def emit_function(rom: bytes, bank: int, start: int,
                   brk_rti_sites=None,
                   instruction_blocks: bool = False,
                   region_paced: bool = False,
+                  region_live_immediates: bool = False,
                   entry_s_offset: int = 0) -> str:
     """Emit a complete v2 C function source for one 65816 function.
 
@@ -551,6 +552,8 @@ def emit_function(rom: bytes, bank: int, start: int,
     """
     if region_paced and not instruction_blocks:
         raise ValueError("region-paced emission requires instruction-blocks")
+    if region_live_immediates and not (region_paced and instruction_blocks):
+        raise ValueError("region-live-immediates requires region-paced instruction-blocks")
     base_func_name = func_name if func_name is not None else _default_func_name(bank, start)
     # HLE bypass: if cfg declared this function's PC as the SPC upload
     # entry (`hle_spc_upload <pc>` in the bank cfg), replace the entire
@@ -2284,7 +2287,8 @@ def emit_function(rom: bytes, bank: int, start: int,
                 # Charge them once for both aggregate and paced emission;
                 # matching jump/fall PCs cannot classify offset-zero branches.
                 _paced_plan = plan(_insn, block_lines[key], _cyc_const,
-                                   live_operand=bool(live_operand_sites and block_pc24 in live_operand_sites))
+                                   live_operand=bool(live_operand_sites and block_pc24 in live_operand_sites),
+                                   live_immediates=region_live_immediates)
             if _paced_plan is None:
                 src.append('    RecompStackPop();')
                 src.append(f'    return interp_tier_dispatch_tail(cpu, {_transfer_target_expr(block_pc24, False)}, '
@@ -2301,8 +2305,11 @@ def emit_function(rom: bytes, bank: int, start: int,
                 src.append(f'    if ({_guard}) {{ RecompStackPop();')
                 src.append(f'      return interp_tier_dispatch_tail(cpu, {_transfer_target_expr(block_pc24, False)}, '
                            f'0x{block_pc24:06X}u, _entry_s, _hrv); }} /* MMIO remains authoritative LLE */')
-            _fetch_last = rom_offset(bank, (_insn.addr + _insn.length - 1) & 0xFFFF)
-            src.append(f'    cpu->open_bus = 0x{rom[_fetch_last]:02X}u; /* last opcode/operand fetch */')
+            _live_fetch = bool(region_live_immediates and live_operand_sites and
+                               block_pc24 in live_operand_sites)
+            _fetch_last = rom_offset(bank, (_insn.addr + (0 if _live_fetch else _insn.length - 1)) & 0xFFFF)
+            _fetch_note = "opcode fetch; paced live operands follow" if _live_fetch else "last opcode/operand fetch"
+            src.append(f'    cpu->open_bus = 0x{rom[_fetch_last]:02X}u; /* {_fetch_note} */')
         if _cyc_const:
             src.append(f'    cpu->cycles += {_cyc_const};')
             _spd_expr, _spd_const = _block_speed(bank, key.pc)
