@@ -164,3 +164,27 @@ qualification failure for an unsupported optimization, not a recurrence of the
 fixed #242 ownership bug. Existing #263–#266 remain open without new replies
 at the November 8 closeout check; #250 and #251 remain open and their maintainer
 heads are preserved. No duplicate upstream issue was filed.
+
+## Batch 010 local additions, November 9
+
+[Batch010](NATIVE-BATCH-010.md) keeps the same official main source identity.
+`interp_bridge.c/h` add opt-in, source-qualified native instruction callbacks
+inside the existing bridge event/retirement loop, plus explicit poll counters
+and additive host diagnostics. `interp816` and guest state layouts are unchanged.
+The title's new `iog_native_poll.c/h` supplies the two actual compiled effects
+and full-stock-ROM/private-build/explicit-environment admission. Ordinary
+generated-code MMIO, boot and NMI guards are unchanged.
+
+Production callback tests use the actual core and owning bridge. A callback
+that runs the interpreter and relabels it is explicitly rejected by counter
+partition checks. Overlay admission refuses before diagnostic mapper effects;
+logical bridge steps are distinguished from interpreted opcode totals.
+Default-disabled and forced-reference paths remain available. The runtime
+feature is not a generic MMIO whitelist or a wait-skipping optimization.
+
+A structural gate caught omitted older profile observations in the first
+candidate. The final301-input corpus retains those source identities and every
+prior body. No prior cost corpus was merged or rebound to the new build.
+Existing263–266 reports and250/251 drafts remain open; their maintainer heads
+were not overwritten. Continuation-related coverage limits are documented as
+limits, not filed as an unproven functional regression.

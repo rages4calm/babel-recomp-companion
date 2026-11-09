@@ -21,7 +21,8 @@ from check_native_routes import ROOT,sha,snapshots
 def run(binary:Path,rom:Path,script:Path,output:Path,frames:int,seed:Path|None=None,
         rate:int=1,interpret_all:bool=False,expect_scene:int|None=None,timeout:int=180,
         capture:bool=False,wide:bool=False,infinite_hp:bool=False,
-        watch_wram:tuple[int,int]|None=None)->dict:
+        watch_wram:tuple[int,int]|None=None,native_poll:bool=False)->dict:
+    if type(native_poll)is not bool:raise ValueError("native_poll must be a boolean")
     private=(ROOT/'.local').resolve();output=output.resolve()
     if not output.is_relative_to(private) or not 60<=frames<=10000 or not 1<=rate<=8 or not 1<=timeout<=300:
         raise ValueError('private output, 60..10000 frames, 1x..8x rate and 1..300 second timeout required')
@@ -66,6 +67,7 @@ def run(binary:Path,rom:Path,script:Path,output:Path,frames:int,seed:Path|None=N
                SNESRECOMP_STATE_TRACE=str(output/'trace.csv'),SNESRECOMP_DUMP_DIR=str(output/'snapshots'),
                SNESRECOMP_SCREENSHOT=str(output/'final.ppm'),SNESRECOMP_SCREENSHOT_FRAME=str(frames-1))
     if interpret_all:env['SNESRECOMP_INTERPRET_ALL']='1'
+    if native_poll:env['IOG_NATIVE_RDNMI_POLL']='1'
     command=[str(output/'babel-recomp.exe'),'--no-launcher','--config',str(config),'--script',str(output/'route.txt'),'--rom',str(rom)]
     if capture:
         env.update(SNESRECOMP_TIER2_MANIFEST=str(output/'tier2-manifest.json'),
@@ -117,6 +119,7 @@ def run(binary:Path,rom:Path,script:Path,output:Path,frames:int,seed:Path|None=N
         'runner_source_sha256':sha(Path(__file__)),
         'capture_requested':capture,'coverage':coverage,'infinite_hp':infinite_hp,'watch_wram':watch_wram,
         'evidence_scope':'Isolated dummy video/audio engine fixture. Explicit checkpoint loads/WRAM writes are assisted; no natural combat, puzzle, speaker/controller or campaign claim.'}
+    if native_poll:report['native_poll_requested']=True
     (output/'receipt.json').write_text(json.dumps(report,indent=2)+'\n');return report
 
 
@@ -129,9 +132,10 @@ def main():
     parser.add_argument('--capture',action='store_true');parser.add_argument('--wide',action='store_true')
     parser.add_argument('--infinite-hp',action='store_true')
     parser.add_argument('--watch-wram',type=lambda value:tuple(int(v,16)for v in value.split(':')))
+    parser.add_argument('--native-poll',action='store_true')
     args=parser.parse_args()
     if args.watch_wram and len(args.watch_wram)!=2:parser.error('--watch-wram needs LO:HI in hex')
-    r=run(args.binary.resolve(),args.rom.resolve(),args.script.resolve(),args.output,args.frames,args.seed_state,args.room_rate,args.interpret_all,args.expect_scene,args.timeout,args.capture,args.wide,args.infinite_hp,args.watch_wram)
+    r=run(args.binary.resolve(),args.rom.resolve(),args.script.resolve(),args.output,args.frames,args.seed_state,args.room_rate,args.interpret_all,args.expect_scene,args.timeout,args.capture,args.wide,args.infinite_hp,args.watch_wram,args.native_poll)
     print(json.dumps({'passed':r['passed'],'checks':r['checks'],'frames':r['frames_traced'],'assisted':r['route_assisted'],'scenes':sorted({s['scene']for s in r['snapshots']}),'last':r['snapshots'][-1]if r['snapshots']else None}))
     return 0 if r['passed']else 1
 
