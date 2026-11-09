@@ -10,6 +10,15 @@ checks. [Batch 006](NATIVE-BATCH-006.md) records native/framework work separatel
 The reference-collection observations below retain their November 6 scope;
 the current developer build/profile is still pending the owner's DM.
 
+November 9 fixture calibration: newer baserom assembly uses logical button
+masks that differ from the verified stock USA instructions. Its comments are
+useful research, but are not a stock input oracle. Distinguish script button
+names, configured controller bindings and the game's logical input words;
+bind stock tests to actual ROM instructions and observed writes. This is a
+source-version difference, not a demonstrated GaiaLabs or SNESRecomp defect.
+Successful original ability/chest observations retain their execution evidence;
+earlier failed setup attempts and superseded input explanations remain recorded.
+
 ## References supplied by the developer
 
 - [Current baserom documentation](https://github.com/Azarem/gaia-iog-baserom/tree/main/docs)

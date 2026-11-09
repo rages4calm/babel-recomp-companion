@@ -21,7 +21,8 @@ static void WriteNativeContinuationStats(void)
     if (count) interp_bridge_native_instruction_stats(rows, count);
     FILE *file = fopen(stats_path, "w");
     if (!file) { free(rows); return; }
-    fprintf(file, "{\"schema\":\"iog native continuation stats v1\",\"insns\":%llu,\"cycles\":%llu,\"sites\":[",
+    fprintf(file, "{\"schema\":\"iog native continuation stats v1\",\"lookup\":\"%s\",\"insns\":%llu,\"cycles\":%llu,\"sites\":[",
+            interp_bridge_native_instruction_index_enabled() ? "direct" : "legacy",
             (unsigned long long)interp_bridge_native_continuation_insns_total(),
             (unsigned long long)interp_bridge_native_continuation_cycles_total());
     for (size_t i = 0; i < count; ++i) {

@@ -213,3 +213,56 @@ relabeling, clock/frame changes and missing/duplicate/stale fetch behavior.
 The graph retains all 1,219 previous bodies unchanged. Early local fixture,
 newline-hash and stale-PC-hook failures remain in private evidence; they were
 corrected before the final candidate. They do not establish upstream defects.
+
+## Batch 012 local additions, November 9
+
+[Batch 012](NATIVE-BATCH-012.md) retains the inventoried official main revision,
+the owning interpreter event loop and all four NMI fallback floors. The fixed
+effect emitter adds 12 static control forms: eight conditional branches,
+BRA/BRL and direct absolute/long jumps. Indirect transfers, calls/returns,
+stack frames and width changes remain outside this emitted subset. Each effect
+still performs its actual ordered bus fetches and per-opcode retirement; there
+is no decoder call relabeled as native execution or event/clock shortcut.
+
+The observed selection preserves 240 earlier source contexts and adds 1,000,
+giving 1,240 source contexts / 4,960 physical-alias descriptors / 93 fixed opcode
+bodies. New selection checks comprise 913 independent RomAtlas decodes plus 87
+exact bound reuse checks. The generated graph preserves all 1,233 older bodies
+byte-identical and adds 11; compiled descriptors and generated source are not
+substitutes for execution evidence.
+
+Registered continuations now use direct PC/MX indexing by default, with legacy
+lookup available through `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0`. Both index
+representations are built before atomic registration commits. Allocation,
+capacity, conflict and active-owner refusals preserve the old registry and
+statistics. Exact key, byte, mode, live-PC, mapper, interrupt and policy checks
+remain; this indexes metadata rather than caching code validation. Guest
+layouts and `interp816.c/h` are unchanged. The title's two native feature
+switches remain explicit private opt-ins with forced-reference and unsupported
+paths available; no public launcher option or installed-game replacement is
+introduced.
+
+The frozen SDK gate passes 791 tests with two skips, including 24 focused effect
+tests. Effect execution covers 1,383,168 paired scenarios / 4,185,560 checks;
+both lookup modes pass 11,583 actual-bridge branch pairs / 363,092 checks and
+65,660 atomic/index checks each. Missing/duplicate/stale fetch, target, clock,
+stack and decoder-relabel mutations remain detected. These checks do not
+broaden the admitted instruction or frame contracts.
+
+The final game cohort passes 161 fresh reference/native pairs: 322 complete
+loss-free captures / 576,680 frames / 2,834 snapshot sets, with 272 actual old011
+same-tier controls. Separate reviews bind the original gameplay semantics and
+store facts. New routes include source-owned ability grants, chest branches
+and the Moon Tribe timed trial with explicit 255 STR / 40 DEF / infinite HP;
+the Mushroom grant uses 255 DEF. Only the loss-free first-enemy strict trial
+death store is qualified in source support; the broader capped watch remains
+excluded. Fresh pairs separately compare actor states and reward stores. Raw APU
+host timestamps, earlier strict save-core failures and unqualified prerequisites
+remain distinct from canonical state/output parity. Guest execution shares and
+lookup-only microbenchmarks do not establish game speed or campaign completion.
+
+Current 012 raw qualification evidence and protected build masters remain
+private. Redundant 011 raw outputs were retired directly after their comparisons,
+not archived; historical receipts and retained inputs do not imply those raw
+files can be restored. No ROM-derived generated code, binary, music, save or
+private gameplay evidence belongs in the public source update.

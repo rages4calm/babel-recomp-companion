@@ -25,6 +25,7 @@ bool IogRegisterNativeContinuations(void) {calls++;active=1;return !reject;}
 size_t interp_bridge_native_instruction_stats(InterpNativeInstructionStats *out,size_t capacity) {(void)out;(void)capacity;return 0;}
 uint64_t interp_bridge_native_continuation_insns_total(void) {return 0;}
 uint64_t interp_bridge_native_continuation_cycles_total(void) {return 0;}
+bool interp_bridge_native_instruction_index_enabled(void) {return true;}
 int main(void) {
  Cart cart={0};snes.cart=&cart;cart.type=CART_HIROM;
  cart.romSize=cart.romImageSize=2097152;cart.rom=calloc(1,2097152);assert(cart.rom);

@@ -1289,10 +1289,21 @@ typedef struct {
 } NativeInstructionEntry;
 static NativeInstructionEntry *s_native_instructions;
 static size_t s_native_instruction_count;
-/* A zero/empty-page check precedes lookup on the per-opcode hot path. Each
- * exact24-bit execution page has its own tiny sorted range; aliases differ. */
+/* A zero/empty-page check precedes lookup on the per-opcode hot path. Direct
+ * pages contain1024exact PC/MX descriptor slots. Sorted ranges remain for
+ * the launch-only legacy timing control. Execution aliases stay distinct. */
 static uint16_t s_native_page_start[65536], s_native_page_count[65536];
+static uint16_t *s_native_page_ids, *s_native_page_slots;
+static int s_native_instruction_index = -1;
 static uint64_t s_native_continuation_insns, s_native_continuation_cycles;
+
+bool interp_bridge_native_instruction_index_enabled(void) {
+    if (s_native_instruction_index < 0) {
+        const char *setting = getenv("SNESRECOMP_NATIVE_INSTRUCTION_INDEX");
+        s_native_instruction_index = !(setting && !strcmp(setting, "0"));
+    }
+    return s_native_instruction_index != 0;
+}
 
 static uint32_t native_instruction_key(const InterpNativeInstruction *d) {
     return (d->pc24 << 3) | (d->m << 2) | (d->x << 1) | d->e;
@@ -1384,8 +1395,34 @@ bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
         } else next[used++] = next[i];
     }
     if (used > kNativeInstructionSlots) { free(next); return false; }
+    /* Construct BOTH lookup representations before committing anything.
+     * 8192 distinct pages is the worst case:128KiB IDs +16MiB slots, in
+     * addition to the retained256KiB legacy ranges. Allocation failure leaves
+     * every old descriptor, index, statistic and launch-mode cache intact. */
+    uint16_t *next_ids = (uint16_t *)calloc(65536, sizeof *next_ids);
+    if (!next_ids) { free(next); return false; }
+    unsigned pages = 0;
+    for (size_t i = 0; i < used; ++i) {
+        unsigned page = next[i].descriptor.pc24 >> 8;
+        if (!next_ids[page]) next_ids[page] = (uint16_t)++pages;
+    }
+    uint16_t *next_slots = (uint16_t *)calloc((size_t)pages * 1024, sizeof *next_slots);
+    if (!next_slots) { free(next_ids); free(next); return false; }
+    for (size_t i = 0; i < used; ++i) {
+        const InterpNativeInstruction *d = &next[i].descriptor;
+        unsigned page = next_ids[d->pc24 >> 8] - 1u;
+        unsigned slot = ((d->pc24 & 0xFFu) << 2) | (d->m << 1) | d->x;
+        if (next_slots[page * 1024u + slot]) {
+            free(next_slots); free(next_ids); free(next); return false;
+        }
+        next_slots[page * 1024u + slot] = (uint16_t)(i + 1);
+    }
+    /* No failure points remain; host setup forbids active bridge readers. */
+    (void)interp_bridge_native_instruction_index_enabled();
     free(s_native_instructions);
+    free(s_native_page_ids); free(s_native_page_slots);
     s_native_instructions = next;
+    s_native_page_ids = next_ids; s_native_page_slots = next_slots;
     s_native_instruction_count = used;
     memset(s_native_page_count, 0, sizeof s_native_page_count);
     for (size_t i = 0; i < used; ++i) {
@@ -1398,7 +1435,10 @@ bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
 void interp_bridge_clear_native_instructions(void) {
     if (s_interp_bridge_depth || s_lle_sched_depth) return;
     free(s_native_instructions); s_native_instructions = NULL;
+    free(s_native_page_ids); s_native_page_ids = NULL;
+    free(s_native_page_slots); s_native_page_slots = NULL;
     s_native_instruction_count = 0;
+    memset(s_native_page_start, 0, sizeof s_native_page_start);
     memset(s_native_page_count, 0, sizeof s_native_page_count);
 }
 uint64_t interp_bridge_native_continuation_insns_total(void) { return s_native_continuation_insns; }
@@ -1511,36 +1551,45 @@ static NativeInstructionEntry *bridge_native_instruction_step(
         (g_snes->cart->type != CART_HIROM && g_snes->cart->type != CART_LOROM))
         return NULL;
     unsigned page = pc >> 8;
-    size_t lo = s_native_page_start[page];
-    size_t hi = lo + s_native_page_count[page];
     uint32_t key = (pc << 3) | (in->mf << 2) | (in->xf << 1);
-    while (lo < hi) {
-        size_t mid = lo + (hi - lo) / 2;
-        uint32_t candidate = native_instruction_key(&s_native_instructions[mid].descriptor);
-        if (candidate < key) lo = mid + 1;
-        else if (candidate > key) hi = mid;
-        else {
-            NativeInstructionEntry *entry = &s_native_instructions[mid];
-            const InterpNativeInstruction *d = &entry->descriptor;
-            if (lle_bounce_target_excluded(pc)) return NULL;
-            Cart *cart = g_snes->cart;
-            unsigned bank = (pc >> 16) & 0x7Fu;
-            if (cart->type == CART_HIROM && bank >= 0x20u && bank < 0x30u &&
-                cart->overlayBank[bank - 0x20u]) return NULL;
-            const uint8_t *p = cart_getRomPtr(cart, (uint8_t)(pc >> 16), (uint16_t)pc);
-            uintptr_t start = (uintptr_t)cart->rom, mapped = (uintptr_t)p;
-            if (!cart->rom || !p || cart->romSize < d->length || mapped < start ||
-                mapped - start > cart->romSize - d->length) return NULL;
-            /* Plain LoROM/HiROM upper halves are linear inside this bounded
-             * bank interval; code is revalidated after EVERY pre-opcode hook. */
-            if ((d->length > 1 &&
-                 cart_getRomPtr(cart, (uint8_t)(pc >> 16),
-                    (uint16_t)(pc + d->length - 1)) != p + d->length - 1) ||
-                memcmp(p, d->bytes, d->length)) return NULL;
-            return entry;
+    NativeInstructionEntry *entry = NULL;
+    if (s_native_instruction_index) {
+        unsigned id = s_native_page_ids[page];
+        if (!id) return NULL;
+        unsigned slot = ((pc & 0xFFu) << 2) | (in->mf << 1) | in->xf;
+        unsigned index = s_native_page_slots[(id - 1u) * 1024u + slot];
+        if (!index || index > s_native_instruction_count) return NULL;
+        entry = &s_native_instructions[index - 1u];
+        if (native_instruction_key(&entry->descriptor) != key) return NULL;
+    } else {
+        size_t lo = s_native_page_start[page];
+        size_t hi = lo + s_native_page_count[page];
+        while (lo < hi) {
+            size_t mid = lo + (hi - lo) / 2;
+            uint32_t candidate = native_instruction_key(&s_native_instructions[mid].descriptor);
+            if (candidate < key) lo = mid + 1;
+            else if (candidate > key) hi = mid;
+            else { entry = &s_native_instructions[mid]; break; }
         }
     }
-    return NULL;
+    if (!entry) return NULL;
+    const InterpNativeInstruction *d = &entry->descriptor;
+    if (lle_bounce_target_excluded(pc)) return NULL;
+    Cart *cart = g_snes->cart;
+    unsigned bank = (pc >> 16) & 0x7Fu;
+    if (cart->type == CART_HIROM && bank >= 0x20u && bank < 0x30u &&
+        cart->overlayBank[bank - 0x20u]) return NULL;
+    const uint8_t *p = cart_getRomPtr(cart, (uint8_t)(pc >> 16), (uint16_t)pc);
+    uintptr_t start = (uintptr_t)cart->rom, mapped = (uintptr_t)p;
+    if (!cart->rom || !p || cart->romSize < d->length || mapped < start ||
+        mapped - start > cart->romSize - d->length) return NULL;
+    /* Plain LoROM/HiROM upper halves are linear inside this bounded bank
+     * interval; code is revalidated after EVERY pre-opcode hook. */
+    if ((d->length > 1 &&
+         cart_getRomPtr(cart, (uint8_t)(pc >> 16),
+            (uint16_t)(pc + d->length - 1)) != p + d->length - 1) ||
+        memcmp(p, d->bytes, d->length)) return NULL;
+    return entry;
 #endif
 }
 

@@ -8,7 +8,7 @@ from pathlib import Path
 import hashlib,json,os,re,shutil,subprocess,sys
 import pytest
 import snes65816 as d
-from v2.native_effects import emit,SAFE_NAMES
+from v2.native_effects import emit,SAFE_NAMES,STATIC_CONTROL_NAMES,STATIC_CONTROL_OPCODES
 
 REPO=Path(__file__).resolve().parents[2]
 CORE=REPO/'runner/src/snes/interp816.c'
@@ -18,6 +18,8 @@ def entries(bank,small=False):
     result=[];slot=0
     for opcode,(name,mode,size)in sorted(d.opcode_table().items()):
         if name not in SAFE_NAMES or(small and opcode not in(0xA9,0xAD,0xBD,0xB2,0xA7,0xED,0xE9,0x85,0xE6,0xEE,0xEB,0x5B)):
+            continue
+        if name in STATIC_CONTROL_NAMES and opcode not in STATIC_CONTROL_OPCODES:
             continue
         for m,x in((0,0),(0,1),(1,0),(1,1)):
             length=size(m,x)if callable(size)else size
@@ -121,10 +123,10 @@ int main(void){
 '''
 
 
-def run_fixture(tmp_path,bank,small=False,mutant=None):
+def run_fixture(tmp_path,bank,small=False,mutant=None,extra_entries=()):
     compiler=os.environ.get('CC')or shutil.which('clang')or shutil.which('cc')
     if not compiler:pytest.skip('C11 compiler required')
-    generated,receipt=emit(CORE.read_text(),entries(bank,small),registration_name='RegisterEffects')
+    generated,receipt=emit(CORE.read_text(),entries(bank,small)+list(extra_entries),registration_name='RegisterEffects')
     assert not re.search(r'\b(?:interp816_|ni_\d\d_)(?:runOpcode|doOpcode)\s*\(',generated)
     fetch='(void)cpu->read(cpu->mem, _ni->base + n);'
     if mutant=='skip_fetch':
@@ -136,6 +138,10 @@ def run_fixture(tmp_path,bank,small=False,mutant=None):
     elif mutant=='stale_operand':
         pattern=r'(static const uint8_t code\[\] = \{0xA9,)0x99'
         generated,n=re.subn(pattern,r'\g<1>0x98',generated,count=1)
+        assert n==1
+    elif mutant=='stale_branch_operand':
+        pattern=r'(static const uint8_t code\[\] = \{0xD0,)0x7F'
+        generated,n=re.subn(pattern,r'\g<1>0x7E',generated,count=1)
         assert n==1
     elif mutant is not None:raise AssertionError(mutant)
     if mutant:generated='#define EXPECT_FETCH_MUTANT 1\n'+generated
@@ -159,6 +165,32 @@ def test_first_generated_effects_real_core(tmp_path):
 @pytest.mark.parametrize('bank',[0x03,0x43,0x83,0xC3])
 def test_all_safe_effects_real_core(tmp_path,bank):
     run_fixture(tmp_path,bank)
+
+
+@pytest.mark.parametrize('bank',[0x03,0x43,0x83,0xC3])
+def test_static_control_targets_flags_and_pc_wrap(tmp_path,bank):
+    # Full SAFE matrix already covers every static-control opcode. This extra
+    # cohort concentrates on BNE/BRA/BRL and directJMP/JML boundary targets.
+    extras=[]
+    for index,opcode in enumerate((0xD0,0x80,0x82,0x4C,0x5C)):
+        name,mode,size=d.opcode_table()[opcode];length=size(0,0)if callable(size)else size
+        for m,x in((0,0),(0,1),(1,0),(1,1)):
+            position=0xE000+index*0x100
+            operand={2:0x80,3:0x8000,4:0x7EFFFF}[length]
+            extras.append(dict(pc24=bank<<16|position,m=m,x=x,e=0,bytes=bytes([opcode])+operand.to_bytes(length-1,'little'),mnemonic=name,immediate=False))
+    # Separate boundary position per width/opcode so no duplicate keys.
+    # BNE atFFFE wraps sequentialPC to0, then signed+127; BRL atFFFA
+    # has positive displacement wrapping through0; JML changes livePB.
+    for opcode,position,operand in((0xD0,0xFFFE,0x7F),(0x82,0xFFFA,0x7FFF),(0x4C,0xFFF6,0xFFFF),(0x5C,0xFFF2,0xC30001)):
+        name,mode,size=d.opcode_table()[opcode];length=size(0,0)if callable(size)else size
+        for m,x in((0,0),(0,1),(1,0),(1,1)):
+            extras.append(dict(pc24=bank<<16|position,m=m,x=x,e=0,bytes=bytes([opcode])+operand.to_bytes(length-1,'little'),mnemonic=name,immediate=False))
+    run_fixture(tmp_path,bank,True,extra_entries=extras)
+
+
+def test_oracle_rejects_stale_branch_target(tmp_path):
+    extra=dict(pc24=0x83FFFE,m=0,x=0,e=0,bytes=b'\xD0\x7F',mnemonic='BNE',immediate=False)
+    run_fixture(tmp_path,0x83,True,'stale_branch_operand',[extra])
 
 
 @pytest.mark.parametrize('mutant',['skip_fetch','double_fetch','stale_operand'])
@@ -186,4 +218,17 @@ s,r=emit(Path(sys.argv[2]).read_text(),e);print(json.dumps(dict(hash=hashlib.sha
 def test_invalid_descriptor_refused(change):
     entry=dict(pc24=0x838100,m=0,x=0,e=0,bytes=b'\xA9\x99\x99',mnemonic='LDA',immediate=True)
     entry.update(change)
+    with pytest.raises(ValueError):emit(CORE.read_text(),[entry])
+
+
+@pytest.mark.parametrize('opcode',[0x6C,0x7C,0xDC])
+def test_indirect_jump_descriptors_refused(opcode):
+    name,mode,size=d.opcode_table()[opcode]
+    entry=dict(pc24=0x838100,m=0,x=0,e=0,bytes=bytes([opcode,0x00,0x80]),mnemonic=name,immediate=False)
+    with pytest.raises(ValueError,match='static branch/jump'):
+        emit(CORE.read_text(),[entry])
+
+
+def test_code_operand_bank_wrap_remains_refused():
+    entry=dict(pc24=0x83FFFF,m=0,x=0,e=0,bytes=b'\xD0\x7F',mnemonic='BNE',immediate=False)
     with pytest.raises(ValueError):emit(CORE.read_text(),[entry])
