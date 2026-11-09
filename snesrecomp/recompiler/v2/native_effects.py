@@ -10,7 +10,11 @@ import snes65816 as decoder
 
 SAFE_NAMES = frozenset("""LDA LDX LDY STA STX STY STZ ADC SBC AND ORA EOR CMP
 CPX CPY BIT TSB TRB ASL LSR ROL ROR INC DEC INX INY DEX DEY TAX TAY TXA TYA
-TXY TYX TCD TDC CLC SEC CLD SED CLV CLI SEI NOP XBA""".split())
+TXY TYX TCD TDC CLC SEC CLD SED CLV CLI SEI NOP XBA
+BPL BMI BVC BVS BCC BCS BNE BEQ BRA BRL JMP JML""".split())
+STATIC_CONTROL_NAMES = frozenset("BPL BMI BVC BVS BCC BCS BNE BEQ BRA BRL JMP JML".split())
+STATIC_CONTROL_OPCODES = frozenset({0x10, 0x30, 0x50, 0x70, 0x90, 0xB0,
+                                  0xD0, 0xF0, 0x80, 0x82, 0x4C, 0x5C})
 FORBIDDEN = frozenset({"runOpcode", "doOpcode", "doInterrupt", "init", "reset",
                        "free", "saveload", "opcode_hook", "pushByte", "pullByte",
                        "pushWord", "pullWord", "setFlags", "getFlags"})
@@ -112,6 +116,11 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations")
             raise ValueError("Unsupported or duplicate native effect descriptor")
         keys.add(key)
         opcode = e["bytes"][0]
+        # A mnemonic alone also admits indirect JMP/JML addressing forms.
+        # Static branches keep the same owning bridge frame; indirect targets
+        # and all call/return frames remain outside this emitter contract.
+        if e["mnemonic"] in STATIC_CONTROL_NAMES and opcode not in STATIC_CONTROL_OPCODES:
+            raise ValueError("Only static branch/jump effects are supported")
         mnemonic, mode, size = decoder.opcode_table()[opcode]
         size = size(e["m"], e["x"]) if callable(size) else size
         if (mnemonic != e["mnemonic"] or size != len(e["bytes"])

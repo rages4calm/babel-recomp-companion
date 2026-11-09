@@ -237,6 +237,11 @@ uint64_t interp_bridge_native_continuation_cycles_total(void);
  * like the interpreter/poll counters, and are not reset by configuration. */
 size_t interp_bridge_native_instruction_stats(InterpNativeInstructionStats *out,
                                               size_t capacity);
+/* Launch-only diagnostic/timing control. Absent/1 selects the direct PC/MX
+ * index; SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0 retains legacy range lookup.
+ * Neither setting enables registration or changes any admission guard.
+ * Clearing registrations preserves this process launch setting. */
+bool interp_bridge_native_instruction_index_enabled(void);
 
 /*
  * Run the interpreter over guest code at entry_pc24, in the context of `cpu`.
@@ -346,8 +351,11 @@ int interp_bridge_resume_task(CpuState *cpu, uint32_t resume_pc24,
 
 /* Count of tier-downs taken this run (observability / tests / Phase-2
  * manifest). */
-/* Optional host coverage hooks; NULL by default. pc_hook fires once per
- * INTERPRETED opcode (exact). bounce_hook fires once per compiled body
+/* Optional observation hooks; NULL by default. pc_hook fires before each
+ * logical bridge opcode, including compiled native effects. It is NOT an
+ * interpreted-coverage counter. Observers must not modify CPU state/code;
+ * use the pre-opcode policy/redirect API for supported host changes.
+ * bounce_hook fires once per compiled body
  * ENTERED -- an entry, not an extent, since a compiled body runs an unknown
  * number of opcodes without reporting them. Do not treat a bounce as coverage
  * of the body interior. */

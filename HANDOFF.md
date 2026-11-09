@@ -3,7 +3,111 @@
 Updated November 9, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
-## Current continuation — native batch 011
+## Qualified continuation — native batch 012
+
+[Batch 012](docs/NATIVE-BATCH-012.md) is a source update on the existing fork,
+with completed bounded gameplay and source qualification. Its preceding source
+baseline is `2166c8f`. Final publication checks record the pushed commit in
+`native-012/final-verify-published.json`. No release or installed-game replacement
+is implied.
+
+Final private binary `.local/batch-001/native-012/build-final/babel-recomp.exe`:
+`8a0634d39b8ccdb85ea3035974770c5e6082e74c8556aadd7a3f6f800bd1887b`.
+Graph SHA `8323a2febc32322842e0f8010ef408e2258d548d3612ec03e70a4285bdf24add`:
+374 roots / 1,327 contexts / 1,244 eligible / 83 LLE. All 1,233 older bodies
+remain byte-identical; 11 are added, with 65 new instruction contexts checked
+through RomAtlas. All 437 historical source inputs and 161 current inputs are
+identity-bound; no older cost corpus was relabeled or merged.
+
+The fixed-effect selection preserves 240 contexts and adds 1,000 observed
+contexts (756 ordinary / 244 static control), giving 4,960 physical-alias
+descriptors and 93 fixed opcode bodies. The 1,000 new contexts have 913 new
+RomAtlas decodes and 87 exact bound reuse checks. Twelve static branch/direct-
+jump forms are added; indirect transfers, frame/stack and width changes remain
+outside the subset. Per-opcode retirement and existing code/mode/owner/mapper/
+overlay/policy/interrupt guards remain. Registered continuations use direct
+PC/MX lookup by default; `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains legacy
+lookup. This does not cache or bypass code validation.
+
+Final SDK: **791 passed, two skipped**, including all 24 focused effect tests.
+Final title gate: **167 passed** (`native-012/title-tests-final.log`). Effects
+pass 1,383,168 paired scenarios / 4,185,560 checks. Both index modes pass
+11,583 actual-bridge branch pairs / 363,092 checks and 65,660 atomic/index
+checks each. Negative mutations remain detected; `interp816.c/h`, guest
+layouts and all four NMI fallback floors are unchanged.
+
+**161 fresh pairs / 322 complete loss-free captures / 576,680 frames / 2,834
+snapshot sets pass**, with all **272 actual old011 same-tier controls** passing.
+Canonical CPU/WRAM/clocks/devices/full APU+scheduler/output, complete journals,
+identities, exact cost partitions and per-site/global sums are independently
+checked. Source gameplay and normalized writer facts pass for old50,
+previous29 and new25. Receipts: `native-012/counter-audit/` and each group's
+`independent-review.json`. Current narrow/wide natural routes reach
+**89.3792% / 89.4043% native guest cycles**; these are bounded execution shares,
+not campaign completion or measured game speed. Lookup-only CPU measurements
+must not be promoted to a game-speed result.
+
+Host cost:42 sequential native runs /252,000frames, six warmups plus36 balanced
+measurements. Paired median service CPU versus011 is +0.3671% narrow /+0.2955%
+wide; direct versus same-binary legacy is -0.8147%/-0.5826%. Narrow old/new
+pairs range -4.19% to+14.44%, so do not promote the medians to an overall speedup
+or a significant regression. Separate wide/narrow cohorts do not isolate renderer
+CPU. SDL discovery paths differ, but actual linked static library bytes, all
+public headers and generated revision match; compiler/flags/resources match.
+All42 runs retain exact guest counters/final witnesses and actual lookup modes.
+See `native-012/host-cost/post-audit.json`; no forced-reference timing cohort.
+
+New25 qualifies six original ability grants, six known-orb revisits, five item
+chests, four opened-chest reloads, full-inventory/empty controls and Moon Tribe
+success/timeout. It has 83,500 source-reference frames / 142 snapshot sets,
+11 wide cases and 21 strict original writer events per fresh tier. Grants use
+original writers and form/return paths, without learned/form/control pokes.
+Trial setup explicitly uses **255 STR / 40 DEF / infinite HP** and positioning;
+actual melee reduces the original six enemies to zero before the countdown
+ends, and original gate/statue/item writers execute. Its no-attack control has
+15 identical initial artifacts and times out with six enemies at 6 HP, no
+reward. Full-inventory, empty-chest and Mushroom fixtures use **255 DEF**;
+full-inventory setup supplies 16 private Herb slots, not earned items.
+
+Only the loss-free first-enemy strict trial death store is qualified in source
+support. The broad six-actor watch capped and remains excluded; do not claim
+six loss-free strict death-store captures. Fresh pairs separately qualify actor
+states and original quest reward stores. New25's older011 witnesses are forced
+reference only, so no old-native percentage gain is claimed for those routes.
+See `native-012/new-routes/completion.json`, `source-semantic-audit.json` and
+`retained-attempts.json`. Newer GaiaLabs input masks differ from stock; final
+grant witnesses bind verified stock instructions and actual observations.
+
+Retain the 1,415 raw APU clock-file differences, 19 aspect raw strict failures,
+normalized word/byte grouping limits and historical004 strict17/28 result.
+Passive copied-owner load, aspect full-frame comparisons, continuation-off and
+legacy lookup controls pass. Raw fresh SAVE/RESTORE core/APU identity and
+Vampire bomb rescue remain unqualified. Garden crossings, failed prerequisites
+and source/decoder calibration attempts stay excluded. GaiaLabs dev-build/
+module identity is still pending; the clubhouse/Erik music report is deferred.
+All **39 owner input hashes are unchanged**, and installed005 is untouched.
+Both native feature switches remain explicit private opt-ins with interpreter
+fallback; no launcher option for unsupported functionality is added.
+
+Cleanup started from 61.67 GiB logical. Old cold outputs through010 use the
+verified archive `9cf7c5a723eaaf414fb0f6515b572fe8eacf37cd489121485f3aa21b41c5550a.zip`;
+its restore/index receipts remain private. Redundant **011 raw outputs were
+retired directly, not archived**, after all old011 comparisons completed.
+Their metadata, scripts, source profiles, saves and build masters remain, but
+the retired raw files have no archive restore path. All current012 raw evidence
+is retained; disposable runtime copies have matching protected masters and
+`native-012/cleanup/runtime-master-restore-map.json`. Earlier copied executables
+were separately compacted with SHA/CRC/receipt checks; do not add operation
+counts together as a final size or recreate an existing archive.
+
+Final full inventory: **22.583 GiB logical (24,247,954,336 bytes)**, down from
+**61.670 GiB**. All 39 owner file hashes remain unchanged, and all current012
+raw qualification evidence is preserved. Preserve current012 consumers, build
+masters, ROM/MSU/music, saves, owner inputs and retained metadata. Future
+comparison of directly retired raw011 data requires a new qualification from retained inputs, not a
+claim that an archive can restore it. See [cleanup usage](docs/PROJECT-CLEANUP.md).
+
+## Completed continuation — native batch 011
 
 [Batch 011](docs/NATIVE-BATCH-011.md) compiles selected actor/LZ instruction
 effects at actual continuation PCs inside the existing owning interpreter

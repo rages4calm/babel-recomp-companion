@@ -9,21 +9,24 @@ The original author's credit, support link and full acknowledgments remain below
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. November 9's private
-[batch 011](docs/NATIVE-BATCH-011.md) compiles selected actor and decompression
-instructions at real continuation boundaries, retaining the existing bridge's
-interrupt, yield and timing protocol. **136 fresh reference/native pairs pass**,
-including 29 additional assisted cases. The 6,000-frame classroom/South Cape
-route reaches **86.51% native CPU cycles in 4:3 / 86.53% in 16:9**, up from
-batch 010's 82.99% / 83.02%. These are bounded guest-execution measurements,
-not percentages of game content or campaign completion.
+[batch 012](docs/NATIVE-BATCH-012.md) adds 1,000 observed instruction contexts,
+static branch/jump effects and direct continuation lookup. **161 fresh
+reference/native pairs pass**, including 25 more assisted ability, chest and
+Moon Tribe cases. The 6,000-frame classroom/South Cape route reaches
+**89.38% native CPU cycles in 4:3 / 89.40% in 16:9**, up from batch 011's
+86.51% / 86.53%. These measure bounded guest execution, not game content or
+project completion. Full campaign qualification remains ahead.
 
-The private path requires `IOG_NATIVE_CONTINUATIONS=1`; the earlier compiled
-poll effects separately require `IOG_NATIVE_RDNMI_POLL=1`. Both default off.
-Separate per-PC counters identify the new work, and interpreter fallback
-remains available. Headless same-binary timing shows about 0.76% more CPU cost in 4:3 and
-0.71% in 16:9 with continuations enabled; this is native execution progress,
-not a demonstrated speedup. Historical cross-version failures
-and raw APU timestamp differences remain documented.
+The private path requires IOG_NATIVE_CONTINUATIONS=1; compiled poll effects
+separately require IOG_NATIVE_RDNMI_POLL=1. Both default off. Interpreter
+fallback remains available, and SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0 retains
+the older lookup on the same binary. Per-PC counters separate each kind of work.
+In 42 headless timing runs, paired median CPU cost is roughly unchanged versus
+batch 011 (+0.37% in 4:3 / +0.30% in 16:9). Direct lookup costs 0.81% / 0.58%
+less than legacy lookup on the same binary in this run. Timing variation remains;
+this is native execution progress, without an overall game-speedup claim.
+Historical cross-version failures and raw APU timestamp differences remain
+documented. Owner installations and settings are unchanged.
 
 - **CompanionLauncher:** Windows adapter using the shared 0.2.0 shell, verified
   USA ROM selection, native display/audio/gamepad settings, and direct Play.
@@ -52,10 +55,10 @@ and raw APU timestamp differences remain documented.
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
 - **Framework:** integrated SNESRecomp `e98dc63`, main checked November 9,
   2026, with Babel-specific changes preserved. [Integration and limits](docs/FRAMEWORK-NOV08.md).
-  Batch 011 retains all 1,219 prior emitted bodies unchanged and adds 14,
-  checking all 231 new instruction contexts through RomAtlas. Earlier live-WRAM,
+  Batch 012 retains all 1,233 prior emitted bodies unchanged and adds 11,
+  checking all 65 new instruction contexts through RomAtlas. Earlier live-WRAM,
   sorting and decode receipts retain their original identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-011.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-012.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
@@ -95,6 +98,10 @@ Build the engine using the instructions below, then run:
 The launcher currently needs the sibling CompanionLauncher package feed; see
 its build instructions. No soundtrack, ROM, generated game code, save or private
 validation data is included. Original SNES audio remains available offline.
+
+Development captures stay in ignored `.local/`. Keep the current qualification
+batch and protected owner data; retire obsolete generated output and duplicate
+test runtimes after their consumers finish. [Cleanup and optional archive restore](docs/PROJECT-CLEANUP.md).
 
 ## Babel foundation and original credits
 
