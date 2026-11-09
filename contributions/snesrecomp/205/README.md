@@ -1,5 +1,14 @@
 # SNESRecomp timing contribution
 
+November 9 update: [#250](https://github.com/RetroPortingToolKit/snesrecomp/pull/250)
+and [#251](https://github.com/RetroPortingToolKit/snesrecomp/pull/251) are now
+merged into official main `d8116fac4470ed1c9df70ae56869c7a9cb44935f`.
+Their final maintainer heads are `075c8323993ba15fbaab539d408255cb334f716b`
+and `31b23c976c54e8f426354a6effe003293cf7f7f0`. The older status and patches
+below are historical preparation records. #241 has also merged, bringing the
+SPC/DSP timing and version11 snapshot changes; current-core game qualification
+is tracked separately from the original consumer restore limitations.
+
 Updated November 8, 2026: [#248](https://github.com/RetroPortingToolKit/snesrecomp/pull/248)
 is merged. The maintainer refreshed the still-draft [#250](https://github.com/RetroPortingToolKit/snesrecomp/pull/250)
 and [#251](https://github.com/RetroPortingToolKit/snesrecomp/pull/251) to

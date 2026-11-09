@@ -9,21 +9,24 @@ The original author's credit, support link and full acknowledgments remain below
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. November 9's private
-[batch 012](docs/NATIVE-BATCH-012.md) adds 1,000 observed instruction contexts,
-static branch/jump effects and direct continuation lookup. **161 fresh
-reference/native pairs pass**, including 25 more assisted ability, chest and
-Moon Tribe cases. The 6,000-frame classroom/South Cape route reaches
-**89.38% native CPU cycles in 4:3 / 89.40% in 16:9**, up from batch 011's
-86.51% / 86.53%. These measure bounded guest execution, not game content or
+[batch 013](docs/NATIVE-BATCH-013.md) adds 750 observed instruction contexts,
+including status and ordinary data-stack effects, on the updated framework.
+**64 fresh reference/native pairs pass** across fights, bosses, rewards,
+abilities, inventory and two natural aspect routes, using new version 11 states.
+The 6,000-frame classroom/South Cape route reaches
+**90.34% native CPU cycles in 4:3 / 90.36% in 16:9**, versus 89.45% / 89.47%
+with the prior context selection on the same updated core. These measure
+bounded guest execution, not game content or
 project completion. Full campaign qualification remains ahead.
 
-The private path requires IOG_NATIVE_CONTINUATIONS=1; compiled poll effects
-separately require IOG_NATIVE_RDNMI_POLL=1. Both default off. Interpreter
-fallback remains available, and SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0 retains
+The private path requires `IOG_NATIVE_CONTINUATIONS=1`; compiled poll effects
+separately require `IOG_NATIVE_RDNMI_POLL=1`. Both default off. Interpreter
+fallback remains available, and `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains
 the older lookup on the same binary. Per-PC counters separate each kind of work.
-In 42 headless timing runs, paired median CPU cost is roughly unchanged versus
-batch 011 (+0.37% in 4:3 / +0.30% in 16:9). Direct lookup costs 0.81% / 0.58%
-less than legacy lookup on the same binary in this run. Timing variation remains;
+In 28 headless timing runs, paired median CPU cost is roughly unchanged versus
+the prior context selection (+0.25% in 4:3 / -0.32% in 16:9). The final build's
+widescreen route uses about 6.18% more frame-service CPU than its 4:3 route.
+This measures the whole route, not renderer cost alone. Timing variation remains;
 this is native execution progress, without an overall game-speedup claim.
 Historical cross-version failures and raw APU timestamp differences remain
 documented. Owner installations and settings are unchanged.
@@ -53,12 +56,14 @@ documented. Owner installations and settings are unchanged.
   [Controls and limits](docs/CHEATS-AND-MODS.md).
 - **Windows icons:** coordinated flute/world/comet artwork for the game and a
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
-- **Framework:** integrated SNESRecomp `e98dc63`, main checked November 9,
-  2026, with Babel-specific changes preserved. [Integration and limits](docs/FRAMEWORK-NOV08.md).
-  Batch 012 retains all 1,233 prior emitted bodies unchanged and adds 11,
-  checking all 65 new instruction contexts through RomAtlas. Earlier live-WRAM,
+- **Framework:** integrated SNESRecomp `d8116fac`, main checked November 9,
+  2026, including merged timing PRs #250/#251, with Babel-specific changes
+  preserved. [Integration and limits](docs/FRAMEWORK-NOV09.md).
+  Batch 013 retains all 1,244 prior emitted bodies unchanged and adds two,
+  checking all 31 new generated instruction contexts through RomAtlas.
+  Its 750 continuation contexts have independent decode checks. Earlier live-WRAM,
   sorting and decode receipts retain their original identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-012.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-013.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
@@ -77,8 +82,11 @@ documented. Owner installations and settings are unchanged.
   [Requested upstream patch split and qualification limits](contributions/snesrecomp/205/README.md).
 - **GaiaLabs collaboration:** newer baserom/retranslation module provenance and
   raw-map rebuild inputs have an [offline inspection tool](docs/GAIALABS-MODULE-INTEGRATION.md).
-  The current dev-build profile remains pending; its new minimap/world-map/room
-  work is not yet integrated into Companion. [Original and GaiaLabs identities](docs/GAME-EDITIONS.md)
+  The owner has received a private current developer build; its source/profile
+  matching and minimap/world-map/room integration remain pending.
+  SoundFont/MIDI tools and SPC documentation are also recorded for future audio
+  work; they are not an implemented native audio engine.
+  [Original and GaiaLabs identities](docs/GAME-EDITIONS.md)
   are separate; the edition picker/import adapter is pending. Thanks to **Azarem**, **Kassiven**,
   **LThammy**, **ViewtifulSlayer**, **Igor Chagas**, and
   **VitorVilela7 / wide-snes** for the referenced tools, content and research.

@@ -143,6 +143,18 @@ def run_fixture(tmp_path,bank,small=False,mutant=None,extra_entries=()):
         pattern=r'(static const uint8_t code\[\] = \{0xD0,)0x7F'
         generated,n=re.subn(pattern,r'\g<1>0x7E',generated,count=1)
         assert n==1
+    elif mutant=='stale_status_width':
+        assignment='cpu->mf = val & 0x20;'
+        assert assignment in generated
+        generated=generated.replace(assignment,'(void)val; /* deliberate stale M */')
+    elif mutant=='stale_index_high':
+        assert 'cpu->x &= 0xff;' in generated and 'cpu->y &= 0xff;' in generated
+        generated=generated.replace('cpu->x &= 0xff;','(void)0; /* deliberate stale X high */')
+        generated=generated.replace('cpu->y &= 0xff;','(void)0; /* deliberate stale Y high */')
+    elif mutant=='bad_stack_order':
+        pattern=r'(ni_\d\d_pushByte\(cpu, _ni, )value >> 8'
+        generated,n=re.subn(pattern,r'\g<1>value & 0xff',generated)
+        assert n
     elif mutant is not None:raise AssertionError(mutant)
     if mutant:generated='#define EXPECT_FETCH_MUTANT 1\n'+generated
     source=tmp_path/'effects.c';source.write_text(generated+HARNESS)
@@ -232,3 +244,36 @@ def test_indirect_jump_descriptors_refused(opcode):
 def test_code_operand_bank_wrap_remains_refused():
     entry=dict(pc24=0x83FFFF,m=0,x=0,e=0,bytes=b'\xD0\x7F',mnemonic='BNE',immediate=False)
     with pytest.raises(ValueError):emit(CORE.read_text(),[entry])
+
+
+def status_stack_entries(bank, all_masks=False):
+    """Fixed masks exercise live status writes and every data-stack opcode."""
+    result=[];slot=0
+    for opcode in (0xC2,0xE2):
+        for m,x in ((0,0),(0,1),(1,0),(1,1)):
+            for mask in range(256) if all_masks else (0,4,8,0x10,0x20,0x30,0xCF,0xFF):
+                result.append(dict(pc24=bank<<16|0xC000+slot*4,m=m,x=x,e=0,
+                    bytes=bytes((opcode,mask)),mnemonic='REP' if opcode==0xC2 else 'SEP',immediate=True))
+                slot+=1
+    # Use disjoint addresses even in the full2048-mask cohort.
+    for opcode in (0x08,0x28,0x48,0x68,0xDA,0xFA,0x5A,0x7A,0x0B,0x2B,0x4B,0x8B,0xAB,0x62,0xD4,0xF4):
+        name,mode,size=d.opcode_table()[opcode]
+        for m,x in ((0,0),(0,1),(1,0),(1,1)):
+            length=size(m,x) if callable(size) else size
+            for operand in ((0xC2AE,0xC2AF,0xFFFF) if opcode==0xF4 else (0xFF,)):
+                result.append(dict(pc24=bank<<16|0xE400+(slot-2048 if all_masks else slot)*4,m=m,x=x,e=0,
+                    bytes=bytes((opcode,))+(operand&((1<<(8*(length-1)))-1)).to_bytes(length-1,'little'),
+                    mnemonic=name,immediate=mode==d.IMM))
+                slot+=1
+    return result
+
+
+def test_all_status_masks_and_data_stack_actual_core(tmp_path):
+    # Source PEA has a Babel-specific C2AE→Y0 rule; preserve it and its C2AF
+    # control rather than claiming this fixture independently proves hardwareISA.
+    run_fixture(tmp_path,0x83,True,extra_entries=status_stack_entries(0x83,True))
+
+
+@pytest.mark.parametrize('mutant',['stale_status_width','stale_index_high','bad_stack_order'])
+def test_status_stack_oracle_rejects_mutated_effects(tmp_path,mutant):
+    run_fixture(tmp_path,0x83,True,mutant,status_stack_entries(0x83))

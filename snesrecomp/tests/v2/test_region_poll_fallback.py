@@ -64,9 +64,9 @@ def _source():
     hdma = (S / "tests/dma/hdma_timing_test.c").read_text(encoding="utf-8")
     hdma = hdma[:hdma.index("int main(void) {")]
     already = functions(bridge)
-    peripherals = '#include "snes/ppu.h"\n#include "snes/dma.h"\nPpu *g_ppu; uint8_t g_snesrecomp_last_hdmaen, g_ppu_wlog_src; bool g_fail;\nstatic uint8_t ppu_regs[0x40];\n'
+    peripherals = '#include "snes/ppu.h"\n#include "snes/dma.h"\nPpu *g_ppu; void (*g_ppu_latch_position_hook)(uint16_t *, uint16_t *);\nuint8_t g_snesrecomp_last_hdmaen, g_ppu_wlog_src; bool g_fail;\nstatic uint8_t ppu_regs[0x40];\n'
     peripherals += "\n".join(_c_function(hdma, name) for name in sorted(functions(hdma) - already)
-                             if name not in {"check"})
+                             if name not in {"check", "interp_bridge_access_lead"})
     rom = bytearray(0x40000)
     code = bytes((0xaf,0x10,0x42,0x80,0x10,0xfa,0x6b))
     rom[0x28100:0x28100+len(code)] = code

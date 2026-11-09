@@ -79,3 +79,8 @@ int main(void) {
     run = subprocess.run([str(exe)], capture_output=True, text=True)
     assert run.returncode == 0, run.stdout + run.stderr
     assert "resume=008002" in run.stdout
+
+
+def test_instruction_blocks_keep_folded_taken_cycle(tmp_path):
+    from test_folded_branch_cycles import run_folded_branch_cases
+    run_folded_branch_cases(tmp_path, instruction_blocks=True)

@@ -3,6 +3,86 @@
 Updated November 9, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
+## Qualified continuation — native batch 013
+
+[Batch 013](docs/NATIVE-BATCH-013.md) follows published baseline `4499fce`.
+Private receipts are under ignored `.local/batch-001/native-013`; final source
+and remote verification are recorded in `final-verify-staged.json` and
+`final-verify-published.json`. No release or installed-game replacement is implied.
+
+Official main is `d8116fac4470ed1c9df70ae56869c7a9cb44935f`, checked November 9:
+#241, #250, #251, #261 and #262 are merged. A 60-path delta and 1,337-file local
+inventory precede the selective integration. Babel changes, 2,124 guarded
+addresses, four NMI fallback floors and nested pins remain. Hardware snapshots
+are version 11/minimum 11. The owner accepts fresh starts; no v10 conversion or
+inferred DSP phase is used. See [framework details](docs/FRAMEWORK-NOV09.md).
+
+Fresh interpreter-only reference SHA
+`78c40d7aa82a6a58344e32cc1664526f40fd4ee04bb20d279ef27e5980a908de`
+produced 62 current source witnesses through clean boot, original map loaders,
+forms and power writers, with disclosed gameplay cheats. Interpreter-only
+generated digests remain genuinely empty. Historical evidence retains its own
+core identity and cannot substitute for current-core execution.
+
+Status and ordinary data-stack effects add 750 observed contexts to the prior
+1,240, giving 1,990 canonical contexts / 7,960 aliases / 109 fixed opcode bodies.
+Independent decoding covers 711 new and 39 exact bound reuse contexts. Calls,
+returns, interrupt frames, direct SP/emulation changes and indirect transfers
+retain fallback. Actual-core protocol proof passes in direct and legacy lookup
+modes. The complete SDK/identity/DSP gate passes 810 tests, two skipped;
+title/maintenance passes all 167 tests. Focused checks overlap those gates.
+
+Final mixed executable SHA
+`299dff5133d5b916fb26d811907c6614242c77d177cd4294204454742fb3c2e4`;
+graph SHA `f35571b22682fd33ee5cb5d34402075cb97ccc72b6f2528961d8460bc66c6d25`:
+410 roots / 1,330 contexts / 1,246 eligible / 84 LLE. All 1,244 previous bodies
+remain byte-identical; two are added, with 31 new instruction contexts decoded.
+`8A8743:M0X0` remains interpreted because of BRK/structural poison. Inputs are
+761 historical and 62 current source profiles; mixed-version costs are separate.
+
+The accepted `qualification-isolated/{new,reg,root}` cohort passes **64 pairs /
+128 captures / 366,400 frames / 1,144 snapshot sets**, with full state, APU,
+output, journal, counter and original-writer reviews. It includes 25 new/primer
+cases, 37 regressions and two natural aspect routes. There are 25 ordinary
+damage/death cases, three boss cases, six power activations, three inventory
+roundtrips and nine verified room-clear rewards. Great Wall predicate/pushback
+tests do not prove ramp traversal. Failed and unselected probes remain excluded.
+The custom audits document atomic-word versus paired-byte log normalization;
+they do not infer byte ordering within an atomic log record. All 572 raw SPC
+host-clock stamp differences are retained; canonical and full APU checks pass.
+
+The 6,000-frame town routes reach 90.3353% / 90.3575% native guest cycles in
+4:3 / 16:9. Same-current-core prior-context controls reach 89.4516% / 89.4741%.
+Six probe pairs plus six same-tier controls independently bind the substituted
+cycles. These are bounded execution results, not content/completion percentages.
+Twenty-eight sequential host-cost runs pass (24 measured, four warmups): median
+paired CPU cost changes +0.25% / -0.32%; no clear overall speed gain. Final median
+frame-service CPU is 9.2266s / 9.7969s over 6,000 headless frames. The wide route
+costs 6.18% more than narrow, a whole-route comparison rather than isolated
+renderer cost or an FPS measurement. Pair ranges remain in the batch report.
+
+Exclude the entire first `qualification-final` attempt: parallel processes
+shared executable-relative file logging and contaminated stdout/dump receipts.
+Its failed receipts and logs remain. Fresh captures use supported
+`SNESRECOMP_LOG_FILE=0` after environment filtering, with per-child provenance
+and an actual 400-frame smoke pair. No engine assertion or source-case change
+was needed. The earlier import-bootstrap failure also stopped before gameplay.
+
+Cleanup retires superseded receipted raw output from 012 and the contaminated
+013 attempt directly, after all consumers finish. Keep current 013 source and
+isolated raw evidence, master builds, seeds, receipts and failure logs. The
+cleanup closeout records 54,947 retired files / 10.25 GiB removed, with the
+project measured at 24.89 GiB afterward, and 39 unchanged protected files. The installed
+game is unchanged; CUA is off and no test runner should remain at closeout.
+
+The owner has received a private current GaiaLabs developer build and supplied
+new audio resources. [Developer notes](docs/GAIALABS-DEVELOPER-NOTES.md) record
+the source/profile and audio follow-up. No private input was used in stock 013;
+GaiaLabs remains a separate unqualified profile. No native SPC replacement is
+implemented. Work from these receipts; do not recreate completed test archives.
+Report confirmed bugs in any repository/tool used, checking existing issues
+first and contributing evidence there when an existing report matches.
+
 ## Qualified continuation — native batch 012
 
 [Batch 012](docs/NATIVE-BATCH-012.md) is a source update on the existing fork,
