@@ -47,13 +47,27 @@ public static class SoundtrackActivation
     public static SoundtrackActivationState Read(string engineDirectory)
     {
         var path = StatePath(engineDirectory);
-        if (!File.Exists(path)) return new(false, null);
+        if (!File.Exists(path)) return new(DefaultEnabled(engineDirectory), null);
         var text = ReadBytes(path).Text;
         var features = Blocks(text).Where(b => Target(b, "feature", FeatureKey)).ToArray();
         var resources = Blocks(text).Where(b => Target(b, "resource", ResourceKey)).ToArray();
         if (features.Length > 1 || resources.Length > 1) throw new InvalidDataException("Duplicate MSU-1 selection; repair it in Babel tools.");
-        return new(features.Length == 1 && Value(features[0].Body, "enabled") == "true",
+        return new(features.Length == 1 ? Value(features[0].Body, "enabled") == "true" : DefaultEnabled(engineDirectory),
                    resources.Length == 1 ? Value(resources[0].Body, "path") : null);
+    }
+    private static bool DefaultEnabled(string engineDirectory)
+    {
+        var manifest = Path.Combine(Path.GetFullPath(engineDirectory), "mods/preloaded/packages/iog.enhancements/1.0.0/manifest.toml");
+        if (!File.Exists(manifest)) return false;
+        var feature = Blocks(ReadManifest(manifest)).SingleOrDefault(b => b.Type == "feature" && Value(b.Body, "id") == "msu1");
+        return feature != null && Value(feature.Body, "default_enabled") == "true";
+    }
+    private static string ReadManifest(string path)
+    {
+        var info = new FileInfo(path);
+        if (info.Length > 1024 * 1024 || (info.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("Native mod manifest is oversized or linked.");
+        return File.ReadAllText(path, new UTF8Encoding(false, true));
     }
     public static void Enable(string engineDirectory, string packDirectory)
     {

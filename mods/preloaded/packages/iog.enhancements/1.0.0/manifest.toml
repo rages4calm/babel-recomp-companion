@@ -81,7 +81,7 @@ id = "msu1"
 name = "MSU-1 soundtrack"
 description = "Play the music from an MSU-1 pack for Illusion of Gaia (CD-quality 44.1 kHz). Sound effects stay the game's own. Songs the pack lacks play as usual."
 group = "Audio"
-default_enabled = false
+default_enabled = true
 
 [[resource]]
 feature = "msu1"
