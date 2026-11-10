@@ -69,6 +69,24 @@ static void gates(void) {
     fixture();word(0x68e,801);s=source();CHECK(s.gate==kIogSceneViewUnsupportedLayout);
     fixture();ram[0x6ef]=8;s=source();CHECK(s.gate==kIogSceneViewUnsupportedLayout);
     fixture();ram[0x6ee]=0x80;ppu.bgXsc[0]=0x19;ppu.bgXsc[1]=0x11;s=source();CHECK(s.gate==kIogSceneViewReady);
+    /* World eligibility must not silently widen the legacy guest-culling
+     * preview, even when the underlying live map layout is identical. */
+    const unsigned rooms[]={1,12,14,15,18,41,63,85,103,133,138,182,204,221,234};
+    for(unsigned i=0;i<sizeof(rooms)/sizeof(rooms[0]);i++) {
+        fixture();word(0x644,rooms[i]);
+        CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewReady);
+        CHECK(IogSceneViewReadSource(ram,sizeof(ram),&ppu,false,&s));
+        CHECK(s.gate==((rooms[i]==1||rooms[i]==12)?kIogSceneViewReady:kIogSceneViewUnsupportedScene));
+    }
+    const unsigned rejected[]={0,3,8,255,256,65535};
+    for(unsigned i=0;i<sizeof(rejected)/sizeof(rejected[0]);i++) {
+        fixture();word(0x644,rejected[i]);
+        CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewUnsupportedScene);
+    }
+    fixture();word(0x644,0xdd);ppu.bgmode=7;
+    CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewUnsupportedLayout);
+    fixture();word(0x644,0xb6);
+    CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,true,&s)&&s.gate==kIogSceneViewRandomizer);
 }
 static void lifecycle_and_pixels(void) {
     IogSceneView view; IogSceneViewGeometry g={777,888,9,true}, old=g;
@@ -149,7 +167,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     source = out/'scene_view.c'
     source.write_text(HARNESS, encoding='utf-8')
-    inputs = [ROOT/'src/iog_scene_view.c', ROOT/'snesrecomp/runner/src/widescreen.c']
+    inputs = [ROOT/'src/iog_scene_view.c', ROOT/'src/iog_visual_objects.c',
+              ROOT/'snesrecomp/runner/src/widescreen.c']
     exe = out/'scene_view.exe'
     command = [args.compiler,'-std=c11','-O1','-Wall','-Wextra','-Werror',
                '-I'+str(ROOT/'src'),'-I'+str(ROOT/'snesrecomp/runner/src'),

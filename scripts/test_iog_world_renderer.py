@@ -27,13 +27,13 @@ static uint8_t source_field[256*224*4];
 static void word(unsigned at,unsigned value){ram[at]=(uint8_t)value;ram[at+1]=(uint8_t)(value>>8);}
 bool IogRandomizerActive(void){return randomizer;}
 void sha256_compute(const uint8_t*p,size_t n,uint8_t hash[32]){CHECK(p==rom&&n==sizeof(rom));memset(hash,0,32);}
-bool IogSceneViewReadSource(const uint8_t*r,size_t n,const Ppu*p,bool random,IogSceneViewSource*out){
+bool IogSceneViewReadWorldSource(const uint8_t*r,size_t n,const Ppu*p,bool random,IogSceneViewSource*out){
  CHECK(r==ram&&n==sizeof(ram)&&p==g_ppu&&!random);memset(out,0,sizeof(*out));
  out->scene=(uint16_t)Word(r,0x644);out->gate=scene_ready?kIogSceneViewReady:kIogSceneViewUnsupportedScene;return true;
 }
 IogVisualStatus IogVisualObjectsBuild(const IogVisualSource*in,const IogVisualViewport*v,IogVisualFrame*out){
  CHECK(in->ram==s.active_ram&&in->rom==rom&&in->stock_identity_verified&&v->height<=512);
- visual_builds++;memset(out,0,sizeof(*out));out->status=kIogVisualReady;out->viewport=*v;
+ visual_builds++;memset(out,0,sizeof(*out));out->status=kIogVisualReady;out->viewport=*v;out->scene=(uint16_t)Word(in->ram,0x644);
  out->part_count=1;IogVisualPart*p=&out->parts[0];p->x=4;p->y=4;p->width=p->height=8;p->order=1;
  for(unsigned n=0;n<64;n++){p->indices[n]=193;p->pixels[n]=0x8001;}
  return kIogVisualReady;
@@ -65,6 +65,8 @@ static void fixture(void){
  s.initialized=s.enabled=s.stock=true;s.extent_quarters=6;randomizer=false;scene_ready=true;
  word(0x644,1);word(0x68a,256);word(0x68e,256);word(0x692,768);word(0x694,768);word(0x696,1024);word(0x698,1024);
  word(0x69e,0xa000);word(0x6a0,0xc000);word(0x6ae,0x2000);word(0x6b0,0x2800);
+ word(0x2000,0x1234);word(0x2002,0x2345);word(0x2004,0x3456);word(0x2006,0x4567);
+ word(0x2800,0x5678);word(0x2802,0x6789);word(0x2804,0x789a);word(0x2806,0x89ab);
  g_ppu->bgmode=1;g_ppu->hScroll[0]=g_ppu->hScroll[1]=256;g_ppu->vScroll[0]=g_ppu->vScroll[1]=256;
  g_ppu->bgTileAdr=0x622;g_ppu->bgXsc[0]=0x11;g_ppu->bgXsc[1]=0x19;
     int width=0,height=0;IogWorldGeometry(1280,720,&width,&height);CHECK(width==598&&height==336);
@@ -96,6 +98,11 @@ static void epochs_and_read_only(void){
  for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
  CHECK(s.epoch_count==1);unsigned ticks=s.simulation_ticks;
  IogWorldEndRaster(0x828051,225,0);CHECK(s.complete&&detached_lines&&visual_builds==1);
+ CHECK(!memcmp(s.detached.vram,s.epochs[0].vram,sizeof(s.detached.vram)));
+ uint32_t*expected=malloc((size_t)s.width*s.height*4);CHECK(expected);
+ memcpy(expected,s.output,(size_t)s.width*s.height*4);s.copy_reference=true;
+ CHECK(RenderWorld()&&!memcmp(expected,s.output,(size_t)s.width*s.height*4));
+ CHECK(!memcmp(s.detached.vram,s.epochs[0].vram,sizeof(s.detached.vram)));free(expected);
  CHECK(ticks==s.simulation_ticks&&!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(&before_cpu,&g_cpu,sizeof(g_cpu)));
  CHECK(!memcmp(&before_ppu,g_ppu,PPU_SAVESTATE_REGS_SIZE));
  CHECK(!memcmp(before_ppu.vram,g_ppu->vram,sizeof(before_ppu.vram)));
@@ -165,7 +172,28 @@ static void actual_window_enable_gates(void){
  fixture();publication();g_ppu->screenWindowed[0]=4;g_ppu->windowsel=2u<<8;
  IogWorldBeginRaster();CHECK(s.valid); /* BG3 is separately captured HUD */
 }
-int main(void){phase_queue();epochs_and_read_only();geometry_and_canaries();actual_window_enable_gates();printf("%u world-renderer assertions passed\n",checks);return 0;}
+static void real_map_edge_framing(void){
+ fixture();word(0x68a,152);word(0x68e,484);word(0x696,768);word(0x698,768);
+ g_ppu->hScroll[0]=g_ppu->hScroll[1]=152;g_ppu->vScroll[0]=g_ppu->vScroll[1]=484;
+ publication();IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0x828051,225,0);CHECK(s.complete&&s.view.world_x==0&&s.view.world_y==428);
+ CHECK(s.visual.viewport.world_x==0&&s.visual.viewport.world_y==428);
+ CHECK(!s.view.padding_left&&!s.view.padding_right&&!s.view.padding_top&&!s.view.padding_bottom);
+ /* Stub pixels encode actual sampled coordinates. The full left column is
+  * real source worldX0; the old implementation left19columns unrendered. */
+ for(int y=0;y<s.height;y++)CHECK(s.output[y*s.width]==(0xff000000u|((unsigned)(429+y)&1023)<<10));
+ CHECK(s.output[100*s.width+300]==(0xff000000u|300u|(529u<<10)));
+ /* The original field is offset152/56 inside the host view, not forced to
+  * its symmetric171/56 position or stretched to fill an invented edge. */
+ CHECK(s.view.native_x==152&&s.view.native_y==56);
+}
+static void identity_and_source_packet(const char*path){
+ CHECK(ExportSourcePacket(path,source_field));
+ fixture();publication();CHECK(s.stock&&s.active);cart.romSize=100;
+ IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
+ IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
+}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();actual_window_enable_gates();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 
@@ -183,17 +211,28 @@ def main():
     exe = out/'world_renderer.exe'
     command = [args.compiler,'-std=c11','-O1','-Wall','-Wextra','-Werror',
                '-I'+str(out),'-I'+str(ROOT/'src'),'-I'+str(ROOT/'snesrecomp/runner/src'),
-               str(source),'-o',str(exe)]
+               str(source),str(ROOT/'src/iog_world_view.c'),str(ROOT/'src/iog_world_pixels.c'),'-o',str(exe)]
     build = subprocess.run(command, capture_output=True, text=True)
     (out/'build.log').write_text(build.stdout+build.stderr, encoding='utf-8');build.check_returncode()
     env = {k:v for k,v in os.environ.items() if not k.startswith(('SNESRECOMP_','IOG_'))}
-    run = subprocess.run([str(exe)], env=env, capture_output=True, text=True)
+    packet = out/'packet'
+    run = subprocess.run([str(exe),str(packet)], env=env, capture_output=True, text=True)
     (out/'run.log').write_text(run.stdout+run.stderr, encoding='utf-8')
-    inputs = [ROOT/'src/iog_world_renderer.c',ROOT/'src/iog_world_renderer.h',ROOT/'src/iog_visual_objects.h']
+    run.check_returncode()
+    meta=json.loads(Path(str(packet)+'.source.json').read_text())
+    assert meta['schema']=='iog-world-source-v1' and meta['complete'] and meta['scene']==1
+    assert (meta['world_x'],meta['world_y'],meta['native_x'],meta['native_y'])==(0,428,152,56)
+    assert len(meta['lines'])==225 and all(len(bytes.fromhex(row['regs']))==64 and 0<=row['epoch']<meta['epochs'] for row in meta['lines'])
+    assert Path(str(packet)+'.active.wram.bin').stat().st_size==131072
+    assert Path(str(packet)+'.published.oam.bin').stat().st_size==544
+    assert Path(str(packet)+'.epochs.bin').stat().st_size==meta['epochs']*meta['epoch_bytes']==131584
+    assert Path(str(packet)+'.hud.bgra').read_bytes()==bytes(256*224*4)
+    assert Path(str(packet)+'.field.bgra').read_bytes()==bytes((i*13+7)&255 for i in range(256*224*4))
+    inputs = [ROOT/'src/iog_world_renderer.c',ROOT/'src/iog_world_renderer.h',ROOT/'src/iog_visual_objects.h',ROOT/'src/iog_world_view.c',ROOT/'src/iog_world_view.h',ROOT/'src/iog_world_pixels.c',ROOT/'src/iog_world_pixels.h']
     result = dict(passed=run.returncode==0,command=command,
         scope='Actual world module/SDKheaders; stubbed scene/visual/detachedpixels, no real game/APU/PPU parity or GPU',
         sources={str(s.relative_to(ROOT)):hashlib.sha256(s.read_bytes()).hexdigest()for s in inputs},
-        stdout=run.stdout,stderr=run.stderr)
+        stdout=run.stdout,stderr=run.stderr,source_packet_format_and_payload_passed=True)
     (out/'receipt.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     run.check_returncode();print(run.stdout.strip())
 

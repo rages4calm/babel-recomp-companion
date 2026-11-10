@@ -122,7 +122,7 @@ static void all_planar_colors(void){
 }
 static void player_rom_pixels(void){
     fixture();IogVisualViewport v={500,300,600,336};wr(0x1010,0x8000);
-    for(unsigned form=0;form<3;form++){
+    for(unsigned form=0;form<9;form++){
         unsigned base=0x1d974+form*6;rom[base]=0;rom[base+1]=0x80;rom[base+2]=0x9a;
     }
     record(0x4000,0,1,0,0,0,0,0x3802);
@@ -134,7 +134,13 @@ static void player_rom_pixels(void){
         CHECK(frame.parts[0].pixels[128]==(0x8000|193));
     }
     wr(0xad4,3);CHECK(run(v)==kIogVisualUnsupportedFormat);
-    wr(0x9ae,0x8000);wr(0x1100e,6);CHECK(run(v)==kIogVisualReady);
+    wr(0x9ae,0x8000);
+    for(unsigned body=0;body<9;body++){
+        wr(0x1100e,body*6);CHECK(run(v)==kIogVisualReady&&frame.parts[0].player);
+        CHECK(frame.parts[0].pixels[0]==(0x8000|193)&&frame.parts[0].pixels[8]==(0x8000|194));
+    }
+    wr(0x1100e,54);CHECK(run(v)==kIogVisualUnsupportedFormat);
+    wr(0x1100e,0xffff);CHECK(run(v)==kIogVisualUnsupportedFormat);
     wr(0x1100e,7);CHECK(run(v)==kIogVisualUnsupportedFormat);
     /* Fixedsourcebank with16bitDMAaddresswrap, notbankcarry. */
     wr(0x1100e,0);rom[0x1d974]=0xf0;rom[0x1d975]=0xff;
@@ -164,7 +170,15 @@ static void refusals_and_capacity(void){
     wr(0x58,0x1f90);CHECK(run(v)==kIogVisualCapacity); /*588visibleparts, noacceptedpartial*/
     fixture();wr(0x56,0);wr(0x58,0);CHECK(run(v)==kIogVisualReady&&!frame.actor_count&&!frame.part_count);
 }
-int main(void){geometry_and_pixels();orders_and_manual();all_planar_colors();player_rom_pixels();refusals_and_capacity();printf("%u visual-object assertions passed\n",checks);return 0;}
+static void exact_room_selection(void){
+    for(unsigned room=0;room<65536;room++){
+        bool expected=false;
+        const unsigned allowed[]={1,12,14,15,18,41,63,85,103,133,138,182,204,221,234};
+        for(unsigned i=0;i<sizeof(allowed)/sizeof(allowed[0]);i++)if(room==allowed[i])expected=true;
+        CHECK(IogVisualObjectsSupportsScene((uint16_t)room)==expected);
+    }
+}
+int main(void){geometry_and_pixels();orders_and_manual();all_planar_colors();player_rom_pixels();refusals_and_capacity();exact_room_selection();printf("%u visual-object assertions passed\n",checks);return 0;}
 '''
 
 

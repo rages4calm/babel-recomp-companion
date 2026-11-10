@@ -45,6 +45,18 @@ static bool ActorAddress(unsigned actor)
     return actor >= 0x1000 && actor < 0x1fc0 && (actor - 0x1000) % 0x30 == 0;
 }
 
+bool IogVisualObjectsSupportsScene(uint16_t scene)
+{
+    switch (scene) {
+    case 0x01: case 0x0c: case 0x0e: case 0x0f: case 0x12:
+    case 0x29: case 0x3f: case 0x55: case 0x67: case 0x85:
+    case 0x8a: case 0xb6: case 0xcc: case 0xdd: case 0xea:
+        return true;
+    default:
+        return false;
+    }
+}
+
 /* Lift the signed 16-bit displacement around the real camera before using
  * host coordinates. Never truncate a part to packed 9-bit OAM coordinates. */
 static int32_t WorldPosition(uint16_t raw, uint16_t camera)
@@ -99,8 +111,10 @@ static bool PlayerGraphics(const IogVisualSource *s, unsigned actor,
     unsigned offset;
     if (Word(s->ram, 0x9ae) & 0x8000) {
         offset = Word(s->ram, 0x10000 + actor + 0xe);
-        /* The initial contract covers the three ordinary form entries only. */
-        if (offset > 12 || offset % 6) return false;
+        /* Stock has nine six-byte body records. Actual retained ability/
+         * transformation captures also use rows4,5,6; rows7/8 are currently
+         * source-format coverage, not observed execution qualification. */
+        if (offset > 48 || offset % 6) return false;
     } else {
         unsigned form = Word(s->ram, 0xad4);
         if (form > 2) return false;
@@ -190,7 +204,7 @@ IogVisualStatus IogVisualObjectsBuild(const IogVisualSource *s,
         return out->status;
     if (!s->stock_identity_verified) { out->status = kIogVisualUnsupportedFormat; return out->status; }
     out->scene = Word(s->ram, 0x644);
-    if (out->scene != 1 && out->scene != 12) { out->status = kIogVisualUnsupportedScene; return out->status; }
+    if (!IogVisualObjectsSupportsScene(out->scene)) { out->status = kIogVisualUnsupportedScene; return out->status; }
     if ((s->ppu->bgmode & 7) != 1 || PPU_objSize(s->ppu) || PPU_objInterlace(s->ppu) ||
         (Word(s->ram, 0x6ee) & 0x1000)) { out->status = kIogVisualUnsupportedFormat; return out->status; }
     ActorOrder actors[kIogVisualMaxActors] = {{0,0}};
