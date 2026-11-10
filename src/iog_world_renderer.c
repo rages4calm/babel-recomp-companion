@@ -5,6 +5,8 @@
  * Unsupported formats keep the authentic field available. */
 #include "iog_world_renderer.h"
 #include "iog_visual_objects.h"
+#include "iog_world_view.h"
+#include "iog_world_pixels.h"
 #include "iog_scene_view.h"
 #include "iog_randomizer.h"
 #include "common_cpu_infra.h"
@@ -32,6 +34,8 @@ typedef struct PictureLine {
 } PictureLine;
 static struct {
     bool initialized, enabled, stock, pending, composed, active, complete, valid;
+    bool copy_reference;
+    bool source_packet;
     int width, height, extent_quarters, epoch_count;
     unsigned frame;
     unsigned simulation_ticks, presentation_calls;
@@ -42,6 +46,7 @@ static struct {
     PictureEpoch epochs[Epochs];
     PictureLine lines[225];
     IogVisualFrame visual;
+    IogWorldView view;
     PpuExtraObject objects[kIogVisualMaxParts];
     uint16_t object_rows[kIogVisualMaxParts][16];
     uint32_t output[MaxWidth*MaxHeight], row[256], hud[256*224];
@@ -77,6 +82,10 @@ bool IogWorldEnabled(void)
         s.initialized=true;
         const char *mode=getenv("IOG_WORLD_RENDERER");
         s.enabled=mode && !strcmp(mode,"1");
+        const char *reference=getenv("IOG_WORLD_REFERENCE_PIXELS");
+        s.copy_reference=reference && !strcmp(reference,"1");
+        const char *packet=getenv("IOG_WORLD_SOURCE_PACKET");
+        s.source_packet=packet && !strcmp(packet,"1");
         s.extent_quarters=6;
         const char *extent=getenv("IOG_WORLD_VIEW_EXTENT");
         if(extent && !strcmp(extent,"1")) s.extent_quarters=4;
@@ -92,6 +101,8 @@ void IogWorldSimulationTick(void) { ++s.simulation_ticks; }
 void IogWorldInitialize(void)
 {
     if(!IogWorldEnabled()) return;
+    s.stock=false;
+    IogWorldReset();
     const Cart *cart=g_snes?g_snes->cart:NULL;
     if(!cart || cart->type!=CART_HIROM || cart->romImageSize!=2097152 ||
        cart->romSize<cart->romImageSize) return;
@@ -99,7 +110,6 @@ void IogWorldInitialize(void)
     sha256_compute(cart->rom,cart->romImageSize,digest);
     for(unsigned i=0;i<32;i++) snprintf(hex+i*2,3,"%02x",digest[i]);
     s.stock=!strcmp(hex,SNESRECOMP_ROM_EXPECTED_SHA256);
-    IogWorldReset();
 }
 
 void IogWorldReset(void)
@@ -107,6 +117,7 @@ void IogWorldReset(void)
     s.pending=s.composed=s.active=s.complete=s.valid=false;
     s.reason="reset_or_unpaired_upload";
     s.epoch_count=0;
+    memset(&s.view,0,sizeof(s.view));
 }
 
 void IogWorldGeometry(int dw,int dh,int *w,int *h)
@@ -158,6 +169,7 @@ void IogWorldBeginRaster(void)
 {
     if(!s.enabled || !g_ppu || !g_snes) return;
     s.complete=false; s.valid=false; s.epoch_count=0;
+    memset(&s.view,0,sizeof(s.view));
     s.reason="unsupported_scene_or_layout";
     memset(s.hud,0,sizeof(s.hud));
     /* The live field is unchanged. Extraction records the real BG3 pixels. */
@@ -165,7 +177,7 @@ void IogWorldBeginRaster(void)
     PpuSetOverlayCapture(g_ppu,kPpuOverlaySource_Bg3,0,0,256,224,0);
     if(!s.stock || IogRandomizerActive() || !s.active) return;
     IogSceneViewSource source;
-    IogSceneViewReadSource(g_snes->ram,131072,g_ppu,false,&source);
+    IogSceneViewReadWorldSource(g_snes->ram,131072,g_ppu,false,&source);
     if(source.gate!=kIogSceneViewReady || source.scene!=Word(s.active_ram,0x644)) return;
     if(PPU_objInterlace(g_ppu) || g_ppu->frameInterlace ||
        (g_ppu->mosaic>>4)!=0 || ActiveWorldWindow(g_ppu)) return;
@@ -246,8 +258,13 @@ static bool RenderWorld(void)
        camera_y!=(int)Word(s.active_ram,0x68E)) {
         s.reason="camera_publication_mismatch";return false;
     }
-    int left=(s.width-256)/2,top=(s.height-224)/2;
-    IogVisualViewport viewport={camera_x-left,camera_y-top,(uint16_t)s.width,(uint16_t)s.height};
+    if(!IogWorldViewCompute(camera_x,camera_y,Word(first->ram,0x692),
+            Word(first->ram,0x696),(uint16_t)s.width,(uint16_t)s.height,&s.view)) {
+        s.reason="invalid_world_view";return false;
+    }
+    int left=s.view.native_x,top=s.view.native_y;
+    IogVisualViewport viewport={s.view.world_x,s.view.world_y,
+        s.view.width,s.view.height};
     s.detached=s.base;
     memcpy(s.detached.vram,first->vram,sizeof(first->vram));
     memcpy(s.detached.cgram,first->cgram,sizeof(first->cgram));
@@ -257,6 +274,7 @@ static bool RenderWorld(void)
         s.reason="unsupported_visual_object";return false;
     }
     *p=s.base;Detach(p);
+    memcpy(p->vram,first->vram,sizeof(p->vram));
     int blank[2]={-1,-1};
     for(int logical=0;logical<2;logical++) {
         int physical=logical^((first->ram[0x6EE]>>7)&1);
@@ -289,10 +307,11 @@ static bool RenderWorld(void)
         }
         for(int start=0;start<s.width;start+=Chunk) {
             int width=Clamp(s.width-start,0,Chunk);
+            unsigned dirty[64],dirty_count=0;
             memcpy(p,line->registers,PPU_SAVESTATE_REGS_SIZE);
             uint16_t source_hscroll[2]={p->hScroll[0],p->hScroll[1]};
             uint16_t source_vscroll[2]={p->vScroll[0],p->vScroll[1]};
-            memcpy(p->vram,e->vram,sizeof(p->vram));
+            if(s.copy_reference) memcpy(p->vram,e->vram,sizeof(p->vram));
             memcpy(p->cgram,e->cgram,sizeof(p->cgram));
             p->screenEnabled[0]&=~4;p->screenEnabled[1]&=~4;
             for(int logical=0;logical<2;logical++) {
@@ -319,12 +338,22 @@ static bool RenderWorld(void)
                     unsigned tx=((unsigned)x&1023)>>3,ty=((unsigned)(wy+1)&1023)>>3;
                     unsigned address=PPU_bgTilemapAdr(p,physical)+((ty&31)<<5)+(tx&31);
                     if(PPU_bgTilemapWider(p,physical)&&(tx&32)) address+=0x400;
-                    p->vram[address&32767]=(uint16_t)tile;
+                    address&=32767;
+                    if(dirty_count==sizeof(dirty)/sizeof(dirty[0])) {
+                        s.reason="tile_patch_capacity";return false;
+                    }
+                    dirty[dirty_count++]=address;
+                    p->vram[address]=(uint16_t)tile;
                 }
             }
             for(size_t i=0;i<count;i++) s.objects[i].x-=start;
             PpuSetExtraObjects(p,s.objects,count);
-            PpuDrawDetachedLine(p,0);PpuDrawDetachedLine(p,1);
+            IogWorldPixelsDrawLine(p,0);IogWorldPixelsDrawLine(p,1);
+            /* Only tilemap entries were changed on the owned picture. All
+             * epochs have identical VRAM (checked above), so restoring these
+             * bounded cells replaces a full64KB copy for every chunk/row. */
+            for(unsigned n=0;n<dirty_count;n++)
+                p->vram[dirty[n]]=first->vram[dirty[n]];
             for(size_t i=0;i<count;i++) s.objects[i].x+=start;
             for(int x=0;x<width;x++) {
                 int worldx=viewport.world_x+start+x,worldy=viewport.world_y+row;
@@ -366,9 +395,63 @@ void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count
         fprintf(s.audit,"{\"kind\":\"policy\",\"frame\":%u,\"simulation_ticks\":%u,\"draw_calls\":%u,\"presentation_calls\":%u,\"cull_operands\":[",s.frame,s.simulation_ticks,s.frame,s.presentation_calls);
         for(unsigned i=0;i<sizeof(sites)/sizeof(sites[0]);i++)
             fprintf(s.audit,"%s%u",i?",":"",Word(g_snes->cart->rom,sites[i]));
-        fprintf(s.audit,"]}\n");
+        fprintf(s.audit,"],\"world_view\":[%d,%d,%u,%u,%u,%u,%u,%u,%u,%u]}\n",
+            s.view.world_x,s.view.world_y,s.view.width,s.view.height,
+            s.view.native_x,s.view.native_y,s.view.padding_left,
+            s.view.padding_right,s.view.padding_top,s.view.padding_bottom);
         fflush(s.audit);
     }
+}
+
+/* Explicit private diagnostic export at the same completed picture boundary.
+ * No guest code runs and no live picture input is reread. The bounded packet
+ * lets independent tools inspect the actual published actor phase, HUD and
+ * per-line memory epochs instead of joining an unrelated end-of-logic dump. */
+static bool PacketFile(const char *base,const char *suffix,const void *data,size_t size)
+{
+    char path[4096];int n=snprintf(path,sizeof(path),"%s%s",base,suffix);
+    if(n<0 || (size_t)n>=sizeof(path)) return false;
+    FILE *file=fopen(path,"wb");if(!file) return false;
+    bool ok=fwrite(data,1,size,file)==size;if(fclose(file)) ok=false;
+    return ok;
+}
+
+static bool ExportSourcePacket(const char *base,const uint8_t *field)
+{
+    const uint16_t endian=1;
+    if(!s.valid || !s.active || !s.epoch_count || *(const uint8_t*)&endian!=1) return false;
+    bool ok=PacketFile(base,".active.wram.bin",s.active_ram,sizeof(s.active_ram));
+    ok=PacketFile(base,".hud.bgra",s.hud,sizeof(s.hud)) && ok;
+    ok=PacketFile(base,".field.bgra",field,256*224*4) && ok;
+    uint8_t oam[544];memcpy(oam,s.base.oam,512);memcpy(oam+512,s.base.highOam,32);
+    ok=PacketFile(base,".published.oam.bin",oam,sizeof(oam)) && ok;
+    char path[4096];int length=snprintf(path,sizeof(path),"%s.epochs.bin",base);
+    if(length<0 || (size_t)length>=sizeof(path)) return false;
+    FILE *file=fopen(path,"wb");if(!file) return false;
+    for(int n=0;n<s.epoch_count;n++) {
+        const PictureEpoch *e=&s.epochs[n];
+        if(fwrite(e->vram,1,sizeof(e->vram),file)!=sizeof(e->vram) ||
+           fwrite(e->cgram,1,sizeof(e->cgram),file)!=sizeof(e->cgram) ||
+           fwrite(e->ram,1,sizeof(e->ram),file)!=sizeof(e->ram)) {ok=false;break;}
+    }
+    if(fclose(file)) ok=false;
+    length=snprintf(path,sizeof(path),"%s.source.json",base);
+    if(length<0 || (size_t)length>=sizeof(path)) return false;
+    file=fopen(path,"wb");if(!file) return false;
+    if(fprintf(file,"{\"schema\":\"iog-world-source-v1\",\"frame\":%u,\"scene\":%u,\"ready\":%s,\"reason\":\"%s\",\"width\":%d,\"height\":%d,\"world_x\":%d,\"world_y\":%d,\"native_x\":%u,\"native_y\":%u,\"compose\":%llu,\"publish\":%llu,\"epochs\":%d,\"epoch_bytes\":131584,\"epoch_layout\":\"VRAM65536-CGRAM512-WRAM65536-LE\",\"even_frame\":%s,\"mosaic_start_line\":%u,\"frame_interlace\":%s,\"lines\":[",
+        s.frame,Word(s.active_ram,0x644),s.complete?"true":"false",s.reason?s.reason:"unknown",s.width,s.height,s.view.world_x,s.view.world_y,
+        s.view.native_x,s.view.native_y,(unsigned long long)s.compose_sequence,
+        (unsigned long long)s.publish_sequence,s.epoch_count,s.base.evenFrame?"true":"false",
+        s.base.mosaicStartLine,s.base.frameInterlace?"true":"false")<0) ok=false;
+    for(int line=0;line<=224;line++) {
+        if(fprintf(file,"%s{\"epoch\":%u,\"regs\":\"",line?",":"",s.lines[line].epoch)<0) ok=false;
+        for(unsigned n=0;n<PPU_SAVESTATE_REGS_SIZE;n++)
+            if(fprintf(file,"%02x",s.lines[line].registers[n])<0) ok=false;
+        if(fprintf(file,"\"}")<0) ok=false;
+    }
+    if(fprintf(file,"],\"complete\":%s}\n",ok?"true":"false")<0) ok=false;
+    if(fclose(file)) ok=false;
+    return ok;
 }
 
 int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int height,double alpha)
@@ -403,6 +486,10 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
                 }
                 if(fclose(file)) ok=false;
                 s.output_written=ok;
+                if(ok && s.source_packet) {
+                    bool packet=ExportSourcePacket(output,field);
+                    if(s.audit) fprintf(s.audit,"{\"kind\":\"source_packet\",\"frame\":%u,\"written\":%s}\n",s.frame,packet?"true":"false");
+                }
                 if(s.audit) {fprintf(s.audit,"{\"kind\":\"picture\",\"frame\":%u,\"width\":%d,\"height\":%d,\"ready\":%s,\"written\":%s}\n",s.frame,width,height,s.complete?"true":"false",ok?"true":"false");fflush(s.audit);}
             }
         }

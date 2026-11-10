@@ -1,4 +1,5 @@
 #include "iog_scene_view.h"
+#include "iog_visual_objects.h"
 
 #include <math.h>
 #include <string.h>
@@ -30,8 +31,9 @@ void IogSceneViewReset(IogSceneView *view)
     view->generation = generation;
 }
 
-bool IogSceneViewReadSource(const uint8_t *ram, size_t size, const Ppu *ppu,
-                           bool randomizer, IogSceneViewSource *out)
+static bool ReadSource(const uint8_t *ram, size_t size, const Ppu *ppu,
+                       bool randomizer, bool independent_world,
+                       IogSceneViewSource *out)
 {
     if (!out) return false;
     memset(out, 0, sizeof(*out));
@@ -43,9 +45,11 @@ bool IogSceneViewReadSource(const uint8_t *ram, size_t size, const Ppu *ppu,
     out->world_width = Word(ram, 0x0692);
     out->world_height = Word(ram, 0x0696);
     out->gate = kIogSceneViewUnsupportedScene;
-    /* Captured original-pixel/map validation covers only these two scenes.
-     * Church08 has a spare storage plane, not a qualified wider room. */
-    if (out->scene != 0x0001 && out->scene != 0x000C) return true;
+    /* Keep the older expanded-guest-culling preview at its original two
+     * scenes. Independent world composition has its own source-qualified
+     * finite room selection; neither admits the spare classroom storage. */
+    if (independent_world ? !IogVisualObjectsSupportsScene(out->scene) :
+        (out->scene != 0x0001 && out->scene != 0x000C)) return true;
     out->gate = kIogSceneViewRandomizer;
     if (randomizer) return true;
     out->gate = kIogSceneViewUnsupportedLayout;
@@ -77,6 +81,18 @@ bool IogSceneViewReadSource(const uint8_t *ram, size_t size, const Ppu *ppu,
     out->layout_signature = signature;
     out->gate = kIogSceneViewReady;
     return true;
+}
+
+bool IogSceneViewReadSource(const uint8_t *ram, size_t size, const Ppu *ppu,
+                          bool randomizer, IogSceneViewSource *out)
+{
+    return ReadSource(ram, size, ppu, randomizer, false, out);
+}
+
+bool IogSceneViewReadWorldSource(const uint8_t *ram, size_t size, const Ppu *ppu,
+                               bool randomizer, IogSceneViewSource *out)
+{
+    return ReadSource(ram, size, ppu, randomizer, true, out);
 }
 
 bool IogSceneViewPrepare(IogSceneView *view, const IogSceneViewSource *source,

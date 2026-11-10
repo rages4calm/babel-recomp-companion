@@ -48,6 +48,11 @@ void IogSceneViewReset(IogSceneView *view);
 bool IogSceneViewReadSource(const uint8_t *ram, size_t ram_size,
                            const struct Ppu *ppu, bool randomizer,
                            IogSceneViewSource *source);
+/* Same live-layout contract, separate finite scene selection for the
+ * independent world renderer. Legacy preview remains restricted to01/0C. */
+bool IogSceneViewReadWorldSource(const uint8_t *ram, size_t ram_size,
+                               const struct Ppu *ppu, bool randomizer,
+                               IogSceneViewSource *source);
 /* False leaves the caller's legacy geometry untouched. An enabled preview
  * contains unsupported rooms/menus in their authentic256-column field. */
 bool IogSceneViewPrepare(IogSceneView *view, const IogSceneViewSource *source,

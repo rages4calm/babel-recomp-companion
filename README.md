@@ -9,8 +9,8 @@ The original author's credit, support link and full acknowledgments remain below
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. November 9's private
-[batch 015](docs/NATIVE-BATCH-015.md) adds 2,267 guarded call/return and COP
-contexts, bringing the selection to 6,757 while retaining development fallback.
+[batch 017](docs/NATIVE-BATCH-017.md) adds 1,371 qualified script/frame-data
+contexts, bringing the selection to 8,128 while retaining development fallback.
 The target is a faithful modern PC edition with fully native Original game
 code and sound as its foundation, preserving Quintet's art direction and
 atmosphere. The main enhanced game is intended to include the retranslation
@@ -18,33 +18,38 @@ and approved expanded maps as built-in content, without mod toggles for either;
 that integration follows stock-game native verification. The current SPC700 driver
 is still interpreted; native completion and presentation polish remain ahead.
 
-[Batch 016](docs/NATIVE-BATCH-016.md) adds an opt-in independent world view while
-keeping the same native selection. The original 256×224 gameplay view stays
+[Batch 017](docs/NATIVE-BATCH-017.md) expands the independent world view to
+15 stock scene formats and fixes map-edge framing. The original 256×224 gameplay view stays
 authoritative; square-pixel 16:9/21:9 output can reveal more world vertically
-and horizontally. The adapter is finite to stock town/Aqueduct formats;
+and horizontally. The adapter remains finite to the verified formats;
 unsupported areas retain authentic-field fallback.
 
 **83 fresh reference/native pairs pass** on the new implementation: 166 captures,
-436,000 frames and 1,294 snapshot sets, with all four original-writer reviews.
-The reused cohort includes Castoth, Sand Fanger and Mummy Queen damage/death,
+436,000 frames and 1,294 snapshot sets. Historical original-writer receipts keep
+their own source identities and scope. The routes include Castoth, Sand Fanger and Mummy Queen damage/death,
 rewards, phase controls, ceremonies and teleport consequences. This is bounded
 assisted coverage, not an earned campaign playthrough.
 
 The 6,000-frame classroom/South Cape route reaches
-**96.38% native guest CPU cycles in 4:3 / 96.40% in 16:9**, versus 94.63% / 94.65%
-in batch 014. Across all 83 routes, the weighted share is 94.85%, up from 90.11%.
+**97.06% native guest CPU cycles** at original width. Across all 83 current
+original-width routes, the weighted share is **96.52%**. The new selection
+actually executes 135,552,332 guest cycles across 1,369 of its 1,371 additions.
 These measure bounded guest execution, not completion or host speed.
 
 The private path requires `IOG_NATIVE_CONTINUATIONS=1`; compiled poll effects
 separately require `IOG_NATIVE_RDNMI_POLL=1`. Both default off. Interpreter
 fallback remains available, and `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains
 the older lookup on the same binary. Per-PC counters separate each kind of work.
-Batch 015's 42-run CPU check shows mixed, noisy results; no overall host-speed
-gain is claimed. Superseded private evidence was retired with all 39 protected
+Batch 017's 42-run paired renderer check reduces whole-process CPU time by
+60.0% / 70.8% / 71.8% at 1× / 1.25× / 1.5× world extents. These are quiet
+700-frame comparisons of the current optimized/reference renderer, including
+startup and diagnostics; they do not measure sustained FPS or input latency.
+The earlier native-selection CPU measurements retain their separate limits.
+Superseded private evidence was retired with all 39 protected
 owner files unchanged. [Renderer and modern PC quality direction](docs/RENDERER-DIRECTION.md)
 records the implemented finite preview and the remaining work on smooth motion,
 faster interfaces, independent scene composition and measured low-latency GPU
-presentation. Batch 016 checks larger world extents separately from higher
+presentation. Batch 017 checks larger world extents separately from higher
 output resolution. Actual NVIDIA transport
 checks are separate from performance or combat acceptance.
 Historical cross-version failures and raw APU timestamp differences remain
@@ -76,10 +81,14 @@ documented. Owner installations and settings are unchanged.
   verify the existing SharpPixels and optional xBR looks; higher resolution
   alone does not reveal more scenery. A scenery map and journal remain planned.
   The newer `IOG_WORLD_RENDERER=1` path separates visuals from gameplay culling:
-  42 comparisons / 142,400 fresh frames pass guest/full-CPU preservation;
-  14 views render the world and 28 correctly use unsupported fallback.
-  Six NVIDIA 720p runs and 66,192 independently checked town pixels support
-  the finite zoom-out work. Default extent is1.5, with separately scaled HUD.
+  42 fresh reference/span pairs / 150,200 frames pass whole-world pixel,
+  source-packet and guest/full-CPU preservation. All 42 selected views render
+  the world; intermediate fallback remains. Fifteen scenes have actual
+  published-sprite proof across three forms, with 66,368 raw sprite texels and
+  25,728 independently composed Town pixels checked. Final NVIDIA 720p captures
+  verify corrected framing and the xBR look. Default extent is 1.5, with separately scaled HUD.
+  Optimized span drawing is now default; `IOG_WORLD_REFERENCE_PIXELS=1` retains
+  the slower pixel/full-copy reference.
   This CPU picture adapter is not the finished GPU renderer; 4K GPU proof,
   HD2D effects in this mode, full scene coverage and performance work remain.
 - **Cheats and mods:** a dedicated launcher panel shares the native settings
@@ -96,7 +105,10 @@ documented. Owner installations and settings are unchanged.
   [Earlier integration](docs/FRAMEWORK-NOV09.md), [current delta](docs/NATIVE-BATCH-016.md).
   Batch 015 reuses the qualified graph and all 1,248 emitted bodies unchanged,
   preserving the earlier 4,490 continuation contexts. The complete SDK gate
-  passes 839 tests, two skipped; guarded call/COP protocol checks are recorded
+  passes 849 tests, two skipped; the retained Windows child-encoding warning
+  and strict targeted control are reported in
+  [issue 270](https://github.com/RetroPortingToolKit/snesrecomp/issues/270).
+  Guarded call/COP protocol checks are recorded
   separately. The local paired-call bank-wrap correction is reported in
   [issue 267](https://github.com/RetroPortingToolKit/snesrecomp/issues/267) and
   [PR 268](https://github.com/RetroPortingToolKit/snesrecomp/pull/268), both open
@@ -104,7 +116,7 @@ documented. Owner installations and settings are unchanged.
   All prior hard timing guards remain work to resolve with verified fixes.
   Earlier live-WRAM, sorting and decode receipts retain their original
   identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-015.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-017.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).

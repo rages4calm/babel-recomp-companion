@@ -61,6 +61,10 @@ typedef struct IogVisualFrame {
     IogVisualPart parts[kIogVisualMaxParts];
 } IogVisualFrame;
 
+/* Finite stock room-format selection for the independent world adapter.
+ * This does not expand the older guest-culling preview's scene policy. */
+bool IogVisualObjectsSupportsScene(uint16_t scene);
+
 /* Read at the real original sprite-composition boundary. No simulation,
  * stack, ROM/RAM/PPU writes, callbacks or retained input pointers. Output is
  * caller-owned and immutable until rebuilt. Valid disjoint output gets zero

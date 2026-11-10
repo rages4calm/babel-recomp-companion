@@ -25,12 +25,21 @@ development reference while native coverage is completed.
 
 ## Current limitations
 
-Gaia is not qualified as fully widescreen or remake quality. Batch 015 adds a
-finite, opt-in scene adapter, not a replacement GPU world renderer. Its NVIDIA
-transport checks pass, but expanded Aqueduct combat acceptance fails. The
-classroom and menus retain an authentic-width fallback. Other rooms, actor
-paths, cameras, transitions and ultrawide composition need scene-specific work.
-See [batch 015 evidence and limits](NATIVE-BATCH-015.md).
+Gaia is not qualified as fully widescreen or remake quality. Batch 017 has an
+independent world adapter for 15 stock scene formats, corrected host-camera
+boundaries and faster CPU drawing. Its original gameplay view remains 256×224;
+42 reference/span pairs and final NVIDIA captures pass. The older expanded-
+culling preview's Aqueduct failure remains historical and unresolved on that
+legacy path. Classroom/unsupported formats retain authentic-field fallback;
+other rooms, actor phases, varying windows, smooth motion and ultrawide
+composition still need work. See [batch 017 evidence and limits](NATIVE-BATCH-017.md).
+
+The 1.5× Town view's left strip is fixed by clamping only the presentation
+camera inside available map data. Small maps can still require balanced
+padding; a larger storage plane does not establish an authored wider room.
+The existing Mode1 span renderer and bounded tilemap restoration reduce
+measured whole-process CPU cost by about72% at 1.5× in the stated paired test.
+This is not a replacement GPU world renderer or a latency/FPS measurement.
 
 A modern GPU backend alone cannot supply missing map content, correct
 offscreen actor behavior or appropriate camera framing. Existing accelerated

@@ -3,6 +3,72 @@
 Updated November 9, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
+## Qualified continuation — batch 017
+
+Baseline `522b078`; work under ignored `native-017`. Final candidate
+`782833d274f28d884f53b6e5e305d2bb0c4924ab817715c4fa233e4602a19769`
+retains the immutable016graph and old6757effects, adding1371qualified contexts:
+8128canonical/32512aliases/140opcode bodies. All prior descriptors/functions
+are conserved. No runtime emitter/bridge or hard guard is relaxed. COP/RTI
+control/indirect transfers remain interpreted; SPC700 is still interpreted.
+
+All83fresh same-binary original256 reference/native pairs pass:166captures,
+436000frames/1294snapshotsets, fullCPU/resume/master/IRQ/HDMA/policy/devices and
+complete APU checks.647rawAPU TSV host-stamp differences are retained with
+unnormalized hashes; canonical access order/port/value/actualAPUclock/sample
+checks and fullSPC/DSP/PCM/scheduler pass. No raw-byte/hardware proof claim.
+Actual native guest-cycle share96.5202%; new1369/1371sites execute135552332cycles
+and31903484instructions; two additions unobserved.7280total contexts observed.
+This is bounded execution, not completion, wall speed or campaign proof.
+
+Camera-boundary policy fixes the reported1.5×town strip: worldX0 replaces−19,
+native field moves inside the larger canvas with no stretching/guest changes.
+Small maps retain balanced explicit padding. Span drawing is now default for
+detached Mode1; `IOG_WORLD_REFERENCE_PIXELS=1` keeps pixel/full-copy reference.
+Only touched tilemap words are restored between chunks; identicalVRAMepoch
+and all previous unsupported-format/refusal checks remain. Legacypreview
+stillonly01/0C; independentworldformatset is01/0C/0E/0F/12/29/3F/55/67/85/8A/
+B6/CC/DD/EA. Classroom08 is not admitted from spare storage alone.
+
+Renderer42fresh reference/span pairs/84captures/150200frames pass wholeimage,
+sourcepacket, rawguest/APU/CPU/native32512site/perPC checks.42selectedpictures
+ready;61602/75100optimizedframes ready, intermediatefallback retained. Sixview
+grids cover16:9/21:9 ×1/1.25/1.5. TwofinalNVIDIA1280captures pass defaultspan,
+exactnearest source transport and requestedxBR. Corrected durablePNG is
+`native-017/visuals/gaia-world-1_5-xbr-1280.png`; no new4K/HdFx claim.
+
+ActualstockC714 replay reproduces16published544-byte tables across15scenes+Dash;
+350native-visible parts/124player parts/66368rawOBJtexels+sourceorder exact.
+Forms0/1/2 andactivebodyoverride4/5/6 qualified;7/8 sourceformatonly. OldCastoth
+lateunpairedRAM refusals remainfailed; selectedstruckphase isnotallphases.
+IndependentfixedTownBG/HUD/actorcomposite25728pixels passes withnofiltered
+mask; earlierBG-only hypotheses remainfailed. Noactualspatiallyvaryingcolor
+window occurs in18900capturedlines; constantVampirewindow isnotavarying-effect
+qualification. Full-world offscreen-overlap aesthetics remain unverified.
+
+Quiet paired fullworldbenchmark42processes/29400frames: processCPU reductions
+60.0/70.8/71.8% at1/1.25/1.5, includesstartup/exit/diagnostics. CPU/WRAM/native
+counts remainexact. Isolatedrow ratios~0.125–0.129 are separate. No sustained
+GPUFPS, physicalinputlatency or intentionallyfastergamewait claim. All workers
+and gamewindows areclosed. See [017 evidence/limits](docs/NATIVE-BATCH-017.md).
+
+For exact current-picture diagnostic inputs, `IOG_WORLD_SOURCE_PACKET=1` with
+the existing output path/frame exports published precomposition WRAM/OAM,
+original field, BG3 surface, all225line registers/epochs and epoch memory.
+These files remain private/ignored. A packet can describe a valid captured
+source that the visual decoder refuses; its explicit ready/reason is mandatory.
+
+SDK849passed/twoskipped; oneWindows child-encodingwarning retained, affected
+officialtest additionally passes strictUTF8. Verifiedupstreamissue270 records
+unmodifiede9red/green; no productionpatch/fullsuite rerun. Officialmainremains
+e9c2073. Current helpers/publictests/C build source are frozen in final-v1
+receipt; do not mistake preliminaryrendererbaseline6b8f proof forfinal782833.
+
+Batch017 storage closeout: `native-017/cleanup/COMPRESSION-VERIFIED.json`
+verifies unchanged paths/bytes/SHA-256 for 20,128 completed private data files.
+In-place NTFS compression saved 6,071,073,461 allocated bytes; no deletion,
+archives, owner changes or retries of previously blocked cleanup targets.
+
 ## Custom renderer foundation — batch 016
 
 Baseline `23090cc`; bounded ignored work lives in `native-016`. Candidate
