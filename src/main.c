@@ -29,6 +29,7 @@
 #include "game_rtl.h"
 #include "iog_widescreen.h"
 #include "iog_scene_view.h"
+#include "iog_world_renderer.h"
 #include "iog_randomizer.h"
 #include "iog_inventory.h"
 #include "iog_i18n.h"
@@ -73,6 +74,11 @@ static void IogInitSceneView(void)
  * 256 columns. Off, the field stays 256 wide and 4:3 is bit-identical. */
 static void IogPrepareFrame(int drawable_w, int drawable_h, int *frame_w, int *frame_h)
 {
+    if (IogWorldEnabled()) {
+        *frame_w = 256; *frame_h = 224;
+        IogWidescreenSetPreviewCenteredHud(false);
+        return;
+    }
     IogInitSceneView();
     if (s_scene_view.enabled) {
         IogSceneViewSource source;
@@ -151,14 +157,31 @@ static void IogEndSimFrame(const uint8_t *field, unsigned number)
 static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
                            int width, int height, double alpha)
 {
+    if (IogWorldEnabled())
+        return IogWorldDraw(dst, pitch, field, width, height, alpha);
     return IogSceneViewDraw(&s_scene_view, dst, pitch, field, width, height, alpha);
 }
 
 static void IogResetSceneView(void)
 {
+    IogWorldReset();
     IogInitSceneView();
     IogSceneViewReset(&s_scene_view);
     IogWidescreenSetPreviewCenteredHud(false);
+}
+
+static void IogPresentationGeometry(int dw, int dh, int *w, int *h)
+{
+    IogWorldGeometry(dw, dh, w, h);
+}
+
+static void IogViewport(int fw, int fh, int dw, int dh, SnesDisplayViewport *out)
+{
+    if (!out || fw <= 0 || fh <= 0) return;
+    int num = 1, den = 1;
+    if (!IogWorldEnabled()) SnesDisplayAspect_GetPixelAspect(
+        (SnesDisplayAspect)g_config.display_aspect, &num, &den);
+    *out = SnesDisplayAspect_FitViewport((double)fw * num / ((double)fh * den), dw, dh);
 }
 
 void IogSettingsInstall(void);   /* iog_settings.c */
@@ -187,6 +210,8 @@ static const SnesDesktopHostGame kGameHost = {
     .before_run_frame    = IogBeforeRunFrame,
     .end_sim_frame       = IogEndSimFrame,
     .draw_frame          = IogDrawSceneView,
+    .presentation_geometry = IogPresentationGeometry,
+    .compute_viewport    = IogViewport,
     .on_reset            = IogResetSceneView,
     .after_config        = IogSettingsInstall,
     .after_run_frame     = IogAfterRunFrame,

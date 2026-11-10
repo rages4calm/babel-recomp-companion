@@ -62,6 +62,8 @@ set(IOG_SOURCES
     src/iog_native_continuations.c
     src/iog_widescreen.c
     src/iog_scene_view.c
+    src/iog_world_renderer.c
+    src/iog_visual_objects.c
     src/iog_i18n.c
     src/iog_mods.c
     src/iog_cheat_rates.c

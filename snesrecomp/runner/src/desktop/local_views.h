@@ -12,7 +12,50 @@
 enum {
   kSnesDesktopMaxViewWidth = 1024,
   kSnesDesktopMaxFrameWidth = 2 * kSnesDesktopMaxViewWidth,
+  kSnesDesktopMaxFrameHeight = 512,
 };
+
+/* Validate a title-owned presentation surface separately from the raster. */
+static inline bool SnesLocalViews_PresentationSize(int requested_width,
+    int requested_height, int fallback_width, int fallback_height,
+    int *width, int *height) {
+  bool valid = requested_width > 0 &&
+      requested_width <= kSnesDesktopMaxFrameWidth && requested_height > 0 &&
+      requested_height <= kSnesDesktopMaxFrameHeight;
+  *width = valid ? requested_width : fallback_width;
+  *height = valid ? requested_height : fallback_height;
+  return valid;
+}
+
+/* A custom compositor may refuse an output frame. Center/crop its actual
+ * source field into a black output without inferring source pitch/height
+ * from presentation geometry. The two surfaces must not overlap. */
+static inline bool SnesLocalViews_CopyRaster(void *dst, size_t pitch,
+    int width, int height, const void *src, size_t source_pitch,
+    int source_width, int source_height) {
+  if (!dst || !src || width <= 0 || width > kSnesDesktopMaxFrameWidth ||
+      height <= 0 || height > kSnesDesktopMaxFrameHeight || source_width <= 0 ||
+      source_width > kSnesDesktopMaxFrameWidth || source_height <= 0 ||
+      source_height > kSnesDesktopMaxFrameHeight ||
+      pitch < (size_t)width * 4 || source_pitch < (size_t)source_width * 4 ||
+      pitch > SIZE_MAX / (size_t)height ||
+      source_pitch > SIZE_MAX / (size_t)source_height)
+    return false;
+  uintptr_t d = (uintptr_t)dst, s = (uintptr_t)src;
+  size_t dn = pitch * (size_t)height, sn = source_pitch * (size_t)source_height;
+  if (d <= s ? s - d < dn : d - s < sn) return false;
+  int copy_width = width < source_width ? width : source_width;
+  int copy_height = height < source_height ? height : source_height;
+  int dx = (width - copy_width) / 2, dy = (height - copy_height) / 2;
+  int sx = (source_width - copy_width) / 2, sy = (source_height - copy_height) / 2;
+  for (int y = 0; y < height; ++y)
+    memset((uint8_t *)dst + (size_t)y * pitch, 0, (size_t)width * 4);
+  for (int y = 0; y < copy_height; ++y)
+    memcpy((uint8_t *)dst + (size_t)(dy + y) * pitch + (size_t)dx * 4,
+           (const uint8_t *)src + (size_t)(sy + y) * source_pitch + (size_t)sx * 4,
+           (size_t)copy_width * 4);
+  return true;
+}
 
 /* Preserve each pane's native pixel proportions while widening its field.
  * target_aspect is per pane, including half the drawable for adaptive views. */

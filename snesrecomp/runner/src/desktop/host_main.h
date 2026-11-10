@@ -242,6 +242,14 @@ typedef struct SnesDesktopHostGame {
    * raster-state capture. The host owns this writable surface. A separate
    * draw_frame may retain a wider image for presentation. */
   void (*publish_native_field)(uint8_t *field, unsigned number);
+  /* Optional title-owned output dimensions, independent of the PPU raster
+   * selected by prepare_frame. Called during simulation capture and every
+   * present: inspect completed presentation data only, never advance guest
+   * state. Invalid dimensions fall back to prepare_frame's dimensions.
+   * Output is bounded to2048x512; draw_frame still receives the original
+   * raster as its source. NULL preserves the previous geometry contract. */
+  void (*presentation_geometry)(int drawable_w, int drawable_h,
+                                int *width, int *height);
 } SnesDesktopHostGame;
 
 /* The whole program. Returns the process exit code. */

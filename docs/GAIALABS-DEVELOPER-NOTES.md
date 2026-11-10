@@ -222,6 +222,24 @@ does not reopen paused game fixes or authorize a release.
 
 ## November 9: private build and audio references
 
+The owner confirms the GaiaLabs collaborators have approved reuse of their
+expanded maps with the Retranslation content. Their latest November 9 product
+direction is to build the retranslation and approved expanded maps into the
+main enhanced game, with no mod toggle for either. Main therefore becomes the
+Retranslation-based experience; the maps must not be presented as unrelated
+stock Original additions. This supersedes the briefly considered Mods preset
+and earlier two-game interface plans. Other optional quality-of-life features
+can be handled separately.
+
+Stock USA remains an internal comparison baseline, not a required second
+user-facing edition. Keep source/module locks, save/config identities and
+credits explicit underneath the chosen main experience. Current stock native
+renderer qualification does not establish native compatibility with the
+retranslation or expanded maps. No GaiaLabs map integration is performed in
+batch 016 by this reference update. Preserve collaborators' credits and
+applicable source/asset terms; approval does not authorize publishing private
+ROM-derived files.
+
 The owner received the developer's current patched build. The developer calls
 it the "everything" build and says public GitHub is mostly current, with a
 handful of changes still uncommitted. These are developer-reported contents;
@@ -229,6 +247,21 @@ the exact source/module correspondence and GaiaLabs native compatibility remain
 unqualified. Keep received files private. No private archive, ROM or bsnes-hd
 override is included in this repository. The stock native batch 013 does not
 use these private inputs. Original and GaiaLabs remain separate profiles.
+
+The developer clarifies that the minimap and world map are already baserom
+features. Treat these as existing base-content capabilities to inspect at the
+matching source revision and selected build profile, rather than new,
+unavailable additions. This is separate from the collaborators' contributed
+expanded widescreen room maps and their Retranslation reuse approval. The
+older module-directory observations above retain their dated inspection scope.
+
+The developer also says: "The jewel shimmer is activated by the black glasses
+btw, if you want to check that out. It shows up on NPCs too". Include Black
+Glasses on/off controls for player and NPC jewel-shimmer observations when
+qualifying the matching build. Check activation/story state, palette, sprite
+priority, windows and room transitions. This records a developer-supplied
+behavior and future test plan, not current native compatibility or an effect
+implemented in stock batch 016.
 
 The developer also supplied:
 
