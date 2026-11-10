@@ -139,11 +139,14 @@ static uint32_t irq_vector(void)   { return read_vector(0x00FFEEu); }
 /* Run one interrupt handler to its RTI, entered as hardware enters it: the
  * frame is pushed at the PC the guest was interrupted AT, so the handler's
  * terminal RTI returns into that instruction stream. */
-static void game_run_interrupt(uint32_t vector, uint64_t frame_end)
+static void game_run_interrupt(uint32_t vector, uint64_t frame_end, bool nmi_edge)
 {
     cpu_push_interrupt_frame_at(&g_cpu, g_resume_pc);
     interp_bridge_set_master_deadline(frame_end);
-    (void)interp_bridge_run_interrupt(&g_cpu, vector);
+    if (nmi_edge && vector == 0x00800Bu && IogNativeContinuationsNmiEnabled())
+        (void)interp_bridge_run_native_nmi(&g_cpu, vector);
+    else
+        (void)interp_bridge_run_interrupt(&g_cpu, vector);
     /* Clearing matters: a deadline left armed stays true for every AOT block
      * prologue afterwards, which turns every compiled body into an immediate
      * yield-unwind. */
@@ -203,7 +206,7 @@ void GameRunOneFrame(void)
          * mid-loop turned the rest of the tilemap into garbage. */
         if (g_snes->nmiEnabled) {
             IogWorldBeforeNmi();
-            game_run_interrupt(nmi_vector(), frame_end);
+            game_run_interrupt(nmi_vector(), frame_end, true);
             IogWorldAfterNmi();
         }
     }
@@ -228,7 +231,7 @@ void GameRunOneFrame(void)
         /* A raster IRQ asserted while the guest ran: service it before
          * continuing, exactly as the CPU samples it between instructions. */
         if (g_snes->inIrq && !g_cpu._flag_I) {
-            game_run_interrupt(irq_vector(), frame_end);
+            game_run_interrupt(irq_vector(), frame_end, false);
             continue;
         }
         /* Parked with no interrupt pending and clock left over: the guest is

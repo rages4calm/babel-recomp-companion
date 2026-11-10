@@ -44,7 +44,19 @@ def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True):
                 raise ValueError("Conflicting contexts")
             entries[key] = entry
     helper = ROOT / "snesrecomp/runner/src/snes/interp816.c"
-    result, receipt = emit(helper.read_text(encoding="utf-8"), list(entries.values()))
+    grant_rows = plan.get("native_nmi_grant_contexts", [])
+    grant_keys = set()
+    for row in grant_rows:
+        pc = int(row["pc24"], 16)
+        for pb in ([pc >> 16] if not aliases else
+                   [pc >> 16 & 0x3F | n for n in (0, 0x40, 0x80, 0xC0)]):
+            key = ((pb << 16) | (pc & 65535), row["m"], row["x"], row["e"])
+            if key in grant_keys or key not in entries:
+                raise ValueError("Duplicate or unregistered finite-NMI context")
+            grant_keys.add(key)
+    owner = int(plan["native_nmi_owner_entry_pc24"], 16) if grant_rows else None
+    result, receipt = emit(helper.read_text(encoding="utf-8"), list(entries.values()),
+                           nmi_owner_pc24=owner, nmi_keys=sorted(grant_keys))
     receipt.update(rom_sha256=digest, context_plan_sha256=hashlib.sha256(contexts.read_bytes()).hexdigest(),
                    helper_file_sha256=hashlib.sha256(helper.read_bytes()).hexdigest(),
                    emitter_sha256=hashlib.sha256((ROOT / "snesrecomp/recompiler/v2/native_effects.py").read_bytes()).hexdigest(),

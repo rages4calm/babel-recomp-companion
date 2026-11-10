@@ -199,8 +199,8 @@ uint64_t interp_bridge_native_poll_cycles_total(void);
  * The existing auto-quiescent interpreter frame keeps event/retirement,
  * paired-bounce and return-boundary ownership. Register aliases/modes
  * separately. Support is plain LoROM/HiROM upper ROM, E0, ordinary data/status/
- * stack/static branch/direct call/return effects. Interrupt frames, indirect
- * transfers, direct SP/emulation changes, power and
+ * stack/static branch/direct call/return and indexed-indirect JMP effects.
+ * Interrupt frames, indirect calls/other indirect jumps, direct SP/emulation changes, power and
  * block-move operations remain interpreted. Every instruction byte and live
  * mode is checked again AFTER hooks, without emulated reads or diagnostics.
  *
@@ -213,7 +213,7 @@ uint64_t interp_bridge_native_poll_cycles_total(void);
  * equality alone is not source/ABI or campaign qualification.
  *
  * Registration copies a batch atomically, accepting identical duplicates and
- * refusing conflicts/invalid metadata/capacity. Up to 32768 descriptors. Host
+ * refusing conflicts/invalid metadata/capacity. Up to 65535 descriptors. Host
  * setup only, outside ALL active bridge frames. clear likewise does nothing
  * inside an active frame. Nothing is serialized or enabled by default.
  */
@@ -231,9 +231,22 @@ typedef struct {
 } InterpNativeInstructionStats;
 bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
                                             size_t count);
+/* Opt-in finite host-NMI data scope. Every supplied descriptor must already
+ * be registered identically. The complete grant is atomic, host-setup only;
+ * ordinary registration, failed updates and process-global counters retain
+ * their existing semantics. Only data/status/static control may be granted:
+ * no stack/frame/call/return/indirect/SP/emulation/power/block-move effects.
+ * Grants name an exact owner entry PC, do not enable ordinary run_interrupt,
+ * and disappear when native instruction registration is cleared. */
+bool interp_bridge_allow_native_nmi_instructions(
+    uint32_t owner_entry_pc24, const InterpNativeInstruction *items, size_t count);
 void interp_bridge_clear_native_instructions(void);
 uint64_t interp_bridge_native_continuation_insns_total(void);
 uint64_t interp_bridge_native_continuation_cycles_total(void);
+/* Strict subsets of continuation counters, never additional CPU work. */
+uint64_t interp_bridge_native_nmi_insns_total(void);
+uint64_t interp_bridge_native_nmi_cycles_total(void);
+size_t interp_bridge_native_nmi_grants(void);
 /* Returns active descriptor count; copies min(count,capacity) when out!=NULL.
  * Per-descriptor statistics live until clear; whole-run totals are monotonic,
  * like the interpreter/poll counters, and are not reset by configuration. */
@@ -244,6 +257,15 @@ size_t interp_bridge_native_instruction_stats(InterpNativeInstructionStats *out,
  * Neither setting enables registration or changes any admission guard.
  * Clearing registrations preserves this process launch setting. */
 bool interp_bridge_native_instruction_index_enabled(void);
+/* Title calls this ONLY at an actual host NMI edge, after the reference
+ * architectural interrupt-frame push. E0, inNmi at entry and no active
+ * bridge/scheduler/foreign interrupt context are required for an opt-in scope;
+ * otherwise the ordinary interrupt API remains authoritative. The grant is
+ * latched to this exact finite RTI owner/depth/watermark and never inherited
+ * by nested bridge/IRQ calls. Guest RDNMI acknowledgment does not revoke an
+ * already established owner. No interrupt delivery, time or frame is invented.
+ * Ordinary interp_bridge_run_interrupt retains its original default refusal. */
+int interp_bridge_run_native_nmi(CpuState *cpu, uint32_t entry_pc24);
 
 /*
  * Run the interpreter over guest code at entry_pc24, in the context of `cpu`.
@@ -402,6 +424,8 @@ typedef struct {
      * AOT functions: true compiled opcode effects, reference retirement. */
     uint64_t native_poll_insns, native_poll_cycles;
     uint64_t native_continuation_insns, native_continuation_cycles;
+    /* Already included in native_continuation_*, not added to any total. */
+    uint64_t native_nmi_insns, native_nmi_cycles;
 } InterpExecutionShare;
 void InterpExecutionShareGet(InterpExecutionShare *out);
 /* Post-mortem section "execution_share", with the trailing comma the other

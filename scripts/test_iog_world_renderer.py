@@ -18,15 +18,37 @@ HARNESS = r'''
 #include <stdlib.h>
 #include <string.h>
 #include "iog_world_renderer.c"
+#include "iog_ips.c"
+/* Exercise the real SDK digest over synthetic bytes; count title identity
+ * checks without replacing the SHA-256 algorithm with a permissive stub. */
+#define sha256_compute fixture_real_sha256_compute
+#include "sha256.c"
+#undef sha256_compute
 static Snes machine;static Cart cart;static Ppu original,before_ppu;
 static uint8_t ram[131072],rom[2097152],before_ram[131072];
 CpuState g_cpu;Snes *g_snes=&machine;Ppu *g_ppu=&original;
 static unsigned checks,detached_lines,visual_builds;static bool randomizer,scene_ready=true;
+static unsigned identity_hashes,interpret_all_calls;static int interpreted;
+static const char *ips_path;
+static SNESModActivationCallback ips_activation;
 static uint8_t source_field[256*224*4];
 #define CHECK(c) do{checks++;if(!(c)){fprintf(stderr,"line%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 static void word(unsigned at,unsigned value){ram[at]=(uint8_t)value;ram[at+1]=(uint8_t)(value>>8);}
 bool IogRandomizerActive(void){return randomizer;}
-void sha256_compute(const uint8_t*p,size_t n,uint8_t hash[32]){CHECK(p==rom&&n==sizeof(rom));memset(hash,0,32);}
+void sha256_compute(const uint8_t*p,size_t n,uint8_t hash[32]){
+ CHECK(p==rom&&n==sizeof(rom));identity_hashes++;fixture_real_sha256_compute(p,n,hash);
+}
+void interp_bridge_set_interpret_all(int enabled){interpreted=enabled;interpret_all_calls++;}
+int snes_mod_register_activation_plugin(const char*id,SNESModActivationCallback callback){
+ CHECK(!strcmp(id,"iog.apocalypse"));ips_activation=callback;return 1;
+}
+int snes_mod_runtime_feature_resource_path_c(const char*package,const char*feature,const char*resource,char*out,uint32_t cap){
+ CHECK(!strcmp(package,"iog.apocalypse")&&!strcmp(feature,"apocalypse_gaia")&&!strcmp(resource,"patch"));
+ if(!ips_path||strlen(ips_path)>=cap)return 0;strcpy(out,ips_path);return 1;
+}
+int snes_mod_runtime_package_root_c(const char*package,const char*version,char*out,uint32_t cap){
+ (void)package;(void)version;(void)out;(void)cap;return 0;
+}
 bool IogSceneViewReadWorldSource(const uint8_t*r,size_t n,const Ppu*p,bool random,IogSceneViewSource*out){
  CHECK(r==ram&&n==sizeof(ram)&&p==g_ppu&&!random);memset(out,0,sizeof(*out));
  out->scene=(uint16_t)Word(r,0x644);out->gate=scene_ready?kIogSceneViewReady:kIogSceneViewUnsupportedScene;return true;
@@ -72,6 +94,7 @@ static void fixture(void){
     int width=0,height=0;IogWorldGeometry(1280,720,&width,&height);CHECK(width==598&&height==336);
  for(unsigned i=0;i<sizeof(source_field);i++)source_field[i]=(uint8_t)(i*13+7);
  detached_lines=visual_builds=0;
+ identity_hashes=interpret_all_calls=0;interpreted=0;ips_path=NULL;
 }
 static void publication(void){
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(s.pending&&!s.composed&&!s.active);
@@ -187,13 +210,50 @@ static void real_map_edge_framing(void){
   * its symmetric171/56 position or stretched to fill an invented edge. */
  CHECK(s.view.native_x==152&&s.view.native_y==56);
 }
+static void signed_camera_shake(void){
+ fixture();word(0x68e,0xffff);g_ppu->vScroll[0]=1023;g_ppu->vScroll[1]=256;
+ publication();IogWorldBeginRaster();CHECK(s.valid);
+ for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0x828051,225,0);
+ CHECK(s.complete&&s.view.world_y==-1&&s.view.native_y==0&&s.view.padding_top==1);
+ /* The synthetic original row is not black. Keep it across the full native
+  * rect rather than discarding its real hardware-wrapped first row; new
+  * outside-map columns on that same row stay explicit empty padding. */
+ CHECK(s.output[s.view.native_x]==(0xff000000u|256u));
+ CHECK(s.output[0]==0);
+ CHECK(s.output[223*s.width+s.view.native_x]==(0xff000000u|256u|(223u<<10)));
+ CHECK(!s.view.padding_left&&!s.view.padding_right);
+ fixture();word(0x68e,0xffef);g_ppu->vScroll[0]=1007;
+ publication();IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0x828051,225,0);CHECK(!s.complete&&!strcmp(s.reason,"invalid_world_view"));
+}
+static void late_ips_identity(const char*base){
+ char path[4096];CHECK(snprintf(path,sizeof(path),"%s.synthetic.ips",base)>0);
+ const uint8_t valid[]={'P','A','T','C','H',0,0,0,0,1,1,'E','O','F'};
+ const uint8_t invalid[]={'P','A','T','C','H',0,0,0,0,1,1,0x20,0,0,0,1,2,'E','O','F'};
+ FILE*f=fopen(path,"wb");CHECK(f&&fwrite(valid,1,sizeof(valid),f)==sizeof(valid));fclose(f);
+ fixture();IogWorldInitialize();CHECK(s.stock&&identity_hashes==1);publication();CHECK(s.active&&s.pending&&s.composed);
+ CHECK(ips_activation!=NULL);ips_path=path;ips_activation();
+ CHECK(rom[0]==1&&interpreted==1&&interpret_all_calls==1);
+ CHECK(!s.stock&&identity_hashes==2); /* causal: pre-plugin hash cannot survive */
+ CHECK(!s.active&&!s.pending&&!s.composed&&!s.valid&&!s.complete&&!s.epoch_count);
+ IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
+ /* First valid record followed by an out-of-bounds second record must fail
+  * pass0 before ANY bytes change; it must not invalidate stock eligibility. */
+ f=fopen(path,"wb");CHECK(f&&fwrite(invalid,1,sizeof(invalid),f)==sizeof(invalid));fclose(f);
+ fixture();IogWorldInitialize();publication();ips_path=path;
+ uint8_t*before=malloc(sizeof(rom));CHECK(before);memcpy(before,rom,sizeof(rom));ips_activation();
+ CHECK(!memcmp(before,rom,sizeof(rom)));free(before);
+ CHECK(s.stock&&s.active&&s.pending&&s.composed&&identity_hashes==1&&!interpret_all_calls);
+ CHECK(remove(path)==0);
+}
 static void identity_and_source_packet(const char*path){
  CHECK(ExportSourcePacket(path,source_field));
  fixture();publication();CHECK(s.stock&&s.active);cart.romSize=100;
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();actual_window_enable_gates();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 
@@ -206,7 +266,8 @@ def main():
     if not out.is_relative_to((ROOT/'.local').resolve()):
         p.error('test output must stay under ignored .local/')
     out.mkdir(parents=True, exist_ok=True)
-    (out/'snesrecomp_rom_identity.h').write_text('#define SNESRECOMP_ROM_EXPECTED_SHA256 "'+'0'*64+'"\n')
+    synthetic_digest=hashlib.sha256(bytes(2097152)).hexdigest()
+    (out/'snesrecomp_rom_identity.h').write_text('#define SNESRECOMP_ROM_EXPECTED_SHA256 "'+synthetic_digest+'"\n')
     source = out/'world_renderer.c';source.write_text(HARNESS, encoding='utf-8')
     exe = out/'world_renderer.exe'
     command = [args.compiler,'-std=c11','-O1','-Wall','-Wextra','-Werror',
@@ -228,11 +289,26 @@ def main():
     assert Path(str(packet)+'.epochs.bin').stat().st_size==meta['epochs']*meta['epoch_bytes']==131584
     assert Path(str(packet)+'.hud.bgra').read_bytes()==bytes(256*224*4)
     assert Path(str(packet)+'.field.bgra').read_bytes()==bytes((i*13+7)&255 for i in range(256*224*4))
-    inputs = [ROOT/'src/iog_world_renderer.c',ROOT/'src/iog_world_renderer.h',ROOT/'src/iog_visual_objects.h',ROOT/'src/iog_world_view.c',ROOT/'src/iog_world_view.h',ROOT/'src/iog_world_pixels.c',ROOT/'src/iog_world_pixels.h']
+    # Removing only the late-patch identity refresh must reproduce the stale
+    # stock-eligibility failure with the very same synthetic patch and input.
+    ips=ROOT/'src/iog_ips.c';text=ips.read_text();needle='    IogWorldInitialize();\n'
+    assert text.count(needle)==1
+    mutant=out/'ips_without_identity_refresh.c';mutant.write_text(text.replace(needle,''),encoding='utf-8')
+    causal=out/'late_patch_causal.c';causal.write_text(HARNESS.replace('#include "iog_ips.c"','#include "'+mutant.as_posix()+'"'),encoding='utf-8')
+    causal_exe=out/'late_patch_causal.exe';causal_command=command.copy();causal_command[causal_command.index(str(source))]=str(causal);causal_command[-1]=str(causal_exe)
+    causal_build=subprocess.run(causal_command,capture_output=True,text=True)
+    (out/'causal-build.log').write_text(causal_build.stdout+causal_build.stderr);causal_build.check_returncode()
+    causal_run=subprocess.run([str(causal_exe),str(out/'causal-packet')],env=env,capture_output=True,text=True)
+    (out/'causal-run.log').write_text(causal_run.stdout+causal_run.stderr)
+    assert causal_run.returncode!=0 and '!s.stock&&identity_hashes==2' in causal_run.stderr
+    inputs = [ROOT/'src/iog_world_renderer.c',ROOT/'src/iog_world_renderer.h',ROOT/'src/iog_visual_objects.h',ROOT/'src/iog_world_view.c',ROOT/'src/iog_world_view.h',ROOT/'src/iog_world_pixels.c',ROOT/'src/iog_world_pixels.h',ips,ROOT/'snesrecomp/runner/src/sha256.c',ROOT/'snesrecomp/runner/src/sha256.h']
     result = dict(passed=run.returncode==0,command=command,
         scope='Actual world module/SDKheaders; stubbed scene/visual/detachedpixels, no real game/APU/PPU parity or GPU',
         sources={str(s.relative_to(ROOT)):hashlib.sha256(s.read_bytes()).hexdigest()for s in inputs},
-        stdout=run.stdout,stderr=run.stderr,source_packet_format_and_payload_passed=True)
+        stdout=run.stdout,stderr=run.stderr,source_packet_format_and_payload_passed=True,
+        actual_SHA256_over_synthetic_ROM=True,synthetic_ROM_digest=synthetic_digest,
+        late_IPS_refresh_and_failed_patch_preservation_passed=True,removed_refresh_causal_mutant_rejected=True,
+        causal_exit_code=causal_run.returncode,causal_command=causal_command)
     (out/'receipt.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     run.check_returncode();print(run.stdout.strip())
 

@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+static bool native_nmi_enabled;
+
+bool IogNativeContinuationsNmiEnabled(void) { return native_nmi_enabled; }
 
 #if defined(IOG_HAS_NATIVE_CONTINUATIONS) && !defined(SNESRECOMP_INTERPRETER_ONLY)
 extern bool IogRegisterNativeContinuations(void);
@@ -39,6 +42,7 @@ static void WriteNativeContinuationStats(void)
 
 void IogNativeContinuationsInitialize(void)
 {
+    native_nmi_enabled = false;
     interp_bridge_clear_native_instructions();
 #if defined(IOG_HAS_NATIVE_CONTINUATIONS) && !defined(SNESRECOMP_INTERPRETER_ONLY)
     const char *setting = getenv("IOG_NATIVE_CONTINUATIONS");
@@ -62,6 +66,9 @@ void IogNativeContinuationsInitialize(void)
         interp_bridge_clear_native_instructions();
         return;
     }
+    const char *nmi_setting = getenv("IOG_NATIVE_NMI_CONTINUATIONS");
+    native_nmi_enabled = nmi_setting && !strcmp(nmi_setting, "1") &&
+        interp_bridge_native_nmi_grants() != 0;
     const char *path = getenv("IOG_NATIVE_CONTINUATION_STATS");
     if (path && path[0] && strlen(path) < sizeof stats_path) {
         strcpy(stats_path, path);

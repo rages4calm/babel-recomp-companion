@@ -71,14 +71,17 @@ static void gates(void) {
     fixture();ram[0x6ee]=0x80;ppu.bgXsc[0]=0x19;ppu.bgXsc[1]=0x11;s=source();CHECK(s.gate==kIogSceneViewReady);
     /* World eligibility must not silently widen the legacy guest-culling
      * preview, even when the underlying live map layout is identical. */
-    const unsigned rooms[]={1,12,14,15,18,41,63,85,103,133,138,182,204,221,234};
+    const unsigned rooms[]={0x01,0x0c,0x0e,0x0f,0x12,0x15,0x1e,0x23,0x25,0x26,
+        0x27,0x28,0x29,0x2d,0x3d,0x3e,0x3f,0x40,0x41,0x42,0x45,0x46,0x4f,0x51,0x53,
+        0x55,0x61,0x62,0x64,0x67,0x6d,0x6f,0x85,0x86,0x8a,0x8b,0xa7,0xb6,0xb8,0xcc,
+        0xcd,0xce,0xdd,0xde,0xdf,0xe0,0xe1,0xe2,0xe3,0xea};
     for(unsigned i=0;i<sizeof(rooms)/sizeof(rooms[0]);i++) {
         fixture();word(0x644,rooms[i]);
         CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewReady);
         CHECK(IogSceneViewReadSource(ram,sizeof(ram),&ppu,false,&s));
         CHECK(s.gate==((rooms[i]==1||rooms[i]==12)?kIogSceneViewReady:kIogSceneViewUnsupportedScene));
     }
-    const unsigned rejected[]={0,3,8,255,256,65535};
+    const unsigned rejected[]={0,2,3,6,8,0x31,255,256,65535};
     for(unsigned i=0;i<sizeof(rejected)/sizeof(rejected[0]);i++) {
         fixture();word(0x644,rejected[i]);
         CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewUnsupportedScene);
@@ -87,6 +90,21 @@ static void gates(void) {
     CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewUnsupportedLayout);
     fixture();word(0x644,0xb6);
     CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,true,&s)&&s.gate==kIogSceneViewRandomizer);
+    /* Signed camera shake is a separate world contract; the old guest-
+     * culling preview remains strict and never treats FFFF as a huge map. */
+    fixture();word(0x68e,0xffff);
+    CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewReady);
+    s=source();CHECK(s.gate==kIogSceneViewUnsupportedLayout);
+    const unsigned good[]={0xfff0,0xffff,0,1,512,528};
+    for(unsigned i=0;i<sizeof(good)/sizeof(good[0]);i++){
+        fixture();word(0x68a,good[i]);
+        CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewReady);
+    }
+    const unsigned bad[]={0xffef,529,0x7fff,0x8000};
+    for(unsigned i=0;i<sizeof(bad)/sizeof(bad[0]);i++){
+        fixture();word(0x68a,bad[i]);
+        CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewUnsupportedLayout);
+    }
 }
 static void lifecycle_and_pixels(void) {
     IogSceneView view; IogSceneViewGeometry g={777,888,9,true}, old=g;

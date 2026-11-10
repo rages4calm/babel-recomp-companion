@@ -1,5 +1,6 @@
 #include "iog_scene_view.h"
 #include "iog_visual_objects.h"
+#include "iog_world_view.h"
 
 #include <math.h>
 #include <string.h>
@@ -76,8 +77,13 @@ static bool ReadSource(const uint8_t *ram, size_t size, const Ppu *ppu,
         for (unsigned n = 0; n < sizeof(fields) / sizeof(fields[0]); n++)
             signature = (signature ^ fields[n]) * 16777619u;
     }
-    if (out->camera_x > out->world_width - 256u ||
-        out->camera_y > out->world_height - 224u) return true;
+    if (independent_world) {
+        int x=(int16_t)out->camera_x,y=(int16_t)out->camera_y;
+        if (x < -kIogWorldCameraExcursion || y < -kIogWorldCameraExcursion ||
+            x > (int)out->world_width-256+kIogWorldCameraExcursion ||
+            y > (int)out->world_height-224+kIogWorldCameraExcursion) return true;
+    } else if (out->camera_x > out->world_width - 256u ||
+               out->camera_y > out->world_height - 224u) return true;
     out->layout_signature = signature;
     out->gate = kIogSceneViewReady;
     return true;

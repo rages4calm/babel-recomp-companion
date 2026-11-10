@@ -16,32 +16,41 @@ FIXTURE = r'''
 #include <assert.h>
 static Snes snes;
 Snes *g_snes=&snes;
-static const char *setting;
+static const char *setting,*nmi_setting;
 static unsigned active,calls,clears;
+static unsigned nmi_available=1;
 static bool reject;
-char *getenv(const char *name) {return !strcmp(name,"IOG_NATIVE_CONTINUATIONS")?(char*)setting:NULL;}
+char *getenv(const char *name) {return !strcmp(name,"IOG_NATIVE_CONTINUATIONS")?(char*)setting:!strcmp(name,"IOG_NATIVE_NMI_CONTINUATIONS")?(char*)nmi_setting:NULL;}
 void interp_bridge_clear_native_instructions(void) {active=0;clears++;}
 bool IogRegisterNativeContinuations(void) {calls++;active=1;return !reject;}
 size_t interp_bridge_native_instruction_stats(InterpNativeInstructionStats *out,size_t capacity) {(void)out;(void)capacity;return 0;}
 uint64_t interp_bridge_native_continuation_insns_total(void) {return 0;}
 uint64_t interp_bridge_native_continuation_cycles_total(void) {return 0;}
 bool interp_bridge_native_instruction_index_enabled(void) {return true;}
+size_t interp_bridge_native_nmi_grants(void) {return active?nmi_available:0;}
 int main(void) {
  Cart cart={0};snes.cart=&cart;cart.type=CART_HIROM;
  cart.romSize=cart.romImageSize=2097152;cart.rom=calloc(1,2097152);assert(cart.rom);
  const char *values[]={NULL,"","0","true","01"};
- for(unsigned i=0;i<5;i++){setting=values[i];IogNativeContinuationsInitialize();assert(!active&&!calls);}
+ for(unsigned i=0;i<5;i++){setting=values[i];nmi_setting="1";IogNativeContinuationsInitialize();assert(!active&&!calls&&!IogNativeContinuationsNmiEnabled());}
+ nmi_setting=NULL;
  setting="1";IogNativeContinuationsInitialize();
 #if defined(IOG_HAS_NATIVE_CONTINUATIONS) && !defined(SNESRECOMP_INTERPRETER_ONLY)
- assert(active==1&&calls==1);reject=true;IogNativeContinuationsInitialize();assert(!active&&calls==2);reject=false;
+ assert(active==1&&calls==1&&!IogNativeContinuationsNmiEnabled());reject=true;IogNativeContinuationsInitialize();assert(!active&&calls==2&&!IogNativeContinuationsNmiEnabled());reject=false;
  for(unsigned bad=0;bad<6;bad++){
   cart.type=CART_HIROM;cart.romSize=cart.romImageSize=2097152;snes.cart=&cart;g_snes=&snes;
   if(bad==0)cart.type=CART_LOROM;if(bad==1)cart.romImageSize--;if(bad==2)cart.romSize--;
   if(bad==3)cart.rom[0]=1;if(bad==4)snes.cart=NULL;if(bad==5)g_snes=NULL;
-  IogNativeContinuationsInitialize();assert(!active&&calls==2);cart.rom[0]=0;
+  IogNativeContinuationsInitialize();assert(!active&&calls==2&&!IogNativeContinuationsNmiEnabled());cart.rom[0]=0;
  }
+ cart.type=CART_HIROM;cart.romSize=cart.romImageSize=2097152;snes.cart=&cart;g_snes=&snes;
+ for(unsigned i=0;i<5;i++){nmi_setting=values[i];IogNativeContinuationsInitialize();assert(active&&!IogNativeContinuationsNmiEnabled());}
+ nmi_setting="1";IogNativeContinuationsInitialize();assert(active&&IogNativeContinuationsNmiEnabled());
+ nmi_available=0;IogNativeContinuationsInitialize();assert(active&&!IogNativeContinuationsNmiEnabled());
+ nmi_available=1;reject=true;IogNativeContinuationsInitialize();assert(!active&&!IogNativeContinuationsNmiEnabled());
+ reject=false;setting="0";IogNativeContinuationsInitialize();assert(!active&&!IogNativeContinuationsNmiEnabled());
 #else
- assert(!active&&!calls);
+ assert(!active&&!calls&&!IogNativeContinuationsNmiEnabled());
 #endif
  assert(clears>=6);free(cart.rom);return 0;
 }

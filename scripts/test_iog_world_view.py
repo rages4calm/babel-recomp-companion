@@ -26,6 +26,18 @@ static void properties(int x,int y,unsigned mw,unsigned mh,unsigned w,unsigned h
  else{CHECK(v.world_y<=0&&v.world_y+(int)h>=(int)mh);CHECK(v.padding_top+mh+v.padding_bottom==h);CHECK(abs((int)v.padding_top-v.padding_bottom)<=1);}
  CHECK(v.padding_left<=w&&v.padding_right<=w&&v.padding_top<=h&&v.padding_bottom<=h);
 }
+static void shake_properties(int x,int y,unsigned mw,unsigned mh,unsigned w,unsigned h){
+ struct {uint64_t before;IogWorldView view;uint64_t after;} guarded={0x123456789abcdef0ULL,{0},0xfedcba9876543210ULL};
+ CHECK(IogWorldViewCompute(x,y,mw,mh,w,h,&guarded.view));
+ CHECK(guarded.before==0x123456789abcdef0ULL&&guarded.after==0xfedcba9876543210ULL);
+ IogWorldView v=guarded.view;
+ CHECK(v.world_x+v.native_x==x&&v.world_y+v.native_y==y);
+ CHECK(v.native_x+256u<=w&&v.native_y+224u<=h);
+ CHECK(v.padding_left==(v.world_x<0?-v.world_x:0));
+ CHECK(v.padding_top==(v.world_y<0?-v.world_y:0));
+ CHECK(v.padding_right==(v.world_x+(int)w>(int)mw?v.world_x+(int)w-(int)mw:0));
+ CHECK(v.padding_bottom==(v.world_y+(int)h>(int)mh?v.world_y+(int)h-(int)mh:0));
+}
 int main(void){
  IogWorldView v,zero={0};
  /* The reported 1.5x town shot previously started at worldX=-19. */
@@ -43,7 +55,15 @@ int main(void){
  }
  int previous=-1;
  for(int x=0;x<=512;x++){CHECK(IogWorldViewCompute(x,484,768,768,598,336,&v));CHECK(v.world_x>=previous&&(previous<0||v.world_x-previous<=1));previous=v.world_x;}
- const int invalid[][6]={{-1,0,768,768,598,336},{0,-1,768,768,598,336},{513,0,768,768,598,336},{0,545,768,768,598,336},{0,0,255,768,598,336},{0,0,768,223,598,336},{0,0,65536,768,598,336},{0,0,768,65536,598,336},{0,0,768,768,255,336},{0,0,768,768,2049,336},{0,0,768,768,598,223},{0,0,768,768,598,513}};
+ CHECK(IogWorldViewCompute(-1,0,768,768,256,224,&v)&&v.world_x==-1&&v.native_x==0&&v.padding_left==1);
+ CHECK(IogWorldViewCompute(-1,0,768,768,598,336,&v)&&v.world_x==-1&&v.native_x==0&&v.padding_left==1);
+ CHECK(IogWorldViewCompute(513,545,768,768,256,224,&v)&&v.world_x==513&&v.world_y==545&&v.padding_right==1&&v.padding_bottom==1);
+ for(unsigned a=0;a<4;a++)for(unsigned b=0;b<4;b++)for(unsigned c=0;c<5;c++)for(unsigned d=0;d<4;d++){
+  unsigned mw=maps[a],mh=maps[b];int xs[]={-16,-1,0,(int)mw-256,(int)mw-255,(int)mw-240};
+  int ys[]={-16,-1,0,(int)mh-224,(int)mh-223,(int)mh-208};
+  for(unsigned e=0;e<6;e++)for(unsigned f=0;f<6;f++)shake_properties(xs[e],ys[f],mw,mh,widths[c],heights[d]);
+ }
+ const int invalid[][6]={{-17,0,768,768,598,336},{0,-17,768,768,598,336},{529,0,768,768,598,336},{0,561,768,768,598,336},{0,0,255,768,598,336},{0,0,768,223,598,336},{0,0,65536,768,598,336},{0,0,768,65536,598,336},{0,0,768,768,255,336},{0,0,768,768,2049,336},{0,0,768,768,598,223},{0,0,768,768,598,513},{INT32_MIN,0,768,768,598,336},{INT32_MAX,0,768,768,598,336}};
  for(unsigned n=0;n<sizeof(invalid)/sizeof(invalid[0]);n++){
   memset(&v,0xA5,sizeof(v));CHECK(!IogWorldViewCompute(invalid[n][0],invalid[n][1],invalid[n][2],invalid[n][3],invalid[n][4],invalid[n][5],&v));CHECK(!memcmp(&v,&zero,sizeof(v)));
  }
