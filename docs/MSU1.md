@@ -1,5 +1,9 @@
 # Optional MSU-1 music
 
+MSU-1 is the default music preference. Import your pack through Soundtrack to
+enable it; missing packs or tracks use original SNES music. Choosing **Use
+original audio** explicitly overrides the default until you select MSU-1 again.
+
 The Companion soundtrack panel imports music separately from the game package.
 Original SNES music works offline; an optional pack is not required to play.
 The importer never changes the ROM or applies an IPS patch. Babel already

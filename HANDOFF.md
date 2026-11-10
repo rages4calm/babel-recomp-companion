@@ -3,6 +3,18 @@
 Updated November 10, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
+Music preference: MSU-1 is now enabled by default in the enhancement catalog.
+The Companion soundtrack page reads that catalog default when no explicit
+selection exists; an explicit original-audio choice still wins. Nine activation
+checks and the launcher build pass. Owner `build/` already selected the imported
+28-track pack. Private classroom v18 demo/native018 settings now select that same
+pack without copying PCM. The private demo seed was replayed from the original
+opening with MSU selected; a 240-frame paced dummy-device load starts town track 3
+and consumes audio. This is stream evidence, not an audible listening check.
+Private receipts are in `native-018/classroom-preview/audio-default/`. CPU-parity
+fixtures must keep their own explicit music/reference settings; do not relabel
+earlier original-audio classroom evidence as MSU validation.
+
 ## Qualified continuation — batch 018
 
 Baseline `4990326`; ignored work under `native-018`. Final private candidate

@@ -9,11 +9,14 @@ internal static class ActivationTests
         try {
             File.WriteAllText(Path.Combine(root, "babel-recomp.exe"), "synthetic");
             var catalog = Path.Combine(root, "mods/preloaded/packages/iog.enhancements/1.0.0");
-            Directory.CreateDirectory(catalog); File.WriteAllText(Path.Combine(catalog, "manifest.toml"), "synthetic");
+            Directory.CreateDirectory(catalog);
+            File.WriteAllText(Path.Combine(catalog, "manifest.toml"), "[[feature]]\nid = \"msu1\"\ndefault_enabled = true\n");
+            Assert(SoundtrackActivation.Read(root).Enabled, "fresh launcher reflects MSU-1 catalog default");
             var pack = Path.GetFullPath(Path.Combine(root, "msu1/companion-packs/test-pack")); Directory.CreateDirectory(pack);
             var state = Path.Combine(root, "mods/preloaded/state.toml");
             const string other = "# owner comment\r\nformat_version = 1\r\n\r\n[[feature]]\r\npackage_id = \"iog.cheats\"\r\nid = \"stats\"\r\nenabled = false\r\n\r\n[[option]]\r\npackage_id = \"iog.enhancements\"\r\nfeature_id = \"run\"\r\nid = \"button\"\r\nvalue = \"Y\"\r\n";
             File.WriteAllText(state, other, new UTF8Encoding(true));
+            Assert(SoundtrackActivation.Read(root).Enabled, "unrelated saved settings inherit soundtrack default");
             SoundtrackActivation.Enable(root, pack);
             var result = SoundtrackActivation.Read(root);
             Assert(result.Enabled && result.PackDirectory == pack, "enable native selection");
@@ -32,7 +35,7 @@ internal static class ActivationTests
             try { SoundtrackActivation.Disable(root); throw new Exception("duplicate selection accepted"); }
             catch (InvalidDataException) { }
             Assert(preserved.SequenceEqual(File.ReadAllBytes(state)), "duplicate selections fail closed");
-            Console.WriteLine("PASS 7 soundtrack activation checks (synthetic native mod state)");
+            Console.WriteLine("PASS 9 soundtrack activation checks (synthetic native mod state)");
         } finally { Directory.Delete(root, true); }
     }
     private static void Assert(bool condition, string name) { if (!condition) throw new Exception(name); }
