@@ -18,6 +18,7 @@
 
 #include "iog_widescreen.h"
 #include "iog_randomizer.h"
+#include "iog_world_renderer.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -408,7 +409,8 @@ void IogWidescreenBeforeFrame(void)
     static int disabled = -1;
     if (disabled < 0)
         disabled = getenv("IOG_WS_NO_CULL_PATCH") != NULL;
-    PatchCull(disabled || IogRandomizerActive() ? 0 : g_ppu->extraLeftRight);
+    PatchCull(disabled || IogRandomizerActive() || IogWorldEnabled()
+        ? 0 : g_ppu->extraLeftRight);
     if (g_cull_margin) {
         uint16_t cam = (uint16_t)(WramWord(kWramCameraX) - g_cull_margin);
         g_snes->ram[kWramCullCamera] = (uint8_t)cam;

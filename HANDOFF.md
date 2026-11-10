@@ -3,6 +3,55 @@
 Updated November 9, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
+## Custom renderer foundation — batch 016
+
+Baseline `23090cc`; bounded ignored work lives in `native-016`. Candidate
+`52b8c87d0d5706f03d22ec9b0707ba3dd062bd6aa32609fe181be4f00a332b80`
+keeps stock 256×224 gameplay sorting, visibility/candidates and camera, with a
+separate visual list and larger square-pixel world canvas/HUD scale. Opt in
+with `IOG_WORLD_RENDERER=1`, extent `IOG_WORLD_VIEW_EXTENT=1|1.25|1.5` (default1.5).
+The reference/legacy paths remain; old expanded-culling failures remain retained.
+
+All 73 fresh broad captures / 142,400 frames / 502 snapshot sets pass 42 strict
+guest/full CPU/resume/master/HDMA/IRQ/stock-operand comparisons over 32 assisted
+routes. Fourteen final views render the world; 28 are explicitly unsupported
+fallbacks. Both scenes' six-geometry grids pass; moving town is ready 599/600
+frames. Sixteen retained 015 original-width controls also match. Initial
+Aqueduct and aligned town/Aqueduct 1× central views match all 57,344 texels.
+Six NVIDIA 1280×720 runs pass actual transport/geometry and Sharp/xBR checks.
+Independent finite map/actor composition checks pass 66,192 predetermined
+pixels across three extents, including new above/below/side scenery and pier.
+No complete room/actor/campaign/GPU-engine/interpolation qualification is claimed.
+The offscreen 4K attempt fell back to software and remains failed for GPU proof.
+
+SNESRecomp `e9c207322c148eccc8a679b72d8b005d0d95d31c` selectively integrates
+merged PR269's finite-owner fix; local changes preserved. Both bridge controls
+pass 447 assertions; SDK839 passes/two skips. Graph manifest is unchanged but
+48 banks are regenerated with composition observations. All 6,757 contexts /
+27,028 aliases / 140 effects bodies reproduce exactly; no new guest native
+share is claimed. CPU world composition remains a performance target: unpaced
+town raster-capture means about6.0/10.7/12.8ms at1/1.25/1.5, not measured FPS
+or latency. HD2D effects remain disabled in distinct-geometry mode. Next work:
+optimize/replace CPU row composition against the retained pixel reference,
+extend actual scene/actor/effect coverage, then smooth camera/input/presentation.
+See [016 evidence and limits](docs/NATIVE-BATCH-016.md).
+Completed SDK test temp95MB remains: automatic approval review rejected scoped
+deletion twice with only `blocked by policy`. No deletion occurred; retain the
+private TEMP-RETIREMENT receipt and do not retry through alternate tools/routes.
+
+November 9 developer follow-up: current stock-USA validation keeps stock maps. The
+expanded widescreen maps belong only to the Retranslation/GaiaLabs edition;
+the owner confirms their contributors have approved reuse. Keep those maps
+exclusive to that edition. The independent renderer/camera can serve both editions.
+Current 016 implementation uses only the verified stock-USA data.
+
+Owner clarification: the eventual main enhanced game includes the retranslation
+and approved expanded maps as built-in content, with no mod toggles for those
+two features. This replaces the earlier two-edition/mod-preset product plan.
+The main content is therefore Retranslation; stock-USA remains an internal
+native/differential reference while its foundation is completed first. Other
+optional QoL/mod choices are separate. No GaiaLabs integration is claimed yet.
+
 ## Qualified native execution / experimental renderer — batch 015
 
 Baseline `0e58f01`; private work is under `.local/batch-001/native-015`.

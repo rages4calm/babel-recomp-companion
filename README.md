@@ -12,8 +12,17 @@ source build interprets the game's 65816 instructions. November 9's private
 [batch 015](docs/NATIVE-BATCH-015.md) adds 2,267 guarded call/return and COP
 contexts, bringing the selection to 6,757 while retaining development fallback.
 The target is a faithful modern PC edition with fully native Original game
-code and sound, preserving Quintet's art direction and atmosphere. The current SPC700 driver
+code and sound as its foundation, preserving Quintet's art direction and
+atmosphere. The main enhanced game is intended to include the retranslation
+and approved expanded maps as built-in content, without mod toggles for either;
+that integration follows stock-game native verification. The current SPC700 driver
 is still interpreted; native completion and presentation polish remain ahead.
+
+[Batch 016](docs/NATIVE-BATCH-016.md) adds an opt-in independent world view while
+keeping the same native selection. The original 256×224 gameplay view stays
+authoritative; square-pixel 16:9/21:9 output can reveal more world vertically
+and horizontally. The adapter is finite to stock town/Aqueduct formats;
+unsupported areas retain authentic-field fallback.
 
 **83 fresh reference/native pairs pass** on the new implementation: 166 captures,
 436,000 frames and 1,294 snapshot sets, with all four original-writer reviews.
@@ -35,8 +44,8 @@ gain is claimed. Superseded private evidence was retired with all 39 protected
 owner files unchanged. [Renderer and modern PC quality direction](docs/RENDERER-DIRECTION.md)
 records the implemented finite preview and the remaining work on smooth motion,
 faster interfaces, independent scene composition and measured low-latency GPU
-presentation. A larger world view, including more scenery above and below,
-is planned separately from higher output resolution. Actual NVIDIA transport
+presentation. Batch 016 checks larger world extents separately from higher
+output resolution. Actual NVIDIA transport
 checks are separate from performance or combat acceptance.
 Historical cross-version failures and raw APU timestamp differences remain
 documented. Owner installations and settings are unchanged.
@@ -66,6 +75,13 @@ documented. Owner installations and settings are unchanged.
   interpolation or full 32:9 support. Private same-pose square-pixel captures
   verify the existing SharpPixels and optional xBR looks; higher resolution
   alone does not reveal more scenery. A scenery map and journal remain planned.
+  The newer `IOG_WORLD_RENDERER=1` path separates visuals from gameplay culling:
+  42 comparisons / 142,400 fresh frames pass guest/full-CPU preservation;
+  14 views render the world and 28 correctly use unsupported fallback.
+  Six NVIDIA 720p runs and 66,192 independently checked town pixels support
+  the finite zoom-out work. Default extent is1.5, with separately scaled HUD.
+  This CPU picture adapter is not the finished GPU renderer; 4K GPU proof,
+  HD2D effects in this mode, full scene coverage and performance work remain.
 - **Cheats and mods:** a dedicated launcher panel shares the native settings
   with the in-game menu. Optional room-clear stat rewards support 1x–8x;
   **Convenience** exposes Babel's existing hold-to-run toggle (default button Y).
@@ -74,9 +90,10 @@ documented. Owner installations and settings are unchanged.
   [Controls and limits](docs/CHEATS-AND-MODS.md).
 - **Windows icons:** coordinated flute/world/comet artwork for the game and a
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
-- **Framework:** integrated SNESRecomp `d8116fac`, main checked November 9,
+- **Framework:** integrated SNESRecomp `e9c20732`, main checked November 9,
   2026, including merged timing PRs #250/#251, with Babel-specific changes
-  preserved. [Integration and limits](docs/FRAMEWORK-NOV09.md).
+  preserved. Batch 016 selectively adds merged PR269's finite-owner correction.
+  [Earlier integration](docs/FRAMEWORK-NOV09.md), [current delta](docs/NATIVE-BATCH-016.md).
   Batch 015 reuses the qualified graph and all 1,248 emitted bodies unchanged,
   preserving the earlier 4,490 continuation contexts. The complete SDK gate
   passes 839 tests, two skipped; guarded call/COP protocol checks are recorded
@@ -110,8 +127,9 @@ documented. Owner installations and settings are unchanged.
   matching and minimap/world-map/room integration remain pending.
   SoundFont/MIDI tools and SPC documentation are also recorded for future audio
   work; they are not an implemented native audio engine.
-  [Original and GaiaLabs identities](docs/GAME-EDITIONS.md)
-  are separate; the edition picker/import adapter is pending. Thanks to **Azarem**, **Kassiven**,
+  [Internal content/build identities](docs/GAME-EDITIONS.md) remain separate for
+  verification; the earlier two-edition interface plan is superseded by built-in
+  retranslation/maps in the eventual main game. Thanks to **Azarem**, **Kassiven**,
   **LThammy**, **ViewtifulSlayer**, **Igor Chagas**, and
   **VitorVilela7 / wide-snes** for the referenced tools, content and research.
   [Developer references](docs/GAIALABS-DEVELOPER-NOTES.md),

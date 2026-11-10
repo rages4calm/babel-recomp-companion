@@ -1,9 +1,17 @@
-# Original and GaiaLabs editions
+# Main content direction and internal build profiles
 
-The owner's November 8 direction is to retain **at least two editions**:
-**Original Gaia** and **GaiaLabs**. GaiaLabs work must not replace or silently
-change the normal game. No edition picker or new runtime option is enabled by
-this contract; the GaiaLabs dev-build identity and engine integration are pending.
+The owner's November 9 clarification supersedes the earlier two-edition plan:
+the main enhanced game will include the **retranslation and approved expanded
+maps as built-in content**, without mod toggles for either. The map contributors
+approved reuse with Retranslation content. Stock USA remains an internal native
+execution and rendering reference. The original game foundation is completed
+before integrating this content; no patched-game native compatibility is claimed.
+
+The existing offline profile utility below still isolates incompatible inputs
+and generated code. Its `original`/`gaialabs` names describe internal build
+identities, not a promised edition picker or required user-facing game choice.
+The minimap and world-map features are developer-reported baserom features;
+their native integration remains pending alongside the retranslation.
 
 | Edition | Current contract |
 |---|---|

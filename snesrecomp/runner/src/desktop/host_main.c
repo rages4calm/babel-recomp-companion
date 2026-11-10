@@ -332,6 +332,11 @@ static uint16 g_seat_keymap[kSnesHostPadSeats];
 static uint16 g_seat_pad[kSnesHostPadSeats];
 static int g_ppu_render_flags = 0;
 static int g_snes_width = 256, g_snes_height = 224;
+static int g_raster_width = 256, g_raster_height = 224;
+static bool PresentationDiffersRaster(void) {
+  return g_game->presentation_geometry &&
+      (g_snes_width != g_raster_width || g_snes_height != g_raster_height);
+}
 static double g_present_alpha = 1;
 static bool g_reset_clock;
 static double g_simulation_hz = SNES_HOST_NTSC_HZ;
@@ -523,7 +528,7 @@ void snesrecomp_request_exit(void) {
 
 /* The last field actually presented, kept so an overlay can freeze the guest
  * and still have something to draw behind itself. Sized like g_my_pixels. */
-static uint8_t g_frozen_frame[kSnesDesktopMaxFrameWidth * 4 * 240];
+static uint8_t g_frozen_frame[kSnesDesktopMaxFrameWidth * 4 * kSnesDesktopMaxFrameHeight];
 static int g_frozen_w, g_frozen_h;
 /* The simulated frame the next present shows. Read by SNESRECOMP_SCREENSHOT
  * and by frame blending, which advances its kept frame once per simulated
@@ -536,7 +541,7 @@ static unsigned g_present_frame;
 #if defined(SNESRECOMP_HOST_HAS_BLEND) || SNESRECOMP_FRAME_STAGING_HLE
 /* Compose where reads are cheap, then upload with a write-only row copy.
  * The frozen overlay snapshot and optional OSD/blend read this frame. */
-static uint8 g_frame_stage[kSnesDesktopMaxFrameWidth * 4 * 240];
+static uint8 g_frame_stage[kSnesDesktopMaxFrameWidth * 4 * kSnesDesktopMaxFrameHeight];
 #endif
 
 static GamepadInfo g_gamepad[kSnesHostPadSeats];
@@ -811,6 +816,14 @@ static void PreparePpuFrame(void) {
   if (fh <= 0 || fh > 240) fh = 224;
   g_snes_width = fw;
   g_snes_height = fh;
+  g_raster_width = g_game->native_widescreen ? fw : 256;
+  g_raster_height = fh;
+  if (g_game->presentation_geometry) {
+    int width = fw, height = fh;
+    g_game->presentation_geometry(drawable_width, drawable_height, &width, &height);
+    SnesLocalViews_PresentationSize(width, height, fw, fh,
+                                  &g_snes_width, &g_snes_height);
+  }
   /* Native widescreen ports rasterize directly into the widened field. */
   g_ws_extra = g_game->native_widescreen ? (fw - 256) / 2 : 0;
   g_ws_active = g_ws_extra != 0;
@@ -829,7 +842,8 @@ static void PreparePpuFrame(void) {
    * PPU never saw, so those ports always ran the reference rasteriser. */
   uint32 flags = g_ppu_render_flags;
   if (g_ws_active) flags |= kPpuRenderFlags_NewRenderer;
-  if (g_config.enhanced_mode7 && g_game->native_widescreen && HiresBuffer(&g_hires_pixels)) {
+  if (!PresentationDiffersRaster() && g_config.enhanced_mode7 &&
+      g_game->native_widescreen && HiresBuffer(&g_hires_pixels)) {
     flags |= kPpuRenderFlags_4x4Mode7;
     PpuSetHiresMode7Buffer(g_ppu, g_hires_pixels, kPpuBufWidth * 4);
     PpuSetHdEmissiveBuffer(g_ppu, HdFx_Params()->bloom > 0 ? HiresBuffer(&g_hd_emissive) : NULL);
@@ -838,9 +852,9 @@ static void PreparePpuFrame(void) {
     PpuSetHdEmissiveBuffer(g_ppu, NULL);
   }
   PpuBeginDrawing(g_ppu, g_my_pixels,
-                  (g_game->native_widescreen ? fw : 256) * 4, flags);
+                  g_raster_width * 4, flags);
   PpuSetExtraSpace(g_ppu, (uint16_t)g_ws_extra);
-  if (g_config.mode7.enabled && !g_game->hd_frame &&
+  if (!PresentationDiffersRaster() && g_config.mode7.enabled && !g_game->hd_frame &&
       g_config.output_method == kOutputMethod_OpenGL) {
     if (!g_hd_capture) g_hd_capture = SnesHdCaptureCreate();
     SnesHdCaptureSetSampling(g_hd_capture,g_config.mode7.supersample);
@@ -1219,9 +1233,9 @@ static bool ScriptCondHolds(const ScriptEntry *e) {
 
 static void ScriptDump(const char *tag, unsigned frame) {
   const char *dir = getenv("SNESRECOMP_DUMP_DIR");
-  const int pitch = (g_game->native_widescreen ? g_snes_width : 256) * 4;
+  const int pitch = g_raster_width * 4;
   int rc = snes_state_dump(dir ? dir : "", tag, g_my_pixels, pitch, g_ws_extra,
-                           g_snes_height, frame);
+                           g_raster_height, frame);
   fprintf(stderr, "script f=%u dump %s %s\n", frame, tag, rc ? "partial" : "ok");
 }
 
@@ -1497,8 +1511,8 @@ int snes_host_speculative_capture(SnesSpecInputFn input, SnesSpecStopFn stop, vo
       g_ppu->inidisp = 0x0F;
     CaptureSimulationFrame(snes_frame_counter);
     if (g_spec_grab) g_spec_grab(ud);
-    const int fw = g_game->native_widescreen ? g_snes_width : 256;
-    const int fh = g_snes_height;
+    const int fw = g_raster_width;
+    const int fh = g_raster_height;
     if (fw * fh <= capacity_px) {
       for (int y = 0; y < fh; y++)
         memcpy(out + (size_t)y * fw, g_my_pixels + (size_t)y * fw * 4, (size_t)fw * 4);
@@ -1565,9 +1579,8 @@ static int ComposeStateThumbnail(uint32_t *dst, size_t cap, int *w, int *h) {
 /* Snapshots and their thumbnails share the same completed raster boundary. */
 static void NoteStateFrame(void) {
   if (g_ppu && g_ppu->renderBuffer) {
-    int width = g_game->native_widescreen ? g_snes_width : 256;
-    snes_savestate_menu_note_frame((const uint32_t *)g_ppu->renderBuffer, width, g_snes_height);
-    snes_rewind_note_framebuffer((const uint32_t *)g_ppu->renderBuffer, width, g_snes_height);
+    snes_savestate_menu_note_frame((const uint32_t *)g_ppu->renderBuffer, g_raster_width, g_raster_height);
+    snes_rewind_note_framebuffer((const uint32_t *)g_ppu->renderBuffer, g_raster_width, g_raster_height);
   }
   snes_rewind_note_frame();
   SnesRa_Frame();   /* real frames only: this is never called for run-ahead's */
@@ -1591,6 +1604,16 @@ void RtlDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
     return;
   }
   debug_server_note_composed_frame(NULL, 0, 0, 0);
+  if (PresentationDiffersRaster()) {
+    if (SnesLocalViews_CopyRaster(pixel_buffer, pitch, g_snes_width, g_snes_height,
+                                 g_my_pixels, (size_t)g_raster_width * 4,
+                                 g_raster_width, g_raster_height)) {
+      g_custom_frame = true;
+      debug_server_note_composed_frame(pixel_buffer, (unsigned)pitch,
+                                       g_snes_width, g_snes_height);
+    }
+    return;
+  }
   RtlWidescreenPresent(pixel_buffer, pitch, g_my_pixels, g_snes_width, g_snes_height);
 }
 
@@ -1735,7 +1758,7 @@ static void LoadHdPacks(void) {
  * companion_live picture into the presenter's buffer: side by side (Dual),
  * or stacked and turned a quarter (Flip Grip, the console held upright).
  * The presenter keeps the aspect of the buffer, so nothing else changes. */
-static uint8_t g_live_stage[kPpuBufWidth * 4 * 240];
+static uint8_t g_live_stage[kSnesDesktopMaxFrameWidth * 4 * kSnesDesktopMaxFrameHeight];
 int g_present_square_pixels;   /* display_aspect.h */
 static const uint32_t *g_live_px;
 static int g_live_cw, g_live_ch;
@@ -1803,7 +1826,7 @@ static void DrawPpuFrameWithPerf(void) {
    * SNES raster, so it keeps the 1x picture. */
   /* HD-2D effects want the 4x canvas on every frame. */
   const int live = LiveLayoutActive();
-  const int render_scale = live ? 1 :
+  const int render_scale = live || PresentationDiffersRaster() ? 1 :
       (g_ppu->renderFlags & kPpuRenderFlags_4x4Mode7) && !g_config.shader &&
       (PpuFrameHasHiresMode7(g_ppu, g_snes_height) || HdFx_Active()) ? 4 : 1;
   uint8 *present_buffer = 0;
@@ -1836,7 +1859,8 @@ static void DrawPpuFrameWithPerf(void) {
   const size_t frame_bytes = (size_t)(g_snes_width * render_scale) *
                              (size_t)(g_snes_height * render_scale) * 4u;
   bool staged = SNESRECOMP_FRAME_STAGING_HLE &&
-                frame_bytes <= sizeof(g_frame_stage);
+                frame_bytes <= (g_game->presentation_geometry ? sizeof(g_frame_stage) :
+                                (size_t)kSnesDesktopMaxFrameWidth * 4u * 240u);
 #if defined(SNESRECOMP_HOST_HAS_BLEND)
   const bool blending = !live && g_config.frame_blend && g_blend &&
                         frame_bytes <= (size_t)kPpuMaxFrameWidth * 4u * 240u;
@@ -1862,7 +1886,7 @@ static void DrawPpuFrameWithPerf(void) {
   } else {
     RtlDrawPpuFrame(pixel_buffer, pitch, g_ppu_render_flags);
   }
-  if (HdFx_Active())
+  if (!PresentationDiffersRaster() && HdFx_Active())
     HdFx_Apply((uint32_t *)pixel_buffer, g_snes_width * render_scale,
                g_snes_height * render_scale, pitch / 4,
                render_scale == 4 && g_ppu->hdEmissive ? g_hd_emissive : NULL,
@@ -1926,7 +1950,7 @@ static void DrawPpuFrameWithPerf(void) {
   }
   const SnesHdFrame *hd = NULL;
   SnesHdView hd_view;
-  if (g_config.mode7.enabled && !g_config.frame_blend) {
+  if (!PresentationDiffersRaster() && g_config.mode7.enabled && !g_config.frame_blend) {
     hd = g_game->hd_frame ? g_game->hd_frame() :
          !g_custom_frame ? SnesHdCaptureFrame(g_hd_capture) : NULL;
   }
@@ -4302,6 +4326,8 @@ int snesrecomp_desktop_main(const SnesDesktopHostGame *game, int argc, char **ar
   g_simulation_hz = game->simulation_hz > 0 ? game->simulation_hz : SNES_HOST_NTSC_HZ;
   g_snes_width = game->frame_width > 0 ? game->frame_width : 256;
   g_snes_height = game->frame_height > 0 ? game->frame_height : 224;
+  g_raster_width = game->native_widescreen ? g_snes_width : 256;
+  g_raster_height = g_snes_height;
 #if SNESRECOMP_HAS_GL_PRESENTER && !SNESRECOMP_SDL_GLES2_ONLY
   snesrecomp_opengl_set_viewport(game->compute_viewport);
 #endif

@@ -43,6 +43,7 @@
 #include "iog_widescreen.h"
 #include "iog_native_poll.h"
 #include "iog_native_continuations.h"
+#include "iog_world_renderer.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -70,11 +71,52 @@ extern Ppu *g_ppu;
 
 /* 0 until the first frame has booted from the reset vector. */
 static uint32_t g_resume_pc;
+static bool g_world_observers_ready;
+
+/* Both tiers observe exactly the original instruction boundary. These
+ * wrappers never change guest state; registration failure leaves the host
+ * without a qualified publication pair rather than a partial observer. */
+void GameWorldObserveCompose(const CpuState *cpu, uint32_t pc24)
+{
+    if (g_world_observers_ready)
+        IogWorldCaptureAtCompose(cpu, pc24);
+}
+
+void GameWorldObserveAfterCompose(const CpuState *cpu, uint32_t pc24)
+{
+    if (g_world_observers_ready)
+        IogWorldCaptureAfterCompose(cpu, pc24);
+}
+
+static void GameWorldInterpCompose(CpuState *cpu, uint32_t pc24)
+{
+    GameWorldObserveCompose(cpu, pc24);
+}
+
+static void GameWorldInterpAfterCompose(CpuState *cpu, uint32_t pc24)
+{
+    GameWorldObserveAfterCompose(cpu, pc24);
+}
 
 static void GameInitialize(void)
 {
     IogNativePollInitialize();
     IogNativeContinuationsInitialize();
+    IogWorldInitialize();
+    g_world_observers_ready = false;
+    bool observers_ok = true;
+    static const uint32_t banks[] = {0x030000, 0x430000, 0x830000, 0xc30000};
+    for (unsigned i = 0; i < sizeof(banks) / sizeof(banks[0]); i++) {
+        if (!interp_bridge_add_pre_opcode_hook(banks[i] | 0xc714, GameWorldInterpCompose))
+            observers_ok = false;
+        if (!interp_bridge_add_pre_opcode_hook(banks[i] | 0xc789, GameWorldInterpAfterCompose))
+            observers_ok = false;
+    }
+    g_world_observers_ready = observers_ok;
+    if (!observers_ok) {
+        IogWorldReset();
+        fprintf(stderr, "[iog_world] composition observers unavailable; world publication disabled\n");
+    }
     /* This frame host pulses inNmi below. A second beam-owned RDNMI edge
      * lets the original vblank wait return twice before NMI refreshes the
      * raw pad, so the game remaps an already-remapped controller word. */
@@ -115,6 +157,7 @@ static void game_run_interrupt(uint32_t vector, uint64_t frame_end)
 
 void GameRunOneFrame(void)
 {
+    IogWorldSimulationTick();
     const uint64_t frame_end = g_cpu.master_cycles + GAME_MASTER_CYCLES_PER_FRAME;
     const int booting = (g_resume_pc == 0);
     int slice;
@@ -158,8 +201,11 @@ void GameRunOneFrame(void)
          * around its full-screen column redraw (code_02ABE6); the NMI
          * handler rewrites VMAIN and the DMA source bank, so forcing it
          * mid-loop turned the rest of the tilemap into garbage. */
-        if (g_snes->nmiEnabled)
+        if (g_snes->nmiEnabled) {
+            IogWorldBeforeNmi();
             game_run_interrupt(nmi_vector(), frame_end);
+            IogWorldAfterNmi();
+        }
     }
 
     /* Run the guest until it parks on a read-only poll (its vblank wait) or
@@ -198,8 +244,10 @@ void GameDrawPpuFrame(void)
     Dma *dma = g_snes->dma;
     int trigger;
     int line, ch;
+    unsigned hdma_lines = 0, irq_count = 0;
 
     IogWidescreenBeforeDraw();
+    IogWorldBeginRaster();
 
     /* Re-arm HDMA from the last $420C (HDMAEN) the guest wrote — typically
      * during the NMI just run. The framework records it for exactly this. */
@@ -219,10 +267,12 @@ void GameDrawPpuFrame(void)
          * both must precede ppu_runLine for this line, not follow it. */
         for (ch = 0; ch < 8; ch++)
             SimpleHdma_DoLine(&hdma_chans[ch]);
+        hdma_lines++;
         if (line == trigger) {
             g_snes->inIrq = true;
             cpu_push_interrupt_frame_at(&g_cpu, g_resume_pc);
             (void)interp_bridge_run_interrupt(&g_cpu, irq_vector());
+            irq_count++;
             g_snes->inIrq = false;
             {
                 uint32_t resume = interp_bridge_lle_resume_pc();
@@ -232,8 +282,10 @@ void GameDrawPpuFrame(void)
             trigger = g_snes->vIrqEnabled ? (int)g_snes->vTimer : -1;
         }
         IogWidescreenBeforeLine(line);
+        IogWorldCaptureLine(line);
         ppu_runLine(g_ppu, line);
     }
+    IogWorldEndRaster(g_resume_pc, hdma_lines, irq_count);
 }
 
 /* Savestates. snes_saveload stores the emulated machine, but the guest's
@@ -275,6 +327,7 @@ static void GameStateLoad(SaveLoadInfo *sli, uint32_t version)
     g_cpu.A = st.A, g_cpu.X = st.X, g_cpu.Y = st.Y, g_cpu.S = st.S, g_cpu.D = st.D;
     g_cpu.DB = st.DB, g_cpu.PB = st.PB, g_cpu.P = st.P, g_cpu.emulation = st.emulation;
     cpu_p_to_mirrors(&g_cpu);
+    IogWorldReset();
 }
 
 const RtlGameInfo kGameInfo = {
@@ -294,4 +347,5 @@ void GameSessionReset(void)
      * been fine" is the usual desync culprit, because single-player never
      * re-enters the boot path twice in one process. */
     g_resume_pc = 0;
+    IogWorldReset();
 }

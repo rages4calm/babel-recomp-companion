@@ -7,7 +7,10 @@ the remaining quality goals are a design contract and work queue.
 
 Keep Gaia's art, character and atmosphere while making the enhanced edition
 feel like a polished contemporary PC game. Fully native Original game code
-and sound remain the foundation; GaiaLabs has a separate integration profile.
+and sound remain the foundation. The eventual main game includes GaiaLabs'
+retranslation and approved expanded maps as built-in content, without toggles
+for either. Stock USA remains an internal verification baseline. Distinct
+content/build identities still prevent incompatible generated code from mixing.
 Original hardware constraints and inherited defects are not product goals.
 
 Sluggish menus, unnecessary transition stalls, camera/character stepping,
@@ -64,7 +67,7 @@ This requires real world layers and full-coordinate visual actors, without
 changing guest AI visibility, the guest camera or global game speed merely
 to enlarge the view. Shrinking the existing image inside borders does not
 qualify. No launcher or in-game zoom setting should appear before an engine
-implementation works. GaiaLabs' expanded maps belong to its separate profile;
+implementation works. GaiaLabs' expanded maps belong with Retranslation content;
 the supplied town has different dimensions and landmark coordinates from
 stock, so matching scenery does not establish identical maps or raw positions.
 
@@ -91,7 +94,7 @@ simultaneous game views or monitor spanning need separate design and evidence.
 World expansion must draw valid authored scenery and correct actors. Define
 room bounds, camera policies and how insufficient content is handled. Do not
 stretch the image, repeat stale edge tiles or expose unloaded scenery to claim
-widescreen coverage. Maps supplied by GaiaLabs can inform its separate profile;
+widescreen coverage. Maps supplied by GaiaLabs can inform the Retranslation build;
 private game-derived inputs remain private.
 
 ## GPU and shader direction
