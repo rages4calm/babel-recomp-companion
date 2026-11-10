@@ -8,52 +8,53 @@ The original author's credit, support link and full acknowledgments remain below
 ## Companion development status
 
 This is an early development fork, with no Companion release yet. The default
-source build interprets the game's 65816 instructions. November 9's private
-[batch 017](docs/NATIVE-BATCH-017.md) adds 1,371 qualified script/frame-data
-contexts, bringing the selection to 8,128 while retaining development fallback.
+source build interprets the game's 65816 instructions. The qualified private
+[batch 018](docs/NATIVE-BATCH-018.md) selects 9,699 native contexts, adding
+1,571 while preserving the previous selection and development fallback.
 The target is a faithful modern PC edition with fully native Original game
-code and sound as its foundation, preserving Quintet's art direction and
-atmosphere. The main enhanced game is intended to include the retranslation
-and approved expanded maps as built-in content, without mod toggles for either;
-that integration follows stock-game native verification. The current SPC700 driver
-is still interpreted; native completion and presentation polish remain ahead.
+code and sound as its foundation, preserving Quintet's art and atmosphere.
+The main enhanced game is intended to include the retranslation and approved
+expanded maps as built-in content, without mod toggles for either. That
+integration follows stock-game native verification. SPC700 is still interpreted.
 
-[Batch 017](docs/NATIVE-BATCH-017.md) expands the independent world view to
-15 stock scene formats and fixes map-edge framing. The original 256×224 gameplay view stays
-authoritative; square-pixel 16:9/21:9 output can reveal more world vertically
-and horizontally. The adapter remains finite to the verified formats;
-unsupported areas retain authentic-field fallback.
+**105 reference/native pairs pass:** 210 captures, 522,200 frames and 1,480
+snapshot sets. Assisted routes now include Dark Gaia's two-form fight and
+ending, with idle/directional controls and original HP/phase writers. These
+are bounded tests using disclosed teleports and survival assistance. Full
+campaign qualification remains unfinished.
 
-**83 fresh reference/native pairs pass** on the new implementation: 166 captures,
-436,000 frames and 1,294 snapshot sets. Historical original-writer receipts keep
-their own source identities and scope. The routes include Castoth, Sand Fanger and Mummy Queen damage/death,
-rewards, phase controls, ceremonies and teleport consequences. This is bounded
-assisted coverage, not an earned campaign playthrough.
-
-The 6,000-frame classroom/South Cape route reaches
-**97.06% native guest CPU cycles** at original width. Across all 83 current
-original-width routes, the weighted share is **96.52%**. The new selection
-actually executes 135,552,332 guest cycles across 1,369 of its 1,371 additions.
-These measure bounded guest execution, not completion or host speed.
+On the same 83 routes used previously, native guest CPU cycles rise from
+**96.52% to 97.78%**, cutting their remaining interpreted cycles by **36.07%**.
+The classroom/South Cape route reaches 98.09%; the expanded 105-route corpus
+reaches 97.76%. These are execution measures, not project-completion or host
+speed percentages. Of the new contexts, 707 actually execute; 864 remain
+unobserved. Scoped NMI execution contributes additional work within existing
+native totals, without counting those cycles twice.
 
 The private path requires `IOG_NATIVE_CONTINUATIONS=1`; compiled poll effects
-separately require `IOG_NATIVE_RDNMI_POLL=1`. Both default off. Interpreter
-fallback remains available, and `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains
-the older lookup on the same binary. Per-PC counters separate each kind of work.
-Batch 017's 42-run paired renderer check reduces whole-process CPU time by
-60.0% / 70.8% / 71.8% at 1× / 1.25× / 1.5× world extents. These are quiet
-700-frame comparisons of the current optimized/reference renderer, including
-startup and diagnostics; they do not measure sustained FPS or input latency.
-The earlier native-selection CPU measurements retain their separate limits.
-Superseded private evidence was retired with all 39 protected
-owner files unchanged. [Renderer and modern PC quality direction](docs/RENDERER-DIRECTION.md)
-records the implemented finite preview and the remaining work on smooth motion,
-faster interfaces, independent scene composition and measured low-latency GPU
-presentation. Batch 017 checks larger world extents separately from higher
-output resolution. Actual NVIDIA transport
-checks are separate from performance or combat acceptance.
-Historical cross-version failures and raw APU timestamp differences remain
-documented. Owner installations and settings are unchanged.
+separately require `IOG_NATIVE_RDNMI_POLL=1`. The new finite NMI data path uses
+`IOG_NATIVE_NMI_CONTINUATIONS=1` with a qualified emitted grant set. All default
+off. Interpreter/reference paths remain available, and
+`SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains the older lookup.
+
+The independent world adapter now covers **50 verified stock scene formats**.
+**82 fresh reference/span pairs / 337,600 frames** pass, including repaired
+camera-shake edges and two complete 256×224 pixel controls. Original gameplay
+simulation and culling remain authoritative; square-pixel 16:9/21:9 output can
+reveal more world vertically and horizontally. Unsupported formats/phases
+retain authentic-field fallback. The older expanded-culling preview remains
+experimental.
+
+Batch 017's renderer optimization reduced whole-process CPU time by
+60.0% / 70.8% / 71.8% at 1× / 1.25× / 1.5× extents in its paired 700-frame
+benchmark. Batch 018 separately measures the NMI toggle with the same optimized
+renderer; [the report](docs/NATIVE-BATCH-018.md) keeps their scopes distinct.
+Neither measures sustained FPS or physical input latency.
+[Renderer direction](docs/RENDERER-DIRECTION.md) records the remaining work on
+smooth motion, interfaces, full scene composition and GPU presentation.
+Private evidence stays under ignored bounded folders; owner installations,
+settings, saves and soundtrack data are unchanged. Historical failures and
+raw audio timestamp differences remain documented.
 
 - **CompanionLauncher:** Windows adapter using the shared 0.2.0 shell, verified
   USA ROM selection, native display/audio/gamepad settings, and direct Play.
@@ -81,14 +82,14 @@ documented. Owner installations and settings are unchanged.
   verify the existing SharpPixels and optional xBR looks; higher resolution
   alone does not reveal more scenery. A scenery map and journal remain planned.
   The newer `IOG_WORLD_RENDERER=1` path separates visuals from gameplay culling:
-  42 fresh reference/span pairs / 150,200 frames pass whole-world pixel,
-  source-packet and guest/full-CPU preservation. All 42 selected views render
-  the world; intermediate fallback remains. Fifteen scenes have actual
-  published-sprite proof across three forms, with 66,368 raw sprite texels and
-  25,728 independently composed Town pixels checked. Final NVIDIA 720p captures
-  verify corrected framing and the xBR look. Default extent is 1.5, with separately scaled HUD.
-  Optimized span drawing is now default; `IOG_WORLD_REFERENCE_PIXELS=1` retains
-  the slower pixel/full-copy reference.
+  82 fresh reference/span pairs pass whole-world pixels, source packets and
+  strict guest/full-CPU/raw-APU preservation. Fifty scene formats have selected
+  actual published-sprite proof. Of 82 selected pictures, 81 render the world;
+  the deliberately malformed Castoth phase remains fallback. Both native-width
+  shake controls match all 57,344 original pixels. Final NVIDIA 720p captures
+  preserve the established framing and xBR look. Default extent is 1.5 with
+  separately scaled HUD. Span drawing is default;
+  `IOG_WORLD_REFERENCE_PIXELS=1` retains the pixel/full-copy reference.
   This CPU picture adapter is not the finished GPU renderer; 4K GPU proof,
   HD2D effects in this mode, full scene coverage and performance work remain.
 - **Cheats and mods:** a dedicated launcher panel shares the native settings
@@ -99,24 +100,27 @@ documented. Owner installations and settings are unchanged.
   [Controls and limits](docs/CHEATS-AND-MODS.md).
 - **Windows icons:** coordinated flute/world/comet artwork for the game and a
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
-- **Framework:** integrated SNESRecomp `e9c20732`, main checked November 9,
+- **Framework:** integrated SNESRecomp `e9c20732`, main checked November 10,
   2026, including merged timing PRs #250/#251, with Babel-specific changes
   preserved. Batch 016 selectively adds merged PR269's finite-owner correction.
-  [Earlier integration](docs/FRAMEWORK-NOV09.md), [current delta](docs/NATIVE-BATCH-016.md).
+  [Earlier integration](docs/FRAMEWORK-NOV09.md), [current local work](docs/NATIVE-BATCH-018.md).
   Batch 015 reuses the qualified graph and all 1,248 emitted bodies unchanged,
   preserving the earlier 4,490 continuation contexts. The complete SDK gate
-  passes 849 tests, two skipped; the retained Windows child-encoding warning
-  and strict targeted control are reported in
+  passes 872 tests, two skipped, with inherited UTF-8 and strict thread-warning
+  handling. The earlier child-encoding report remains open in
   [issue 270](https://github.com/RetroPortingToolKit/snesrecomp/issues/270).
   Guarded call/COP protocol checks are recorded
   separately. The local paired-call bank-wrap correction is reported in
   [issue 267](https://github.com/RetroPortingToolKit/snesrecomp/issues/267) and
   [PR 268](https://github.com/RetroPortingToolKit/snesrecomp/pull/268), both open
   at the November 9 check.
+  Windows mod paths should remain short pending
+  [issue 271](https://github.com/RetroPortingToolKit/snesrecomp/issues/271);
+  the current validation checks actual package loading in bounded paths.
   All prior hard timing guards remain work to resolve with verified fixes.
   Earlier live-WRAM, sorting and decode receipts retain their original
   identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-017.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-018.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).

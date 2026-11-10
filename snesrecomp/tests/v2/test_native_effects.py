@@ -236,11 +236,11 @@ def test_invalid_descriptor_refused(change):
     with pytest.raises(ValueError):emit(CORE.read_text(),[entry])
 
 
-@pytest.mark.parametrize('opcode',[0x6C,0x7C,0xDC])
+@pytest.mark.parametrize('opcode',[0x6C,0xDC])
 def test_indirect_jump_descriptors_refused(opcode):
     name,mode,size=d.opcode_table()[opcode]
     entry=dict(pc24=0x838100,m=0,x=0,e=0,bytes=bytes([opcode,0x00,0x80]),mnemonic=name,immediate=False)
-    with pytest.raises(ValueError,match='static branch/jump'):
+    with pytest.raises(ValueError,match='static or indexed-indirect jump'):
         emit(CORE.read_text(),[entry])
 
 
@@ -248,6 +248,32 @@ def test_indirect_jsr_descriptor_refused():
     entry=dict(pc24=0x838000,m=0,x=0,e=0,bytes=bytes.fromhex('fc0090'),mnemonic='JSR',immediate=False)
     with pytest.raises(ValueError,match='direct call/return'):
         emit(CORE.read_text(),[entry])
+
+
+def test_full_uint16_descriptor_range_and_overflow():
+    entries=[dict(pc24=0x808000+i//4,m=(i>>1)&1,x=i&1,e=0,
+                  bytes=b'\xea',mnemonic='NOP',immediate=False)for i in range(65535)]
+    generated,receipt=emit(CORE.read_text(),entries)
+    assert receipt['entries']==65535
+    assert generated.count('static int ni_at_')==65535
+    assert 'ni_at_80BFFF_10}'in generated
+    with pytest.raises(ValueError,match='bounded nonempty'):
+        emit(CORE.read_text(),entries+[dict(entries[-1],pc24=0x80c000)])
+
+
+def test_optional_nmi_scope_is_explicit_and_fail_closed():
+    entry=dict(pc24=0x838100,m=0,x=0,e=0,bytes=b'\xea',mnemonic='NOP',immediate=False)
+    key=(entry['pc24'],0,0,0);source=CORE.read_text()
+    assert emit(source,[entry])==emit(source,[entry],nmi_owner_pc24=None,nmi_keys=[])
+    for owner,keys in ((None,[key]),(True,[key]),(0x7e8500,[key]),(0x8500,[]),
+                       (0x8500,[key,key]),(0x8500,[(0x838101,0,0,0)]),
+                       (0x8500,[(entry['pc24'],False,0,0)])):
+        with pytest.raises(ValueError):emit(source,[entry],nmi_owner_pc24=owner,nmi_keys=keys)
+    for opcode in (0x08,0x28,0x48,0x68,0x20,0x22,0x60,0x6b,0x7c):
+        name,mode,size=d.opcode_table()[opcode];length=size(0,0)if callable(size)else size
+        row=dict(entry,bytes=bytes([opcode])+bytes(length-1),mnemonic=name)
+        with pytest.raises(ValueError,match='NMI data site'):
+            emit(source,[row],nmi_owner_pc24=0x8500,nmi_keys=[key])
 
 
 def test_jsr_afc7_diagnostic_preserves_environment_presence(tmp_path):

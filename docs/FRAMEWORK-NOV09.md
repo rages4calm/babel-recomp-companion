@@ -1,6 +1,14 @@
 # November 9 framework integration
 
-Official main is pinned to
+This is the historical integration snapshot. The current source pin is
+`e9c207322c148eccc8a679b72d8b005d0d95d31c`, with the selective PR269 integration
+recorded in [batch 016](NATIVE-BATCH-016.md). The subsequent local additions in
+[batch 018](NATIVE-BATCH-018.md) extend descriptor capacity, indexed-indirect
+JMP and explicitly scoped NMI data execution. These are local changes, not a
+claim that upstream main contains them. Babel's existing changes and all
+timing guards remain; no vendor directory was replaced.
+
+For the integration below, official main was pinned to
 [`d8116fac4470ed1c9df70ae56869c7a9cb44935f`](https://github.com/RetroPortingToolKit/snesrecomp/commit/d8116fac4470ed1c9df70ae56869c7a9cb44935f).
 This advances the earlier `e98dc63` integration. The maintainer merged our
 [#250](https://github.com/RetroPortingToolKit/snesrecomp/pull/250) and

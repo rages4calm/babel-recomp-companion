@@ -23,6 +23,7 @@
 #include "common_cpu_infra.h"
 #include "mod_runtime.h"
 #include "iog_randomizer.h"
+#include "iog_world_renderer.h"
 #include "snes/cart.h"
 #include "snes/interp_bridge.h"
 #include "snes/snes.h"
@@ -116,6 +117,10 @@ static void ActivateApocalypse(void)
         return;
     }
     interp_bridge_set_interpret_all(1);
+    /* Activation runs after GameInitialize verified the original image.
+     * Revalidate the now-patched cartridge and discard pending pictures;
+     * stock-only visual metadata must not survive a successful late patch. */
+    IogWorldInitialize();
     fprintf(stderr, "[ips] %s: %d records applied; running the patched code interpreted\n",
             path, records);
 }

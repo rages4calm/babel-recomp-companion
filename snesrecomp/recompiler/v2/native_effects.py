@@ -19,6 +19,10 @@ STATIC_CONTROL_OPCODES = frozenset({0x10, 0x30, 0x50, 0x70, 0x90, 0xB0,
                                   0xD0, 0xF0, 0x80, 0x82, 0x4C, 0x5C})
 DIRECT_CALL_RETURN_NAMES = frozenset({"JSR", "JSL", "RTS", "RTL"})
 DIRECT_CALL_RETURN_OPCODES = frozenset({0x20, 0x22, 0x60, 0x6B})
+INDIRECT_JUMP_OPCODES = frozenset({0x7C})
+NMI_EXCLUDED_OPCODES = frozenset({0x08, 0x28, 0x48, 0x68, 0xDA, 0xFA,
+    0x5A, 0x7A, 0x0B, 0x2B, 0x8B, 0xAB, 0x4B, 0xF4, 0x62, 0xD4,
+    0x20, 0x22, 0x60, 0x6B, 0x7C})
 FORBIDDEN = frozenset({"runOpcode", "doOpcode", "doInterrupt", "init", "reset",
                        "free", "saveload", "opcode_hook"})
 
@@ -88,7 +92,8 @@ def _rename(text, prefix):
     return re.sub(r"\binterp816_(\w+)\b", lambda m: prefix + m[1], text)
 
 
-def emit(source, entries, *, registration_name="IogRegisterNativeContinuations"):
+def emit(source, entries, *, registration_name="IogRegisterNativeContinuations",
+         nmi_owner_pc24=None, nmi_keys=()):
     """Return private C and an identity receipt for exact decoded entries.
 
     Entry keys: pc24(int), m/x/e(0/1), bytes(bytes), mnemonic, immediate(bool).
@@ -104,7 +109,7 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations")
     if len(cycles) != 256:
         raise ValueError("Malformed cycle table")
     entries = sorted(entries, key=lambda e: (e["pc24"], e["m"], e["x"], e["e"]))
-    if not entries or len(entries) > 32768:
+    if not entries or len(entries) > 65535:
         raise ValueError("A bounded nonempty descriptor set is required")
     keys = set()
     bodies, helpers = {}, {}
@@ -121,9 +126,11 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations")
         opcode = e["bytes"][0]
         # A mnemonic alone also admits indirect JMP/JML addressing forms.
         # Static branches and direct calls/returns keep the same owning bridge
-        # frame. Indirect opcode forms remain outside this emitter contract.
-        if e["mnemonic"] in STATIC_CONTROL_NAMES and opcode not in STATIC_CONTROL_OPCODES:
-            raise ValueError("Only static branch/jump effects are supported")
+        # frame. Only the qualified indexed-indirect JMP is admitted;
+        # other indirect opcode forms remain outside this contract.
+        if (e["mnemonic"] in STATIC_CONTROL_NAMES
+                and opcode not in STATIC_CONTROL_OPCODES | INDIRECT_JUMP_OPCODES):
+            raise ValueError("Only static or indexed-indirect jump effects are supported")
         if e["mnemonic"] in DIRECT_CALL_RETURN_NAMES and opcode not in DIRECT_CALL_RETURN_OPCODES:
             raise ValueError("Only direct call/return effects are supported")
         mnemonic, mode, size = decoder.opcode_table()[opcode]
@@ -197,7 +204,24 @@ typedef struct NiOperands {
             definitions[name] = text
         parts += [text[:text.index("{")].rstrip() + ";" for text in definitions.values()]
         parts += list(definitions.values())
-    descriptors = []
+    nmi_keys = list(nmi_keys)
+    if nmi_keys or nmi_owner_pc24 is not None:
+        if (not nmi_keys or type(nmi_owner_pc24) is not int
+                or not 0 <= nmi_owner_pc24 <= 0xFFFFFF
+                or nmi_owner_pc24 & 0xFFFF < 0x8000
+                or nmi_owner_pc24 >> 16 in (0x7E, 0x7F)):
+            raise ValueError("Explicit finite upper-ROM NMI owner and sites required")
+        seen = set()
+        by_key = {(e['pc24'], e['m'], e['x'], e['e']): e for e in entries}
+        for key in nmi_keys:
+            if (type(key) is not tuple or len(key) != 4
+                    or any(type(n) is not int for n in key)
+                    or key in seen or key not in by_key
+                    or by_key[key]['bytes'][0] in NMI_EXCLUDED_OPCODES):
+                raise ValueError("Unsupported, duplicate or unregistered NMI data site")
+            seen.add(key)
+        nmi_keys.sort()
+    descriptors, descriptor_by_key = [], {}
     for e in entries:
         pc, m, x = e["pc24"], e["m"], e["x"]
         symbol = f"ni_at_{pc:06X}_{m}{x}"
@@ -216,13 +240,26 @@ typedef struct NiOperands {
 {body}
   return cpu->cyclesUsed;
 }}""")
-        descriptors.append(f"  {{0x{pc:06X}u,{m},{x},0,{len(e['bytes'])},{{{encoded}}},{symbol}}}")
+        descriptor = f"  {{0x{pc:06X}u,{m},{x},0,{len(e['bytes'])},{{{encoded}}},{symbol}}}"
+        descriptors.append(descriptor)
+        descriptor_by_key[(pc, m, x, e['e'])] = descriptor
     parts.append("static const InterpNativeInstruction ni_entries[] = {\n" + ",\n".join(descriptors) + "\n};")
-    parts.append(f"bool {registration_name}(void) {{ return interp_bridge_add_native_instructions(ni_entries, sizeof ni_entries / sizeof *ni_entries); }}")
+    if nmi_keys:
+        parts.append("static const InterpNativeInstruction ni_nmi_entries[] = {\n" +
+                     ",\n".join(descriptor_by_key[k] for k in nmi_keys) + "\n};")
+        parts.append(f"""bool {registration_name}(void) {{
+  if (!interp_bridge_add_native_instructions(ni_entries, sizeof ni_entries / sizeof *ni_entries)) return false;
+  return interp_bridge_allow_native_nmi_instructions(0x{nmi_owner_pc24:06X}u, ni_nmi_entries, sizeof ni_nmi_entries / sizeof *ni_nmi_entries);
+}}""")
+    else:
+        parts.append(f"bool {registration_name}(void) {{ return interp_bridge_add_native_instructions(ni_entries, sizeof ni_entries / sizeof *ni_entries); }}")
     result = "\n\n".join(parts) + "\n"
     if re.search(r"\b(?:interp816_|ni_\d\d_)(?:runOpcode|doOpcode)\s*\(", result):
         raise ValueError("Decoder call in native output")
-    return result, {"schema": "native continuation specialization v1", "entries": len(entries),
+    receipt = {"schema": "native continuation specialization v1", "entries": len(entries),
                     "helper_source_sha256": hashlib.sha256(source.encode()).hexdigest(),
                     "generated_source_sha256": hashlib.sha256(result.encode()).hexdigest(),
                     "fixed_opcode_bodies": len(bodies), "helper_functions": sorted(helpers)}
+    if nmi_keys:
+        receipt.update(native_nmi_owner_pc24=nmi_owner_pc24, native_nmi_grants=len(nmi_keys))
+    return result, receipt

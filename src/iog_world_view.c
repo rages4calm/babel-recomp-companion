@@ -3,10 +3,19 @@
 
 static int32_t Origin(int32_t camera,uint32_t map,unsigned view,unsigned native)
 {
-    if(map<view) return -(int32_t)((view-map)/2);
-    int32_t origin=camera-(int32_t)((view-native)/2);
-    if(origin<0) origin=0;
-    if(origin>(int32_t)(map-view)) origin=(int32_t)(map-view);
+    int32_t origin;
+    if(map<view) origin=-(int32_t)((view-map)/2);
+    else {
+        origin=camera-(int32_t)((view-native)/2);
+        if(origin<0) origin=0;
+        if(origin>(int32_t)(map-view)) origin=(int32_t)(map-view);
+    }
+    /* Containing all 256x224 source pixels takes precedence over clamping
+     * an expanded view to the map. In particular a 256-wide view at -1 must
+     * start at -1, rather than wrapping an unsigned native offset. */
+    int32_t first=camera+(int32_t)native-(int32_t)view;
+    if(origin<first) origin=first;
+    if(origin>camera) origin=camera;
     return origin;
 }
 
@@ -18,8 +27,10 @@ bool IogWorldViewCompute(int32_t camera_x,int32_t camera_y,
     memset(out,0,sizeof(*out));
     if(width<256 || width>2048 || height<224 || height>512 ||
        map_width<256 || map_height<224 || map_width>65535 || map_height>65535 ||
-       camera_x<0 || camera_y<0 || (uint32_t)camera_x>map_width-256 ||
-       (uint32_t)camera_y>map_height-224) return false;
+       camera_x < -kIogWorldCameraExcursion ||
+       camera_y < -kIogWorldCameraExcursion ||
+       camera_x > (int32_t)(map_width-256)+kIogWorldCameraExcursion ||
+       camera_y > (int32_t)(map_height-224)+kIogWorldCameraExcursion) return false;
     out->width=width;out->height=height;
     out->world_x=Origin(camera_x,map_width,width,256);
     out->world_y=Origin(camera_y,map_height,height,224);

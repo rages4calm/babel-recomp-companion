@@ -70,7 +70,7 @@ static bool ActiveWorldWindow(const Ppu *p)
 }
 static int ScrollWorld(const uint8_t *ram,unsigned at,unsigned scroll)
 {
-    int base=(int)Word(ram,at), result=(base&~1023)|(scroll&1023);
+    int base=(int16_t)Word(ram,at), result=(base&~1023)|(int)(scroll&1023);
     if(result-base>512) result-=1024;
     if(base-result>512) result+=1024;
     return result;
@@ -254,8 +254,8 @@ static bool RenderWorld(void)
     int physical=(s.active_ram[0x6EE]>>7)&1;
     int camera_x=ScrollWorld(s.active_ram,0x68A,p->hScroll[physical]);
     int camera_y=ScrollWorld(s.active_ram,0x68E,p->vScroll[physical]);
-    if(camera_x!=(int)Word(s.active_ram,0x68A) ||
-       camera_y!=(int)Word(s.active_ram,0x68E)) {
+    if(camera_x!=(int16_t)Word(s.active_ram,0x68A) ||
+       camera_y!=(int16_t)Word(s.active_ram,0x68E)) {
         s.reason="camera_publication_mismatch";return false;
     }
     if(!IogWorldViewCompute(camera_x,camera_y,Word(first->ram,0x692),
@@ -357,8 +357,15 @@ static bool RenderWorld(void)
             for(size_t i=0;i<count;i++) s.objects[i].x+=start;
             for(int x=0;x<width;x++) {
                 int worldx=viewport.world_x+start+x,worldy=viewport.world_y+row;
-                if(worldx>=0&&worldx<(int)Word(e->ram,0x692)&&worldy>=0&&
-                   worldy<(int)Word(e->ram,0x696)) s.output[row*s.width+start+x]=s.row[x];
+                bool native_pixel=native_y>=0&&native_y<224&&
+                    start+x>=left&&start+x<left+256;
+                /* Preserve the actual uploaded tilemap cells across the
+                 * whole authoritative field during shake. This may include
+                 * a hardware-wrapped edge; expanded outside-map space is
+                 * still padding, never guessed or repeated terrain. */
+                if(native_pixel||(worldx>=0&&worldx<(int)Word(e->ram,0x692)&&
+                   worldy>=0&&worldy<(int)Word(e->ram,0x696)))
+                    s.output[row*s.width+start+x]=s.row[x];
             }
         }
     }

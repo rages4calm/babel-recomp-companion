@@ -25,20 +25,22 @@ development reference while native coverage is completed.
 
 ## Current limitations
 
-Gaia is not qualified as fully widescreen or remake quality. Batch 017 has an
-independent world adapter for 15 stock scene formats, corrected host-camera
-boundaries and faster CPU drawing. Its original gameplay view remains 256×224;
-42 reference/span pairs and final NVIDIA captures pass. The older expanded-
+Gaia is not qualified as fully widescreen or remake quality. Batch 018 has an
+independent world adapter for 50 stock scene formats, corrected host-camera
+boundaries and bounded signed shake handling. Its original gameplay view remains 256×224;
+82 reference/span pairs and final NVIDIA captures pass. The older expanded-
 culling preview's Aqueduct failure remains historical and unresolved on that
 legacy path. Classroom/unsupported formats retain authentic-field fallback;
 other rooms, actor phases, varying windows, smooth motion and ultrawide
-composition still need work. See [batch 017 evidence and limits](NATIVE-BATCH-017.md).
+composition still need work. See [batch 018 evidence and limits](NATIVE-BATCH-018.md).
 
-The 1.5× Town view's left strip is fixed by clamping only the presentation
-camera inside available map data. Small maps can still require balanced
+The 1.5× Town view's left strip is fixed by clamping the presentation camera
+inside available map data. During bounded shakes, containing the entire
+original field takes priority; its uploaded edge cells remain authoritative.
+Both native-width shake controls match all 57,344 original pixels. Small maps can still require balanced
 padding; a larger storage plane does not establish an authored wider room.
 The existing Mode1 span renderer and bounded tilemap restoration reduce
-measured whole-process CPU cost by about72% at 1.5× in the stated paired test.
+measured whole-process CPU cost by about72% at 1.5× in batch 017's paired test.
 This is not a replacement GPU world renderer or a latency/FPS measurement.
 
 A modern GPU backend alone cannot supply missing map content, correct

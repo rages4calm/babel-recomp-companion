@@ -1,7 +1,122 @@
 # Illusion of Gaia Companion — handoff
 
-Updated November 9, 2026. Development version `0.1.0-dev.1`.
+Updated November 10, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
+
+## Qualified continuation — batch 018
+
+Baseline `4990326`; ignored work under `native-018`. Final private candidate
+`7a850990d1c72ad6e33c1947a3070f388056b20228831e1353a0c7359f1a86e2`.
+All 521 compiled-source hashes, production bridge compile/link command, immutable
+016 graph and generated effects are bound in build receipts. The temporary
+owner-diagnostic translation unit is retired; CMAKE_PROJECT_INCLUDE is empty.
+Owner installation remains 005; this is source work, no release/install.
+
+Native selection: 9,699 canonical / 38,796 aliases, old 8,128 literal plus 1,571
+new (1,566 room/boss union + five indexed JMP). Emitter has 144 opcode bodies;
+old full 8,128-context C is byte-identical and all old 32,512 descriptors /
+32,610 functions remain exact. RomAtlas: 1,563 fresh + eight bound reuses.
+Capacity 65,535 retains uint16 IDs/zero miss and atomic registration. Scoped NMI
+allows 430 old data contexts / 1,720 aliases only at actual host entry 00800B.
+Actual diagnostic disproved the initial 008003 assumption. IRQ/ordinary interrupt,
+nested ownership, stack/frame/control and all hard policy checks retain fallback.
+Enable via IOG_NATIVE_NMI_CONTINUATIONS=1 alongside the existing NI/poll switches;
+new native_nmi counters are strictly subsets of NI, never extra CPU work.
+
+Full SDK: 872 passed / two skipped / no warnings, inherited UTF-8 and strict
+thread-warning handling. Focused 34 tests + three subtests include real CPU,
+SPC/DSP, DMA, hardware math, bus ordering, deadlines, ownership and causal mutants.
+All public engine and renderer code is frozen; do not edit without new proof.
+
+105 same-final-binary original256 pairs / 210 captures / 522,200 frames /
+1,480 snapshot sets PASS through the explicit composite receipt. Old83 native
+share 97.7752% versus 96.5202% previously: 101,686,054 fewer interpreted cycles,
+a 36.0655% reduction in that remaining workload. New19 rooms 97.9738%; DarkGaia3
+97.2174%; mixed105 97.7578% is a distinct corpus. Of 1,571 new contexts, 707
+execute (702 ordinary + all five JMP); 864 unobserved, no inferred refusal cause.
+New ordinary/JMP cycles 10,196,834 / 12,703,470. NMI108,212,898 cycles is already
+inside old-context NI totals. 8,225 total continuation contexts observed.
+740 raw APU timestamp-difference files retained; unchanged canonical event and
+complete APU/SPC/DSP/PCM/scheduler checks pass. No raw equality/hardware claim.
+Three same-binary NMI off/on pairs / 25,200 frames have raw APU equality too;
+per-PC NI increase == interpreted decrease == NMI subset, other work unchanged.
+Three old17/new18 forced-reference controls also pass without new game runs.
+
+New Dark Gaia sources follow source-verified caller graphics context → original
+E7 flight → special E8 entry. A/up attacks produce original HP20→0, phase2HP40,
+40→0 and E5 ending; idle remains20, down-control remains phase2HP40. No enemy
+HP/phase/PC/clear/reward edits. BossV3 review FAILED on native init writer IPC0
+versus interpreted83D009. Raw logs/failure remain; V4 read-only replacement binds
+exact compiled bank83_part09_v2.c/hash and unique store, full CPU/actor/frame,
+address/width/value and adjacent byte order. Complete three captured pairs and
+nine wrong-mapping/missing-init controls pass. Do not relabel V3 passed or apply
+blanket IPC normalization. Final native composite explicitly binds V4.
+
+Fresh renderer82 / 164 captures / 337,600 frames / 1,256 snapshot sets PASS.
+Physical final-attempt002 uses short pNNN/vN endpoints with actual resolver,
+SHA, all file opens and effective feature-state checks; max path195 characters.
+All old42 views, new35 scenes, three phase checks and two native256 controls
+pass. 81 selected positive pictures / 50 unique formats have actual stock C714
+OAM/OBJ/order proof; one Castoth1306 malformed-source frame correctly falls back.
+Per tier1,481 visible parts / 644 player / 280,640 raw OBJ texels. ROI partition:
+4,351,535 native nonHUD exact + 102,836 projectedBG3 exact + 190,493 originalHUD-only
+terrain explicitly unobserved = 81×57,344. Both 256×224 shake pictures match every
+57,344 pixels. Guest/rawAPU/fullCPU/native-per-PC/policy/source packets/world
+pixels are exact between REFpixels/fullcopy and SPAN; NMI/poll/NI ON both.
+This renderer comparison does NOT use native-vs-interpreter stamp normalization.
+
+Original renderer attempt001 retains 44 passes + actual Inca HP divergence.
+Root proved Windows path264 versus259 skipped the cheat manifest in one run;
+normal C++ filesystem/open failed264 but extended-path open succeeded. Effective
+states differed. The compact full82 rerun fixes the validation environment,
+not guest state. SDK issue271 filed/verified; no shared-runtime workaround or
+public source change. All native105 paths≤230 and actual1,260 manifest opens /
+canonical feature checks pass. Keep paths short pending upstream handling.
+
+Separate real adapter defect fixed: GameInitialize cached stock hash before
+late IPS plugin activation. Successful actual IPS now calls existing world
+initialization to rehash/reset picture pairs; bad two-pass IPS preserves bytes
+and stock eligibility. Actual modules + real SHA on synthetic2MiB pass871,391
+assertions; removing only refresh reproduces it. Own issue3 will close with
+source push. This does not qualify Apocalypse/GaiaLabs world rendering.
+
+Two final NVIDIA1280 nearest/xBR captures pass; NMI active, nearest200,928 texels
+exact, filtered color has no independent oracle. PNGs under native-018/visuals,
+xBR normal town image remains pixel-identical to017. No new4K/HD2D/GPU-engine/
+physical-input/sustained-FPS claim. Classroom/unsupported phases retain fallback.
+
+Quiet NMIoff/on CPU benchmark42processes/29,400frames PASS on samefinalbinary:
+paired median on/off ratios1.0000/1.0000/1.0071 at1/1.25/1.5 extents, within
+observed paired variation; no consistent host speed gain. All671serviceframes
+perrun genuinely worldready, exact ROM/seed/config/mod-resource input identity,
+CPU/WRAM/audit/sitecount witnesses, NIdelta==NMI subset. GetProcessTimes covers
+target startup/engine/I/O/diagnostics/exit, not parent preparation. No other
+workload ran. Earlier017renderer60–71.8% CPU reduction stays separate.
+
+Storage closeout:13,472 cold preliminary/superseded raw dumps /3,726,274,127
+logical bytes retired via exact hashed scoped list. Preserve complete failing
+Inca pair and ALL final105+82 raw data, JSON receipts/profile/source inputs,
+states/masters. No archives or owner deletion. Existing-file NTFS compression
+preserves paths/bytes and saves1,046,548,214reported bytes; futurecaptureparents
+were compressed before generation. Batch15.7GBlogical /5.2GBreportedfilestorage,
+underreviewed5GiBlimit butaboveinitial4GiBtarget toretaincurrentcompleteproof.
+cleanup/FINAL-RECEIPT.json records exact controls; doNOTretry blocked016SDKdelete.
+Currentfinal-attempt002/case data remains full; oldprelim/attempt001 raw data
+exceptfailedcase is explicitlyretired, not an available golden capture.
+
+Receipts: qualification/FINAL-RECEIPT.json, counter-audit/FINAL-COHORT-AUDIT.json,
+renderer-qualification/final-attempt002/{FINAL-RECEIPT,INDEPENDENT-CLOSEOUT}.json,
+native-gap/{FROZEN-ENGINE-PROOF,FROZEN-EFFECTS-RECEIPT}.json,
+native-gap/nmi-off-on/FINAL-RECEIPT.json, SDK and exact build identities.
+See [018 public evidence and limits](docs/NATIVE-BATCH-018.md).
+
+Next: rank actual final105 residual costs, investigate hard guards and finite
+NMI stack/call/control capability with reproduced ownership/timing proofs;
+do not pad thousands of low-value definitions or remove known RDNMI guards.
+Finish original native foundation including sound (SPC700 still interpreted),
+then integrate built-in retranslation/approved maps with new content identity.
+Wider phase/window/overlap coverage, smooth motion, UI latency and a GPU world
+engine remain separate unfinished work. Reference/fallback paths stay available.
 
 ## Qualified continuation — batch 017
 

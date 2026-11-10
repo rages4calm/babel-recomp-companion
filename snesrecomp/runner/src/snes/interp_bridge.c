@@ -1312,10 +1312,11 @@ uint64_t interp_bridge_native_poll_cycles_total(void) { return s_native_poll_cyc
 
 /* Descriptor IDs store index+1 in uint16_t, reserving zero for a miss.
  * This bounded capacity fits both those IDs and the legacy page starts. */
-enum { kNativeInstructionSlots = 32768 };
+enum { kNativeInstructionSlots = 65535 };
 typedef struct {
     InterpNativeInstruction descriptor;
     uint64_t insns, cycles;
+    uint32_t nmi_owner_pc24;
 } NativeInstructionEntry;
 static NativeInstructionEntry *s_native_instructions;
 static size_t s_native_instruction_count;
@@ -1326,6 +1327,14 @@ static uint16_t s_native_page_start[65536], s_native_page_count[65536];
 static uint16_t *s_native_page_ids, *s_native_page_slots;
 static int s_native_instruction_index = -1;
 static uint64_t s_native_continuation_insns, s_native_continuation_cycles;
+static uint64_t s_native_nmi_insns, s_native_nmi_cycles;
+/* An explicit host NMI entry owns this grant. It is never inherited by a
+ * nested bridge or an ordinary/IRQ entry, and is not serialized. */
+static struct {
+    uint32_t entry_pc24;
+    uint16_t entry_s;
+    int bridge_depth, enabled;
+} s_native_nmi_owner;
 
 bool interp_bridge_native_instruction_index_enabled(void) {
     if (s_native_instruction_index < 0) {
@@ -1385,10 +1394,12 @@ static int native_instruction_metadata_valid(const InterpNativeInstruction *d) {
         /* Data and direct call/return effects retain the owning opcode loop,
          * including its existing paired-bounce and owner-boundary handling.
          * Interrupt frames, direct SP/emulation changes,
-         * indirect transfers, halts and block moves still require fallback. */
+         * indirect calls/other indirect jumps, halts and block moves still
+         * require fallback. Indexed-indirect JMP retains its live pointer
+         * bus reads and the same owning loop's resolved-landing capture. */
         case 0x00: case 0x02: case 0x40:
         case 0x44: case 0x54: case 0x6C:
-        case 0x7C: case 0xCB: case 0xDB: case 0xDC: case 0xFC:
+        case 0xCB: case 0xDB: case 0xDC: case 0xFC:
         case 0x1B: case 0x9A: case 0xFB: return 0;
         default: return 1;
     }
@@ -1421,11 +1432,13 @@ bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
                 free(next); return false;
             }
             a->insns += b->insns; a->cycles += b->cycles;
+            if (!a->nmi_owner_pc24) a->nmi_owner_pc24 = b->nmi_owner_pc24;
         } else next[used++] = next[i];
     }
     if (used > kNativeInstructionSlots) { free(next); return false; }
     /* Construct BOTH lookup representations before committing anything.
-     * At most32768 populated pages require128KiB IDs +64MiB slots, in
+     * Plain upper-half ROM excludes WRAM banks7E/7F, hence at most32512
+     * populated pages require128KiB IDs +65024KiB slots, in
      * addition to the retained256KiB legacy ranges and entry allocations.
      * Rebuilds temporarily retain old and new allocations; duplicate batches
      * can leave an entry allocation larger than the deduplicated count.
@@ -1464,6 +1477,57 @@ bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
     }
     return true;
 }
+
+static NativeInstructionEntry *native_instruction_find(uint32_t key) {
+    size_t lo = 0, hi = s_native_instruction_count;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        uint32_t candidate = native_instruction_key(&s_native_instructions[mid].descriptor);
+        if (candidate < key) lo = mid + 1;
+        else if (candidate > key) hi = mid;
+        else return &s_native_instructions[mid];
+    }
+    return NULL;
+}
+
+static int native_instruction_nmi_data_valid(const InterpNativeInstruction *d) {
+    if (!native_instruction_metadata_valid(d)) return 0;
+    switch (d->bytes[0]) {
+        /* No stack/frame mutation, calls, returns or live indirect control
+         * in this first finite-owner data protocol. */
+        case 0x08: case 0x28: case 0x48: case 0x68:
+        case 0xDA: case 0xFA: case 0x5A: case 0x7A:
+        case 0x0B: case 0x2B: case 0x8B: case 0xAB:
+        case 0x4B: case 0xF4: case 0x62: case 0xD4:
+        case 0x20: case 0x22: case 0x60: case 0x6B: case 0x7C: return 0;
+        default: return 1;
+    }
+}
+
+bool interp_bridge_allow_native_nmi_instructions(
+        uint32_t owner_entry_pc24, const InterpNativeInstruction *items,
+        size_t count) {
+    if (s_interp_bridge_depth || s_lle_sched_depth ||
+        owner_entry_pc24 > 0xFFFFFFu || (uint16_t)owner_entry_pc24 < 0x8000u ||
+        (owner_entry_pc24 >> 16) == 0x7Eu || (owner_entry_pc24 >> 16) == 0x7Fu ||
+        (count && !items) || count > kNativeInstructionSlots) return false;
+    /* Validate the ENTIRE transaction before changing any grant. No
+     * allocation or other fallible operation remains in the second pass. */
+    for (size_t i = 0; i < count; ++i) {
+        const InterpNativeInstruction *d = &items[i];
+        if (!native_instruction_nmi_data_valid(d)) return false;
+        NativeInstructionEntry *entry = native_instruction_find(native_instruction_key(d));
+        if (!entry || entry->descriptor.length != d->length ||
+            entry->descriptor.step != d->step ||
+            memcmp(entry->descriptor.bytes, d->bytes, 4) ||
+            (entry->nmi_owner_pc24 && entry->nmi_owner_pc24 != owner_entry_pc24))
+            return false;
+    }
+    for (size_t i = 0; i < count; ++i)
+        native_instruction_find(native_instruction_key(&items[i]))->nmi_owner_pc24 = owner_entry_pc24;
+    return true;
+}
+
 void interp_bridge_clear_native_instructions(void) {
     if (s_interp_bridge_depth || s_lle_sched_depth) return;
     free(s_native_instructions); s_native_instructions = NULL;
@@ -1475,6 +1539,14 @@ void interp_bridge_clear_native_instructions(void) {
 }
 uint64_t interp_bridge_native_continuation_insns_total(void) { return s_native_continuation_insns; }
 uint64_t interp_bridge_native_continuation_cycles_total(void) { return s_native_continuation_cycles; }
+uint64_t interp_bridge_native_nmi_insns_total(void) { return s_native_nmi_insns; }
+uint64_t interp_bridge_native_nmi_cycles_total(void) { return s_native_nmi_cycles; }
+size_t interp_bridge_native_nmi_grants(void) {
+    size_t count = 0;
+    for (size_t i = 0; i < s_native_instruction_count; ++i)
+        count += s_native_instructions[i].nmi_owner_pc24 != 0;
+    return count;
+}
 size_t interp_bridge_native_instruction_stats(InterpNativeInstructionStats *out,
                                               size_t capacity) {
     if (out) for (size_t i = 0; i < capacity && i < s_native_instruction_count; ++i) {
@@ -1576,7 +1648,11 @@ static NativeInstructionEntry *bridge_native_instruction_step(
     (void)in; (void)pc; (void)scheduler_frame; (void)stop_on_rti;
     return NULL;
 #else
-    if (!scheduler_frame || stop_on_rti || s_lle_sched_depth <= 0 ||
+    const int nmi_owner = stop_on_rti && s_native_nmi_owner.enabled &&
+        s_native_nmi_owner.bridge_depth == s_interp_bridge_depth &&
+        s_interp_owner_exit_valid && !s_interp_owner_is_scheduler &&
+        s_native_nmi_owner.entry_s == s_interp_owner_exit_s;
+    if ((!nmi_owner && (!scheduler_frame || stop_on_rti || s_lle_sched_depth <= 0)) ||
         (((uint32_t)in->k << 16) | in->pc) != pc ||
         in->e || in->waiting || in->stopped || in->nmiWanted || in->irqWanted ||
         cpu_interrupt_context_active() || !g_snes || !g_snes->cart ||
@@ -1605,6 +1681,8 @@ static NativeInstructionEntry *bridge_native_instruction_step(
         }
     }
     if (!entry) return NULL;
+    if (nmi_owner && entry->nmi_owner_pc24 != s_native_nmi_owner.entry_pc24)
+        return NULL;
     const InterpNativeInstruction *d = &entry->descriptor;
     if (lle_bounce_target_excluded(pc)) return NULL;
     Cart *cart = g_snes->cart;
@@ -3131,6 +3209,11 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
                     native_continuation->cycles += (unsigned)_cyc;
                     s_native_continuation_insns++;
                     s_native_continuation_cycles += (unsigned)_cyc;
+                    if (stop_on_rti && s_native_nmi_owner.enabled &&
+                        s_native_nmi_owner.bridge_depth == s_interp_bridge_depth) {
+                        s_native_nmi_insns++;
+                        s_native_nmi_cycles += (unsigned)_cyc;
+                    }
                 }
             } else {
                 /* A trusted callback may decline only before ALL effects,
@@ -3857,6 +3940,32 @@ int interp_bridge_run_interrupt(CpuState *cpu, uint32_t entry_pc24) {
                                  0, 0, 0, 0, NULL, 0, 1);
 }
 
+int interp_bridge_run_native_nmi(CpuState *cpu, uint32_t entry_pc24) {
+    /* The title must select this API ONLY on its actual NMI delivery edge,
+     * after pushing the same architectural frame as the reference API.
+     * RDNMI may be acknowledged inside the handler; provenance is latched
+     * here, never inferred again from a flag which the guest can clear. */
+    if (!cpu) return 0;
+    if (!g_snes || !g_snes->inNmi || s_interp_bridge_depth ||
+        s_lle_sched_depth || cpu_interrupt_context_active() ||
+        cpu->emulation || entry_pc24 > 0xFFFFFFu)
+        return interp_bridge_run_interrupt(cpu, entry_pc24);
+    const uint32_t saved_entry = s_native_nmi_owner.entry_pc24;
+    const uint16_t saved_s = s_native_nmi_owner.entry_s;
+    const int saved_depth = s_native_nmi_owner.bridge_depth;
+    const int saved_enabled = s_native_nmi_owner.enabled;
+    s_native_nmi_owner.entry_pc24 = entry_pc24;
+    s_native_nmi_owner.entry_s = cpu->S;
+    s_native_nmi_owner.bridge_depth = s_interp_bridge_depth + 1;
+    s_native_nmi_owner.enabled = 1;
+    int result = interp_bridge_run_interrupt(cpu, entry_pc24);
+    s_native_nmi_owner.entry_pc24 = saved_entry;
+    s_native_nmi_owner.entry_s = saved_s;
+    s_native_nmi_owner.bridge_depth = saved_depth;
+    s_native_nmi_owner.enabled = saved_enabled;
+    return result;
+}
+
 /* ── tier-down entry (called from generated indirect-dispatch defaults) ───── */
 
 extern int snes_frame_counter;
@@ -4502,6 +4611,8 @@ void InterpExecutionShareGet(InterpExecutionShare *out) {
     out->native_poll_cycles = s_native_poll_cycles;
     out->native_continuation_insns = s_native_continuation_insns;
     out->native_continuation_cycles = s_native_continuation_cycles;
+    out->native_nmi_insns = s_native_nmi_insns;
+    out->native_nmi_cycles = s_native_nmi_cycles;
     double pct = out->cpu_cycles
         ? 100.0 * (double)out->interp_cycles / (double)out->cpu_cycles : 0.0;
     /* The interpreter's bus-cycle rounding can put it a hair over the total;
@@ -4519,7 +4630,8 @@ void InterpExecutionShareDumpJson(FILE *f) {
                "\"master_cycles\": %llu, \"interp_cycle_pct\": %.4f, "
                "\"aot_cycle_pct\": %.4f, \"native_poll_insns\": %llu, "
                "\"native_poll_cycles\": %llu, \"native_continuation_insns\": %llu, "
-               "\"native_continuation_cycles\": %llu},\n",
+               "\"native_continuation_cycles\": %llu, \"native_nmi_insns\": %llu, "
+               "\"native_nmi_cycles\": %llu},\n",
             s.frame, (unsigned long long)s.interp_insns,
             (unsigned long long)s.interp_cycles,
             (unsigned long long)s.cpu_cycles,
@@ -4528,7 +4640,9 @@ void InterpExecutionShareDumpJson(FILE *f) {
             (unsigned long long)s.native_poll_insns,
             (unsigned long long)s.native_poll_cycles,
             (unsigned long long)s.native_continuation_insns,
-            (unsigned long long)s.native_continuation_cycles);
+            (unsigned long long)s.native_continuation_cycles,
+            (unsigned long long)s.native_nmi_insns,
+            (unsigned long long)s.native_nmi_cycles);
 }
 
 void Tier2CoverageDumpJson(FILE *f) {

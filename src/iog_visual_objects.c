@@ -49,8 +49,15 @@ bool IogVisualObjectsSupportsScene(uint16_t scene)
 {
     switch (scene) {
     case 0x01: case 0x0c: case 0x0e: case 0x0f: case 0x12:
-    case 0x29: case 0x3f: case 0x55: case 0x67: case 0x85:
-    case 0x8a: case 0xb6: case 0xcc: case 0xdd: case 0xea:
+    case 0x15: case 0x1e: case 0x23: case 0x25: case 0x26:
+    case 0x27: case 0x28: case 0x29: case 0x2d: case 0x3d:
+    case 0x3e: case 0x3f: case 0x40: case 0x41: case 0x42:
+    case 0x45: case 0x46: case 0x4f: case 0x51: case 0x53:
+    case 0x55: case 0x61: case 0x62: case 0x64: case 0x67:
+    case 0x6d: case 0x6f: case 0x85: case 0x86: case 0x8a:
+    case 0x8b: case 0xa7: case 0xb6: case 0xb8: case 0xcc:
+    case 0xcd: case 0xce: case 0xdd: case 0xde: case 0xdf:
+    case 0xe0: case 0xe1: case 0xe2: case 0xe3: case 0xea:
         return true;
     default:
         return false;
@@ -62,7 +69,10 @@ bool IogVisualObjectsSupportsScene(uint16_t scene)
 static int32_t WorldPosition(uint16_t raw, uint16_t camera)
 {
     unsigned d = (raw - (unsigned)camera) & 0xffff;
-    return (int32_t)camera + (d < 0x8000 ? (int32_t)d : (int32_t)d - 0x10000);
+    /* Supported map cameras fit below 32768. FFFF during a boundary shake
+     * denotes -1, not a world sixty-five thousand pixels away. */
+    return (int32_t)(int16_t)camera +
+        (d < 0x8000 ? (int32_t)d : (int32_t)d - 0x10000);
 }
 
 typedef struct ActorOrder { uint16_t actor, key; } ActorOrder;
@@ -221,7 +231,8 @@ IogVisualStatus IogVisualObjectsBuild(const IogVisualSource *s,
         unsigned x = Word(s->ram, at);
         if (x & 0x8000) { manual_end = true; break; }
         status = Add(s, out, 0, 0, n, Word(s->ram, at + 4), x,
-            Word(s->ram, at + 2), 8, true, false, 0, 0, &order);
+            WorldPosition(Word(s->ram, at + 2), Word(s->ram, 0x68e)),
+            8, true, false, 0, 0, &order);
         if (status != kIogVisualReady) goto done;
     }
     if (!manual_end) { status = kIogVisualCapacity; goto done; }

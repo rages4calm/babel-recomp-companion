@@ -63,6 +63,15 @@ static void geometry_and_pixels(void){
     wr(0x1010,0x90);CHECK(run(v)==kIogVisualReady&&frame.parts[0].palette==4);
     fixture();wr(0x1014,0xfffc);v.world_x=-10;v.world_y=300;
     CHECK(run(v)==kIogVisualReady&&frame.parts[0].world_x==-4&&frame.parts[0].x==6);
+    fixture();wr(0x68a,0xffff);wr(0x68e,0xffff);wr(0x1014,1);wr(0x1016,1);
+    v=(IogVisualViewport){-1,-1,256,224};
+    CHECK(run(v)==kIogVisualReady&&frame.part_count==1);
+    CHECK(frame.parts[0].world_x==1&&frame.parts[0].world_y==0);
+    CHECK(frame.parts[0].x==2&&frame.parts[0].y==1);
+    wr(0x13100,10);wr(0x13102,0xffff);wr(0x13104,0x3802);wr(0x13106,0xffff);
+    CHECK(run(v)==kIogVisualReady&&frame.part_count==2);
+    CHECK(frame.parts[0].manual&&frame.parts[0].world_y==-1&&frame.parts[0].y==0);
+    fixture();wr(0x1014,0xfffc);v=(IogVisualViewport){-10,300,600,336};
     v.world_x=INT32_MIN;CHECK(run(v)==kIogVisualReady&&frame.part_count==0&&frame.outside_parts==1);
     v.world_x=500;v.width=4096;v.height=512;CHECK(run(v)==kIogVisualReady);
     v.width=4097;CHECK(run(v)==kIogVisualInvalidInput);v.width=600;v.height=513;CHECK(run(v)==kIogVisualInvalidInput);
@@ -173,7 +182,10 @@ static void refusals_and_capacity(void){
 static void exact_room_selection(void){
     for(unsigned room=0;room<65536;room++){
         bool expected=false;
-        const unsigned allowed[]={1,12,14,15,18,41,63,85,103,133,138,182,204,221,234};
+        const unsigned allowed[]={0x01,0x0c,0x0e,0x0f,0x12,0x15,0x1e,0x23,0x25,0x26,
+            0x27,0x28,0x29,0x2d,0x3d,0x3e,0x3f,0x40,0x41,0x42,0x45,0x46,0x4f,0x51,0x53,
+            0x55,0x61,0x62,0x64,0x67,0x6d,0x6f,0x85,0x86,0x8a,0x8b,0xa7,0xb6,0xb8,0xcc,
+            0xcd,0xce,0xdd,0xde,0xdf,0xe0,0xe1,0xe2,0xe3,0xea};
         for(unsigned i=0;i<sizeof(allowed)/sizeof(allowed[0]);i++)if(room==allowed[i])expected=true;
         CHECK(IogVisualObjectsSupportsScene((uint16_t)room)==expected);
     }
