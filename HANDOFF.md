@@ -1,7 +1,14 @@
 # Illusion of Gaia Companion — handoff
 
-Updated November 10, 2026. Development version `0.1.0-dev.1`.
+Updated November 11, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
+
+New developer resource: [GaiaLabs flag analysis](docs/GAIALABS-FLAGS-REFERENCE.md)
+pins `gaia-iog-baserom@5a9ba4b1a43af3b9abe85b7fa271ac900961777e`, with 916
+meanings across 687 indexed bits. Read its scene/lifecycle and assisted-runtime
+cautions before planning new teleport, boss or reward fixtures. Private metadata
+receipts are under `native-018/gaialabs-flags-20261111/`. No game runs or engine,
+dependency, ROM/profile or existing qualification changes accompany this intake.
 
 Music preference: MSU-1 is now enabled by default in the enhancement catalog.
 The Companion soundtrack page reads that catalog default when no explicit
