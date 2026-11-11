@@ -4,6 +4,13 @@ Recorded November 6, 2026 from developer messages relayed by the owner.
 This is a research and integration queue, not a record of implemented Companion
 features or newly qualified gameplay.
 
+November 11: the team supplied a new [flag database and Mesen2 analysis](GAIALABS-FLAGS-REFERENCE.md).
+Pinned at `5a9ba4b1a43af3b9abe85b7fa271ac900961777e`: 916 scene-aware meanings
+across 687 indexed bits. Address/mask/name consistency checks pass; upstream
+runtime grades retain their own identities and assisted-test limitations. Use
+the new reference for future flag lifecycle and fixture planning; it does not
+update an existing native batch or qualify the private patched build.
+
 November 8 follow-up: [module/source preflight](GAIALABS-MODULE-INTEGRATION.md)
 and [Mesen2 runtime readiness](MESEN2-REFERENCE.md) now have actual private
 checks. [Batch 006](NATIVE-BATCH-006.md) records native/framework work separately.
