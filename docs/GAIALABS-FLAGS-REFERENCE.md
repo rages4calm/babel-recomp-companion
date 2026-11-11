@@ -91,3 +91,28 @@ here. No upstream harness or Lua code was executed.
 
 Credit GaiaLabs and the analysis contributors for the database and experiments.
 Preserve the project's existing Quintet, Babel mr0ta/mrOt4 and upstream credits.
+
+## Additional engine source supplied November 11
+
+The team also supplied [extracted/system/engine](https://github.com/Azarem/gaia-iog-baserom/tree/5a9ba4b1a43af3b9abe85b7fa271ac900961777e/extracted/system/engine),
+at the same pinned commit. Its directory index contains 66 assembly files,
+1,168,464 bytes in total. Ten selected files were fetched and reviewed locally
+(196,648 bytes); all sizes and Git blob hashes match the index. Private source
+and receipt: `gaialabs-flags-20261111/engine/`. These assembly files are external
+research inputs, not new compiled native implementations or source to publish
+from this project.
+
+| Selected reference | Relevant follow-up |
+|---|---|
+| `actor_execution.asm`, `actor_pool.asm` | Five actor execution contexts, wait dispatch, iframe handling, live linked lists and allocation. Map measured remaining dispatch paths to the correct context before changing native guards. |
+| `cop_handlers_wait.asm` | Counter storage, script resume pointer and RTL yield; ties the flag reports' runner-pass timing to concrete routines. |
+| `cop_handlers_audio.asm`, `music_actors.asm`, `spc_transfer.asm` | Music commands, fade handshake, temporary jingle/dialog actors, scene-music restoration and SPC upload. Useful for the pending clubhouse music investigation and preserving UI/input service during uploads. |
+| `scene_lifecycle.asm` | Transition stages, scene clearing, resource/actor loading and optional title-box input wait; compare against the qualified warp caller contract. |
+| `GlobalInputHandler.asm`, `vblank_joypad.asm` | Raw/remapped input, masks, consumption and repeat. Preserve the existing transformed-source caveat and match actual stock instructions before adopting operands. |
+| `flag_helpers.asm` | Flag-test/set/clear helper behavior behind the database's named domains. |
+
+The index also locates combat collision, camera/tilemap, sprite composition,
+save, inventory-related COP, DMA and hardware-math sources. Those were indexed,
+not inspected in this intake. Annotation claims remain source evidence until
+checked against the selected ROM/build and execution. No assembly was executed,
+compiled, patched or copied into engine code during this review.
