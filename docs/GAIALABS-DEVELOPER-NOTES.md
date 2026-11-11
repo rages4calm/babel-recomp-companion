@@ -10,6 +10,10 @@ across 687 indexed bits. Address/mask/name consistency checks pass; upstream
 runtime grades retain their own identities and assisted-test limitations. Use
 the new reference for future flag lifecycle and fixture planning; it does not
 update an existing native batch or qualify the private patched build.
+The additional [annotated engine directory](GAIALABS-FLAGS-REFERENCE.md#additional-engine-source-supplied-november-11)
+is pinned at the same revision: 66 indexed assembly files, ten selected sources
+reviewed for actor/input/scene/audio/wait behavior. It is a reference alongside
+the flag map, not a replacement for the current engine or native qualification.
 
 November 8 follow-up: [module/source preflight](GAIALABS-MODULE-INTEGRATION.md)
 and [Mesen2 runtime readiness](MESEN2-REFERENCE.md) now have actual private

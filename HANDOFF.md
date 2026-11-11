@@ -9,6 +9,11 @@ meanings across 687 indexed bits. Read its scene/lifecycle and assisted-runtime
 cautions before planning new teleport, boss or reward fixtures. Private metadata
 receipts are under `native-018/gaialabs-flags-20261111/`. No game runs or engine,
 dependency, ROM/profile or existing qualification changes accompany this intake.
+The team's additional annotated `extracted/system/engine` directory is recorded
+in the same notes: 66 indexed assembly files; ten reviewed actor, input, wait,
+scene, flag and audio sources. Pinned snapshots are in that intake's `engine/`
+subdirectory. Match transformed source against the selected stock instructions
+before using operands or altering native execution policy.
 
 Music preference: MSU-1 is now enabled by default in the enhancement catalog.
 The Companion soundtrack page reads that catalog default when no explicit
