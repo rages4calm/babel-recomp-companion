@@ -129,6 +129,22 @@ if(IOG_NATIVE_EFFECTS_SOURCE)
     target_compile_definitions(IllusionOfGaiaUsaSNESRecomp PRIVATE IOG_HAS_NATIVE_CONTINUATIONS=1)
 endif()
 
+# Source-qualified mutable copy stubs have a separate, optional private input.
+set(IOG_NATIVE_WRAM_EFFECTS_SOURCE "" CACHE FILEPATH "Private live-operand WRAM copy effects")
+if(IOG_NATIVE_WRAM_EFFECTS_SOURCE)
+    if(SNESRECOMP_INTERPRETER_ONLY OR NOT IOG_NATIVE_EFFECTS_SOURCE)
+        message(FATAL_ERROR "WRAM copy effects require the private native build")
+    endif()
+    file(REAL_PATH "${IOG_NATIVE_WRAM_EFFECTS_SOURCE}" _iog_wram_effects)
+    file(REAL_PATH "${CMAKE_SOURCE_DIR}/.local" _iog_private)
+    string(FIND "${_iog_wram_effects}" "${_iog_private}/" _iog_private_index)
+    if(NOT _iog_private_index EQUAL 0 OR NOT EXISTS "${_iog_wram_effects}")
+        message(FATAL_ERROR "WRAM effects source must exist beneath this project's .local")
+    endif()
+    target_sources(IllusionOfGaiaUsaSNESRecomp PRIVATE "${_iog_wram_effects}")
+    target_compile_definitions(IllusionOfGaiaUsaSNESRecomp PRIVATE IOG_HAS_NATIVE_WRAM_CONTINUATIONS=1)
+endif()
+
 # The mod catalog. This names WHERE the packages are; the framework owns the
 # layout they are staged into beside the executable, and stages them on every
 # build OF THE EXECUTABLE -- including the launcher's own Generate & rebuild on

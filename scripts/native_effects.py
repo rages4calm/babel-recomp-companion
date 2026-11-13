@@ -37,7 +37,8 @@ def validate_owner_policy(entries, scope_limits, grant_keys, policy):
                 raise ValueError("NMI-scoped fixed instruction requires its exact NMI grant")
 
 
-def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True):
+def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True, *,
+            outline_effects: bool = False):
     output = output.resolve()
     if not output.is_relative_to((ROOT / ".local").resolve()) or output.exists():
         raise ValueError("Fresh project-private output required")
@@ -103,7 +104,8 @@ def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True):
     result, receipt = emit(helper.read_text(encoding="utf-8"), list(entries.values()),
                            nmi_owner_pc24=owner, nmi_keys=sorted(grant_keys),
                            frame_keys=sorted(frame_keys),
-                           scope_limits=sorted(scope_limits.items()))
+                           scope_limits=sorted(scope_limits.items()),
+                           outline_effects=outline_effects)
     receipt.update(rom_sha256=digest, context_plan_sha256=hashlib.sha256(contexts.read_bytes()).hexdigest(),
                    helper_file_sha256=hashlib.sha256(helper.read_bytes()).hexdigest(),
                    emitter_sha256=hashlib.sha256((ROOT / "snesrecomp/recompiler/v2/native_effects.py").read_bytes()).hexdigest(),
@@ -121,5 +123,8 @@ if __name__ == "__main__":
     for name in ("rom", "contexts", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--no-aliases", action="store_true")
+    parser.add_argument("--outline-effects", action="store_true",
+                        help="Outline exact repeated effects behind unchanged guarded PC wrappers")
     args = parser.parse_args()
-    print(json.dumps(prepare(args.rom, args.contexts, args.output, not args.no_aliases)))
+    print(json.dumps(prepare(args.rom, args.contexts, args.output, not args.no_aliases,
+                             outline_effects=args.outline_effects)))

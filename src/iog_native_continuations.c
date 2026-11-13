@@ -2,6 +2,7 @@
 #include "iog_native_continuations.h"
 #include "common_cpu_infra.h"
 #include "snes/interp_bridge.h"
+#include "snes/interp_native_wram.h"
 #include "snes/cart.h"
 #include "sha256.h"
 #include "snesrecomp_rom_identity.h"
@@ -14,6 +15,9 @@ bool IogNativeContinuationsNmiEnabled(void) { return native_nmi_enabled; }
 
 #if defined(IOG_HAS_NATIVE_CONTINUATIONS) && !defined(SNESRECOMP_INTERPRETER_ONLY)
 extern bool IogRegisterNativeContinuations(void);
+#ifdef IOG_HAS_NATIVE_WRAM_CONTINUATIONS
+extern bool IogRegisterNativeWramCopyContinuations(void);
+#endif
 static char stats_path[4096];
 static int stats_exit_registered;
 static void WriteNativeContinuationStats(void)
@@ -24,10 +28,12 @@ static void WriteNativeContinuationStats(void)
     if (count) interp_bridge_native_instruction_stats(rows, count);
     FILE *file = fopen(stats_path, "w");
     if (!file) { free(rows); return; }
-    fprintf(file, "{\"schema\":\"iog native continuation stats v1\",\"lookup\":\"%s\",\"insns\":%llu,\"cycles\":%llu,\"sites\":[",
+    fprintf(file, "{\"schema\":\"iog native continuation stats v1\",\"lookup\":\"%s\",\"insns\":%llu,\"cycles\":%llu,\"wram_copy_insns\":%llu,\"wram_copy_cycles\":%llu,\"sites\":[",
             interp_bridge_native_instruction_index_enabled() ? "direct" : "legacy",
             (unsigned long long)interp_bridge_native_continuation_insns_total(),
-            (unsigned long long)interp_bridge_native_continuation_cycles_total());
+            (unsigned long long)interp_bridge_native_continuation_cycles_total(),
+            (unsigned long long)interp_bridge_native_wram_copy_insns_total(),
+            (unsigned long long)interp_bridge_native_wram_copy_cycles_total());
     for (size_t i = 0; i < count; ++i) {
         const InterpNativeInstructionStats *s = &rows[i];
         fprintf(file, "%s{\"pc24\":\"%06X\",\"m\":%u,\"x\":%u,\"e\":%u,\"insns\":%llu,\"cycles\":%llu}",
@@ -66,6 +72,15 @@ void IogNativeContinuationsInitialize(void)
         interp_bridge_clear_native_instructions();
         return;
     }
+#ifdef IOG_HAS_NATIVE_WRAM_CONTINUATIONS
+    if (!IogRegisterNativeWramCopyContinuations()) {
+        interp_bridge_clear_native_instructions();
+        return;
+    }
+    const char *copy_setting = getenv("IOG_NATIVE_WRAM_COPY_CONTINUATIONS");
+    interp_bridge_set_native_wram_copy_enabled(
+        copy_setting && !strcmp(copy_setting, "1"));
+#endif
     const char *frame_setting = getenv("IOG_NATIVE_FRAME_CONTINUATIONS");
     interp_bridge_set_native_frame_effects_enabled(
         frame_setting && !strcmp(frame_setting, "1"));

@@ -7,6 +7,7 @@
 #include <string.h>
 #include <time.h>
 #include "interp_bridge.h"
+#include "interp_native_wram.h"
 #include "cpu_plain_rom_read.h"
 #include "interp816.h"
 #include "tier2_capture.h"
@@ -1319,6 +1320,7 @@ typedef struct {
     uint32_t nmi_owner_pc24;
     uint8_t frame_effect;
     uint8_t owner_scopes;
+    uint16_t wram_copy_base; /* zero denotes the immutable ROM contract */
 } NativeInstructionEntry;
 static NativeInstructionEntry *s_native_instructions;
 static size_t s_native_instruction_count;
@@ -1331,6 +1333,8 @@ static int s_native_instruction_index = -1;
 static uint64_t s_native_continuation_insns, s_native_continuation_cycles;
 static uint64_t s_native_nmi_insns, s_native_nmi_cycles;
 static int s_native_frame_enabled;
+static int s_native_wram_copy_enabled;
+static uint64_t s_native_wram_copy_insns, s_native_wram_copy_cycles;
 /* An explicit host NMI entry owns this grant. It is never inherited by a
  * nested bridge or an ordinary/IRQ entry, and is not serialized. */
 static struct {
@@ -1408,21 +1412,52 @@ static int native_instruction_metadata_valid(const InterpNativeInstruction *d) {
     }
 }
 
-bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
-                                            size_t count) {
+static int native_wram_copy_metadata_valid(
+        const InterpNativeWramCopyInstruction *d) {
+    unsigned bank=d->pc24>>16;
+    if (!d->step || d->pc24>0xFFFFFFu || !d->stub_pc || d->stub_pc>0x1FFAu ||
+        d->m>1 || d->x>1 || d->e || !d->scopes || (d->scopes&~3u) ||
+        !(bank<0x40u || (bank>=0x80u && bank<0xC0u) || bank==0x7Eu)) return 0;
+    unsigned offset=(unsigned)(uint16_t)d->pc24-d->stub_pc;
+    if (offset!=0 && offset!=1 && offset!=4 && offset!=5) return 0;
+    if (d->scopes&INTERP_NATIVE_SCOPE_NMI) {
+        if (d->nmi_owner_pc24>0xFFFFFFu ||
+            (uint16_t)d->nmi_owner_pc24<0x8000u ||
+            (d->nmi_owner_pc24>>16)==0x7Eu ||
+            (d->nmi_owner_pc24>>16)==0x7Fu) return 0;
+    } else if (d->nmi_owner_pc24) return 0;
+    return 1;
+}
+
+static bool native_instruction_add_batch(const InterpNativeInstruction *items,
+        const InterpNativeWramCopyInstruction *copies, size_t count) {
     if (s_interp_bridge_depth || s_lle_sched_depth ||
-        (count && !items) || count > kNativeInstructionSlots)
+        (count && !items && !copies) || count > kNativeInstructionSlots)
         return false;
     if (!count) return true;
     for (size_t i = 0; i < count; ++i)
-        if (!native_instruction_metadata_valid(&items[i])) return false;
+        if (copies ? !native_wram_copy_metadata_valid(&copies[i]) :
+                     !native_instruction_metadata_valid(&items[i])) return false;
     size_t total = s_native_instruction_count + count;
     NativeInstructionEntry *next = (NativeInstructionEntry *)calloc(total, sizeof *next);
     if (!next) return false;
     if (s_native_instruction_count)
         memcpy(next, s_native_instructions, s_native_instruction_count * sizeof *next);
-    for (size_t i = 0; i < count; ++i)
-        next[s_native_instruction_count + i].descriptor = items[i];
+    for (size_t i = 0; i < count; ++i) {
+        NativeInstructionEntry *entry=&next[s_native_instruction_count+i];
+        if (!copies) entry->descriptor=items[i];
+        else {
+            const InterpNativeWramCopyInstruction *c=&copies[i];
+            unsigned offset=(unsigned)(uint16_t)c->pc24-c->stub_pc;
+            InterpNativeInstruction *d=&entry->descriptor;
+            d->pc24=c->pc24;d->m=c->m;d->x=c->x;d->e=c->e;
+            d->length=offset==1?3:1;d->step=c->step;
+            d->bytes[0]=offset==0?0x8B:offset==1?0x54:offset==4?0xAB:0x60;
+            entry->wram_copy_base=c->stub_pc;
+            entry->owner_scopes=c->scopes;
+            entry->nmi_owner_pc24=c->nmi_owner_pc24;
+        }
+    }
     qsort(next, total, sizeof *next, native_instruction_compare);
     size_t used = 0;
     for (size_t i = 0; i < total; ++i) {
@@ -1431,7 +1466,10 @@ bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
             NativeInstructionEntry *a = &next[used - 1], *b = &next[i];
             if (a->descriptor.length != b->descriptor.length ||
                 a->descriptor.step != b->descriptor.step ||
-                memcmp(a->descriptor.bytes, b->descriptor.bytes, 4)) {
+                memcmp(a->descriptor.bytes, b->descriptor.bytes, 4) ||
+                a->wram_copy_base!=b->wram_copy_base ||
+                (a->wram_copy_base && (a->owner_scopes!=b->owner_scopes ||
+                 a->nmi_owner_pc24!=b->nmi_owner_pc24))) {
                 free(next); return false;
             }
             a->insns += b->insns; a->cycles += b->cycles;
@@ -1442,9 +1480,9 @@ bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
     }
     if (used > kNativeInstructionSlots) { free(next); return false; }
     /* Construct BOTH lookup representations before committing anything.
-     * Plain upper-half ROM excludes WRAM banks7E/7F, hence at most32512
-     * populated pages require128KiB IDs +65024KiB slots, in
-     * addition to the retained256KiB legacy ranges and entry allocations.
+     * Upper-half ROM and the separately qualified low-WRAM stub pages fit
+     * the uint16_t page IDs; descriptor capacity remains65535. Both indices
+     * retain exact physical banks and modes, including distinct RAM mirrors.
      * Rebuilds temporarily retain old and new allocations; duplicate batches
      * can leave an entry allocation larger than the deduplicated count.
      * Allocation failure leaves
@@ -1481,6 +1519,35 @@ bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
         s_native_page_count[page]++;
     }
     return true;
+}
+
+bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
+                                            size_t count) {
+    return native_instruction_add_batch(items,NULL,count);
+}
+
+bool interp_bridge_add_native_wram_copy_instructions(
+        const InterpNativeWramCopyInstruction *items, size_t count) {
+    return native_instruction_add_batch(NULL,items,count);
+}
+
+void interp_bridge_set_native_wram_copy_enabled(bool enabled) {
+    if (!s_interp_bridge_depth && !s_lle_sched_depth)
+        s_native_wram_copy_enabled=enabled;
+}
+
+size_t interp_bridge_native_wram_copy_grants(void) {
+    size_t count=0;
+    for(size_t i=0;i<s_native_instruction_count;i++)
+        count+=s_native_instructions[i].wram_copy_base!=0;
+    return count;
+}
+
+uint64_t interp_bridge_native_wram_copy_insns_total(void) {
+    return s_native_wram_copy_insns;
+}
+uint64_t interp_bridge_native_wram_copy_cycles_total(void) {
+    return s_native_wram_copy_cycles;
 }
 
 static NativeInstructionEntry *native_instruction_find(uint32_t key) {
@@ -1593,6 +1660,7 @@ void interp_bridge_clear_native_instructions(void) {
     free(s_native_page_slots); s_native_page_slots = NULL;
     s_native_instruction_count = 0;
     s_native_frame_enabled = 0;
+    s_native_wram_copy_enabled = 0;
     memset(s_native_page_start, 0, sizeof s_native_page_start);
     memset(s_native_page_count, 0, sizeof s_native_page_count);
 }
@@ -1750,6 +1818,22 @@ static NativeInstructionEntry *bridge_native_instruction_step(
     const InterpNativeInstruction *d = &entry->descriptor;
     if (lle_bounce_target_excluded(pc)) return NULL;
     Cart *cart = g_snes->cart;
+    if (entry->wram_copy_base) {
+        /* Pure source-shape inspection only. CPU-owned low WRAM cannot be
+         * changed by another guest instruction between this check and fetch;
+         * the original loop retires events after this single opcode. Mutable
+         * bank operands are deliberately not cached or substituted. */
+        unsigned physical_bank=pc>>16;
+        unsigned base=entry->wram_copy_base;
+        if (!s_native_wram_copy_enabled || base>0x1FFAu ||
+            !(physical_bank<0x40u ||
+              (physical_bank>=0x80u && physical_bank<0xC0u) ||
+               physical_bank==0x7Eu) || !g_snes->ram ||
+            g_snes->ram[base]!=0x8Bu || g_snes->ram[base+1]!=0x54u ||
+            g_snes->ram[base+4]!=0xABu || g_snes->ram[base+5]!=0x60u)
+            return NULL;
+        return entry;
+    }
     unsigned bank = (pc >> 16) & 0x7Fu;
     if (cart->type == CART_HIROM && bank >= 0x20u && bank < 0x30u &&
         cart->overlayBank[bank - 0x20u]) return NULL;
@@ -3273,6 +3357,10 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
                     native_continuation->cycles += (unsigned)_cyc;
                     s_native_continuation_insns++;
                     s_native_continuation_cycles += (unsigned)_cyc;
+                    if (native_continuation->wram_copy_base) {
+                        s_native_wram_copy_insns++;
+                        s_native_wram_copy_cycles+=(unsigned)_cyc;
+                    }
                     if (stop_on_rti && s_native_nmi_owner.enabled &&
                         s_native_nmi_owner.bridge_depth == s_interp_bridge_depth) {
                         s_native_nmi_insns++;
