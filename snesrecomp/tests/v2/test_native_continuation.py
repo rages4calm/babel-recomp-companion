@@ -220,7 +220,7 @@ int main(void){
 }
 '''
 
-BLOCKED = {0x00,0x02,0x40,0x44,0x54,0x6C,0xCB,0xDB,0xDC,0xFC,
+BLOCKED = {0x00,0x44,0x54,0x6C,0xCB,0xDB,0xDC,0xFC,
            0x1B,0x9A,0xFB}
 
 
@@ -233,6 +233,7 @@ def _metadata_source():
                 lines += ["interp_bridge_clear_native_instructions();memset(d.bytes,0,4);",
                           f"d.m={m};d.x={x};d.length={length};d.bytes[0]={opcode};",
                           f'CHECK(interp_bridge_add_native_instructions(&d,1)=={int(opcode not in BLOCKED)},"canonical length/control admission");',
+                          'CHECK(!interp_bridge_native_frame_grants(),"canonical registration alone never grants frame effects");',
                           f'd.length={length % 4 + 1};CHECK(!interp_bridge_add_native_instructions(&d,1),"wrong canonical length refused");']
     lines += [r'''
     interp_bridge_clear_native_instructions();memset(&d,0,sizeof d);d.pc24=0x828000;d.m=1;d.length=2;d.bytes[0]=0xa9;d.step=pure_decline;

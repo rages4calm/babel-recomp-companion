@@ -25,14 +25,22 @@ development reference while native coverage is completed.
 
 ## Current limitations
 
-Gaia is not qualified as fully widescreen or remake quality. Batch 018 has an
-independent world adapter for 50 stock scene formats, corrected host-camera
-boundaries and bounded signed shake handling. Its original gameplay view remains 256×224;
-82 reference/span pairs and final NVIDIA captures pass. The older expanded-
-culling preview's Aqueduct failure remains historical and unresolved on that
-legacy path. Classroom/unsupported formats retain authentic-field fallback;
-other rooms, actor phases, varying windows, smooth motion and ultrawide
-composition still need work. See [batch 018 evidence and limits](NATIVE-BATCH-018.md).
+Gaia is not qualified as fully widescreen or remake quality. Batch 020's
+independent world adapter passes 110 reference/span pairs, 555,000 frames and
+selected formats in 61 stock scenes. Original gameplay remains 256×224; visual
+composition stays separate from combat/AI culling. The original classroom and
+both exits pass. Six additional ordinary rooms use original live camera bounds;
+Dark Space, flight and ending expose only their authoritative source plate with
+black outside. Unsupported layouts/phases keep fallback. The older expanded-
+culling preview's Aqueduct failure remains historical on that legacy path.
+Smooth motion, remaining scenes/interfaces and complete ultrawide composition
+still need work. See [batch 020 evidence and limits](NATIVE-BATCH-020.md).
+
+The current same-build SPAN/reference CPU check reports 59.2% / 70.3% less
+whole-process CPU at 1x / 1.5x. The separate 019→020 default-SPAN check reports
+4.4% / 1.8% higher CPU; improved native coverage is not presented as a host
+speedup. These are small paired, unpaced software-backend tests, including
+startup/diagnostics, rather than sustained FPS, GPU or latency qualifications.
 
 The 1.5× Town view's left strip is fixed by clamping the presentation camera
 inside available map data. During bounded shakes, containing the entire

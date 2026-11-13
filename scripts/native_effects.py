@@ -12,6 +12,31 @@ import snes65816 as decoder
 from v2.native_effects import emit
 
 
+def validate_owner_policy(entries, scope_limits, grant_keys, policy):
+    """Title policy for finite instructions, without weakening AOT barriers."""
+    contract = policy.get("fixed_instruction_scopes", {})
+    if contract.get("schema") != "gaia fixed instruction owner scopes v1":
+        raise ValueError("Missing fixed-instruction owner policy")
+    canonical = lambda pc: pc & 0x3FFFFF
+    ranges = [(canonical(int(r["start"], 16)), canonical(int(r["end_exclusive"], 16)))
+              for r in contract["scope_only_ranges"]]
+    forbidden = {canonical(int(pc, 16)) for pc in contract["forbidden_sites"]}
+    vectors = {canonical(int(pc, 16)) for pc in contract["vector_jumps"]}
+    for key, entry in entries.items():
+        pc = canonical(key[0])
+        if pc in forbidden:
+            raise ValueError("Protected RDNMI acknowledgement/poll control")
+        vector = 0x8000 <= pc < 0x8014
+        if vector and (pc not in vectors or entry["bytes"][0] != 0x5C):
+            raise ValueError("Reset/IRQ or non-long-jump vector remains protected")
+        if vector or any(lo <= pc < hi for lo, hi in ranges):
+            flags = scope_limits.get(key)
+            if type(flags) is not int or flags not in (1, 2, 3):
+                raise ValueError("Protected fixed instruction requires an explicit owner scope")
+            if flags & 2 and key not in grant_keys:
+                raise ValueError("NMI-scoped fixed instruction requires its exact NMI grant")
+
+
 def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True):
     output = output.resolve()
     if not output.is_relative_to((ROOT / ".local").resolve()) or output.exists():
@@ -55,8 +80,30 @@ def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True):
                 raise ValueError("Duplicate or unregistered finite-NMI context")
             grant_keys.add(key)
     owner = int(plan["native_nmi_owner_entry_pc24"], 16) if grant_rows else None
+    frame_keys = set()
+    for row in plan.get("native_frame_grant_contexts", []):
+        pc = int(row["pc24"], 16)
+        for pb in ([pc >> 16] if not aliases else
+                   [pc >> 16 & 0x3F | n for n in (0, 0x40, 0x80, 0xC0)]):
+            key = ((pb << 16) | (pc & 65535), row["m"], row["x"], row["e"])
+            if key in frame_keys or key not in entries:
+                raise ValueError("Duplicate or unregistered frame-effect context")
+            frame_keys.add(key)
+    scope_limits = {}
+    for row in plan.get("native_owner_scope_contexts", []):
+        pc = int(row["pc24"], 16)
+        for pb in ([pc >> 16] if not aliases else
+                   [pc >> 16 & 0x3F | n for n in (0, 0x40, 0x80, 0xC0)]):
+            key = ((pb << 16) | (pc & 65535), row["m"], row["x"], row["e"])
+            if key in scope_limits or key not in entries:
+                raise ValueError("Duplicate or unregistered owner-scope context")
+            scope_limits[key] = row["scopes"]
+    validate_owner_policy(entries, scope_limits, grant_keys,
+                          json.loads((ROOT / "recomp/native/policy.json").read_text()))
     result, receipt = emit(helper.read_text(encoding="utf-8"), list(entries.values()),
-                           nmi_owner_pc24=owner, nmi_keys=sorted(grant_keys))
+                           nmi_owner_pc24=owner, nmi_keys=sorted(grant_keys),
+                           frame_keys=sorted(frame_keys),
+                           scope_limits=sorted(scope_limits.items()))
     receipt.update(rom_sha256=digest, context_plan_sha256=hashlib.sha256(contexts.read_bytes()).hexdigest(),
                    helper_file_sha256=hashlib.sha256(helper.read_bytes()).hexdigest(),
                    emitter_sha256=hashlib.sha256((ROOT / "snesrecomp/recompiler/v2/native_effects.py").read_bytes()).hexdigest(),

@@ -255,6 +255,70 @@ static bool OriginalClassroomPixel(const PictureEpoch *e,int x,int y)
     return e->ram[address]!=0x6E;
 }
 
+typedef struct PictureBounds { int left,top,right,bottom; } PictureBounds;
+
+static bool BoundedRoomScene(unsigned scene)
+{
+    switch(scene) {
+    case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x31:
+    case 0xE5: case 0xE6: case 0xE7: case 0xE8: return true;
+    default: return false;
+    }
+}
+
+/* Allocated maps can hold several separate floors, story versions, or BG
+ * animation material. For these measured stock rooms, the original live
+ * InitCameraBounds window is the authored extent, not the allocation size.
+ * Dark Space and flight also use composed BG2 material rather than a proved
+ * offscreen terrain stream. Retain their authoritative field, as well as
+ * Dark Gaia's original camera scroll between phase pages and the ending,
+ * rather than exposing extra animation/other-phase material. */
+static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
+    PictureBounds *out)
+{
+    const uint8_t *ram=e->ram;
+    unsigned scene=Word(ram,0x644),width=Word(ram,0x692),height=Word(ram,0x696);
+    unsigned expected_width=scene==0x04?512:256,expected_height=256;
+    if(scene==0x03 || scene==0x04 || scene==0xE6 || scene==0xE8) expected_height=512;
+    if(scene==0x06) expected_height=1280;
+    if(!BoundedRoomScene(scene) || width!=expected_width || height!=expected_height) return false;
+    if(scene>=0xE5 && scene<=0xE8) {
+        *out=(PictureBounds){camera_x,camera_y,camera_x+256,camera_y+224};
+        return true;
+    }
+    /* 06DE is the uncorrected bottom edge; 06DC additionally contains the
+     * original visible-height correction. Neither word is a player edit. */
+    *out=(PictureBounds){Word(ram,0x6D6),Word(ram,0x6D8),
+        Word(ram,0x6DA),Word(ram,0x6DE)};
+    return out->left>=0 && out->top>=0 && out->right<=(int)width &&
+        out->bottom<=(int)height && out->right-out->left>=256 &&
+        out->bottom-out->top>=224 &&
+        !((out->left|out->top|out->right|out->bottom)&255);
+}
+
+static void RoomPictureView(int camera_x,int camera_y,const PictureBounds *bounds)
+{
+    IogWorldView view;
+    if(IogWorldViewCompute(camera_x-bounds->left,camera_y-bounds->top,
+            (unsigned)(bounds->right-bounds->left),(unsigned)(bounds->bottom-bounds->top),
+            (uint16_t)s.width,(uint16_t)s.height,&view)) {
+        view.world_x+=bounds->left;view.world_y+=bounds->top;s.view=view;
+    } else {
+        /* Original forced-walk stairs can change the destination window
+         * before their camera finishes panning. Keep the real source field
+         * centered at the same extent, without a fallback zoom or invented
+         * cells between floors. Its original pixels remain authoritative. */
+        s.view.world_x=camera_x-(s.width-256)/2;
+        s.view.world_y=camera_y-(s.height-224)/2;
+        s.view.native_x=(uint16_t)(camera_x-s.view.world_x);
+        s.view.native_y=(uint16_t)(camera_y-s.view.world_y);
+        s.view.padding_left=(uint16_t)Clamp(bounds->left-s.view.world_x,0,s.width);
+        s.view.padding_right=(uint16_t)Clamp(s.view.world_x+s.width-bounds->right,0,s.width);
+        s.view.padding_top=(uint16_t)Clamp(bounds->top-s.view.world_y,0,s.height);
+        s.view.padding_bottom=(uint16_t)Clamp(s.view.world_y+s.height-bounds->bottom,0,s.height);
+    }
+}
+
 static void Detach(Ppu *p)
 {
     p->renderBuffer=(uint8_t*)s.row; p->renderPitch=256*4;
@@ -275,7 +339,8 @@ static bool RenderWorld(void)
 {
     if(!s.valid || !s.epoch_count || s.width<256 || s.height<224) return false;
     PictureEpoch *first=&s.epochs[s.lines[1].epoch];
-    bool classroom=Word(s.active_ram,0x644)==0x08;
+    unsigned scene=Word(s.active_ram,0x644);
+    bool classroom=scene==0x08;
     if(classroom) for(int n=0;n<s.epoch_count;n++)
         if(!OriginalClassroomLayout(&s.epochs[n])) {
             s.reason="unsupported_classroom_layout";return false;
@@ -286,15 +351,34 @@ static bool RenderWorld(void)
     Ppu *p=&s.detached;
     *p=s.base;memcpy(p,s.lines[1].registers,PPU_SAVESTATE_REGS_SIZE);
     int physical=(s.active_ram[0x6EE]>>7)&1;
-    int camera_x=ScrollWorld(s.active_ram,0x68A,p->hScroll[physical]);
-    int camera_y=ScrollWorld(s.active_ram,0x68E,p->vScroll[physical]);
-    if(camera_x!=(int16_t)Word(s.active_ram,0x68A) ||
-       camera_y!=(int16_t)Word(s.active_ram,0x68E)) {
+    int camera_x=(int16_t)Word(s.active_ram,0x68A);
+    int camera_y=(int16_t)Word(s.active_ram,0x68E);
+    bool source_plate=scene>=0xE5 && scene<=0xE8;
+    if(source_plate) {
+        /* These verified compositions expose only their native field. Their
+         * BG scroll can animate independently of the actor camera (E7 flight),
+         * so retain that real raster scroll without treating it as more world.
+         * Shape/scene refusal and composition/OAM publication gates still apply. */
+        PictureBounds bounds;
+        if(Word(first->ram,0x644)!=scene ||
+           !RoomPictureBounds(first,camera_x,camera_y,&bounds)) {
+            s.reason="unsupported_room_window";return false;
+        }
+    } else if(ScrollWorld(s.active_ram,0x68A,p->hScroll[physical])!=camera_x ||
+              ScrollWorld(s.active_ram,0x68E,p->vScroll[physical])!=camera_y) {
         s.reason="camera_publication_mismatch";return false;
     }
     if(!IogWorldViewCompute(camera_x,camera_y,Word(first->ram,0x692),
             Word(first->ram,0x696),(uint16_t)s.width,(uint16_t)s.height,&s.view)) {
         s.reason="invalid_world_view";return false;
+    }
+    bool bounded=BoundedRoomScene(Word(s.active_ram,0x644));
+    if(bounded) {
+        PictureBounds bounds;
+        if(!RoomPictureBounds(first,camera_x,camera_y,&bounds)) {
+            s.reason="unsupported_room_window";return false;
+        }
+        RoomPictureView(camera_x,camera_y,&bounds);
     }
     int left=s.view.native_x,top=s.view.native_y;
     IogVisualViewport viewport={s.view.world_x,s.view.world_y,
@@ -324,6 +408,11 @@ static bool RenderWorld(void)
         int native_y=row-top;
         PictureLine *line=&s.lines[Clamp(native_y,0,223)+1];
         PictureEpoch *e=&s.epochs[line->epoch];
+        PictureBounds bounds={0,0,0,0};
+        if(bounded && ((source_plate && Word(e->ram,0x644)!=scene) ||
+           !RoomPictureBounds(e,camera_x,camera_y,&bounds))) {
+            s.reason="unsupported_room_window";return false;
+        }
         /* Objects were decoded from the exact composition/OAM publication
          * pair. Recolor the one visible row with this raster's palette. */
         size_t count=0;
@@ -397,7 +486,9 @@ static bool RenderWorld(void)
                  * whole authoritative field during shake. This may include
                  * a hardware-wrapped edge; expanded outside-map space is
                  * still padding, never guessed or repeated terrain. */
-                if(classroom?OriginalClassroomPixel(e,worldx,worldy):
+                if(bounded?(native_pixel || (worldx>=bounds.left && worldx<bounds.right &&
+                   worldy>=bounds.top && worldy<bounds.bottom)):
+                   classroom?OriginalClassroomPixel(e,worldx,worldy):
                    (native_pixel||(worldx>=0&&worldx<(int)Word(e->ram,0x692)&&
                    worldy>=0&&worldy<(int)Word(e->ram,0x696))))
                     s.output[row*s.width+start+x]=s.row[x];

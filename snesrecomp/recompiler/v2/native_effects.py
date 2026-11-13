@@ -21,6 +21,8 @@ DIRECT_CALL_RETURN_NAMES = frozenset({"JSR", "JSL", "RTS", "RTL"})
 DIRECT_CALL_RETURN_OPCODES = frozenset({0x20, 0x22, 0x60, 0x6B})
 INDIRECT_JUMP_OPCODES = frozenset({0x7C})
 NMI_EXCLUDED_OPCODES = frozenset({0x7C})
+FRAME_NAMES = frozenset({"COP", "RTI"})
+FRAME_OPCODES = frozenset({0x02, 0x40})
 FORBIDDEN = frozenset({"runOpcode", "doOpcode", "doInterrupt", "init", "reset",
                        "free", "saveload", "opcode_hook"})
 
@@ -91,7 +93,7 @@ def _rename(text, prefix):
 
 
 def emit(source, entries, *, registration_name="IogRegisterNativeContinuations",
-         nmi_owner_pc24=None, nmi_keys=()):
+         nmi_owner_pc24=None, nmi_keys=(), frame_keys=(), scope_limits=()):
     """Return private C and an identity receipt for exact decoded entries.
 
     Entry keys: pc24(int), m/x/e(0/1), bytes(bytes), mnemonic, immediate(bool).
@@ -110,6 +112,20 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations",
     if not entries or len(entries) > 65535:
         raise ValueError("A bounded nonempty descriptor set is required")
     keys = set()
+    scopes = {}
+    for key, flags in scope_limits:
+        if (type(key) is not tuple or len(key) != 4
+                or any(type(n) is not int for n in key) or key in scopes
+                or type(flags) is not int or flags not in (1, 2, 3)):
+            raise ValueError("Explicit unique existing-owner scope limits required")
+        scopes[key] = flags
+    frame_keys = list(frame_keys)
+    frame_set = set()
+    for key in frame_keys:
+        if (type(key) is not tuple or len(key) != 4
+                or any(type(n) is not int for n in key) or key in frame_set):
+            raise ValueError("Explicit unique frame-effect keys required")
+        frame_set.add(key)
     bodies, helpers = {}, {}
     for e in entries:
         key = e["pc24"], e["m"], e["x"], e["e"]
@@ -118,10 +134,12 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations",
                 or e["e"] or type(e["bytes"]) is not bytes or not 1 <= len(e["bytes"]) <= 4
                 or (e["pc24"] & 0xFFFF) < 0x8000
                 or (e["pc24"] & 0xFFFF) + len(e["bytes"]) > 0x10000
-                or e["mnemonic"] not in SAFE_NAMES or type(e["immediate"]) is not bool):
+                or e["mnemonic"] not in SAFE_NAMES | FRAME_NAMES or type(e["immediate"]) is not bool):
             raise ValueError("Unsupported or duplicate native effect descriptor")
         keys.add(key)
         opcode = e["bytes"][0]
+        if (opcode in FRAME_OPCODES) != (key in frame_set):
+            raise ValueError("COP/RTI require an exact explicit frame-effect grant")
         # A mnemonic alone also admits indirect JMP/JML addressing forms.
         # Static branches and direct calls/returns keep the same owning bridge
         # frame. Only the qualified indexed-indirect JMP is admitted;
@@ -155,6 +173,11 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations",
                 raise ValueError("Only the status setter may change instruction widths")
             helpers[name] = text
             pending |= _calls(text) - set(helpers)
+    if not frame_set <= keys:
+        raise ValueError("Unregistered frame-effect key")
+    if not scopes.keys() <= keys:
+        raise ValueError("Unregistered owner-scope key")
+    frame_keys.sort()
     parts = ["""/* PRIVATE ROM-derived continuations; never distribute this file.
  * ISA helpers specialized from LakeSnes-derived interp816.c (MIT,
  * copyright2021-2023 angelo_wf and contributors); preserve SDK attribution. */
@@ -215,7 +238,8 @@ typedef struct NiOperands {
             if (type(key) is not tuple or len(key) != 4
                     or any(type(n) is not int for n in key)
                     or key in seen or key not in by_key
-                    or by_key[key]['bytes'][0] in NMI_EXCLUDED_OPCODES):
+                    or by_key[key]['bytes'][0] in NMI_EXCLUDED_OPCODES
+                    or (key in scopes and not scopes[key] & 2)):
                 raise ValueError("Unsupported, duplicate or unregistered NMI data site")
             seen.add(key)
         nmi_keys.sort()
@@ -245,6 +269,25 @@ typedef struct NiOperands {
     if nmi_keys:
         parts.append("static const InterpNativeInstruction ni_nmi_entries[] = {\n" +
                      ",\n".join(descriptor_by_key[k] for k in nmi_keys) + "\n};")
+    for flags in sorted(set(scopes.values())):
+        parts.append(f"static const InterpNativeInstruction ni_scope_{flags}_entries[] = {{\n" +
+                     ",\n".join(descriptor_by_key[k] for k in sorted(scopes) if scopes[k] == flags) + "\n};")
+    if frame_keys:
+        parts.append("static const InterpNativeInstruction ni_frame_entries[] = {\n" +
+                     ",\n".join(descriptor_by_key[k] for k in frame_keys) + "\n};")
+    if frame_keys or scopes:
+        setup = (f"bool {registration_name}(void) {{\n"
+                 "  if (!interp_bridge_add_native_instructions(ni_entries, sizeof ni_entries / sizeof *ni_entries)) return false;\n")
+        for flags in sorted(set(scopes.values())):
+            setup += f"  if (!interp_bridge_restrict_native_instructions(ni_scope_{flags}_entries, sizeof ni_scope_{flags}_entries / sizeof *ni_scope_{flags}_entries, {flags}u)) return false;\n"
+        if frame_keys:
+            setup += "  if (!interp_bridge_allow_native_frame_instructions(ni_frame_entries, sizeof ni_frame_entries / sizeof *ni_frame_entries)) return false;\n"
+        if nmi_keys:
+            setup += (f"  return interp_bridge_allow_native_nmi_instructions(0x{nmi_owner_pc24:06X}u, ni_nmi_entries, sizeof ni_nmi_entries / sizeof *ni_nmi_entries);\n}}")
+        else:
+            setup += "  return true;\n}"
+        parts.append(setup)
+    elif nmi_keys:
         parts.append(f"""bool {registration_name}(void) {{
   if (!interp_bridge_add_native_instructions(ni_entries, sizeof ni_entries / sizeof *ni_entries)) return false;
   return interp_bridge_allow_native_nmi_instructions(0x{nmi_owner_pc24:06X}u, ni_nmi_entries, sizeof ni_nmi_entries / sizeof *ni_nmi_entries);
@@ -260,4 +303,8 @@ typedef struct NiOperands {
                     "fixed_opcode_bodies": len(bodies), "helper_functions": sorted(helpers)}
     if nmi_keys:
         receipt.update(native_nmi_owner_pc24=nmi_owner_pc24, native_nmi_grants=len(nmi_keys))
+    if frame_keys:
+        receipt.update(native_frame_grants=len(frame_keys))
+    if scopes:
+        receipt.update(native_owner_scope_limits=len(scopes))
     return result, receipt

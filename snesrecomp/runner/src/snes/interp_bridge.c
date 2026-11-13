@@ -1317,6 +1317,8 @@ typedef struct {
     InterpNativeInstruction descriptor;
     uint64_t insns, cycles;
     uint32_t nmi_owner_pc24;
+    uint8_t frame_effect;
+    uint8_t owner_scopes;
 } NativeInstructionEntry;
 static NativeInstructionEntry *s_native_instructions;
 static size_t s_native_instruction_count;
@@ -1328,6 +1330,7 @@ static uint16_t *s_native_page_ids, *s_native_page_slots;
 static int s_native_instruction_index = -1;
 static uint64_t s_native_continuation_insns, s_native_continuation_cycles;
 static uint64_t s_native_nmi_insns, s_native_nmi_cycles;
+static int s_native_frame_enabled;
 /* An explicit host NMI entry owns this grant. It is never inherited by a
  * nested bridge or an ordinary/IRQ entry, and is not serialized. */
 static struct {
@@ -1391,13 +1394,13 @@ static int native_instruction_metadata_valid(const InterpNativeInstruction *d) {
     if (d->length != length) return 0;
     for (unsigned i = length; i < 4; ++i) if (d->bytes[i]) return 0;
     switch (d->bytes[0]) {
-        /* Data and direct call/return effects retain the owning opcode loop,
+        /* Data, direct call/return and separately granted COP/RTI effects retain the owning opcode loop,
          * including its existing paired-bounce and owner-boundary handling.
-         * Interrupt frames, direct SP/emulation changes,
+         * Direct SP/emulation changes,
          * indirect calls/other indirect jumps, halts and block moves still
          * require fallback. Indexed-indirect JMP retains its live pointer
          * bus reads and the same owning loop's resolved-landing capture. */
-        case 0x00: case 0x02: case 0x40:
+        case 0x00:
         case 0x44: case 0x54: case 0x6C:
         case 0xCB: case 0xDB: case 0xDC: case 0xFC:
         case 0x1B: case 0x9A: case 0xFB: return 0;
@@ -1433,6 +1436,8 @@ bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
             }
             a->insns += b->insns; a->cycles += b->cycles;
             if (!a->nmi_owner_pc24) a->nmi_owner_pc24 = b->nmi_owner_pc24;
+            a->frame_effect |= b->frame_effect;
+            if (!a->owner_scopes) a->owner_scopes = b->owner_scopes;
         } else next[used++] = next[i];
     }
     if (used > kNativeInstructionSlots) { free(next); return false; }
@@ -1496,7 +1501,8 @@ static int native_instruction_nmi_data_valid(const InterpNativeInstruction *d) {
         /* Qualified stack effects and direct calls/returns keep the same
          * owning retirement loop, real bus accesses and original NMI frame.
          * Indirect control has not been qualified in this finite owner.
-         * Metadata still excludes COP/RTI, SP writes, block moves and XCE. */
+         * COP/RTI additionally require their explicit frame grant. Metadata
+         * still excludes SP writes, block moves and XCE. */
         case 0x7C: return 0;
         default: return 1;
     }
@@ -1518,12 +1524,66 @@ bool interp_bridge_allow_native_nmi_instructions(
         if (!entry || entry->descriptor.length != d->length ||
             entry->descriptor.step != d->step ||
             memcmp(entry->descriptor.bytes, d->bytes, 4) ||
-            (entry->nmi_owner_pc24 && entry->nmi_owner_pc24 != owner_entry_pc24))
+            (entry->nmi_owner_pc24 && entry->nmi_owner_pc24 != owner_entry_pc24) ||
+            (entry->owner_scopes && !(entry->owner_scopes & INTERP_NATIVE_SCOPE_NMI)) ||
+            ((d->bytes[0] == 0x02 || d->bytes[0] == 0x40) && !entry->frame_effect))
             return false;
     }
     for (size_t i = 0; i < count; ++i)
         native_instruction_find(native_instruction_key(&items[i]))->nmi_owner_pc24 = owner_entry_pc24;
     return true;
+}
+
+bool interp_bridge_restrict_native_instructions(
+        const InterpNativeInstruction *items, size_t count, unsigned scopes) {
+    if (s_interp_bridge_depth || s_lle_sched_depth || !scopes ||
+        (scopes & ~(INTERP_NATIVE_SCOPE_SCHEDULER | INTERP_NATIVE_SCOPE_NMI)) ||
+        (count && !items) || count > kNativeInstructionSlots) return false;
+    for (size_t i = 0; i < count; ++i) {
+        const InterpNativeInstruction *d = &items[i];
+        if (!native_instruction_metadata_valid(d)) return false;
+        NativeInstructionEntry *entry = native_instruction_find(native_instruction_key(d));
+        if (!entry || entry->descriptor.length != d->length ||
+            entry->descriptor.step != d->step ||
+            memcmp(entry->descriptor.bytes, d->bytes, 4) ||
+            (entry->owner_scopes && entry->owner_scopes != scopes) ||
+            (entry->nmi_owner_pc24 && !(scopes & INTERP_NATIVE_SCOPE_NMI))) return false;
+    }
+    for (size_t i = 0; i < count; ++i)
+        native_instruction_find(native_instruction_key(&items[i]))->owner_scopes = (uint8_t)scopes;
+    return true;
+}
+
+bool interp_bridge_allow_native_frame_instructions(
+        const InterpNativeInstruction *items, size_t count) {
+    if (s_interp_bridge_depth || s_lle_sched_depth ||
+        (count && !items) || count > kNativeInstructionSlots) return false;
+    /* Permission is distinct from registration and from the launch switch.
+     * Validate the entire fixed set before granting any frame effect. */
+    for (size_t i = 0; i < count; ++i) {
+        const InterpNativeInstruction *d = &items[i];
+        if (!native_instruction_metadata_valid(d) ||
+            (d->bytes[0] != 0x02 && d->bytes[0] != 0x40)) return false;
+        NativeInstructionEntry *entry = native_instruction_find(native_instruction_key(d));
+        if (!entry || entry->descriptor.length != d->length ||
+            entry->descriptor.step != d->step ||
+            memcmp(entry->descriptor.bytes, d->bytes, 4)) return false;
+    }
+    for (size_t i = 0; i < count; ++i)
+        native_instruction_find(native_instruction_key(&items[i]))->frame_effect = 1;
+    return true;
+}
+
+void interp_bridge_set_native_frame_effects_enabled(bool enabled) {
+    if (!s_interp_bridge_depth && !s_lle_sched_depth)
+        s_native_frame_enabled = enabled;
+}
+
+size_t interp_bridge_native_frame_grants(void) {
+    size_t count = 0;
+    for (size_t i = 0; i < s_native_instruction_count; ++i)
+        count += s_native_instructions[i].frame_effect != 0;
+    return count;
 }
 
 void interp_bridge_clear_native_instructions(void) {
@@ -1532,6 +1592,7 @@ void interp_bridge_clear_native_instructions(void) {
     free(s_native_page_ids); s_native_page_ids = NULL;
     free(s_native_page_slots); s_native_page_slots = NULL;
     s_native_instruction_count = 0;
+    s_native_frame_enabled = 0;
     memset(s_native_page_start, 0, sizeof s_native_page_start);
     memset(s_native_page_count, 0, sizeof s_native_page_count);
 }
@@ -1679,6 +1740,11 @@ static NativeInstructionEntry *bridge_native_instruction_step(
         }
     }
     if (!entry) return NULL;
+    if (entry->owner_scopes &&
+        !(entry->owner_scopes & (nmi_owner ? INTERP_NATIVE_SCOPE_NMI :
+                                           INTERP_NATIVE_SCOPE_SCHEDULER))) return NULL;
+    if ((entry->descriptor.bytes[0] == 0x02 || entry->descriptor.bytes[0] == 0x40) &&
+        (!entry->frame_effect || !s_native_frame_enabled)) return NULL;
     if (nmi_owner && entry->nmi_owner_pc24 != s_native_nmi_owner.entry_pc24)
         return NULL;
     const InterpNativeInstruction *d = &entry->descriptor;

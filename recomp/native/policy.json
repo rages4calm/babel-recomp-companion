@@ -4,9 +4,20 @@
   "mapper": "hirom",
   "guard_ranges": [
     {"start": "008000", "end_exclusive": "008014", "reason": "Architectural vector trampolines; reset and interrupt delivery remain interpreted."},
-    {"start": "0082DE", "end_exclusive": "008387", "reason": "Known NMI AOT stack leak and nested COP/RTI ownership; keep all internal labels interpreted."},
+    {"start": "0082DE", "end_exclusive": "008387", "reason": "Known whole-function NMI AOT stack leak and nested COP/RTI ownership; retain the AOT barrier. Separately qualified fixed instructions require explicit existing-owner scope limits."},
     {"start": "02803B", "end_exclusive": "028191", "reason": "Boot/vblank routines $82803B/$828043, including $82804D/$828051, retain interpreter ownership. Separate preceding math leaf ends in RTL at $82803A; its hardware accesses still fall back."},
     {"start": "03C5FF", "end_exclusive": "03CA00", "reason": "Babel patches actor/OAM culling operands in memory for widescreen; compiled immediates would become stale."}
   ],
-  "qualification": "Generation creates private replay candidates. Only matched execution at identical guest points can qualify a native path."
+  "fixed_instruction_scopes": {
+    "schema": "gaia fixed instruction owner scopes v1",
+    "scope_only_ranges": [
+      {"start": "0082DE", "end_exclusive": "008387"},
+      {"start": "02803B", "end_exclusive": "028191"}
+    ],
+    "vector_jumps": ["008007", "00800B"],
+    "forbidden_sites": ["828049", "82804D", "828051", "828053", "828195"],
+    "historical_whole_function_NMI_floors": ["82AF5F", "829DE2", "829E1D", "82B038"],
+    "contract": "The unchanged ranges and four historical NMI floors block whole-function AOT, not already-qualified single-instruction effects. Fixed instructions retain the original retirement, frames, bus effects and existing owners; new protected-range instructions require exact owner-scope restrictions. Only the two stock long-JMP vector instructions may be selected; reset and IRQ vectors remain excluded. RDNMI acknowledgements/poll controls stay outside this registry; the existing separate poll island is unchanged. Runtime all/single/file/programmatic exclusions are never bypassed."
+  },
+  "qualification": "Generation creates private replay candidates. Only matched execution at identical guest points can qualify a native path; fixed-instruction scope metadata is not execution or campaign proof."
 }

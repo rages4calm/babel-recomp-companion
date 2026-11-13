@@ -200,7 +200,8 @@ uint64_t interp_bridge_native_poll_cycles_total(void);
  * paired-bounce and return-boundary ownership. Register aliases/modes
  * separately. Support is plain LoROM/HiROM upper ROM, E0, ordinary data/status/
  * stack/static branch/direct call/return and indexed-indirect JMP effects.
- * Interrupt frames, indirect calls/other indirect jumps, direct SP/emulation changes, power and
+ * COP/RTI require a separate explicit frame grant and launch enable below.
+ * Other interrupt frames, indirect calls/other indirect jumps, direct SP/emulation changes, power and
  * block-move operations remain interpreted. Every instruction byte and live
  * mode is checked again AFTER hooks, without emulated reads or diagnostics.
  *
@@ -231,12 +232,33 @@ typedef struct {
 } InterpNativeInstructionStats;
 bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
                                             size_t count);
+/* Opt-in COP/RTI effects only. Registration alone never enables them. Atomic,
+ * exact registered descriptors; host setup only. The original owning loop
+ * still handles nested COP frames, RTI owner exits, events and every bus access.
+ * NMI execution requires its own exact-owner grant as well. No frame is
+ * synthesized, skipped, repaired or interpreted inside a callback. */
+bool interp_bridge_allow_native_frame_instructions(
+    const InterpNativeInstruction *items, size_t count);
+void interp_bridge_set_native_frame_effects_enabled(bool enabled);
+size_t interp_bridge_native_frame_grants(void);
+enum {
+    INTERP_NATIVE_SCOPE_SCHEDULER = 1,
+    INTERP_NATIVE_SCOPE_NMI = 2
+};
+/* Restrict exact registered descriptors to these existing eligible owners.
+ * Does not authorize a new owner or bypass any mapper, exclusion or event
+ * guard. Atomic, host setup only; a set restriction cannot be changed in
+ * place, and identical registry rebuilds retain it. NMI still needs an exact
+ * NMI grant; COP/RTI still need frame permission and the launch switch. */
+bool interp_bridge_restrict_native_instructions(
+    const InterpNativeInstruction *items, size_t count, unsigned scopes);
 /* Opt-in finite host-NMI scope. Every supplied descriptor must already
  * be registered identically. The complete grant is atomic, host-setup only;
  * ordinary registration, failed updates and process-global counters retain
  * their existing semantics. Data/status/static control and the qualified
  * data-stack and direct-call/return effects use the same real owner
- * and retirement. No interrupt-frame, indirect-control, SP-write, emulation,
+ * and retirement. Separately granted COP/RTI retain their real frame accesses
+ * and original owner exit. No other interrupt-frame, indirect-control, SP-write, emulation,
  * power or block-move effects are permitted.
  * Grants name an exact owner entry PC, do not enable ordinary run_interrupt,
  * and disappear when native instruction registration is cleared. */

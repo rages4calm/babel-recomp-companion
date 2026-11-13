@@ -66,6 +66,9 @@ void IogNativeContinuationsInitialize(void)
         interp_bridge_clear_native_instructions();
         return;
     }
+    const char *frame_setting = getenv("IOG_NATIVE_FRAME_CONTINUATIONS");
+    interp_bridge_set_native_frame_effects_enabled(
+        frame_setting && !strcmp(frame_setting, "1"));
     const char *nmi_setting = getenv("IOG_NATIVE_NMI_CONTINUATIONS");
     native_nmi_enabled = nmi_setting && !strcmp(nmi_setting, "1") &&
         interp_bridge_native_nmi_grants() != 0;

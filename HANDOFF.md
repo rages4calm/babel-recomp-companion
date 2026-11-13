@@ -3,7 +3,82 @@
 Updated November 12, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
-## Qualified continuation — batch 019
+## Qualified continuation — batch 020
+
+Source baseline `6b7c40d103c948ea9d24a7d254790710a3148804`. Exact private candidate:
+`984919e11911a69a658cd769cbc9d52e83f1f94a22e324733016aa2117ee9d30`.
+Read [batch 020](docs/NATIVE-BATCH-020.md). The 018 build tree and immutable 016
+graph were reused. No installation or regeneration; owner `build/` remains 005.
+
+- Selection: 14,871 canonical / 59,484 aliases, preserving all old 9,708 contexts.
+  All 5,163 additions execute in the tests. Exact frame grants: 4,988; finite NMI
+  grants: 1,021. New contexts have restrictive existing-owner scopes. COP/RTI keep
+  real stack/bus/frame retirement. AOT barriers, RDNMI poll code and all runtime
+  exclusions, mapper, byte/mode, event and owner checks remain. Frame effects
+  require `IOG_NATIVE_FRAME_CONTINUATIONS=1` alongside NI/poll/NMI switches;
+  all default off. Fallback stays available.
+- Independent native suite: 105 pairs, 210 captures, 522,200 frames and 1,480
+  snapshot sets. Matched native guest CPU rises from 98.056569% to 99.816657%;
+  interpreter cycles fall from 188,032,136 to 17,738,898 (90.566% reduction).
+  Overall 13,459 selected contexts execute; 1,412 old contexts remain unobserved.
+  CPU/master/poll/AOT work is unchanged. The 740 raw APU diagnostic differences
+  are SPC host-observer stamps only; ports, event order, samples, executed
+  `Apu.portClock`, complete APU/PCM/queue state and seven CPU fields match.
+- Separate same-binary controls: six logical pairs, nine unique captures and
+  53,400 fresh frames, with exact full CPU/devices/raw APU. Causal new NMI grants
+  seen: 470/490, supplying 4,979,297 cycles. Broad all-owner site counts observe
+  all 490, without establishing per-PC NMI attribution.
+- Renderer: 110 unique pairs, 220 captures, 555,000 frames and 1,710 snapshot sets;
+  61 scenes in selected formats, 109 positive pictures and one Castoth refusal.
+  Four original-width controls match all 57,344 pixels. New 23 + old 82 + class 5;
+  37 same-V2 pairs were verified at a storage hold, then 73 unstarted pairs ran.
+  No V1 results reused. Source/OAM/native ROI/world pixels/full CPU/devices/raw
+  APU and per-PC counters match REF/SPAN. Original lesson, both doors and town
+  reentry pass. Houses use live room bounds; E5–E8 keep the original field with
+  black outside. Flight's independent background scroll no longer resizes the view.
+- Renderer units: 14,524,016 assertions and 51 actual source checks. SDK: 903
+  passed, two skipped, no warnings, 780 unchanged files; title policy: nine passed.
+  Initial V1 flight and preparation failures remain separate.
+- `native-020/Play Original Classroom.cmd` launches final 1080p xBR/1.5x with
+  native frame/poll/NMI and existing MSU-1. A fresh 4,400-frame opening and
+  240-frame RTX 5070 / NVIDIA 616.64 capture pass; image/checkpoint match 019.
+  MSU track 3 starts and consumes dummy-device audio. Physical listening and
+  sustained FPS remain unqualified.
+- CPU benchmark: 26 processes / 18,200 frames. SPAN/reference ratios are 0.407862
+  and 0.296689 at 1x/1.5x (59.2%/70.3% saving). Separate 020/019 default-SPAN
+  ratios are 1.043940/1.017624 (+4.4%/+1.8% CPU); profiling remains work. One
+  earlier warmup failed only a terminal blank line; its failed output is retained.
+- Pins remain SNESRecomp `80a41241` and GaiaLabs `e825dddde`. All four authored
+  PRs are merged; 11 of 12 issues closed, only profile-import #265 open. Credits
+  and vendor deltas remain. Dedicated-bank-only WRAM capture is an intentional
+  SDK limit; no confirmed new upstream bug was found.
+- Cleanup removed 86,557 obsolete files: 26,226,189,611 logical bytes /
+  8,548,063,889 reported file-data bytes, with no locks. Current 020 raw stays.
+  Selected 018/019 passed raw is retired with four markers, while original
+  receipts remain historical. Keep all source/states/seeds/metadata/failures,
+  six old Dark Gaia failure captures, complete 019 classroom lineage, ten 019
+  unit inputs, compact 018 classroom input, masters and the 016 graph. Owner
+  39-file and normal 28-PCM hashes remain unchanged. Reviewed budget: 9 GiB;
+  8,408,921,397 bytes accounted including allowance, no pending reservations.
+
+Next measured gaps: 11,428,773 cycles in dynamic WRAM/mirrored/unmapped code,
+then 3,674,705 protected RDNMI cycles. The main 0402–0407 helper is game-authored
+self-modifying PHB/MVN/PLB/RTS, installed by 829E6F/829E7A; callers rewrite bank
+operands. Its 321 journal targets establish calls, without historical fetched
+bodies. A new contract needs actual byte capture/live operands, correct mirror
+mapping and one-byte/seven-cycle MVN retirement under real bus/event/owner timing.
+Do not substitute current RAM or apply upper-ROM's four-alias rule. No new
+WRAM admission is prepared.
+
+Private proofs: `counter-audit-v2/FINAL-COHORT-AUDIT.json`,
+`native-gap/FROZEN-ENGINE-PROOF-v2.json`, `renderer/COMPLETE-RECEIPT.json`,
+`renderer/final002/INDEPENDENT-CLOSEOUT.json`, `performance/FINAL-RECEIPT.json`,
+`storage/final-prior-retirement/FINAL-RECEIPT.json`, `play-proof/READBACK-REVIEW.json`.
+These are bounded assisted tests; campaign, native SPC and the remake GPU goals
+remain unfinished.
+
+## Previous qualified continuation — batch 019 (historical)
+
 
 Source baseline `12bbdd94913fdf2e3dcffd982eb11961422a17bf`; ignored work under
 `native-019`. Final private candidate SHA-256:
