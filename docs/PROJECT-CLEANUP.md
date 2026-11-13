@@ -5,7 +5,34 @@ copies after their consumers finish. Keep the current qualification batch, sourc
 receipts, required generation inputs, master builds and owner data. Do not grow a
 new full fixture tree for each small check; reuse one bounded scratch batch.
 
-## Current closeout — batch 020
+## Current closeout — batch 021
+
+Completed without archives or moving clutter: **43,918 files / 13,273,408,436
+logical bytes / 4,353,804,196 reported last-link file-data bytes**, zero locks
+or failures. This combines 268 obsolete passed 020 compiled test outputs and 43,650
+superseded passed 020 native/renderer raw files. Two exact unchanged inventories
+were approved after 129 native pairs, NEW24 semantics, 44 renderer captures,
+SDK 915/core/causal checks and reader releases. The selected payloads were
+identified by resolved project path, reparse checks, 64-bit volume/file IDs,
+size and modification time. Before/after hashes/IDs/timestamps of 19,258 retained
+files remain unchanged. No whole-project scan or permission/process forcing.
+
+All source, states/seeds, metadata/profiles/counters, original receipts, failures,
+current 021 raw and current/prior playable binaries remain. This includes 39 owner
+files, all 28 normal PCM tracks, the exact four old 020 unit/refusal inputs,
+ten old 019 unit inputs, compact 018 classroom input and six historical failed
+Dark Gaia captures. No retry CMD is needed: all 43,918 targets are absent.
+
+Two `RAW-RETIRED-20261113.json` markers bind 020 qualification-final-v2 and
+renderer/final002 retirement. Their old full 110-pair/61-format proof remains
+historical metadata; its selected raw goldens are unavailable. Fresh 021 evidence
+is 129 native pairs plus the 44-capture critical renderer subset, with no new
+renderer admissions. Original passed receipts are not rewritten as fresh proof.
+Logical bytes, reported data allocation and whole-volume recovery are different
+measures. [Batch 021](NATIVE-BATCH-021.md) records tests and performance limits.
+
+## Previous closeout — batch 020 (historical)
+
 
 The exact reviewed operations removed **86,557 files / 26,226,189,611 logical
 bytes / 8,548,063,889 reported last-link file-data bytes**, with zero locks or
@@ -20,7 +47,7 @@ All retained row dictionaries are identical. Apply rechecks absolute project
 paths, reparse ancestors, 64-bit volume/file IDs, size and modification time.
 No permissions, locks or processes are forced.
 
-Current full020 proof, owner files, normal PCM tracks, runnable018/019 masters,
+At that closeout, full020 proof, owner files, normal PCM tracks, runnable018/019 masters,
 016 graph/source, all states/seeds/source/JSON/JSONL/logs/profiles/journals and
 failure evidence remain. This includes six old Dark Gaia failure captures,
 complete019 classroom failure lineage, the ten unit inputs and the compact018
@@ -29,8 +56,8 @@ retained with the operation; all postchecks pass.
 
 Four `RAW-RETIRED-20261112.json` markers at affected historical roots bind the
 selected retirement. Original passed receipts are unchanged; their selected old
-raw comparisons are no longer available goldens. Current020 supplies the full
-raw proof. The private `Retry reviewed prior raw.cmd` is available if a reviewed
+raw comparisons are no longer available goldens. At that time 020 supplied full
+raw proof; the selected payloads are now retired by 021 above. The private `Retry reviewed prior raw.cmd` is available if a reviewed
 operation needs resuming; this completed operation has no locked leftovers.
 Final current-batch capture accounting is 8,408,921,397 bytes including a 512 MiB
 allowance, zero pending reservations, below the reviewed 8.5/9 GiB bounds.

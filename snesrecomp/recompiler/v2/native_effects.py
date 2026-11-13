@@ -93,13 +93,15 @@ def _rename(text, prefix):
 
 
 def emit(source, entries, *, registration_name="IogRegisterNativeContinuations",
-         nmi_owner_pc24=None, nmi_keys=(), frame_keys=(), scope_limits=()):
+         nmi_owner_pc24=None, nmi_keys=(), frame_keys=(), scope_limits=(), outline_effects=False):
     """Return private C and an identity receipt for exact decoded entries.
 
     Entry keys: pc24(int), m/x/e(0/1), bytes(bytes), mnemonic, immediate(bool).
     The caller verifies stock ROM identity and original bytes before invoking.
     Registration independently validates mode/length/bytes in the live mapper.
     """
+    if type(outline_effects) is not bool:
+        raise ValueError("outline_effects must be an explicit bool")
     if not re.fullmatch(r"[A-Za-z_]\w*", registration_name):
         raise ValueError("Unsafe registration symbol")
     table = re.search(r"cyclesPerOpcode\[256\]\s*=\s*\{([^}]+)\}", source)
@@ -243,6 +245,35 @@ typedef struct NiOperands {
                 raise ValueError("Unsupported, duplicate or unregistered NMI data site")
             seen.add(key)
         nmi_keys.sort()
+    outlined_groups = {}
+    if outline_effects:
+        parts.append("""#if defined(_MSC_VER)
+#define NI_NOINLINE __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+#define NI_NOINLINE __attribute__((noinline))
+#else
+#error Outlined effects require a supported noinline attribute
+#endif""")
+        for e in entries:
+            group = (e["bytes"], e["m"], e["x"], e["e"], e["immediate"])
+            if group in outlined_groups:
+                continue
+            symbol = f"ni_effect_{len(outlined_groups):05d}"
+            outlined_groups[group] = symbol
+            m, x = e["m"], e["x"]
+            encoded = ",".join(f"0x{v:02X}" for v in e["bytes"])
+            body = _rename(bodies[e["bytes"][0]], f"ni_{m}{x}_")
+            body = body.replace("cpu->mf", str(m)).replace("cpu->xf", str(x))
+            parts.append(f"""static NI_NOINLINE int {symbol}(Interp816 *cpu, uint32_t base) {{
+  static const uint8_t code[] = {{{encoded}}};
+  NiOperands operands = {{base, code, 0, sizeof code, {str(e['immediate']).lower()}}};
+  NiOperands *_ni = &operands;
+  cpu->cyclesUsed = 0;
+  (void)ni_{m}{x}_readOpcode(cpu, _ni);
+  cpu->cyclesUsed = {cycles[e['bytes'][0]]};
+{body}
+  return cpu->cyclesUsed;
+}}""")
     descriptors, descriptor_by_key = [], {}
     for e in entries:
         pc, m, x = e["pc24"], e["m"], e["x"]
@@ -250,7 +281,15 @@ typedef struct NiOperands {
         encoded = ",".join(f"0x{v:02X}" for v in e["bytes"])
         body = _rename(bodies[e["bytes"][0]], f"ni_{m}{x}_")
         body = body.replace("cpu->mf", str(m)).replace("cpu->xf", str(x))
-        parts.append(f"""static int {symbol}(Interp816 *cpu) {{
+        if outline_effects:
+            group = (e["bytes"], m, x, e["e"], e["immediate"])
+            parts.append(f"""static int {symbol}(Interp816 *cpu) {{
+  if (!cpu || !cpu->read || cpu->e || cpu->mf != {m} || cpu->xf != {x} ||
+      cpu->k != 0x{pc >> 16:02X} || cpu->pc != 0x{pc & 0xFFFF:04X}) return 0;
+  return {outlined_groups[group]}(cpu, 0x{pc:06X}u);
+}}""")
+        else:
+            parts.append(f"""static int {symbol}(Interp816 *cpu) {{
   if (!cpu || !cpu->read || cpu->e || cpu->mf != {m} || cpu->xf != {x} ||
       cpu->k != 0x{pc >> 16:02X} || cpu->pc != 0x{pc & 0xFFFF:04X}) return 0;
   static const uint8_t code[] = {{{encoded}}};
@@ -307,4 +346,12 @@ typedef struct NiOperands {
         receipt.update(native_frame_grants=len(frame_keys))
     if scopes:
         receipt.update(native_owner_scope_limits=len(scopes))
+    if outline_effects:
+        grouping = "\n".join(f"{code.hex()}:{m}:{x}:{e}:{int(immediate)}"
+                             for code, m, x, e, immediate in outlined_groups)
+        receipt.update(outline_effects=True,
+                       outlined_effect_bodies=len(outlined_groups),
+                       outlined_effect_wrappers=len(entries),
+                       outline_grouping="exact bytes,M,X,E,immediate",
+                       outline_group_keys_sha256=hashlib.sha256(grouping.encode()).hexdigest())
     return result, receipt

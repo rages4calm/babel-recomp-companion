@@ -1,9 +1,89 @@
 # Illusion of Gaia Companion — handoff
 
-Updated November 12, 2026. Development version `0.1.0-dev.1`.
+Updated November 13, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
-## Qualified continuation — batch 020
+Owner priority: finish the remaining native game code so broader improvements can
+begin. Keep performance checks focused on visible lag, skipped frames, input
+response and regressions. Avoid repeating microbenchmarks for tiny CPU differences.
+
+## Qualified continuation — batch 021
+
+Source baseline `596a38ef1f67c7efd6e9f6c743f4fe0360a80036`. Exact private candidate:
+`50cdd0644e8f29cc58856d8466b43d566241cdfcb7b5b686e90b20eb9a8cbd47`.
+Read [batch 021](docs/NATIVE-BATCH-021.md). Reused 018 build/immutable 016 graph;
+no installation, graph regeneration or release. Owner `build/` remains 005.
+
+- New contract: twelve actual-fetch-qualified physical WRAM contexts in 80/82/83,
+  preserving 59,484 ROM descriptors; total 59,496. Four 83 entries additionally name
+  finite NMI owner 00800B. All twelve execute. Six-byte PHB/MVN/PLB/RTS shape is
+  checked after hooks; operands remain live, MVN one byte/seven cycles, original
+  bus/event/owner retirement. All old policy/exclusions remain. New private input
+  and `IOG_NATIVE_WRAM_COPY_CONTINUATIONS=1` are needed beside NI/poll/NMI/frame;
+  all switches default off. Interpreter/reference and old lookup remain.
+- Independent 129 pairs/258 captures/683,400 frames/1,988 snapshot sets pass.
+  Same original 105: native guest 99.816657→99.934781%; interpreter 17,738,898→
+  6,310,125 (64.42775% less), exactly 11,428,773 new copy cycles, old ROM counts
+  unchanged. Expanded 129 is 99.831025% on its different denominator, with
+  17,661,262 copy cycles; 13,509 old ROM contexts observed. Do not add copy/NMI
+  crosscuts to NI totals. Broad per-site NMI-grant counts are all-owner labels.
+- NEW24 semantics: 14 areas + five stock Neo attack/idle pairs. Actual nonzero
+  damage, original 0175–0179 writers, Will restoration and hub returns; idles
+  stay undamaged/no win. F4 additionally uses disclosed intro flags 86/87 plus
+  original entry rectangle. No enemy HP/death/win/actor-PC writes. All 254 new
+  original fields match 14,565,376 pixels. Assisted/checkpoint-linked, not campaign.
+- Four same-binary copy controls: 8 captures/43,600 frames, 176,511 instructions/
+  1,178,033 cycles; 80 raw APU files exact. NMI 797/5,011 is a subset. Broad 129
+  preserves the existing executed-APU/state/PCM/queue/CPU event checks while
+  retaining 993 raw SPC observer-tag differences. 17 raw.info cached beam
+  differences remain unnormalized (one old 105, 16 new). Passive F2 diagnostic:
+  3 captures/12,000 frames, all 31 actual-anchor projections match; OFF/ON raw
+  anchors match and dumps do not mutate state. Other 13 new unequal cache
+  points have no captured anchor projection. No global hardware/beam claim.
+  Exporter clock-context ambiguity reported upstream as #285.
+- Optional outlining: 2,474 shared bodies/59,484 guarded wrappers, default emitter
+  byte-exact 020, descriptor/policy tails unchanged. 23,542,272-byte executable
+  versus 37,864,448. Actual opcode/bus/core/mutant checks pass; SDK 915 passed,
+  two skipped, no warnings, 784 unchanged files; title-policy 9 passed.
+- Renderer critical set: 20 pairs plus 4 original-field controls, 44 unique captures/
+  169,800 frames/432 snapshot sets. 16 old comparisons (15 ready / 1 Castoth refusal),
+  four unsupported 0A/75/F2/F6 controls; 9 fresh positive scene IDs. Original lesson,
+  both doors/town return, combat, bounds/phases pass. No new admissions/C edits.
+  Old 61/110 remains historical; current raw is the 44 critical set.
+- CPU: 26 fresh/26 actual processes, 18,200 frames, seven clean first-attempt blocks.
+  CopyON/020 process ratios 0.997009/1.013333 at 1x/1.5x, ranges straddle/meet 1;
+  no demonstrated speedup. Service ratios 1.000023/1.014286. CPU issue 4 stays open.
+  All earlier contended/preflight/monitor runs remain failed and excluded. The
+  human-authorized quiet window ended promptly; all our processes joined.
+- Fresh original MSU opening 4,400f + NVIDIA 1080p xBR/1.5x 240f pass. Checkpoint/image
+  byte-exact 020; native 5,205,738 ops includes 15,434 copy ops / 106,646 cycles alongside
+  MSU tracks 1/2/3. No physical-listening/sustained-FPS claim. Test using
+  `native-021/Play Original Classroom.cmd` (exact candidate above).
+- Cleanup 43,918 files/13,273,408,436 logical/4,353,804,196 reported last-link bytes,
+  zero locks. Two old 020 RAW-RETIRED-20261113 markers; old 110/61 raw is unavailable,
+  original receipts remain historical. Keep current 021 all raw/failures/metadata,
+  all states/seeds, old 15 unit inputs, 39 owner files / 28 normal PCM tracks, masters and 016 graph.
+  No archive. Final capture ledger remains bounded; no new cold fixture tree.
+- Official pin 80a41241 / Gaia e825dddde unchanged at check; four PRs merged,
+  11/12 original reports closed; 265 open and new 285 filed. No vendor replacement.
+
+Next: use `native-gap/remaining-matched105-v1.json` (6,310,125 residual cycles)
+and `remaining-full129-v1.json` (21,661,924) as separate denominators. New 129
+exposes 12,288,814 unregistered and 4,380,197 actor-policy cycles; retained RDNMI
+is 4,785,310 there. Matched 105 RDNMI 3,674,705 remains protected. Source/owner
+qualification and new causal evidence precede any permission; do not remove guards
+or regenerate the whole graph to inflate coverage. Native SPC, campaign and the
+larger renderer/remake work remain unfinished. Do not redo completed 129/44 audits
+without changed source or a material failure; old 020 raw is retired.
+
+Primary private receipts: `counter-audit-v1/FINAL-COHORT-AUDIT.json`,
+`FROZEN-ENGINE-PROOF.json`, `renderer/COMPLETE-RECEIPT.json`,
+`area-boss/final-candidate-semantics/ALL-SEMANTICS-v2.json`,
+`beam-diagnostic/FINAL-RECEIPT.json`, `performance-blocks-v2/FINAL-RECEIPT.json`,
+`storage/large-raw-retirement/FINAL-RECEIPT.json`, `play-proof/READBACK-REVIEW.json`.
+
+## Previous qualified continuation — batch 020 (historical)
+
 
 Source baseline `6b7c40d103c948ea9d24a7d254790710a3148804`. Exact private candidate:
 `984919e11911a69a658cd769cbc9d52e83f1f94a22e324733016aa2117ee9d30`.
