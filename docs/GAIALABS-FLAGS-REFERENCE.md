@@ -8,6 +8,28 @@ Pinned repository: `Azarem/gaia-iog-baserom` at
 `5a9ba4b1a43af3b9abe85b7fa271ac900961777e`. This does not replace the older
 source identity used by completed native batches or select a patched build.
 
+### November 12 reference refresh
+
+Current upstream main was checked at
+[`e825dddde466c73cb9900c2c04a7d2bfa37ed165`](https://github.com/Azarem/gaia-iog-baserom/commit/e825dddde466c73cb9900c2c04a7d2bfa37ed165),
+two commits and 220 changed paths beyond the snapshot above. Both flag JSON
+files retain the same Git blob identities. The original pinned analysis and its
+receipts remain unchanged.
+
+Seven selected engine sources were compared: menu selection, actor execution,
+camera scrolling, flags, HDMA/SPC, scene scripts and the main loop. Removing
+comments and applying seven explicit label renames produces identical instruction
+text in those files. This checks selected textual changes; it does not qualify
+all 220 paths or a newly rebuilt ROM. Private comparison identities and the
+rename list are in `native-019/references-final/`.
+
+The revised menu notes explicitly distinguish transformed logical input bits
+from stock raw pad bits, correct the menu's packed-column description, and
+clarify held-direction repeat and cursor cleanup. Do not copy the transformed
+button masks into stock-game controls. The revised collision notes also identify
+scene-specific runtime writers; keep collision/gameplay authoritative when
+composing a wider picture. Batch 019 retains its tested stock inputs and graph.
+
 ## Sources and checked structure
 
 - [Generated flag reference](https://github.com/Azarem/gaia-iog-baserom/blob/5a9ba4b1a43af3b9abe85b7fa271ac900961777e/artifacts/flags.json): 916 semantic entries across 687 indexed bits and 910 named aliases. Generated from the US database and flag inventory.

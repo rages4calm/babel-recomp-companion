@@ -231,11 +231,13 @@ typedef struct {
 } InterpNativeInstructionStats;
 bool interp_bridge_add_native_instructions(const InterpNativeInstruction *items,
                                             size_t count);
-/* Opt-in finite host-NMI data scope. Every supplied descriptor must already
+/* Opt-in finite host-NMI scope. Every supplied descriptor must already
  * be registered identically. The complete grant is atomic, host-setup only;
  * ordinary registration, failed updates and process-global counters retain
- * their existing semantics. Only data/status/static control may be granted:
- * no stack/frame/call/return/indirect/SP/emulation/power/block-move effects.
+ * their existing semantics. Data/status/static control and the qualified
+ * data-stack and direct-call/return effects use the same real owner
+ * and retirement. No interrupt-frame, indirect-control, SP-write, emulation,
+ * power or block-move effects are permitted.
  * Grants name an exact owner entry PC, do not enable ordinary run_interrupt,
  * and disappear when native instruction registration is cleared. */
 bool interp_bridge_allow_native_nmi_instructions(

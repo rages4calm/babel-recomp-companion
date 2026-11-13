@@ -1,8 +1,9 @@
 # November 9 framework integration
 
-This is the historical integration snapshot. The current source pin is
-`e9c207322c148eccc8a679b72d8b005d0d95d31c`, with the selective PR269 integration
-recorded in [batch 016](NATIVE-BATCH-016.md). The subsequent local additions in
+This is the historical integration snapshot. The current source pin and targeted
+merge are recorded in [the November 12 update](FRAMEWORK-NOV12.md).
+The previous `e9c207322c148eccc8a679b72d8b005d0d95d31c` pin and selective PR269 integration
+are recorded in [batch 016](NATIVE-BATCH-016.md). The subsequent local additions in
 [batch 018](NATIVE-BATCH-018.md) extend descriptor capacity, indexed-indirect
 JMP and explicitly scoped NMI data execution. These are local changes, not a
 claim that upstream main contains them. Babel's existing changes and all

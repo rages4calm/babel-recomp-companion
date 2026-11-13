@@ -1,7 +1,87 @@
 # Illusion of Gaia Companion — handoff
 
-Updated November 11, 2026. Development version `0.1.0-dev.1`.
+Updated November 12, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
+
+## Qualified continuation — batch 019
+
+Source baseline `12bbdd94913fdf2e3dcffd982eb11961422a17bf`; ignored work under
+`native-019`. Final private candidate SHA-256:
+`5f83844b6910f9e2bd6927f061841669ccfa2f4113c294d924711d7952486dc2`.
+Read [batch 019](docs/NATIVE-BATCH-019.md) for exact scopes and retained failures.
+The existing 018 build tree and immutable 016 graph were reused. No graph
+regeneration or installation occurred; owner `build/` remains version 005.
+
+- Native selection: 9,708 canonical / 38,832 aliases; all old 9,699 retained,
+  nine new unguarded NMI-enable helpers independently checked by RomAtlas.
+  Finite real-owner NMI grants grow from 430 to 531 / 2,124 aliases, allowing
+  qualified existing data-stack and direct-call/return effects. Exact owner
+  entry 00800B, stack/frame, depth, mode, live-byte, mapper, pending-event and
+  policy guards remain. Indirect 7C and interrupt-frame/SP/emulation/block-move
+  effects remain excluded from NMI scope. The new 828195 ACK candidate was
+  explicitly withheld; RDNMI guards are unchanged. Fallback remains available.
+- 105 fresh original256 reference/native pairs / 210 captures / 522,200 frames /
+  1,480 snapshot sets pass independent counter/hash/source/CPU/device audits.
+  Matched 105 native guest cycles: 97.757773% → 98.056569%; interpreted cycles
+  fall by 28,909,292 (13.32585% of remaining work). Matched 83: 98.074265%.
+  Nine new helpers execute 9,635,749 native cycles; additional NMI work supplies
+  the other 19,273,543. CPU/master, polling and generated AOT work are unchanged.
+  8,282 selected contexts execute; 1,426 remain unobserved. Observed sites still
+  retain guarded interpreter instances; selection does not force every invocation.
+  CPU/canonical APU comparison passes; 740 raw APU files retain disclosed
+  diagnostic instruction/timestamp differences. Dark Gaia's V4 initialization
+  attribution remains narrow, with raw IPC0 and negative controls preserved.
+- Three same-binary NMI off/on controls / 25,200 frames pass exact full CPU/
+  devices/raw APU. All 101 added grants execute in this causal subset, with
+  940,936 isolated cycles. All-owner counts at those sites across 105 routes
+  are not per-PC NMI attribution. NMI counters are subsets of NI, never extra work.
+- Original classroom restored: actual 512×256 room, stock walls/stools/actors,
+  collision and both real doors, square-pixel widescreen/1.5x and black outside.
+  No expanded architecture, extra pupils or prank hooks. Five fresh pairs /
+  65,000 frames pass lesson/dismissal, 16:9/21:9, east town exit/reentry and roof
+  exit. Explicit successful runtime receipt is `classroom/runtime/FINAL-RECEIPT-v3.json`;
+  previous failed fixture metadata/return alignment receipts remain failed.
+  Authentic gray front-wall faces stay; only confirmed uniform void becomes black.
+- Exact old renderer 82-pair / 337,600-frame suite passes on this binary, with
+  raw APU, source packets, full CPU, world bytes and published sprites equal
+  between pixel/full-copy and span paths. One malformed Castoth phase keeps
+  fallback. Adapter now supports 51 selected stock scene formats. Classroom
+  unit checks: 1,938,911 assertions plus 21 actual decoder/source checks.
+- Private `native-019/Play Original Classroom.cmd` launches the current candidate
+  fullscreen 1080p, xBR, 1.5x, native continuations/poll/NMI and the existing
+  MSU-1 pack. A separately cold-replayed original opening produces its checkpoint;
+  240-frame actual NVIDIA capture and dummy-device track 3 consumption pass.
+  Screenshot: `native-019/original-classroom-1_5-xbr-1080p.png`. This is not a
+  sustained-FPS, physical-listening or manual input-latency qualification.
+- SNESRecomp official main `80a41241e39bfffd384506fbe7ca65b386e03050` is integrated
+  via a 13-file delta inventory; Babel changes remain. SDK v2/timing/DSP gate:
+  877 passed / two skipped / no warnings, plus 29 screenshot-response tests and
+  strict actual C bridge/mod-path/PPU fixtures. Four authored PRs are merged;
+  11 of 12 issues are closed, only profile-import cost #265 remains open.
+  Generator-only metadata sampling fixes do not rewrite the retained old graph.
+  [Integration and limits](docs/FRAMEWORK-NOV12.md).
+- GaiaLabs current reference refresh: `e825dddde466c73cb9900c2c04a7d2bfa37ed165`;
+  both supplied flag databases retain the previous blob identities. Seven selected
+  engine sources are instruction-text identical after explicit label renames and
+  comment removal. Preserve the older qualified snapshot/source identity.
+  [Reference cautions](docs/GAIALABS-FLAGS-REFERENCE.md).
+
+Private receipts: `build-receipts/final-v1.json`,
+`native-gap/FROZEN-ENGINE-PROOF.json`, `counter-audit/FINAL-COHORT-AUDIT.json`,
+`renderer-qualification/COMPLETE-RECEIPT.json`, `play-proof/GPU-MSU-RECEIPT.json`.
+Native/core/renderer source is frozen; edits require a new candidate and affected
+checks. Future work must use measured remaining interpreter sites/guards and
+preserve reference paths. These are bounded assisted routes, not a completed
+whole-game campaign or native SPC engine. No new GPU backend is claimed.
+
+Storage closeout: 39,674 obsolete files removed directly, 12,268,759,786 logical
+bytes / 7,876,538,315 reported last-link file-data allocation bytes. No new
+archives or locked leftovers. Normal soundtrack, owner files, all states/seeds,
+current 018 golden proof and 016 graph remain. Old 015/017 raw outputs are retired;
+their metadata/receipts remain historical, not immediately rerunnable goldens.
+`Clean Disposable Files.cmd` has exact plan/proof/identity/lock/reparse guards and
+15 ROM-free tests; it skips unavailable local retirement plans on other checkouts.
+Only reviewed source/tests/docs are published; private assets and proof stay ignored.
 
 New developer resource: [GaiaLabs flag analysis](docs/GAIALABS-FLAGS-REFERENCE.md)
 pins `gaia-iog-baserom@5a9ba4b1a43af3b9abe85b7fa271ac900961777e`, with 916
@@ -27,7 +107,7 @@ Private receipts are in `native-018/classroom-preview/audio-default/`. CPU-parit
 fixtures must keep their own explicit music/reference settings; do not relabel
 earlier original-audio classroom evidence as MSU validation.
 
-## Qualified continuation — batch 018
+## Historical qualified continuation — batch 018
 
 Baseline `4990326`; ignored work under `native-018`. Final private candidate
 `7a850990d1c72ad6e33c1947a3070f388056b20228831e1353a0c7359f1a86e2`.

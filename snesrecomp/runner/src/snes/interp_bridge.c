@@ -1493,13 +1493,11 @@ static NativeInstructionEntry *native_instruction_find(uint32_t key) {
 static int native_instruction_nmi_data_valid(const InterpNativeInstruction *d) {
     if (!native_instruction_metadata_valid(d)) return 0;
     switch (d->bytes[0]) {
-        /* No stack/frame mutation, calls, returns or live indirect control
-         * in this first finite-owner data protocol. */
-        case 0x08: case 0x28: case 0x48: case 0x68:
-        case 0xDA: case 0xFA: case 0x5A: case 0x7A:
-        case 0x0B: case 0x2B: case 0x8B: case 0xAB:
-        case 0x4B: case 0xF4: case 0x62: case 0xD4:
-        case 0x20: case 0x22: case 0x60: case 0x6B: case 0x7C: return 0;
+        /* Qualified stack effects and direct calls/returns keep the same
+         * owning retirement loop, real bus accesses and original NMI frame.
+         * Indirect control has not been qualified in this finite owner.
+         * Metadata still excludes COP/RTI, SP writes, block moves and XCE. */
+        case 0x7C: return 0;
         default: return 1;
     }
 }
@@ -3479,8 +3477,9 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
                             "sp_pre=$%04X aot_ret=%d sp_post=$%04X\n",
                             op, (unsigned)pc_before, (unsigned)target,
                             (unsigned)_sp_pre, (int)_air, (unsigned)in.sp);
-                const uint32_t ret =
-                    (pc_before & 0xFF0000u) |
+                /* Sequential code and inline arguments advance the 16-bit
+                 * PC within the caller's program bank. */
+                const uint32_t ret = (pc_before & 0xFF0000u) |
                     ((pc_before + (uint32_t)call_len +
                       (uint32_t)cpu_dispatch_inline_arg_bytes(target)) & 0xFFFFu);
                 edge_expect = ret;

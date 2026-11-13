@@ -226,6 +226,35 @@ static unsigned MapTile(const PictureEpoch *e,int logical,int x,int y)
     return Word(ram,defs+ram[address]*8+((y>>3)&1)*4+((x>>3)&1)*2);
 }
 
+/* Original scene08 contains a real 512x256 room, including the east hall and
+ * town stairs. Its second 512x512 layer also contains spare material below
+ * that room; those cells are not additional scenery. Stock primary metatile
+ * 6E is the uniform gray void outside its walls. Admit only the captured
+ * layout/definition, then make that void black without moving a wall, seat,
+ * actor, collision rectangle or native door. Unknown layouts keep fallback. */
+static bool OriginalClassroomLayout(const PictureEpoch *e)
+{
+    const uint8_t *ram=e->ram;
+    if(Word(ram,0x692)!=512 || Word(ram,0x696)!=256 ||
+       Word(ram,0x694)!=512 || Word(ram,0x698)!=512 ||
+       Word(ram,0x69E)!=0xA000 || Word(ram,0x6AE)!=0x2000) return false;
+    for(unsigned n=0;n<4;n++)
+        if(Word(ram,0x2000+0x6E*8+n*2)!=0x1C01) return false;
+    return true;
+}
+
+static bool OriginalClassroomPixel(const PictureEpoch *e,int x,int y)
+{
+    if(x<0 || x>=512 || y<0 || y>=256) return false;
+    /* Match the hardware BG sampling line: output world row0 samples row1.
+     * This masks only original void cells, not any pixels of adjacent walls. */
+    unsigned sy=(unsigned)y+1;
+    if(sy>=256) return false;
+    unsigned address=0xA000+(((unsigned)x>>8)<<8)+
+        ((sy>>4)<<4)+(((unsigned)x>>4)&15);
+    return e->ram[address]!=0x6E;
+}
+
 static void Detach(Ppu *p)
 {
     p->renderBuffer=(uint8_t*)s.row; p->renderPitch=256*4;
@@ -246,6 +275,11 @@ static bool RenderWorld(void)
 {
     if(!s.valid || !s.epoch_count || s.width<256 || s.height<224) return false;
     PictureEpoch *first=&s.epochs[s.lines[1].epoch];
+    bool classroom=Word(s.active_ram,0x644)==0x08;
+    if(classroom) for(int n=0;n<s.epoch_count;n++)
+        if(!OriginalClassroomLayout(&s.epochs[n])) {
+            s.reason="unsupported_classroom_layout";return false;
+        }
     for(int n=0;n<s.epoch_count;n++) if(memcmp(first->vram,s.epochs[n].vram,sizeof(first->vram))) {
         s.reason="mid_raster_character_upload";return false;
     }
@@ -363,8 +397,9 @@ static bool RenderWorld(void)
                  * whole authoritative field during shake. This may include
                  * a hardware-wrapped edge; expanded outside-map space is
                  * still padding, never guessed or repeated terrain. */
-                if(native_pixel||(worldx>=0&&worldx<(int)Word(e->ram,0x692)&&
-                   worldy>=0&&worldy<(int)Word(e->ram,0x696)))
+                if(classroom?OriginalClassroomPixel(e,worldx,worldy):
+                   (native_pixel||(worldx>=0&&worldx<(int)Word(e->ram,0x692)&&
+                   worldy>=0&&worldy<(int)Word(e->ram,0x696))))
                     s.output[row*s.width+start+x]=s.row[x];
             }
         }
