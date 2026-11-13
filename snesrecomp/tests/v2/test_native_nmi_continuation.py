@@ -1,4 +1,4 @@
-"""Explicit finite NMI data continuations: actual bridge, SPC and WRAM DMA.
+"""Explicit finite NMI continuations: stack, direct calls, SPC and WRAM DMA.
 
 All guest bytes are synthetic. The reference owner still pushes/pops every
 architectural/COP/subroutine frame and retires every instruction/device event.
@@ -15,12 +15,12 @@ SUPPORT=r'''
 static unsigned nmi_variant,nmi_fault,nmi_held,nmi_hook_calls;
 static int nmi_decline(Interp816 *in){(void)in;return 0;}
 static void nmi_forbidden_grants(void){
- static const uint8_t ops[]={8,0x28,0x48,0x68,0xda,0xfa,0x5a,0x7a,0x0b,0x2b,0x8b,0xab,0x4b,0xf4,0x62,0xd4,0x20,0x22,0x60,0x6b,0x7c,2,0x40,0x1b,0x9a,0xfb,0x44,0x54};
- static const uint8_t lengths[]={1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,2,3,4,1,1,3,2,1,1,1,1,3,3};
+ static const uint8_t ops[]={0x7c,2,0x40,0x1b,0x9a,0xfb,0x44,0x54};
+ static const uint8_t lengths[]={3,2,1,1,1,1,3,3};
  for(unsigned i=0;i<sizeof ops;i++){
   InterpNativeInstruction d=ni_entries[0];d.pc24=0x839000+i*4;d.length=lengths[i];memset(d.bytes,0,4);d.bytes[0]=ops[i];
   (void)interp_bridge_add_native_instructions(&d,1);
-  CHECK(!interp_bridge_allow_native_nmi_instructions(0x8500,&d,1)&&!interp_bridge_native_nmi_grants(),"stack/control/SP/emulation/block effects cannot acquire finite NMI grant");
+  CHECK(!interp_bridge_allow_native_nmi_instructions(0x8500,&d,1)&&!interp_bridge_native_nmi_grants(),"indirect/frame/SP/emulation/block effects cannot acquire finite NMI grant");
  }
 }
 static void nmi_active_hook(CpuState *cpu,uint32_t pc){
@@ -82,12 +82,12 @@ static void mmio_pair(unsigned budget,unsigned mode,int dma_enabled){
 def _source(mutant=None):
     text,_=cop_source();old,entries=cop_program();entries=[r for r in entries if r['pc24']!=0x8500]
     code=bytearray();m=x=0;dma_operand=None
-    excluded={0x08,0x28,0x48,0x68,0xda,0xfa,0x5a,0x7a,0x0b,0x2b,0x8b,0xab,0x02,0x40,0x20,0x60}
-    for raw in ('08','c230','48','da','5a','0b','8b','e220','ad1042','a95a','cd4021','d0fb','a901','8d0b42','c230','0200','ab','2b','7a','fa','68','28','40'):
+    excluded={0x02,0x40}
+    for raw in ('08','c230','48','da','5a','0b','8b','f43412','68','620000','68','d410','68','8b','4b','ab','ab','200092','e220','a900','8d0042','a981','8d0042','a980','8d0042','ad1042','a95a','cd4021','d0fb','a901','8d0b42','c230','0200','ab','2b','7a','fa','68','28','40'):
         raw=bytes.fromhex(raw);pc=0x829000+len(code);name,mode,size=decoder.opcode_table()[raw[0]]
         if raw==bytes.fromhex('a901'):dma_operand=pc+1
         if raw[0]not in excluded:
-            for a,b in ([(a,b)for a in range(2)for b in range(2)]if pc==0x829001 else[(m,x)]):
+            for a,b in ([(a,b)for a in range(2)for b in range(2)]if pc in (0x829000,0x829001) else[(m,x)]):
                 entries.append(dict(pc24=pc,m=a,x=b,e=0,bytes=raw,mnemonic=name,immediate=mode==decoder.IMM))
         code.extend(raw)
         if raw[0]==0xc2:
@@ -96,6 +96,10 @@ def _source(mutant=None):
         elif raw[0]==0xe2:
             if raw[1]&0x20:m=1
             if raw[1]&0x10:x=1
+    helpers=[(0x829200,bytes.fromhex('ee4103')),(0x829203,bytes.fromhex('22009382')),(0x829207,bytes.fromhex('60')),(0x829300,bytes.fromhex('ee4203')),(0x829303,bytes.fromhex('6b'))]
+    for pc,raw in helpers:
+        name,mode,size=decoder.opcode_table()[raw[0]]
+        entries.append(dict(pc24=pc,m=0,x=0,e=0,bytes=raw,mnemonic=name,immediate=mode==decoder.IMM))
     for m in range(2):
         for x in range(2):
             entries.append(dict(pc24=0x8600,m=m,x=x,e=0,bytes=bytes.fromhex('ee4003'),mnemonic='INC',immediate=False))
@@ -104,6 +108,12 @@ def _source(mutant=None):
     assert not re.search(r'\b(?:interp816_|ni_\w+_)(?:runOpcode|doOpcode)\s*\(',generated)
     if mutant=='skip_port':generated=generated.replace('uint8_t value = cpu->read(cpu->mem, adr);','uint8_t value = adr==0x802140?0x5a:cpu->read(cpu->mem, adr);')
     if mutant=='skip_dma':generated=generated.replace('cpu->write(cpu->mem, adr, val);','if(adr!=0x80420b)cpu->write(cpu->mem, adr, val);')
+    if mutant=='bad_stack_data':
+        generated,n=re.subn(r'(ni_\w+_push(?:Word|Byte)\(cpu, _ni, )cpu->a(\);)',r'\1(cpu->a ^ 1)\2',generated)
+        assert n>0
+    if mutant=='bad_call_cycles':
+        body=_c_function(generated,'ni_at_829203_00');assert 'cpu->cyclesUsed = 8;'in body
+        generated=generated.replace(body,body.replace('cpu->cyclesUsed = 8;','cpu->cyclesUsed = 9;'))
     if mutant=='relabel':
         start=generated.index('static int ni_at_829001_00(');end=generated.index('\n}',start)+2
         generated=generated[:start]+'static int ni_at_829001_00(Interp816 *cpu){return interp816_runOpcode(cpu); }'+generated[end:]
@@ -115,6 +125,7 @@ def _source(mutant=None):
       ' RAM[0x8500]=0x5c;RAM[0x8501]=0;RAM[0x8502]=0x90;RAM[0x8503]=0x82;\n'
       ' memcpy(RAM+0x8100,cop_code,sizeof cop_code);RAM[0xffe4]=0;RAM[0xffe5]=0x81;\n'
       ' RAM[0x8200]=0xee;RAM[0x8201]=6;RAM[0x8202]=3;RAM[0x8203]=0x60;\n')+text[end:]
+    text=text.replace(' interp_bridge_set_interpret_all', ' const uint8_t nested_jsr[]={0xee,0x41,3,0x22,0,0x93,0x82,0x60};memcpy(RAM+0x829200,nested_jsr,sizeof nested_jsr);const uint8_t nested_jsl[]={0xee,0x42,3,0x6b};memcpy(RAM+0x829300,nested_jsl,sizeof nested_jsl);\n interp_bridge_set_interpret_all')
     text=text.replace(' interp_bridge_set_interpret_all', ' RAM[0x8600]=0xee;RAM[0x8601]=0x40;RAM[0x8602]=3;RAM[0x8603]=0x40;\n interp_bridge_set_interpret_all')
     start=text.index('    InterpNativeInstruction items[256];');end=text.index(' event_count=0;',start)
     text=text[:start]+r'''
@@ -148,7 +159,7 @@ int main(int argc,char **argv){RAM=malloc(MEMSZ);if(!RAM)return 2;nmi_variant=ar
     return text,receipt
 
 
-@pytest.fixture(scope='module',params=[None,'relabel','skip_port','skip_dma','production_grant'])
+@pytest.fixture(scope='module',params=[None,'relabel','skip_port','skip_dma','bad_stack_data','bad_call_cycles','production_grant'])
 def nmi_binary(tmp_path_factory,request):
     out=tmp_path_factory.mktemp('native-nmi-'+str(request.param));cc=os.environ.get('CC')or shutil.which('clang')or shutil.which('cc')
     if not cc:pytest.skip('C11 compiler required')
@@ -162,7 +173,7 @@ def nmi_binary(tmp_path_factory,request):
 @pytest.mark.parametrize('lookup',['0','1'])
 def test_exact_finite_nmi_owner_real_devices_and_fallback(nmi_binary,lookup):
     out,exe,mutant=nmi_binary
-    fault=mutant in ('relabel','skip_port','skip_dma')
+    fault=mutant in ('relabel','skip_port','skip_dma','bad_stack_data','bad_call_cycles')
     for variant in([0]if mutant else range(4)):
         p=subprocess.run([str(exe),str(variant)],capture_output=True,text=True,timeout=45,cwd=out,env=dict(os.environ,SNESRECOMP_NATIVE_INSTRUCTION_INDEX=lookup))
         (out/f'run-{lookup}-{variant}.json').write_text(json.dumps(dict(exit_code=p.returncode,lookup=lookup,variant=variant,mutant=mutant,stdout=p.stdout,stderr=p.stderr),indent=2))

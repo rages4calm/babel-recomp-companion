@@ -269,11 +269,14 @@ def test_optional_nmi_scope_is_explicit_and_fail_closed():
                        (0x8500,[key,key]),(0x8500,[(0x838101,0,0,0)]),
                        (0x8500,[(entry['pc24'],False,0,0)])):
         with pytest.raises(ValueError):emit(source,[entry],nmi_owner_pc24=owner,nmi_keys=keys)
-    for opcode in (0x08,0x28,0x48,0x68,0x20,0x22,0x60,0x6b,0x7c):
+    for opcode in (0x08,0x28,0x48,0x68,0xda,0xfa,0x5a,0x7a,0x0b,0x2b,0x8b,0xab,0x4b,0xf4,0x62,0xd4,0x20,0x22,0x60,0x6b):
         name,mode,size=d.opcode_table()[opcode];length=size(0,0)if callable(size)else size
         row=dict(entry,bytes=bytes([opcode])+bytes(length-1),mnemonic=name)
-        with pytest.raises(ValueError,match='NMI data site'):
-            emit(source,[row],nmi_owner_pc24=0x8500,nmi_keys=[key])
+        generated,_=emit(source,[row],nmi_owner_pc24=0x8500,nmi_keys=[key])
+        assert 'interp_bridge_allow_native_nmi_instructions' in generated
+    row=dict(entry,bytes=bytes.fromhex('7c0090'),mnemonic='JMP')
+    with pytest.raises(ValueError,match='NMI data site'):
+        emit(source,[row],nmi_owner_pc24=0x8500,nmi_keys=[key])
 
 
 def test_jsr_afc7_diagnostic_preserves_environment_presence(tmp_path):

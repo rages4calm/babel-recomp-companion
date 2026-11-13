@@ -5,7 +5,74 @@ copies after their consumers finish. Keep the current qualification batch, sourc
 receipts, required generation inputs, master builds and owner data. Do not grow a
 new full fixture tree for each small check; reuse one bounded scratch batch.
 
-November 9 cleanup retains the complete current012 raw qualification. Older011
+For the explicitly retired classroom prank and old private preview executables,
+use `Clean Disposable Files.cmd` (or pass `-Preview` first). Its PowerShell script
+has a fixed allowlist: the `native-018/classroom-preview/nightclub` tree, its two
+nightclub executables, and normal preview executables v1 through v17 in the
+private 018 build directory. It also removes the explicitly retired
+`babel-renderer-prelim-v1.exe` and `babel-owner-diagnostic-v1.exe` there; their
+hashes match retained build receipts. The classroom worker confirmed the old
+classroom executables are unused. It preserves normal v18, classroom
+source/seeds/receipts, complete 018 final105 native and82 renderer proof,
+current019 work, owner files, normal soundtrack,
+SDKs and toolchains. It does not run the archival workflow described below.
+
+The script rejects paths outside this project and reparse points, skips targets
+referenced by running processes, and unlinks files individually without changing
+permissions or forcing locks closed. Receipts under
+`.local/project-cleanup/disposable-20261112/` list every result. If files are
+locked, close their consumers and rerun the same CMD; absent targets are harmless.
+Music hardlinks are unlinked without modifying the surviving original tracks.
+Logical bytes removed, reported file-data allocation removed at the last link,
+and observed volume free-space change are separate figures. Concurrent activity
+and filesystem metadata prevent claiming the last figure as exact reclamation.
+
+The CMD also runs `scripts/cleanup_obsolete_objects.ps1`. This second script
+only accepts the SHA-bound reviewed plan at
+`.local/project-cleanup/disposable-20261112/obsolete-objects-proposal.json`.
+It retires 5,261 exact source-bound objects from 19 obsolete CMake build roots
+in batches 006–015; 88 unmapped objects are retained. It checks each build's
+project source home, source-file existence, object file identity/size, reparse
+ancestors and running consumers. It keeps the build recipes, source and master
+executables. Both scripts share the project cleanup lease and support `-Preview`.
+A missing object plan is skipped; a changed plan is refused. Neither script
+retries the blocked 016 SDK target or selects any 018/019 raw proof.
+
+The third helper, `scripts/retire_old_raw.ps1`, skips immediately unless the
+private completed019 coordinator GO marker exists. It accepts only the reviewed
+SHA-bound 34,308-file plan for the old015 and017 `qualification-final` raw
+outputs. Seven hash-bound closedproof gates require the new105 native pairs,
+82 renderer pairs and independent closeout, five classroom pairs and independent
+closeout, SDK877 checks and core proof. It also rebinds the reviewed input-consumer
+JSON/scripts and verifies the selected replacement binary. Each unlink checks
+project containment, reparse ancestors, file identity, size and modification
+time, while denying writers. Running consumers and locked/changed files are
+retained with a receipt; rerun the same CMD after closing their consumers.
+After all34,308 files are verified absent, a small hash-bound completion marker
+makes later runs an immediate no-op. Recreated historical data is not silently
+deleted again under that completed operation.
+
+November12 retirement completed after these new019 checks passed: 34,308 old raw
+files /10,953,226,876 logical bytes /7,272,078,861 reported last-link file-storage
+bytes removed, with no locks or failures. Together with the prank, old private
+executables and compiler objects, this cleanup removed39,674 files /
+12,268,759,786 logical bytes /7,876,538,315 reported last-link storage bytes.
+The27 prank soundtrack hardlinks contribute zero storage savings. These are
+reported file-data figures, not a claim of exact total physical volume recovery.
+
+Old015/017 JSON summaries, profiles, journals, source, saved states and input
+seeds remain. Their selected raw comparisons are **retired without an archive**
+and are no longer available golden captures. Adjacent `RAW-RETIRED-20261112.json`
+markers and the cleanup closeout bind that status; historical passed receipts
+are not rewritten as new proof. The failed017 renderer matrix remains intact.
+All current018 golden raw proof and complete019 proof remain. No owner ROM,
+save, normal soundtrack, source baserom, master graph, SDK or toolchain is retired.
+
+ROM-free guard checks: `python -m unittest discover -s scripts -p test_cleanup_disposable.py -v`.
+The raw helper has nine additional checks:
+`python -m unittest discover -s scripts -p test_retire_old_raw.py -v`.
+
+At the November9 cleanup, complete012 raw qualification was retained. Older011
 raw captures and selected obsolete widescreen/upstream test outputs were directly
 retired at the owner's request; those files are **not archived**. Their receipts,
 metadata, scripts and seeds remain as historical records. Do not claim those old

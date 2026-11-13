@@ -9,8 +9,8 @@ The original author's credit, support link and full acknowledgments remain below
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. The qualified private
-[batch 018](docs/NATIVE-BATCH-018.md) selects 9,699 native contexts, adding
-1,571 while preserving the previous selection and development fallback.
+[batch 019](docs/NATIVE-BATCH-019.md) selects 9,708 native contexts and extends
+finite NMI execution to qualified stack/direct-call effects, preserving fallback.
 The target is a faithful modern PC edition with fully native Original game
 code and sound as its foundation, preserving Quintet's art and atmosphere.
 The main enhanced game is intended to include the retranslation and approved
@@ -23,27 +23,29 @@ ending, with idle/directional controls and original HP/phase writers. These
 are bounded tests using disclosed teleports and survival assistance. Full
 campaign qualification remains unfinished.
 
-On the same 83 routes used previously, native guest CPU cycles rise from
-**96.52% to 97.78%**, cutting their remaining interpreted cycles by **36.07%**.
-The classroom/South Cape route reaches 98.09%; the expanded 105-route corpus
-reaches 97.76%. These are execution measures, not project-completion or host
-speed percentages. Of the new contexts, 707 actually execute; 864 remain
-unobserved. Scoped NMI execution contributes additional work within existing
-native totals, without counting those cycles twice.
+On the same 105 routes as batch 018, native guest CPU cycles rise from
+**97.76% to 98.06%**, cutting their remaining interpreted cycles by **13.33%**.
+The earlier 83-route subset reaches 98.07%; the classroom/South Cape route
+reaches 98.36%. These are execution measures, not project-completion or host
+speed percentages. All nine newly selected helper contexts execute, together
+with the 101 added NMI grants. Scoped NMI work stays within existing native
+totals, without counting those cycles twice. Whole-game coverage is unfinished.
 
 The private path requires `IOG_NATIVE_CONTINUATIONS=1`; compiled poll effects
-separately require `IOG_NATIVE_RDNMI_POLL=1`. The new finite NMI data path uses
+separately require `IOG_NATIVE_RDNMI_POLL=1`. The finite NMI path uses
 `IOG_NATIVE_NMI_CONTINUATIONS=1` with a qualified emitted grant set. All default
 off. Interpreter/reference paths remain available, and
 `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains the older lookup.
 
-The independent world adapter now covers **50 verified stock scene formats**.
+The independent world adapter now covers **51 verified stock scene formats**.
 **82 fresh reference/span pairs / 337,600 frames** pass, including repaired
 camera-shake edges and two complete 256×224 pixel controls. Original gameplay
 simulation and culling remain authoritative; square-pixel 16:9/21:9 output can
 reveal more world vertically and horizontally. Unsupported formats/phases
-retain authentic-field fallback. The older expanded-culling preview remains
-experimental.
+retain authentic-field fallback. Five additional classroom pairs / 65,000 frames
+verify the original room, lesson dismissal, both doors and town reentry. Its
+original walls, stools and actors remain; black space outside the room is kept.
+The older expanded-culling preview remains experimental.
 
 Batch 017's renderer optimization reduced whole-process CPU time by
 60.0% / 70.8% / 71.8% at 1× / 1.25× / 1.5× extents in its paired 700-frame
@@ -67,8 +69,8 @@ raw audio timestamp differences remain documented.
   observations pass synthetic tests. Live unlocks, storage, notifications and
   sound are not yet connected. RetroAchievements account/network integration
   is disabled in this edition; [policy and implementation](docs/RETROACHIEVEMENTS.md).
-- **Presentation:** map-aware 16:9 terrain margins repair South Cape's stale
-  edge tiles; the classroom uses an explicit authentic-width interior fallback.
+- **Presentation:** the earlier map-aware 16:9 terrain margins repair South Cape's stale
+  edge tiles; that historical path used an authentic-width classroom fallback.
   The default path preserves original central pixels and 4:3 output in its tested routes.
   [Moving-edge, mod and F1 music checks](docs/WIDESCREEN-MODS-005.md).
   An opt-in development preview (`IOG_SCENE_VIEW_PREVIEW=1`) follows the window
@@ -83,11 +85,14 @@ raw audio timestamp differences remain documented.
   alone does not reveal more scenery. A scenery map and journal remain planned.
   The newer `IOG_WORLD_RENDERER=1` path separates visuals from gameplay culling:
   82 fresh reference/span pairs pass whole-world pixels, source packets and
-  strict guest/full-CPU/raw-APU preservation. Fifty scene formats have selected
+  strict guest/full-CPU/raw-APU preservation. Fifty-one scene formats have selected
   actual published-sprite proof. Of 82 selected pictures, 81 render the world;
   the deliberately malformed Castoth phase remains fallback. Both native-width
   shake controls match all 57,344 original pixels. Final NVIDIA 720p captures
-  preserve the established framing and xBR look. Default extent is 1.5 with
+  preserve the established framing and xBR look. Batch 019 restores the original
+  classroom geometry, adds five classroom pairs, and verifies a 1080p xBR/MSU-1
+  capture. Original gray voids become black; authentic wall faces stay unchanged.
+  Default extent is 1.5 with
   separately scaled HUD. Span drawing is default;
   `IOG_WORLD_REFERENCE_PIXELS=1` retains the pixel/full-copy reference.
   This CPU picture adapter is not the finished GPU renderer; 4K GPU proof,
@@ -100,27 +105,22 @@ raw audio timestamp differences remain documented.
   [Controls and limits](docs/CHEATS-AND-MODS.md).
 - **Windows icons:** coordinated flute/world/comet artwork for the game and a
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
-- **Framework:** integrated SNESRecomp `e9c20732`, main checked November 10,
-  2026, including merged timing PRs #250/#251, with Babel-specific changes
-  preserved. Batch 016 selectively adds merged PR269's finite-owner correction.
-  [Earlier integration](docs/FRAMEWORK-NOV09.md), [current local work](docs/NATIVE-BATCH-018.md).
-  Batch 015 reuses the qualified graph and all 1,248 emitted bodies unchanged,
-  preserving the earlier 4,490 continuation contexts. The complete SDK gate
-  passes 872 tests, two skipped, with inherited UTF-8 and strict thread-warning
-  handling. The earlier child-encoding report remains open in
-  [issue 270](https://github.com/RetroPortingToolKit/snesrecomp/issues/270).
-  Guarded call/COP protocol checks are recorded
-  separately. The local paired-call bank-wrap correction is reported in
-  [issue 267](https://github.com/RetroPortingToolKit/snesrecomp/issues/267) and
-  [PR 268](https://github.com/RetroPortingToolKit/snesrecomp/pull/268), both open
-  at the November 9 check.
-  Windows mod paths should remain short pending
-  [issue 271](https://github.com/RetroPortingToolKit/snesrecomp/issues/271);
-  the current validation checks actual package loading in bounded paths.
+- **Framework:** integrated SNESRecomp `80a41241`, official main checked
+  November 12, 2026, with Babel-specific changes preserved. The targeted merge
+  includes long/Unicode mod paths, PPU macro and screenshot-response fixes;
+  the paired-call bank-wrap correction was already locally equivalent.
+  [Current integration and delta](docs/FRAMEWORK-NOV12.md) distinguish compiled
+  runtime fixes from generator-only changes that do not rewrite the retained
+  batch-016 graph. The SDK v2/timing/DSP gate passes 877 tests, two skipped,
+  with no warnings; 29 additional screenshot-response tests and strict C
+  bridge/path/PPU fixtures pass. All four authored PRs are merged and 11 of 12
+  reported issues are closed; only
+  [profile-import performance issue 265](https://github.com/RetroPortingToolKit/snesrecomp/issues/265)
+  remains open at this check.
   All prior hard timing guards remain work to resolve with verified fixes.
   Earlier live-WRAM, sorting and decode receipts retain their original
   identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-018.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-019.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
@@ -129,7 +129,7 @@ raw audio timestamp differences remain documented.
   and duplicate vblank ownership bug [#242](https://github.com/RetroPortingToolKit/snesrecomp/issues/242)
   are reported upstream. The tested timing work is added to the existing
   [#205 discussion](https://github.com/RetroPortingToolKit/snesrecomp/issues/205#issuecomment-6589796017).
-  The current Linux test-link failure is reported as
+  The earlier Linux test-link failure was reported as
   [#263](https://github.com/RetroPortingToolKit/snesrecomp/issues/263).
   Windows debug screenshot JSON escaping is reported as
   [#264](https://github.com/RetroPortingToolKit/snesrecomp/issues/264).
@@ -167,7 +167,7 @@ validation data is included. Original SNES audio remains available offline.
 
 Development captures stay in ignored `.local/`. Keep the current qualification
 batch and protected owner data; retire obsolete generated output and duplicate
-test runtimes after their consumers finish. [Cleanup and optional archive restore](docs/PROJECT-CLEANUP.md).
+test runtimes after their consumers finish. [Cleanup commands and evidence retention](docs/PROJECT-CLEANUP.md).
 
 ## Babel foundation and original credits
 
