@@ -1,5 +1,11 @@
 # Native batch 022 — boss logic, inventory copies and indexed calls
 
+> Historical receipt. Batch 023 retired its passed native raw; [batch 024](NATIVE-BATCH-024.md)
+> now also retires its renderer 22 raw after replacement proof and reader releases.
+> Source, metadata, failures, states/seeds and runnable master remain. Original
+> retention statements below describe the earlier closeout. Retired payloads are
+> unavailable as goldens; entire 021 renderer 44 remains.
+
 Source baseline `a1441342aceab647dd63f01e8682d507041082c7`, November 13, 2026.
 Private candidate SHA-256:
 `e9d538170d0a39c8ee14d863a28935a5e8af04d3f79bed91bd10fd190ca7d4fb`.
@@ -209,5 +215,5 @@ qualified roots. Batch 023 retired 31,974 raw files in place; every historical
 info JSON, receipt, profile, journal, log, state, seed, failure and required unit
 input remains. Three retirement markers bind the operation. These passed
 receipts remain historical; the retired raw must not be used as available
-goldens. **All batch-022 renderer22 and older batch-021 renderer44 raw remain.**
+goldens. **All batch-022 renderer 22 and older batch-021 renderer 44 raw remain.**
 See [cleanup](PROJECT-CLEANUP.md) and [replacement qualification](NATIVE-BATCH-023.md).

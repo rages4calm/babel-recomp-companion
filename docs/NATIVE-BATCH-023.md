@@ -1,5 +1,11 @@
 # Native batch 023 — immutable actor code and broader script coverage
 
+> Historical receipt. [Batch 024](NATIVE-BATCH-024.md) now retires this batch's
+> passed native 171 and renderer 22 raw after fresh replacement proof and reader
+> releases. Source, metadata, failures, states/seeds and runnable master remain.
+> Original retention statements below describe the earlier closeout. Retired
+> payloads are unavailable as goldens; entire 021 renderer 44 remains.
+
 Source baseline `58411f46ec4a6eeca66baf8fda93ed3eb1860b68`, November 13, 2026.
 Private candidate SHA-256:
 `fff8e726b3dff92ec5b04a34b32334c36808e95e1ed96fc50f4bb582660c01b8`.

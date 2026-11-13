@@ -83,3 +83,23 @@ Four new capacity tests exercise both lookups across the 65,535 boundary and at
 activated truncation faults. The full SDK gate passes **972 tests, two skipped,
 zero warnings**, with all 786 source files unchanged during execution.
 [Batch 023](NATIVE-BATCH-023.md) records the exact native gameplay proof and limits.
+
+## Batch 024 word-MMIO coverage
+
+Official main remains the pin above at the November 13 readback. Public engine,
+bridge, interpreter, emitter, policy, ABI, save layouts and compiled sources are
+unchanged. A source-backed context expansion targets the game's Mode7 perspective
+and world-map code; it adds no opcode or permission class.
+
+Eight new focused tests cover M0 claimed-word and scalar-refusal access to the
+runtime's divider and H-IRQ registers, with flat/outlined effects and both lookups.
+They execute 3,552 positive reference/native pairs and 167,044 checks. One
+high-write-byte fault is activated and rejected in four variants. Real modeled
+Snes/APU/SPC/DSP/DMA state, bus order and masked IRQ pending state are checked;
+this is not the entire production AOT/cart bus, IRQ handler delivery or silicon
+latency proof.
+
+The previous 972-pass/two-skip SDK result is explicitly reused against 786
+unchanged source files. The eight new tests ran separately; collection reports
+982 tests, and no fresh full-suite run is claimed. Current game execution is
+qualified independently. [Batch 024](NATIVE-BATCH-024.md) records the exact scope.

@@ -9,34 +9,31 @@ The original author's credit, support link and full acknowledgments remain below
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. Qualified private
-[batch 023](docs/NATIVE-BATCH-023.md) adds **9,576 exact instruction/mode contexts**
-for actor processing and broader game scripts. Of these, 9,570 execute across the
-retained 148 routes, including all 371 immutable actor contexts. All previous
-65,523 ROM and twelve WRAM entries remain; the private candidate has 75,111 total.
-Interpreter/reference paths stay available. The target is a faithful modern PC
-edition with fully native Original game code and sound, preserving Quintet's art
-and atmosphere. Retranslation and approved expanded maps are intended as built-in
-content after stock-game verification. SPC700 remains interpreted.
+[batch 024](docs/NATIVE-BATCH-024.md) adds **3,350 exact instruction/mode contexts**,
+primarily original Mode 7 perspective and world-map work. Across 185 tested routes,
+3,324 execute; 26 unobserved contexts receive no execution credit. All previous
+75,099 ROM and twelve WRAM entries remain, for 78,461 total. Interpreter/reference
+paths stay available. The target is a faithful modern PC edition with fully
+native Original game code and sound, preserving Quintet's art and atmosphere.
+Retranslation and approved expanded maps are intended as built-in content after
+stock-game verification. SPC700 remains interpreted.
 
-**171 reference/native pairs pass:** 342 captures, 1,220,600 frames and 2,756 snapshot
-sets. This includes the retained 148 plus 23 new assisted quest, puzzle, reward and
-ability pairs, with fresh inherited combat/boss reviews. New cases cover Wind
-Melody, hieroglyphs, jewel entry, Vampire wires and earned Earth Quaker combat.
-Outcomes use original game writers; disclosed teleports, prerequisite inventory/
-flags and player stats are assistance. Two Aura setups remain unqualified.
+**185 reference/native pairs pass:** 370 captures, 1,356,600 frames and 3,114
+checkpoint sets. Fourteen new assisted scenarios cover original rotating
+world-map travel/Quit, Ring pickup/refusal, Purification Stone, Teapot, Viper and
+Solid Arm phases, crystal state and narrow Aura activation. Original game
+writers produce the outcomes; prerequisite inventory/flags, teleports and player
+stats are disclosed assistance. Aura combat/earned unlock, the fourth crystal
+platform, Solid Arm's upper-claw setup and two exit approaches remain unqualified.
 Full campaign qualification remains unfinished.
 
-On those same 148 routes, interpreted CPU cycles fall **50.23%**
-(13,424,794 to 6,681,281), reaching **99.958031% native guest CPU**. Every previous
-ROM/WRAM per-site count is unchanged, and each new site's native counts exactly
-replace its former interpreted counts. The original 105 and retained 129 cohorts
-separately reach 99.959761% and 99.960039%; their denominators stay distinct.
-These are 65816 execution figures, not host speed or project completion.
-[Results and limits](docs/NATIVE-BATCH-023.md).
-
-The added 23-route cohort separately reaches 99.513670%; the expanded
-171-route cohort reaches 99.836466%. These broader routes expose further
-interpreter hotspots and retain their own denominator.
+On the **same 171 routes**, interpreted CPU cycles fall **72.43%**
+(35,838,335 to 9,882,279), reaching **99.954906% native guest CPU**. Old per-site
+counts remain exact; every new site's native work replaces its former interpreted
+work. The earlier 105/129/148 subsets stay unchanged this batch. The expanded 185
+reaches 99.943708%, and NEW 14 separately reaches 99.847186%; their denominators
+remain distinct. These are 65816 execution figures, not host speed or project
+completion. [Results and limits](docs/NATIVE-BATCH-024.md).
 
 The private path uses `IOG_NATIVE_CONTINUATIONS=1`, `IOG_NATIVE_RDNMI_POLL=1`,
 `IOG_NATIVE_NMI_CONTINUATIONS=1`, `IOG_NATIVE_FRAME_CONTINUATIONS=1` and
@@ -49,11 +46,13 @@ recorded under the same strict comparison scopes.
 The world adapter's **61 scene formats / 110 pairs** and the prior 44-capture
 critical set remain earlier evidence. A fresh **22-capture / 71,500-frame** subset
 passes classroom lesson/both doors/town return, combat, boss and unsupported-scene
-checks. Renderer source is unchanged and no new format is admitted. Square-pixel
+checks. Three additional Mode7 captures / 12,000 frames verify original-field and
+padded-wide fallback, making 25 fresh captures / 83,500 frames. Renderer source is
+unchanged and no new format is admitted. Square-pixel
 16:9/21:9 output with 1.5x extent preserves original gameplay/culling; unsupported
 layouts keep their original field and black padding. Original classroom geometry,
 actors and authored decoration remain. The original MSU opening and short NVIDIA
-1080p xBR/1.5x check pass, with the checkpoint and image byte-identical to 022.
+1080p xBR/1.5x check pass, with the checkpoint and image byte-identical to 023.
 
 Optional outlining shares effect bodies while keeping exact PC/mode wrappers.
 No CPU benchmark campaign ran for this batch. The earlier
@@ -112,7 +111,10 @@ stays ignored.
   [Current integration and delta](docs/FRAMEWORK-NOV12.md) distinguish compiled
   runtime fixes from generator-only changes that do not rewrite the retained
   batch-016 graph. The batch-023 SDK v2/timing/DSP gate passes 972 tests, two skipped,
-  with no warnings. Earlier screenshot-response/path/PPU checks remain documented
+  with no warnings; this unchanged 786-file result is reused this batch. Eight
+  fresh real-device Mode7 word-I/O tests add 3,552 reference/native pairs and
+  167,044 checks, including activated fault rejection. The 982-test collection
+  is not a fresh full-suite execution. Earlier screenshot-response/path/PPU checks remain documented
   in the preceding batch. All four authored PRs are merged and 11 of 12
   reported issues are closed; only
   [profile-import performance issue 265](https://github.com/RetroPortingToolKit/snesrecomp/issues/265)
@@ -121,7 +123,7 @@ stays ignored.
   All prior hard timing guards remain work to resolve with verified fixes.
   Earlier live-WRAM, sorting and decode receipts retain their original
   identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-022.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-024.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).
