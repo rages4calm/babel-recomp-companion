@@ -112,7 +112,7 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations",
     if len(cycles) != 256:
         raise ValueError("Malformed cycle table")
     entries = sorted(entries, key=lambda e: (e["pc24"], e["m"], e["x"], e["e"]))
-    if not entries or len(entries) > 65535:
+    if not entries or len(entries) > 131072:
         raise ValueError("A bounded nonempty descriptor set is required")
     keys = set()
     scopes = {}

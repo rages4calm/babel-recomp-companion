@@ -254,15 +254,17 @@ def test_indexed_jsr_descriptor_has_explicit_support():
              nmi_keys=[(0x838000,0,0,0)])
 
 
-def test_full_uint16_descriptor_range_and_overflow():
+def test_full_descriptor_capacity_and_overflow():
     entries=[dict(pc24=0x808000+i//4,m=(i>>1)&1,x=i&1,e=0,
-                  bytes=b'\xea',mnemonic='NOP',immediate=False)for i in range(65535)]
+                  bytes=b'\xea',mnemonic='NOP',immediate=False)for i in range(131072)]
     generated,receipt=emit(CORE.read_text(),entries)
-    assert receipt['entries']==65535
-    assert generated.count('static int ni_at_')==65535
+    assert receipt['entries']==131072
+    assert generated.count('static int ni_at_')==131072
+    # The former last uint16 descriptor remains represented in the full set.
     assert 'ni_at_80BFFF_10}'in generated
+    assert 'ni_at_80FFFF_11}'in generated
     with pytest.raises(ValueError,match='bounded nonempty'):
-        emit(CORE.read_text(),entries+[dict(entries[-1],pc24=0x80c000)])
+        emit(CORE.read_text(),entries+[dict(entries[-1],pc24=0x818000)])
 
 
 def test_optional_nmi_scope_is_explicit_and_fail_closed():

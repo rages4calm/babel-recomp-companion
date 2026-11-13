@@ -68,3 +68,18 @@ batch-016 graph is reused, so generator-only changes still do not imply new
 generated game code. [Batch 020](NATIVE-BATCH-020.md) records the actual execution
 and renderer scope, failures and limits. All existing credits and license notices
 remain intact.
+
+## Batch 023 local registry extension
+
+Official main was checked again on November 13 and remains the pin above.
+The local descriptor registry now supports 131,072 entries using 32-bit slot IDs
+and legacy range starts. Page IDs/counts remain 16-bit within their proven bounds;
+public headers, saved CPU layouts, dispatch, interpreter, exclusions, owner/event
+checks and retirement remain unchanged. This is a local extension, not an
+upstream merge. The old lookup remains available.
+
+Four new capacity tests exercise both lookups across the 65,535 boundary and at
+131,072, with real reference/native effects, atomic failure checks and two
+activated truncation faults. The full SDK gate passes **972 tests, two skipped,
+zero warnings**, with all 786 source files unchanged during execution.
+[Batch 023](NATIVE-BATCH-023.md) records the exact native gameplay proof and limits.

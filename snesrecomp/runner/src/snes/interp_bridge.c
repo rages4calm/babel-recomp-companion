@@ -1311,9 +1311,10 @@ void interp_bridge_clear_native_rdnmi_polls(void) {
 uint64_t interp_bridge_native_poll_insns_total(void) { return s_native_poll_insns; }
 uint64_t interp_bridge_native_poll_cycles_total(void) { return s_native_poll_cycles; }
 
-/* Descriptor IDs store index+1 in uint16_t, reserving zero for a miss.
- * This bounded capacity fits both those IDs and the legacy page starts. */
-enum { kNativeInstructionSlots = 65535 };
+/* Host-only descriptor IDs reserve zero for a miss. Keep a bounded registry
+ * while allowing qualified additions beyond the original16-bit index limit.
+ * Neither these tables nor their indices are part of saved CPU state. */
+enum { kNativeInstructionSlots = 131072 };
 typedef struct {
     InterpNativeInstruction descriptor;
     uint64_t insns, cycles;
@@ -1327,8 +1328,9 @@ static size_t s_native_instruction_count;
 /* A zero/empty-page check precedes lookup on the per-opcode hot path. Direct
  * pages contain1024exact PC/MX descriptor slots. Sorted ranges remain for
  * the launch-only legacy timing control. Execution aliases stay distinct. */
-static uint16_t s_native_page_start[65536], s_native_page_count[65536];
-static uint16_t *s_native_page_ids, *s_native_page_slots;
+static uint32_t s_native_page_start[65536];
+static uint16_t s_native_page_count[65536], *s_native_page_ids;
+static uint32_t *s_native_page_slots;
 static int s_native_instruction_index = -1;
 static uint64_t s_native_continuation_insns, s_native_continuation_cycles;
 static uint64_t s_native_nmi_insns, s_native_nmi_cycles;
@@ -1482,7 +1484,10 @@ static bool native_instruction_add_batch(const InterpNativeInstruction *items,
     if (used > kNativeInstructionSlots) { free(next); return false; }
     /* Construct BOTH lookup representations before committing anything.
      * Upper-half ROM and the separately qualified low-WRAM stub pages fit
-     * the uint16_t page IDs; descriptor capacity remains65535. Both indices
+     * the uint16_t page IDs. Each page has at most1024 E0 PC/MX slots;
+     * page counts stay16-bit, while descriptor IDs and starts are32-bit.
+     * Eligible ROM/WRAM mappings occupy at most36640 distinct pages.
+     * Both indices
      * retain exact physical banks and modes, including distinct RAM mirrors.
      * Rebuilds temporarily retain old and new allocations; duplicate batches
      * can leave an entry allocation larger than the deduplicated count.
@@ -1495,7 +1500,7 @@ static bool native_instruction_add_batch(const InterpNativeInstruction *items,
         unsigned page = next[i].descriptor.pc24 >> 8;
         if (!next_ids[page]) next_ids[page] = (uint16_t)++pages;
     }
-    uint16_t *next_slots = (uint16_t *)calloc((size_t)pages * 1024, sizeof *next_slots);
+    uint32_t *next_slots = (uint32_t *)calloc((size_t)pages * 1024, sizeof *next_slots);
     if (!next_slots) { free(next_ids); free(next); return false; }
     for (size_t i = 0; i < used; ++i) {
         const InterpNativeInstruction *d = &next[i].descriptor;
@@ -1504,7 +1509,7 @@ static bool native_instruction_add_batch(const InterpNativeInstruction *items,
         if (next_slots[page * 1024u + slot]) {
             free(next_slots); free(next_ids); free(next); return false;
         }
-        next_slots[page * 1024u + slot] = (uint16_t)(i + 1);
+        next_slots[page * 1024u + slot] = (uint32_t)(i + 1);
     }
     /* No failure points remain; host setup forbids active bridge readers. */
     (void)interp_bridge_native_instruction_index_enabled();
@@ -1516,7 +1521,7 @@ static bool native_instruction_add_batch(const InterpNativeInstruction *items,
     memset(s_native_page_count, 0, sizeof s_native_page_count);
     for (size_t i = 0; i < used; ++i) {
         unsigned page = next[i].descriptor.pc24 >> 8;
-        if (!s_native_page_count[page]) s_native_page_start[page] = (uint16_t)i;
+        if (!s_native_page_count[page]) s_native_page_start[page] = (uint32_t)i;
         s_native_page_count[page]++;
     }
     return true;

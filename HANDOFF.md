@@ -7,7 +7,116 @@ Owner priority: finish the remaining native game code so broader improvements ca
 begin. Keep performance checks focused on visible lag, skipped frames, input
 response and regressions. Avoid repeating microbenchmarks for tiny CPU differences.
 
-## Qualified continuation — batch 022
+## Qualified continuation — batch 023
+
+Source baseline `58411f46ec4a6eeca66baf8fda93ed3eb1860b68`. Exact private candidate:
+`fff8e726b3dff92ec5b04a34b32334c36808e95e1ed96fc50f4bb582660c01b8`.
+Read [batch 023](docs/NATIVE-BATCH-023.md). Reuses the single batch-018 build tree
+and immutable batch-016 graph. Owner `build/` remains 005; no installation,
+release, graph regeneration or CPU benchmarks.
+
+- Adds 9,576 exact physical ROM PC/mode contexts, including 371 immutable actor
+  contexts. All old 65,523 ROM plus twelve WRAM entries remain: **75,111 total**.
+  Scheduler scopes only, 1,322 new frame permissions, zero new NMI grants. Old
+  4,084 ROM/four WRAM NMI grants, four whole-function barriers and five RDNMI
+  exclusions remain. Instruction spans touching any of twenty live culling
+  operand bytes are excluded in all four aliases.
+- Internal capacity is 131,072. Host slot IDs/legacy page starts are 32-bit;
+  page IDs/counts remain 16-bit within their bounds. The entire bridge executable
+  except this exact capacity migration is unchanged. Public ABI, save layouts,
+  metadata validators, dispatch, owners, exclusions, events, bus retirement,
+  interpreter, poll and title activation remain. Fallback and old lookup stay;
+  native switches default off.
+- Independent fresh **148 pairs / 296 captures / 869,400 frames / 2,414 sets**
+  pass. Of 9,576 new contexts, 9,570 execute 1,762,752 instructions / 6,743,513
+  cycles; six unobserved contexts get no execution credit. All 371 immutable
+  actor contexts execute 1,259,719 instructions / 4,302,945 cycles (a subset).
+  Every old ROM/WRAM per-site count, NMI/poll count and CPU/master total is exact.
+  Every new site's former interpreter decrease equals its native work.
+- Same 148: interpreter 13,424,794→6,681,281 (**50.231780% less**), native guest
+  CPU 99.958031%. Same 129: 9,519,673→5,122,822, native 99.960039%. Same 105:
+  4,232,373→3,893,264, native 99.959761%. These separate denominators measure
+  guest CPU coverage, not project completion, host speed, native SPC or campaign.
+  SPC700 remains interpreted.
+- NEW23: 46 captures / 351,200 frames / 342 sets, 171 original-256 fields /
+  9,805,824 exact pixels PASS. Earned Wind/tile/reset, lithographs/Jackal,
+  correct/wrong hieroglyphs, Angkor/Gorgon, fifty-vs-forty-nine jewel entry,
+  genuine post-Vampire wires/timeout-dud and Earth Quaker kill/control. Original
+  outcome writers; disclosed setup assistance, no enemy/outcome/actor pokes.
+  Aura p23/p24 remain unresolved/unqualified; no inferred engine bug. Source
+  exploration closed at 43 attempts / 301,928 frames, including failures and
+  9,750 primer frames. Final combined171:342 captures/1,220,600 frames/2,756 sets;
+  added23 native guest 99.513670%, combined171 99.836466%.
+  The broader routes expose additional interpreter work; matched148 is unchanged.
+- Inherited OLD24/OLD19 semantics freshly pass. Retained148 has 1,206 raw SPC host-tag
+  and seventeen cached-beam info differences remain, unnormalized, under unchanged
+  executed-APU/CPU-port-order/full-state/PCM/queue criteria. Expanded171 has 1,377
+  host-tag differences and seventeen info differences. No new masks/waivers,
+  global beam, continuous SPC-state or hardware-waveform equivalence claims.
+- Full SDK: **972 passed, two skipped, zero warnings**, 786 source files unchanged.
+  Title-policy nine, actor-policy five and alias-recipe eight tests pass. Four new
+  capacity tests execute fourteen actual REF/native pairs / 264 checks in both
+  lookups, including IDs 65,535/65,536/65,537/131,072. Two activated truncation
+  faults are rejected. Atomic allocation failure, mixed permissions/counters and
+  seven migrated boundary checks pass. Prior failed attempts remain failed.
+- Unchanged renderer: 22 captures / 71,500 frames, seven ready pairs across six
+  positive IDs, one Castoth object refusal and two unsupported-scene pairs with
+  extra native-256 controls. Original lesson, both doors, town, combat, boss,
+  source/OAM/ROI/CPU/devices pass. Legacy widescreen margin43 separately passes
+  four captures / 14,800 frames with 20,979 new actor instructions; that is not
+  original-256 culling/RNG equivalence. No new renderer admissions. Entire old
+  batch-021 renderer44 and batch-022 renderer22 raw remain.
+- Original MSU opening 4,400 frames plus NVIDIA1080p xBR/1.5x 240 frames pass;
+  seed/image are byte-exact to 022. New contexts 396 / 1,017 instructions /
+  3,681 cycles; old WRAM 15,434 instructions / 106,646 cycles unchanged. Dummy
+  audio-device consumption, not physical listening or sustained-FPS proof.
+  Test with `native-023/Play Original Classroom.cmd` and the pinned candidate.
+- Official SDK `80a41241` / Gaia `e825dddde` remain current at the November13
+  readback; issues265/285 remain open with zero comments. RomAtlas `23521a57`
+  is tree-equivalent to the qualified decoder plus its recorded Windows patch;
+  this reuses the qualified binary rather than claiming a new main build.
+- Cleanup: **32,205 files / 9,407,344,680 logical / 3,127,474,696 reported
+  last-link bytes**, zero locks/errors. Exact old022 passed-native raw31,974 plus
+  old SDK outputs231 removed after fresh148/43 proof and reader releases. All
+  12,619 protected native-cleanup files and 1,232 SDK-cleanup files unchanged.
+  Owner39/normal28PCM/compact15/masters, all states/seeds/metadata/failures and
+  both older renderer suites remain. Three markers record retired raw; no archive,
+  whole-project scan or retry CMD. Old raw is unavailable as a golden.
+
+Next: use the expanded `counter-audit-additions/combined171-v1/remaining-union-v1.json`
+as the primary next-batch input. Its 35,838,335 interpreted cycles include
+26,006,938 unregistered ROM/mode cycles and
+8,702,595 guarded RDNMI cycles. The largest unregistered
+site is `83AA6A` / M0X0 / E0 (1,038,016 cycles).
+Its opcode, source identity and owner are unqualified, not inferred from the
+address. Broader source/owner/byte/mode evidence is the next priority. This
+expanded corpus exposes additional work; the matched 148 results stay unchanged.
+
+Retain batch023 `native-gap/remaining-full148-v1.json` as the narrower baseline:
+6,681,281 interpreted cycles = RDNMI6,121,885 + old registered/refused403,494 +
+mutable actor126,780 + new registered/refused28,666 + other456. Registered refusal
+categories identify sites, not captured instance-level causes. Use passive causal
+evidence and a separately qualified live-operand contract; do not remove owner,
+event, byte or mode checks. Keep 105/129/148 and added/expanded denominators
+separate. Native SPC, campaign and broader remake/renderer work remain. Do not
+repeat completed qualification or benchmarks without changed source or a material
+failure.
+
+Primary private receipts: `FROZEN-ENGINE-PROOF.json`,
+`counter-audit-v1/FINAL-COHORT-AUDIT.json`,
+`area-boss/FINAL-INDEPENDENT-OUTCOMES.json`, fresh inherited OLD24/OLD19 semantics,
+`core-tests-capacity/FINAL-MECHANISM-RECEIPT.json`,
+`native-gap/FROZEN-EFFECTS-RECEIPT.json`, `renderer/COMPLETE-RECEIPT.json`,
+`legacy-cull/READBACK-REVIEW.json`, `play-proof/READBACK-REVIEW.json` and cleanup
+receipts. Historical sections below describe their own closeout; old raw-retention
+and next-work instructions there are superseded by this section.
+
+## Previous qualified continuation — batch 022 (historical)
+
+Batch023 has retired the passed native payloads described below; all old022
+renderer22 raw remains. Retention/next-work statements here describe its original
+closeout and are superseded by the current023 instructions above.
+
 
 Source baseline `a1441342aceab647dd63f01e8682d507041082c7`. Exact private candidate:
 `e9d538170d0a39c8ee14d863a28935a5e8af04d3f79bed91bd10fd190ca7d4fb`.

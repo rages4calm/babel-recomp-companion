@@ -200,3 +200,14 @@ Primary private receipts: `FROZEN-ENGINE-PROOF.json`,
 hash-bound receipts distinguish structural selection, builds, bounded execution,
 original outcomes and campaign work. Native SPC and campaign completion remain
 unfinished.
+
+## Historical payload retirement by batch 023
+
+After fresh independent replacement of all 148 pairs and inherited 43 semantic
+reviews, all consumers released the exact passed native payloads in the three
+qualified roots. Batch 023 retired 31,974 raw files in place; every historical
+info JSON, receipt, profile, journal, log, state, seed, failure and required unit
+input remains. Three retirement markers bind the operation. These passed
+receipts remain historical; the retired raw must not be used as available
+goldens. **All batch-022 renderer22 and older batch-021 renderer44 raw remain.**
+See [cleanup](PROJECT-CLEANUP.md) and [replacement qualification](NATIVE-BATCH-023.md).
