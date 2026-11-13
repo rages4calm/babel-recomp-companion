@@ -7,7 +7,86 @@ Owner priority: finish the remaining native game code so broader improvements ca
 begin. Keep performance checks focused on visible lag, skipped frames, input
 response and regressions. Avoid repeating microbenchmarks for tiny CPU differences.
 
-## Qualified continuation — batch 023
+## Qualified continuation — batch 024
+
+Source baseline `cc984267df0d98ba5a8c68e678e4434520a23535`; private executable
+`172ff8743f08c0edc02abf54bc2c5fefefa09385b65251d75201d50765dea1aa`.
+Read [batch 024](docs/NATIVE-BATCH-024.md). Reuse immutable 016 graph and single 018
+build; owner `build/` stays 005. No install, release, graph regeneration or CPU
+benchmark. Current scratch `.local/batch-001/native-024` stays intact.
+
+- Adds 3,350 exact physical ROM/mode contexts: 2,434 from old 171 and 916 from new
+  travel/Quit source cases. All 3,324 observed additions execute 19,237,441 native
+  instructions / 70,700,566 cycles across 185. 26 unobserved additions get no credit.
+  Old 75,099 ROM/twelve WRAM rows remain; total 78,461. New 892 frame grants,
+  scheduler scopes only, zero new NMI. Capacity 131,072, old 4,084 ROM/four WRAM NMI
+  grants, four AOT barriers, five RDNMI exclusions and 20 mutable culling bytes stay.
+- Production engine/generator/policy/524 compiled inputs unchanged. All guards,
+  old lookup, interpreter/reference, ABI and save layouts remain. Native switches
+  default off. Generated C and validation inputs remain ignored/private.
+- Fresh 171: 342 captures/1,220,600 frames/2,756 sets PASS. Interpreter 35,838,335→
+  9,882,279 (**72.425396% less**); native guest 99.954906%. Each new site's former
+  interpreter decrease equals native work; all old per-PC counts exact. Earlier
+  105/129/148 stay unchanged; those denominators are not rewritten.
+- Combined 185: 370 captures/1,356,600 frames/3,114 sets PASS; 99.943708% native
+  guest CPU. NEW 14 separate 99.847186%, 179 exact 256 fields/10,264,576 pixels.
+  Original rotating travel/Quit executes all 916 source additions. Other 12
+  quest/phase cases add functional coverage with zero new 3350 coverage credit.
+  Ring/refusal, Stone, Teapot, Viper callbacks, Solid Arm lower fan, three-crystal
+  control and narrow Aura lifecycle pass. OLD 66 semantics freshly pass. No enemy
+  outcome pokes; prerequisite flags/inventory/teleports/player stats disclosed.
+- Four source goals remain unresolved: Solid Arm upper claw, fourth platform,
+  castle and Euro exits. Aura combat/earned unlock remains unproved; narrow
+  activation is not that proof. 27 source attempts/106,798 frames retained,
+  including failures; source-baseline runs are not fresh candidate execution.
+- RawSPC host stamps/info differences remain: 171=1,377/17; 185=1,554/18.
+  Unchanged executed-APU/CPU-port-order/full-state/PCM/queue criteria. No new
+  masks, global beam, continuous-SPC-state or hardware-waveform claims.
+- Eight fresh focused real-Snes word-I/O tests PASS: 3,552 REF/native pairs,
+  167,044 checks, four activated masking-fault rejections. Prior SDK 972 passed/
+  two skipped/zero warnings is reused, NOT fresh; all 786 old source files exact.
+  New 982-test collection is not full-suite execution. Private fetch observers
+  remain failed/limited (607 owner keys); no complete MMIO/ownership proof claim.
+- Renderer 25 captures/83,500 frames PASS: critical 22 plus new Mode7 triple.
+  Lesson/both doors/town/combat/boss/unsupported controls and original Mode7 pixels
+  retain fallback. No new formats/admissions. Keep entire 021 renderer 44.
+  Cold MSU 4,400f + NVIDIA 1080p xBR/1.5x 240f PASS, seed/image byte-exact 023.
+  Opening executes zero new 3350 contexts: regression only. Latest test helper:
+  `native-024/Play Original Classroom.cmd`; owner installation unchanged.
+- Official SDK 80a41241/Gaia e825dddde current at final readback; issues 265/285
+  open. RomAtlas b9ae425 data-only delta; qualified decoder reused, not rebuilt
+  main. Python 3.14.10/Clang 22.1.8/CMake 4.4.5/Ninja 1.13.2 retained.
+- Cleanup 42,421 files/12,443,866,688 logical/5,425,289,728 reported last-link
+  bytes, zero locks/errors; no retry CMD/archive. Retired old 023 native 171 plus
+  old 023/022 renderer 22 each and 235 old SDK outputs after replacement/readers.
+  Keep 3,170 historical info JSONs, all source/metadata/failures/states/seeds,
+  owner 39/PCM28/compact 15/masters/graphs/current 024 and entire 021 renderer 44.
+  Retired raw is unavailable as a golden. Current 024 storage below 9 GiB hard
+  cap with zero reservations; no further captures scheduled.
+
+Next primary input: `counter-audit-additions/combined185-v1/remaining-union-v1.json`.
+13,767,490 interpreted cycles: guarded RDNMI 9,679,040, unregistered ROM/mode
+2,672,069, old registered/refused 1,178,672, mutable actor 127,488, new registered/
+refused 109,752, unsupported SP 258, actor SP 178, reset 30, unknown actor 3. Biggest
+unregistered frontier 88F9DC/88F9C0/88F9C2/88F9CA has unqualified opcode/source/
+owner identity; do not infer from the address. Refusal categories do not capture
+instance causes. Investigate source/passive causal evidence and retain guards.
+Keep 105/129/148/171 ranks separately. Native SPC/campaign/renderer work remains.
+Do not repeat games/benchmarks/audits without changed source or material failure.
+
+Primary private receipts: `FROZEN-ENGINE-PROOF.json`, `FROZEN-EFFECTS-RECEIPT.json`,
+`core-tests-mode7/FINAL-MECHANISM-RECEIPT.json`, final 171/combined 185 independent
+audits, NEW 14 independent audit, inherited OLD66, renderer critical/Mode 7 and
+MSU/GPU receipts, and exact cleanup final receipts. Failed diagnostic receipts
+remain failed. Historical retention and next-work sections below are superseded.
+
+## Previous qualified continuation — batch 023 (historical)
+
+Batch024 retires its passed native 171 and renderer 22 raw after replacement proof.
+All source, metadata, failures and seeds stay; historical receipts remain unchanged.
+Its original retention/next-work instructions below are superseded by024.
+
+
 
 Source baseline `58411f46ec4a6eeca66baf8fda93ed3eb1860b68`. Exact private candidate:
 `fff8e726b3dff92ec5b04a34b32334c36808e95e1ed96fc50f4bb582660c01b8`.
@@ -45,7 +124,7 @@ release, graph regeneration or CPU benchmarks.
   outcome writers; disclosed setup assistance, no enemy/outcome/actor pokes.
   Aura p23/p24 remain unresolved/unqualified; no inferred engine bug. Source
   exploration closed at 43 attempts / 301,928 frames, including failures and
-  9,750 primer frames. Final combined171:342 captures/1,220,600 frames/2,756 sets;
+  9,750 primer frames. Final combined171: 342 captures/1,220,600 frames/2,756 sets;
   added23 native guest 99.513670%, combined171 99.836466%.
   The broader routes expose additional interpreter work; matched148 is unchanged.
 - Inherited OLD24/OLD19 semantics freshly pass. Retained148 has 1,206 raw SPC host-tag
@@ -65,7 +144,7 @@ release, graph regeneration or CPU benchmarks.
   source/OAM/ROI/CPU/devices pass. Legacy widescreen margin43 separately passes
   four captures / 14,800 frames with 20,979 new actor instructions; that is not
   original-256 culling/RNG equivalence. No new renderer admissions. Entire old
-  batch-021 renderer44 and batch-022 renderer22 raw remain.
+  batch-021 renderer 44 and batch-022 renderer 22 raw remain.
 - Original MSU opening 4,400 frames plus NVIDIA1080p xBR/1.5x 240 frames pass;
   seed/image are byte-exact to 022. New contexts 396 / 1,017 instructions /
   3,681 cycles; old WRAM 15,434 instructions / 106,646 cycles unchanged. Dummy
@@ -113,9 +192,9 @@ and next-work instructions there are superseded by this section.
 
 ## Previous qualified continuation — batch 022 (historical)
 
-Batch023 has retired the passed native payloads described below; all old022
-renderer22 raw remains. Retention/next-work statements here describe its original
-closeout and are superseded by the current023 instructions above.
+Batch 023 retired its passed native payloads;024 also retires old022 renderer 22.
+Retention/next-work statements here describe the original closeout and are
+superseded by current024 instructions above.
 
 
 Source baseline `a1441342aceab647dd63f01e8682d507041082c7`. Exact private candidate:
@@ -165,7 +244,7 @@ graph; owner `build/` remains005. No install, release or CPU benchmark campaign.
 - Renderer unchanged:22captures/71,500f,8oldpairs+2unsupportedpairs with2extra
   native256 controls;7ready pairs/6positive scene IDs,1Castoth object refusal.
   Original lesson/both doors/town/combat/boss pixels/source/OAM/ROI pass. No new
-  admissions; retain entireold021renderer44 raw. Old61/110 remains historical.
+  admissions; retain entireold021renderer 44 raw. Old61/110 remains historical.
 - Original MSU opening4,400f +NVIDIA1080p xBR/1.5x240f pass; checkpoint/image
   exact021. 1,329 new keys/9,711ops/33,474cycles execute alongside unchanged
   15,434WRAMops/106,646cycles. No physical listening or sustainedFPS claim.
@@ -178,11 +257,11 @@ graph; owner `build/` remains005. No install, release or CPU benchmark campaign.
   last-link bytes,0locks/failures; no archive/rescan. Exact26,360old021native raw
   files plus227oldSDKtemps retired;10,456retained files unchanged. Three oldnative
   RAW-RETIRED markers bind historical metadata; oldraw is unavailable. Entire
-  old021renderer44 remains. Current022 allraw and fifteen unit inputs stay.
+  old021renderer 44 remains. Current022 allraw and fifteen unit inputs stay.
 - Keep current022 all raw/failures/metadata, allstates/seeds, owner39/normal28PCM,
   masters, immutable016 graph and fifteen compact old unit inputs. Exact passed
   old021native payload retirement requires129 independent proof, OLD24/NEW19
-  closure and explicit reader releases. Entireold021renderer44 stays. No archive.
+  closure and explicit reader releases. Entireold021renderer 44 stays. No archive.
 
 Next: start from022 `native-gap/remaining-full148-v1.json` for the broader
 quest/ability corpus:13,424,794interpreted cycles =RDNMI6,121,885 +actor/OAM4,429,899

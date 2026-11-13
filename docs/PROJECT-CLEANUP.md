@@ -5,7 +5,47 @@ copies after their consumers finish. Keep the current qualification batch, sourc
 receipts, required generation inputs, master builds and owner data. Do not grow a
 new full fixture tree for each small check; reuse one bounded scratch batch.
 
-## Current closeout — batch 023
+## Current closeout — batch 024
+
+Completed in place: **42,421 files / 12,443,866,688 logical bytes /
+5,425,289,728 reported last-link file-data bytes**, zero locks or errors.
+No archive, move, whole-project rescan or retry CMD was needed.
+
+- 235 obsolete passed 023 SDK EXE/OBJ files: 66,710,528 bytes, with all 1,254
+  protected files unchanged.
+- 36,512 superseded passed 023 native payloads: 10,453,553,394 logical bytes /
+  3,434,976,434 reported last-link bytes, covering 171 pairs/342 captures.
+- 5,674 superseded renderer payloads from 023 and 022 (22 captures each):
+  1,923,602,766 logical and reported last-link bytes.
+
+The combined raw operation removes 42,186 files after the independent fresh 171,
+combined 185, inherited OLD66, NEW 14, critical 22 plus Mode 7-three and MSU/GPU
+closures. All 16,744 unique retained files passed SHA/file-ID/size/time checks.
+All readers released the exact forecasts; scope/identity guards and
+full preview passed before Apply. All 514 named dependencies were independently
+checked for SHA/file identity/size/time and excluded from removal. No permission,
+lock or unrelated process was forced.
+
+All 3,170 historical info JSONs, source, receipts, profiles, journals, logs,
+failures, states/seeds, owner 39/normal 28 PCM tracks, compact 15 inputs, graph and
+current/prior runnable masters remain. All current 024 raw remains. **The entire
+old 021 renderer 44 raw suite remains** because the fresh subset does not replace
+it in full. Retirement markers identify removed old 023 native and old 023/022
+renderer raw without changing historical passed receipts. Already retired 022
+native raw was neither read nor retargeted; retired payloads are unavailable as
+future goldens.
+
+Current 024 has zero pending capture reservations and stays below its unchanged
+9 GiB hard cap. Logical bytes, reported file-data allocation and whole-volume
+free-space change are distinct. [Batch 024](NATIVE-BATCH-024.md) records actual
+replacement proof and remaining native work.
+
+## Previous closeout — batch 023 (historical)
+
+Its then-current 023 native and renderer raw are now retired by 024 above, along
+with 022 renderer 22. The original retention statements below describe 023 closeout;
+all metadata, failures, seeds and entire 021 renderer 44 remain.
+
 
 Completed in place: **32,205 files / 9,407,344,680 logical bytes /
 3,127,474,696 reported last-link file-data bytes**, zero locks or errors.
@@ -26,7 +66,7 @@ lock or unrelated process was forced.
 All 2,414 historical info JSONs, receipts, profiles, journals, logs, source,
 failures, states/seeds, Gem30 scout seed, fifteen compact dependencies, owner39,
 normal28PCM, immutable graph and current/prior runnable masters remain.
-**All old batch-021 renderer44 and batch-022 renderer22 raw remain.** Current
+**All old batch-021 renderer 44 and batch-022 renderer 22 raw remain.** Current
 batch-023 raw and failed attempts remain. Three `RAW-RETIRED-20261113.json`
 markers identify old batch-022 native roots; historical passed receipts are not
 rewritten. Retired raw is unavailable as a future golden.
@@ -56,7 +96,7 @@ No permission, lock or unrelated process was forced.
 
 At its closeout, current022 raw/failures and all source/metadata remained.
 Its passed native payloads are now retired by023 above; all failures,
-source/receipts/metadata/profiles/journals/logs and states/seeds remain. The **entire old021 renderer44 raw set remains**,
+source/receipts/metadata/profiles/journals/logs and states/seeds remain. The **entire old021 renderer 44 raw set remains**,
 because the new22-capture renderer subset does not replace it in full. Three
 `RAW-RETIRED-20261113.json` markers identify the old native payload roots; old
 passed receipts remain historical and are not rewritten. Their retired raw files
