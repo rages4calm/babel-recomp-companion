@@ -9,8 +9,8 @@ The original author's credit, support link and full acknowledgments remain below
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. The qualified private
-[batch 019](docs/NATIVE-BATCH-019.md) selects 9,708 native contexts and extends
-finite NMI execution to qualified stack/direct-call effects, preserving fallback.
+[batch 020](docs/NATIVE-BATCH-020.md) selects 14,871 native contexts, including
+qualified COP/RTI script frames and scoped interrupt effects, preserving fallback.
 The target is a faithful modern PC edition with fully native Original game
 code and sound as its foundation, preserving Quintet's art and atmosphere.
 The main enhanced game is intended to include the retranslation and approved
@@ -23,40 +23,47 @@ ending, with idle/directional controls and original HP/phase writers. These
 are bounded tests using disclosed teleports and survival assistance. Full
 campaign qualification remains unfinished.
 
-On the same 105 routes as batch 018, native guest CPU cycles rise from
-**97.76% to 98.06%**, cutting their remaining interpreted cycles by **13.33%**.
-The earlier 83-route subset reaches 98.07%; the classroom/South Cape route
-reaches 98.36%. These are execution measures, not project-completion or host
-speed percentages. All nine newly selected helper contexts execute, together
-with the 101 added NMI grants. Scoped NMI work stays within existing native
-totals, without counting those cycles twice. Whole-game coverage is unfinished.
+On the same 105 routes as batch 019, native guest CPU cycles rise from
+**98.06% to 99.82%**, cutting the remaining interpreted cycles by **90.57%**.
+The earlier 83-route subset reaches 99.82%; the classroom/South Cape route
+reaches 99.85%. All 5,163 newly selected contexts execute in the corpus.
+These are execution measures, not project-completion or host speed percentages.
+Separate same-binary frame and NMI off/on controls preserve full CPU/devices/raw
+APU exactly. In that causal subset, 470 of 490 added NMI grants execute; broad
+all-owner site counts are reported separately. NMI work is already included in
+native totals, without counting those cycles twice. Whole-game coverage remains
+unfinished, and the broad reference/native suite retains its disclosed diagnostic
+raw APU differences.
 
 The private path requires `IOG_NATIVE_CONTINUATIONS=1`; compiled poll effects
 separately require `IOG_NATIVE_RDNMI_POLL=1`. The finite NMI path uses
-`IOG_NATIVE_NMI_CONTINUATIONS=1` with a qualified emitted grant set. All default
-off. Interpreter/reference paths remain available, and
-`SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains the older lookup.
+`IOG_NATIVE_NMI_CONTINUATIONS=1` with a qualified emitted grant set. Exact COP/RTI
+frame grants additionally require `IOG_NATIVE_FRAME_CONTINUATIONS=1`; registration
+alone cannot enable them. All default off. Interpreter/reference paths remain
+available, and `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains the older lookup.
 
-The independent world adapter now covers **51 verified stock scene formats**.
-**82 fresh reference/span pairs / 337,600 frames** pass, including repaired
-camera-shake edges and two complete 256×224 pixel controls. Original gameplay
-simulation and culling remain authoritative; square-pixel 16:9/21:9 output can
-reveal more world vertically and horizontally. Unsupported formats/phases
-retain authentic-field fallback. Five additional classroom pairs / 65,000 frames
-verify the original room, lesson dismissal, both doors and town reentry. Its
-original walls, stools and actors remain; black space outside the room is kept.
-The older expanded-culling preview remains experimental.
+The independent world adapter covers **61 stock scenes in selected, verified
+formats**. **110 reference/span pairs / 555,000 frames** pass, with source/OAM,
+whole-world pixels, full CPU/devices and raw APU equality between drawing paths.
+Original gameplay simulation and culling remain authoritative; square-pixel
+16:9/21:9 output can reveal more authored world horizontally and vertically.
+Small-room bounds avoid revealing other floors or stored animation material.
+Dark Space, flight and ending keep their authoritative field with black outside;
+the flight view no longer switches sizes as its background scroll animates.
+Unsupported layouts/phases retain fallback. The original classroom, lesson,
+both doors and town reentry pass; original walls, stools and actors remain.
 
-Batch 017's renderer optimization reduced whole-process CPU time by
-60.0% / 70.8% / 71.8% at 1× / 1.25× / 1.5× extents in its paired 700-frame
-benchmark. Batch 018 separately measures the NMI toggle with the same optimized
-renderer; [the report](docs/NATIVE-BATCH-018.md) keeps their scopes distinct.
+A paired 700-frame CPU check revalidates the existing optimized renderer: SPAN
+uses **59.2% / 70.3% less process CPU** than reference drawing at 1x / 1.5x.
+The same test measures **4.4% / 1.8% higher process CPU** for batch 020 than 019
+with default SPAN; this native-coverage batch has no measured host speedup.
+[Results and limits](docs/NATIVE-BATCH-020.md) distinguish the comparisons.
 Neither measures sustained FPS or physical input latency.
 [Renderer direction](docs/RENDERER-DIRECTION.md) records the remaining work on
 smooth motion, interfaces, full scene composition and GPU presentation.
 Private evidence stays under ignored bounded folders; owner installations,
 settings, saves and soundtrack data are unchanged. Historical failures and
-raw audio timestamp differences remain documented.
+raw audio observer-stamp differences remain documented.
 
 - **CompanionLauncher:** Windows adapter using the shared 0.2.0 shell, verified
   USA ROM selection, native display/audio/gamepad settings, and direct Play.
@@ -84,19 +91,14 @@ raw audio timestamp differences remain documented.
   verify the existing SharpPixels and optional xBR looks; higher resolution
   alone does not reveal more scenery. A scenery map and journal remain planned.
   The newer `IOG_WORLD_RENDERER=1` path separates visuals from gameplay culling:
-  82 fresh reference/span pairs pass whole-world pixels, source packets and
-  strict guest/full-CPU/raw-APU preservation. Fifty-one scene formats have selected
-  actual published-sprite proof. Of 82 selected pictures, 81 render the world;
-  the deliberately malformed Castoth phase remains fallback. Both native-width
-  shake controls match all 57,344 original pixels. Final NVIDIA 720p captures
-  preserve the established framing and xBR look. Batch 019 restores the original
-  classroom geometry, adds five classroom pairs, and verifies a 1080p xBR/MSU-1
-  capture. Original gray voids become black; authentic wall faces stay unchanged.
-  Default extent is 1.5 with
-  separately scaled HUD. Span drawing is default;
+  110 current reference/span pairs pass for 61 selected stock scenes, including
+  both original classroom doors and the repaired flight framing. One malformed
+  Castoth format retains fallback; four original-width controls match all 57,344
+  pixels. The final 1080p NVIDIA xBR/MSU-1 classroom capture preserves the original
+  room. Default extent is 1.5 with a separately scaled HUD. Span drawing is default;
   `IOG_WORLD_REFERENCE_PIXELS=1` retains the pixel/full-copy reference.
-  This CPU picture adapter is not the finished GPU renderer; 4K GPU proof,
-  HD2D effects in this mode, full scene coverage and performance work remain.
+  This CPU picture adapter is not the finished GPU renderer; full scene/phase
+  coverage, GPU effects, interpolation and performance work remain.
 - **Cheats and mods:** a dedicated launcher panel shares the native settings
   with the in-game menu. Optional room-clear stat rewards support 1x–8x;
   **Convenience** exposes Babel's existing hold-to-run toggle (default button Y).
@@ -111,16 +113,16 @@ raw audio timestamp differences remain documented.
   the paired-call bank-wrap correction was already locally equivalent.
   [Current integration and delta](docs/FRAMEWORK-NOV12.md) distinguish compiled
   runtime fixes from generator-only changes that do not rewrite the retained
-  batch-016 graph. The SDK v2/timing/DSP gate passes 877 tests, two skipped,
-  with no warnings; 29 additional screenshot-response tests and strict C
-  bridge/path/PPU fixtures pass. All four authored PRs are merged and 11 of 12
+  batch-016 graph. The batch-020 SDK v2/timing/DSP gate passes 903 tests, two skipped,
+  with no warnings. Earlier screenshot-response/path/PPU checks remain documented
+  in the preceding batch. All four authored PRs are merged and 11 of 12
   reported issues are closed; only
   [profile-import performance issue 265](https://github.com/RetroPortingToolKit/snesrecomp/issues/265)
   remains open at this check.
   All prior hard timing guards remain work to resolve with verified fixes.
   Earlier live-WRAM, sorting and decode receipts retain their original
   identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-019.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-020.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).

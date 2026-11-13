@@ -47,3 +47,24 @@ Batch 019's finite NMI stack/direct-call extension is not described as an upstre
 feature. See [the batch evidence](NATIVE-BATCH-019.md) for execution scope and limits.
 The SDK v2/timing/DSP gate reports 877 passed, two skipped and no warnings; no
 source catalog changed during that gate. Credits and license notices are retained.
+
+
+## Batch 020 local extension
+
+Official main was checked again on November 12 and remains the same pin.
+This batch adds a local, opt-in fixed-instruction frame permission and restrictive
+owner-scope API; it is not described as an upstream feature. Ordinary registration
+does not enable COP/RTI. Exact frame grants, a separate launch switch and the
+existing finite NMI protocol are required. Whole-function AOT barrier bounds,
+RDNMI poll code and runtime interpreter exclusions remain unchanged.
+
+The updated SDK v2/timing/DSP source gate passes **903 tests, two skipped, no
+warnings**, with 780 files unchanged during execution. New actual C bridge tests
+cover frame and vector retirement, default-off behavior, atomic permissions,
+restrictive scope combinations and duplicate registration. Nine separate title
+policy tests cover the allowed fixed-instruction boundaries. The earlier 877-test
+receipt remains historical; its test count is not added to 903. The immutable
+batch-016 graph is reused, so generator-only changes still do not imply new
+generated game code. [Batch 020](NATIVE-BATCH-020.md) records the actual execution
+and renderer scope, failures and limits. All existing credits and license notices
+remain intact.

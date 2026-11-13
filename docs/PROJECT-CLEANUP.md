@@ -5,6 +5,41 @@ copies after their consumers finish. Keep the current qualification batch, sourc
 receipts, required generation inputs, master builds and owner data. Do not grow a
 new full fixture tree for each small check; reuse one bounded scratch batch.
 
+## Current closeout — batch 020
+
+The exact reviewed operations removed **86,557 files / 26,226,189,611 logical
+bytes / 8,548,063,889 reported last-link file-data bytes**, with zero locks or
+failures. This includes superseded V1 passed captures and selected passed raw
+outputs from 018/019. No archive or whole-project rescan was used.
+
+The final old-raw operation removes 73,642 exact files after the new 105 native
+pairs, 110 renderer pairs, SDK903/core/causal and 26-process performance gates
+close. The original 73,652-row preview is a verified strict superset: ten required
+019 unit/refusal inputs (1,245,184 bytes) were excluded in place and hash-checked.
+All retained row dictionaries are identical. Apply rechecks absolute project
+paths, reparse ancestors, 64-bit volume/file IDs, size and modification time.
+No permissions, locks or processes are forced.
+
+Current full020 proof, owner files, normal PCM tracks, runnable018/019 masters,
+016 graph/source, all states/seeds/source/JSON/JSONL/logs/profiles/journals and
+failure evidence remain. This includes six old Dark Gaia failure captures,
+complete019 classroom failure lineage, the ten unit inputs and the compact018
+classroom input. Required consumer releases and hash-bound coordinator GO are
+retained with the operation; all postchecks pass.
+
+Four `RAW-RETIRED-20261112.json` markers at affected historical roots bind the
+selected retirement. Original passed receipts are unchanged; their selected old
+raw comparisons are no longer available goldens. Current020 supplies the full
+raw proof. The private `Retry reviewed prior raw.cmd` is available if a reviewed
+operation needs resuming; this completed operation has no locked leftovers.
+Final current-batch capture accounting is 8,408,921,397 bytes including a 512 MiB
+allowance, zero pending reservations, below the reviewed 8.5/9 GiB bounds.
+Logical file size, reported file-data allocation and whole-volume recovery are
+different measures. [Batch 020](NATIVE-BATCH-020.md) records the qualification
+and measured CPU cost alongside this cleanup.
+
+## Earlier closeout — batch 019
+
 For the explicitly retired classroom prank and old private preview executables,
 use `Clean Disposable Files.cmd` (or pass `-Preview` first). Its PowerShell script
 has a fixed allowlist: the `native-018/classroom-preview/nightclub` tree, its two
