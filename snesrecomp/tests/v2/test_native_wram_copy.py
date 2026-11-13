@@ -209,7 +209,8 @@ static void registry_tests(void){
  InterpNativeInstruction rom={0};rom.pc24=d.pc24;rom.length=1;rom.bytes[0]=0x8b;rom.step=d.step;
  CHECK(!interp_bridge_add_native_instructions(&rom,1),"ordinary ROM API still refuses low WRAM");
  rom.pc24=0x838000;rom.length=3;rom.bytes[0]=0x54;
- CHECK(!interp_bridge_add_native_instructions(&rom,1),"ordinary ROM API still refuses MVN");
+ CHECK(interp_bridge_add_native_instructions(&rom,1),"ordinary ROM API accepts canonical MVN descriptor");
+ CHECK(interp_bridge_native_wram_copy_grants()==1,"ordinary ROM MVN adds no mutable WRAM grant");
  interp_bridge_clear_native_instructions();CHECK(!interp_bridge_native_wram_copy_grants(),"clear registrations clears copy grants");
  InterpNativeWramCopyInstruction *full=calloc(65535,sizeof *full);CHECK(full!=NULL,"bounded full-capacity fixture allocation");
  if(full){for(unsigned i=0;i<65535;i++){

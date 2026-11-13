@@ -7,7 +7,7 @@ from pathlib import Path
 import functools,hashlib,json,os,re,shutil,subprocess
 import pytest
 import snes65816 as decoder
-from v2.native_effects import emit
+from v2.native_effects import emit,NMI_EXCLUDED_OPCODES
 from test_native_effects import CORE,REPO,HARNESS,entries
 from test_region_pacing import _c_function
 
@@ -97,7 +97,8 @@ def test_outlined_all_effects_real_opcode_bus_and_physical_keys(tmp_path,mutant)
     rows=[r for bank in(0x03,0x43,0x83,0xC3)for r in entries(bank)]+frame_rows()
     generated,receipt=emit(CORE.read_text(),rows,registration_name='RegisterEffects',outline_effects=True,
         frame_keys=[key(r)for r in frame_rows()],nmi_owner_pc24=0x00800B,
-        nmi_keys=[key(r)for r in rows if r['bytes'][0]!=0x7C],scope_limits=[(key(r),3)for r in rows])
+        nmi_keys=[key(r)for r in rows if r['bytes'][0]not in NMI_EXCLUDED_OPCODES],scope_limits=[(key(r),3)for r in rows])
+    assert receipt['native_nmi_grants']==sum(r['bytes'][0]not in NMI_EXCLUDED_OPCODES for r in rows)
     if mutant:
         generated,n=re.subn(r'(return ni_effect_\d+\(cpu, )0x03',r'\g<1>0x43',generated,count=1)
         assert n==1

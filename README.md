@@ -8,55 +8,56 @@ The original author's credit, support link and full acknowledgments remain below
 ## Companion development status
 
 This is an early development fork, with no Companion release yet. The default
-source build interprets the game's 65816 instructions. The qualified private
-[batch 021](docs/NATIVE-BATCH-021.md) retains 14,871 ROM contexts and adds twelve
-source-qualified physical WRAM contexts, with interpreter/reference paths available.
+source build interprets the game's 65816 instructions. Qualified private
+[batch 022](docs/NATIVE-BATCH-022.md) adds 6,039 physical instruction/mode entries
+for boss logic, inventory copies, text rendering and other scripts. All previous
+59,484 ROM and twelve WRAM entries remain; 6,029 additions execute on the retained
+129 routes and ten remain unobserved. Interpreter/reference paths stay available.
 The target is a faithful modern PC edition with fully native Original game code
 and sound, preserving Quintet's art and atmosphere. Retranslation and approved
 expanded maps are intended as built-in content after stock-game verification.
 SPC700 remains interpreted.
 
-**129 reference/native pairs pass:** 258 captures, 683,400 frames and 1,988 snapshot
-sets. Fourteen new area pairs and five rematch attack/idle pairs extend the previous
-105-route corpus. Original damage, completion flags and returns are checked using
-disclosed teleports, player-stat assistance and checkpoint-linked starting states.
+**148 reference/native pairs pass:** 296 captures, 869,400 frames and 2,414 snapshot
+sets. Nineteen new quest, puzzle and ability pairs cover keys, Hope/Rama ceremonies,
+Ishtar answers, the Moon trial, real jewel rewards, the earned Dark Friar burst
+and armor pressure plates. Outcomes use original game writers; disclosed
+teleports, prerequisite inventory/flags and player stats remain assistance.
 Full campaign qualification remains unfinished.
 
-On the same original 105 routes, native guest CPU cycles rise from **99.82% to
-99.93%**, and the remaining interpreted cycles fall **64.43%** (17,738,898 to
-6,310,125). The expanded, harder 129-route cohort reaches **99.831025%**; its
-additional cases are not added to the historical denominator. These are execution
-figures, not project-completion or host-speed percentages. All twelve new WRAM
-contexts execute. Each MVN callback moves one byte, fetches both live bank operands
-and retains original event/owner retirement. Same-binary copy off/on controls
-preserve CPU/device dumps and all 80 raw APU files exactly; NMI/copy counters are
-subsets of NI work, never extra CPU cycles.
+On the same retained 129 routes, interpreted CPU cycles fall **56.05%**
+(21,661,924 to 9,519,673), reaching **99.925741% native guest CPU**. Every previous
+ROM/WRAM per-site count is unchanged, and each new site's native counts exactly
+replace its former interpreted counts. All fourteen targeted ROM MVN sites and
+the indexed text call execute. The original 105-route cohort separately reaches
+99.956256%; the larger 148-route denominator is not substituted into either
+historical comparison. These are 65816 execution figures, not host-speed or
+project-completion percentages. [Results and limits](docs/NATIVE-BATCH-022.md).
 
-The private path uses `IOG_NATIVE_CONTINUATIONS=1`,
-`IOG_NATIVE_RDNMI_POLL=1`, `IOG_NATIVE_NMI_CONTINUATIONS=1` and
-`IOG_NATIVE_FRAME_CONTINUATIONS=1` with qualified emitted grants. The new private
-WRAM input additionally requires `IOG_NATIVE_WRAM_COPY_CONTINUATIONS=1`.
-All default off. `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains the older lookup.
-The broader reference/native suite keeps its documented SPC observer-tag and
-cached-beam metadata differences; strict comparison scopes and the passive
-clock-anchor diagnostic are described in the batch report.
+The private path uses `IOG_NATIVE_CONTINUATIONS=1`, `IOG_NATIVE_RDNMI_POLL=1`,
+`IOG_NATIVE_NMI_CONTINUATIONS=1`, `IOG_NATIVE_FRAME_CONTINUATIONS=1` and
+`IOG_NATIVE_WRAM_COPY_CONTINUATIONS=1` with qualified emitted inputs. All default
+off. `SNESRECOMP_NATIVE_INSTRUCTION_INDEX=0` retains the older lookup. New entries
+are scheduler-only; no new NMI permissions or relaxed owner/event guards were
+added. The existing SPC observer-tag and cached-beam metadata differences remain
+recorded under the same strict comparison scopes.
 
-The world adapter's previous **61 scene formats / 110 pairs** remain historical.
-A fresh **44-capture / 169,800-frame** critical set passes: original classroom
-lesson, both doors, town re-entry, combat, room bounds, phases and unsupported
-scene controls. Renderer source is unchanged and no new format is admitted.
-Square-pixel 16:9/21:9 output with 1.5x extent preserves original gameplay/culling;
-unsupported layouts retain their original field and black padding. The original
-classroom geometry, actors and authored decoration remain.
+The world adapter's **61 scene formats / 110 pairs** and the prior 44-capture
+critical set remain earlier evidence. A fresh **22-capture / 71,500-frame** subset
+passes classroom lesson/both doors/town return, combat, boss and unsupported-scene
+checks. Renderer source is unchanged and no new format is admitted. Square-pixel
+16:9/21:9 output with 1.5x extent preserves original gameplay/culling; unsupported
+layouts keep their original field and black padding. Original classroom geometry,
+actors and authored decoration remain. The original MSU opening and short NVIDIA
+1080p xBR/1.5x check pass, with the checkpoint and image byte-identical to 021.
 
-Optional effect outlining reduces the executable from 37.9 to 23.5 MB. A fresh
-26-process Town CPU comparison shows **no demonstrated speedup**: selected
-copy-on/batch 020 process-CPU ratios are 0.997 at 1x and 1.013 at 1.5x. The
+Optional outlining keeps the expanded private candidate at 24.6 MB. No CPU
+benchmark campaign ran for this batch. The earlier
 [performance issue](https://github.com/rages4calm/babel-recomp-companion/issues/4)
-remains open. The test includes startup/diagnostics and does not measure sustained
-FPS or input latency. [Results and limits](docs/NATIVE-BATCH-021.md) and the
-[renderer direction](docs/RENDERER-DIRECTION.md) distinguish remaining GPU,
-smooth-motion, interface and full-scene work. Private validation data stays ignored.
+remains open; guest-cycle coverage does not establish host speed, sustained FPS
+or input latency. The [renderer direction](docs/RENDERER-DIRECTION.md) records
+remaining GPU, smooth-motion, interface and scene work. Private validation data
+stays ignored.
 
 - **CompanionLauncher:** Windows adapter using the shared 0.2.0 shell, verified
   USA ROM selection, native display/audio/gamepad settings, and direct Play.
@@ -106,7 +107,7 @@ smooth-motion, interface and full-scene work. Private validation data stays igno
   the paired-call bank-wrap correction was already locally equivalent.
   [Current integration and delta](docs/FRAMEWORK-NOV12.md) distinguish compiled
   runtime fixes from generator-only changes that do not rewrite the retained
-  batch-016 graph. The batch-021 SDK v2/timing/DSP gate passes 915 tests, two skipped,
+  batch-016 graph. The batch-022 SDK v2/timing/DSP gate passes 968 tests, two skipped,
   with no warnings. Earlier screenshot-response/path/PPU checks remain documented
   in the preceding batch. All four authored PRs are merged and 11 of 12
   reported issues are closed; only
@@ -116,7 +117,7 @@ smooth-motion, interface and full-scene work. Private validation data stays igno
   All prior hard timing guards remain work to resolve with verified fixes.
   Earlier live-WRAM, sorting and decode receipts retain their original
   identities and scope.
-  [Current native batch and limits](docs/NATIVE-BATCH-021.md),
+  [Current native batch and limits](docs/NATIVE-BATCH-022.md),
   [tool qualification](docs/TOOLS-NOV08.md),
   [earlier native cohort](docs/NATIVE-BATCH-004.md),
   [earlier timing evidence](docs/NATIVE-BATCH.md).

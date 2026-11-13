@@ -1,5 +1,10 @@
 # Native batch 021 — live WRAM copies and smaller native effects
 
+Historical report: [batch022](NATIVE-BATCH-022.md) now supplies the current
+same-route native proof plus nineteen new outcomes. Its cleanup report specifies
+which superseded021 payloads were retired; old metadata and the complete021
+renderer raw set remain. Do not treat retired payloads as available goldens.
+
 Source baseline `596a38ef1f67c7efd6e9f6c743f4fe0360a80036`, November 13, 2026.
 Private candidate SHA-256:
 `50cdd0644e8f29cc58856d8466b43d566241cdfcb7b5b686e90b20eb9a8cbd47`.

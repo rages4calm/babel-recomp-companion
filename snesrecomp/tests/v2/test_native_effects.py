@@ -244,10 +244,14 @@ def test_indirect_jump_descriptors_refused(opcode):
         emit(CORE.read_text(),[entry])
 
 
-def test_indirect_jsr_descriptor_refused():
+def test_indexed_jsr_descriptor_has_explicit_support():
     entry=dict(pc24=0x838000,m=0,x=0,e=0,bytes=bytes.fromhex('fc0090'),mnemonic='JSR',immediate=False)
-    with pytest.raises(ValueError,match='direct call/return'):
-        emit(CORE.read_text(),[entry])
+    generated,receipt=emit(CORE.read_text(),[entry])
+    assert receipt['entries']==1 and '0x838000' in generated
+    # Support for FC does not authorize finite-NMI pointer-call execution.
+    with pytest.raises(ValueError,match='Unsupported.*NMI'):
+        emit(CORE.read_text(),[entry],nmi_owner_pc24=0x8800,
+             nmi_keys=[(0x838000,0,0,0)])
 
 
 def test_full_uint16_descriptor_range_and_overflow():

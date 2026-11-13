@@ -7,7 +7,96 @@ Owner priority: finish the remaining native game code so broader improvements ca
 begin. Keep performance checks focused on visible lag, skipped frames, input
 response and regressions. Avoid repeating microbenchmarks for tiny CPU differences.
 
-## Qualified continuation — batch 021
+## Qualified continuation — batch 022
+
+Source baseline `a1441342aceab647dd63f01e8682d507041082c7`. Exact private candidate:
+`e9d538170d0a39c8ee14d863a28935a5e8af04d3f79bed91bd10fd190ca7d4fb`.
+Read [batch 022](docs/NATIVE-BATCH-022.md). Reused single018 build and immutable016
+graph; owner `build/` remains005. No install, release or CPU benchmark campaign.
+
+- Adds6,039 exact physical ROM contexts, retaining59,484 old ROM +12WRAM,
+  total65,535 within existing capacity. All new scopes scheduler1;359 new frame
+  permissions, zero new NMI permissions. Old4,084 ROM +4WRAM NMI grants remain.
+  Ordinary ROM MVN retires one original byte/instruction; indexed JSR reads the
+  live same-PBR pointer and performs original stack pushes. All owner/event/
+  mapper/hook/live-byte/mode/exclusion guards remain. Entire bridge except two
+  metadata validators, header ABI, original interpreter, poll, policy and title
+  activation are unchanged. Generated source remains private, all switches off
+  by default, interpreter/reference and old lookup available.
+- Independent fresh129:258captures/683,400frames/1,988sets PASS. Old59,484 ROM
+  and12WRAM per-site counts unchanged; each new site's previous interpreted
+  instruction/cycle decrease exactly equals new native work, zero exceptions.
+  6,029/6,039 new entries execute2,883,199ops/12,142,251cycles;10unobserved,
+  no guessed refusal causes. All14ROM MVNs execute58,386ops/408,702cycles;
+  FC17,165ops/137,320cycles. Subsets overlap NI; do not sum them again.
+- Same129: interpreter21,661,924→9,519,673 (56.0534% less), native99.925741%.
+  Same105:6,310,125→4,232,373 (32.9273% less), native99.956256%. CPU/master/
+  poll/NMI work unchanged. These are65816 guest-cycle figures, not host speed,
+  project-completion, nativeSPC or full-campaign percentages.
+- Nineteen NEW22 assisted quest/ability/puzzle pairs PASS:38captures/186,000f/
+  426sets; Prison Key, Hope/Rama, Ishtar doors/four answers/refusals, Moon
+  clear/timeout, real jewels30vs29, earned Dark Friar remote burst and armor
+  combat/pull/plate. All213original256fieldpairs exact12,214,272pixels;
+  zero new raw.info differences. Original writers produce outcomes; no enemy
+  HP/death/count, victory/quest-counter, NPC-position or actor-PC outcome edits.
+  Combined148:296captures/869,400frames/2,414sets, native99.915671% on its
+  separate denominator (NEW19alone99.874029%). Combined newNI3,485,853ops/
+  15,595,378cycles at same6,029observed contexts; rawSPCtags1,206/rawinfo17.
+  Source-baseline38executions/184,155f and failed/refined inputs are separate.
+- Existing OLD24 semantics freshly pass on this candidate, including damage,
+  original wins, Will restoration, returns and idle controls;254fieldpairs exact.
+  Broad129 retains exactly993rawSPC observer-tag and17rawcached-beam info
+  differences, unnormalized, with the unchanged executedAPU/CPUport/order/full
+  state/PCM/queue checks. No new masks or global hardware beam equivalence.
+- Core53tests:13,764positivepairs/325,348checks,4extra boundary runs,
+  40activated causal negatives; actual full-peripheral vs APU-stub owner scope
+  distinguished in report. FullSDK968PASS/2skip/0warnings,785unchanged sources;
+  title-policy9 and alias-recipe8 PASS. Earlier synthetic-mutant/old-NMI-fixture
+  failures remain failed; production code unchanged by their test fixes.
+- Renderer unchanged:22captures/71,500f,8oldpairs+2unsupportedpairs with2extra
+  native256 controls;7ready pairs/6positive scene IDs,1Castoth object refusal.
+  Original lesson/both doors/town/combat/boss pixels/source/OAM/ROI pass. No new
+  admissions; retain entireold021renderer44 raw. Old61/110 remains historical.
+- Original MSU opening4,400f +NVIDIA1080p xBR/1.5x240f pass; checkpoint/image
+  exact021. 1,329 new keys/9,711ops/33,474cycles execute alongside unchanged
+  15,434WRAMops/106,646cycles. No physical listening or sustainedFPS claim.
+  Test using `native-022/Play Original Classroom.cmd` with the exact candidate.
+- Official SNESRecomp80a41241 / Gaia e825dddde remain current at final readback;
+  265/285 open with zero comments. RomAtlas main23521a57 has identical13crate/
+  vendor/lock trees to qualified0e588945 decoder+recorded Windows refusal patch;
+  reused executable376109..., not a newly built main binary. No vendor replacement.
+- Cleanup complete:26,587files/7,495,941,324logical/2,496,392,508reported
+  last-link bytes,0locks/failures; no archive/rescan. Exact26,360old021native raw
+  files plus227oldSDKtemps retired;10,456retained files unchanged. Three oldnative
+  RAW-RETIRED markers bind historical metadata; oldraw is unavailable. Entire
+  old021renderer44 remains. Current022 allraw and fifteen unit inputs stay.
+- Keep current022 all raw/failures/metadata, allstates/seeds, owner39/normal28PCM,
+  masters, immutable016 graph and fifteen compact old unit inputs. Exact passed
+  old021native payload retirement requires129 independent proof, OLD24/NEW19
+  closure and explicit reader releases. Entireold021renderer44 stays. No archive.
+
+Next: start from022 `native-gap/remaining-full148-v1.json` for the broader
+quest/ability corpus:13,424,794interpreted cycles =RDNMI6,121,885 +actor/OAM4,429,899
++oldselected-refused346,018 +newselected-refused57,476 +unregisteredROM/mode2,469,516.
+The versioned remaining-cost supplement combines immutable129 costs with nineteen
+hash-bound checkpoint JSON profiles; no raw/APU/game reruns. New hotspots include
+80E91E..E94C and8AC829, still requiring source/owner qualification.
+Keep `remaining-full129-v1.json` and `remaining-matched105-v1.json` separate. Full129 residual9,519,673 =
+RDNMI4,785,310 +actor/OAM4,380,197 +oldregistered-refused207,603 +
+newregistered-refused3,538 +unregistered143,025. Same105 residual4,232,373 =
+3,674,705 +244,715 +207,513 +2,968 +102,472 respectively. Do not remove guards or
+regenerate the graph to inflate coverage. Native SPC, broader renderer/remake
+work and campaign remain unfinished. Do not repeat completed148/renderer/core
+checks without changed source or a material failure; no microbenchmark loop.
+
+Primary private receipts: `FROZEN-ENGINE-PROOF.json`,
+`counter-audit-v1/FINAL-COHORT-AUDIT.json`,
+`counter-audit-148-v1/FINAL-COMBINED-AUDIT.json`, `area-boss/COMPLETE-RECEIPT.json`,
+`area-boss/INDEPENDENT-SEMANTICS-19-v1.json`, `renderer/COMPLETE-RECEIPT.json`,
+`play-proof/READBACK-REVIEW.json`, `native-gap/FROZEN-EFFECTS-RECEIPT.json`,
+`core-tests-flow/FINAL-MECHANISM-RECEIPT.json` and storage retirement receipts.
+
+## Previous qualified continuation — batch 021 (historical)
 
 Source baseline `596a38ef1f67c7efd6e9f6c743f4fe0360a80036`. Exact private candidate:
 `50cdd0644e8f29cc58856d8466b43d566241cdfcb7b5b686e90b20eb9a8cbd47`.
@@ -61,13 +150,13 @@ no installation, graph regeneration or release. Owner `build/` remains 005.
   `native-021/Play Original Classroom.cmd` (exact candidate above).
 - Cleanup 43,918 files/13,273,408,436 logical/4,353,804,196 reported last-link bytes,
   zero locks. Two old 020 RAW-RETIRED-20261113 markers; old 110/61 raw is unavailable,
-  original receipts remain historical. Keep current 021 all raw/failures/metadata,
+  original receipts remain historical. At 021 closeout all raw/failures/metadata were retained; see 022 retention above. Keep
   all states/seeds, old 15 unit inputs, 39 owner files / 28 normal PCM tracks, masters and 016 graph.
   No archive. Final capture ledger remains bounded; no new cold fixture tree.
 - Official pin 80a41241 / Gaia e825dddde unchanged at check; four PRs merged,
   11/12 original reports closed; 265 open and new 285 filed. No vendor replacement.
 
-Next: use `native-gap/remaining-matched105-v1.json` (6,310,125 residual cycles)
+Historical 021 next-step note (superseded by 022): use `native-gap/remaining-matched105-v1.json` (6,310,125 residual cycles)
 and `remaining-full129-v1.json` (21,661,924) as separate denominators. New 129
 exposes 12,288,814 unregistered and 4,380,197 actor-policy cycles; retained RDNMI
 is 4,785,310 there. Matched 105 RDNMI 3,674,705 remains protected. Source/owner

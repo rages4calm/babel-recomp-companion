@@ -1400,13 +1400,14 @@ static int native_instruction_metadata_valid(const InterpNativeInstruction *d) {
     switch (d->bytes[0]) {
         /* Data, direct call/return and separately granted COP/RTI effects retain the owning opcode loop,
          * including its existing paired-bounce and owner-boundary handling.
-         * Direct SP/emulation changes,
-         * indirect calls/other indirect jumps, halts and block moves still
-         * require fallback. Indexed-indirect JMP retains its live pointer
-         * bus reads and the same owning loop's resolved-landing capture. */
+         * Indexed-indirect JSR and one-byte MVN are scheduler effects only;
+         * both retain live bus accesses and the same owning retirement.
+         * Direct SP/emulation changes, other indirect jumps, halts and other
+         * block moves still require fallback. Indexed-indirect JMP retains
+         * its live pointer reads and resolved-landing capture. */
         case 0x00:
-        case 0x44: case 0x54: case 0x6C:
-        case 0xCB: case 0xDB: case 0xDC: case 0xFC:
+        case 0x44: case 0x6C:
+        case 0xCB: case 0xDB: case 0xDC:
         case 0x1B: case 0x9A: case 0xFB: return 0;
         default: return 1;
     }
@@ -1570,7 +1571,7 @@ static int native_instruction_nmi_data_valid(const InterpNativeInstruction *d) {
          * Indirect control has not been qualified in this finite owner.
          * COP/RTI additionally require their explicit frame grant. Metadata
          * still excludes SP writes, block moves and XCE. */
-        case 0x7C: return 0;
+        case 0x54: case 0x7C: case 0xFC: return 0;
         default: return 1;
     }
 }

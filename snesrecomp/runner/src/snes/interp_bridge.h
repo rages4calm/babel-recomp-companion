@@ -200,9 +200,11 @@ uint64_t interp_bridge_native_poll_cycles_total(void);
  * paired-bounce and return-boundary ownership. Register aliases/modes
  * separately. Support is plain LoROM/HiROM upper ROM, E0, ordinary data/status/
  * stack/static branch/direct call/return and indexed-indirect JMP effects.
+ * Scheduler entries also support indexed-indirect JSR and one-byte MVN with
+ * original live pointer/data accesses, stack effects and opcode retirement.
  * COP/RTI require a separate explicit frame grant and launch enable below.
- * Other interrupt frames, indirect calls/other indirect jumps, direct SP/emulation changes, power and
- * block-move operations remain interpreted. Every instruction byte and live
+ * Other interrupt frames, other indirect jumps, direct SP/emulation changes,
+ * power and other block moves remain interpreted. Every instruction byte and live
  * mode is checked again AFTER hooks, without emulated reads or diagnostics.
  *
  * `step` has the same effect/fetch/cycle/pure-decline contract as the native
