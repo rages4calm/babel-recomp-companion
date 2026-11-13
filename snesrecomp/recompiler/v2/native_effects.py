@@ -12,7 +12,7 @@ SAFE_NAMES = frozenset("""LDA LDX LDY STA STX STY STZ ADC SBC AND ORA EOR CMP
 CPX CPY BIT TSB TRB ASL LSR ROL ROR INC DEC INX INY DEX DEY TAX TAY TXA TYA
 TXY TYX TCD TDC CLC SEC CLD SED CLV CLI SEI NOP XBA
 REP SEP PHP PLP PHA PLA PHX PLX PHY PLY PHD PLD PHK PHB PLB PEA PER PEI
-BPL BMI BVC BVS BCC BCS BNE BEQ BRA BRL JMP JML JSR JSL RTS RTL""".split())
+BPL BMI BVC BVS BCC BCS BNE BEQ BRA BRL JMP JML JSR JSL RTS RTL MVN""".split())
 LIVE_STATUS_HELPERS = frozenset({"getFlags", "setFlags"})
 STATIC_CONTROL_NAMES = frozenset("BPL BMI BVC BVS BCC BCS BNE BEQ BRA BRL JMP JML".split())
 STATIC_CONTROL_OPCODES = frozenset({0x10, 0x30, 0x50, 0x70, 0x90, 0xB0,
@@ -20,7 +20,8 @@ STATIC_CONTROL_OPCODES = frozenset({0x10, 0x30, 0x50, 0x70, 0x90, 0xB0,
 DIRECT_CALL_RETURN_NAMES = frozenset({"JSR", "JSL", "RTS", "RTL"})
 DIRECT_CALL_RETURN_OPCODES = frozenset({0x20, 0x22, 0x60, 0x6B})
 INDIRECT_JUMP_OPCODES = frozenset({0x7C})
-NMI_EXCLUDED_OPCODES = frozenset({0x7C})
+INDEXED_CALL_OPCODES = frozenset({0xFC})
+NMI_EXCLUDED_OPCODES = frozenset({0x7C, 0x54, 0xFC})
 FRAME_NAMES = frozenset({"COP", "RTI"})
 FRAME_OPCODES = frozenset({0x02, 0x40})
 FORBIDDEN = frozenset({"runOpcode", "doOpcode", "doInterrupt", "init", "reset",
@@ -149,8 +150,9 @@ def emit(source, entries, *, registration_name="IogRegisterNativeContinuations",
         if (e["mnemonic"] in STATIC_CONTROL_NAMES
                 and opcode not in STATIC_CONTROL_OPCODES | INDIRECT_JUMP_OPCODES):
             raise ValueError("Only static or indexed-indirect jump effects are supported")
-        if e["mnemonic"] in DIRECT_CALL_RETURN_NAMES and opcode not in DIRECT_CALL_RETURN_OPCODES:
-            raise ValueError("Only direct call/return effects are supported")
+        if (e["mnemonic"] in DIRECT_CALL_RETURN_NAMES
+                and opcode not in DIRECT_CALL_RETURN_OPCODES | INDEXED_CALL_OPCODES):
+            raise ValueError("Only direct or indexed-indirect call/return effects are supported")
         mnemonic, mode, size = decoder.opcode_table()[opcode]
         size = size(e["m"], e["x"]) if callable(size) else size
         if (mnemonic != e["mnemonic"] or size != len(e["bytes"])

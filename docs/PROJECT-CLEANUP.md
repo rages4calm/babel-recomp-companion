@@ -5,7 +5,40 @@ copies after their consumers finish. Keep the current qualification batch, sourc
 receipts, required generation inputs, master builds and owner data. Do not grow a
 new full fixture tree for each small check; reuse one bounded scratch batch.
 
-## Current closeout — batch 021
+## Current closeout — batch 022
+
+Completed in place, with no archive or whole-project rescan: **26,587 files /
+7,495,941,324 logical bytes / 2,496,392,508 reported last-link file-data bytes**,
+zero locks or failures. This combines227 obsolete passed021 SDK EXE/OBJ files
+(63,799,296 bytes) and26,360 superseded passed021 native raw files
+(7,432,142,028 logical /2,432,593,212 reported allocation bytes).
+
+The exact native selection is limited to the three closed021 qualification
+roots containing129 pairs/258 captures. Retirement followed the independently
+qualified022 replacement129, inheritedOLD24 and new19 semantics, and explicit
+reader releases. All target volume/file IDs, sizes, modification times and link
+counts matched the frozen plan. All10,456 retained files keep their hashes,
+identities, sizes and times; these include1,988 info JSONs,39 owner files,28 normal
+PCM tracks,15 compact unit inputs, two old attribution logs and playable masters.
+The separate temporary-file operation also preserved its1,169 protected files.
+No permission, lock or unrelated process was forced.
+
+All current022 raw/failures, original source/receipts/metadata/profiles/journals/
+logs and states/seeds remain. The **entire old021 renderer44 raw set remains**,
+because the new22-capture renderer subset does not replace it in full. Three
+`RAW-RETIRED-20261113.json` markers identify the old native payload roots; old
+passed receipts remain historical and are not rewritten. Their retired raw files
+must not be treated as available goldens. No retry CMD is needed: every approved
+target is absent and there are zero locks.
+
+Current022 evidence is148 native reference pairs/296 captures/869,400 frames,
+plus the bounded renderer and original MSU/GPU checks. The15 compact dependencies,
+immutable016 graph, current/prior runnable builds and private developer inputs
+remain. Logical size, reported file-data allocation and whole-volume free-space
+change are different measures. [Batch022](NATIVE-BATCH-022.md) records the proof
+and remaining native work.
+
+## Previous closeout — batch 021 (historical)
 
 Completed without archives or moving clutter: **43,918 files / 13,273,408,436
 logical bytes / 4,353,804,196 reported last-link file-data bytes**, zero locks
@@ -18,7 +51,8 @@ size and modification time. Before/after hashes/IDs/timestamps of 19,258 retaine
 files remain unchanged. No whole-project scan or permission/process forcing.
 
 All source, states/seeds, metadata/profiles/counters, original receipts, failures,
-current 021 raw and current/prior playable binaries remain. This includes 39 owner
+at that closeout current021 raw and current/prior playable binaries remained.
+Its native payloads are now retired by022 above; its renderer raw remains. This includes 39 owner
 files, all 28 normal PCM tracks, the exact four old 020 unit/refusal inputs,
 ten old 019 unit inputs, compact 018 classroom input and six historical failed
 Dark Gaia captures. No retry CMD is needed: all 43,918 targets are absent.

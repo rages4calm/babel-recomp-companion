@@ -12,6 +12,24 @@ import snes65816 as decoder
 from v2.native_effects import emit
 
 
+def context_banks(row, aliases=True):
+    """Explicit physical additions need not speculate about unobserved mirrors.
+
+    Absent/false retains the original four-alias recipe. The same recipe must
+    be carried by candidate and permission rows; permissions still have to name
+    registered keys. Mutable WRAM has its own generator and is not expanded here.
+    """
+    physical_only = row.get("physical_only", False)
+    if type(physical_only) is not bool:
+        raise ValueError("physical_only must be an explicit bool")
+    pc = int(row["pc24"], 16)
+    if not 0 <= pc <= 0xFFFFFF:
+        raise ValueError("Invalid physical instruction address")
+    bank = pc >> 16
+    return ([bank] if physical_only or not aliases else
+            [bank & 0x3F | n for n in (0, 0x40, 0x80, 0xC0)])
+
+
 def validate_owner_policy(entries, scope_limits, grant_keys, policy):
     """Title policy for finite instructions, without weakening AOT barriers."""
     contract = policy.get("fixed_instruction_scopes", {})
@@ -56,7 +74,7 @@ def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True, *,
     for row in plan["candidate_contexts"]:
         original = int(row["pc24"], 16)
         bank, pc = original >> 16, original & 65535
-        banks = [bank] if not aliases else [bank & 0x3F | n for n in (0, 0x40, 0x80, 0xC0)]
+        banks = context_banks(row, aliases)
         for pb in banks:
             offset = decoder.rom_offset(pb, pc)
             insn = decoder.decode_insn(image, offset, pc, pb, row["m"], row["x"])
@@ -74,8 +92,7 @@ def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True, *,
     grant_keys = set()
     for row in grant_rows:
         pc = int(row["pc24"], 16)
-        for pb in ([pc >> 16] if not aliases else
-                   [pc >> 16 & 0x3F | n for n in (0, 0x40, 0x80, 0xC0)]):
+        for pb in context_banks(row, aliases):
             key = ((pb << 16) | (pc & 65535), row["m"], row["x"], row["e"])
             if key in grant_keys or key not in entries:
                 raise ValueError("Duplicate or unregistered finite-NMI context")
@@ -84,8 +101,7 @@ def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True, *,
     frame_keys = set()
     for row in plan.get("native_frame_grant_contexts", []):
         pc = int(row["pc24"], 16)
-        for pb in ([pc >> 16] if not aliases else
-                   [pc >> 16 & 0x3F | n for n in (0, 0x40, 0x80, 0xC0)]):
+        for pb in context_banks(row, aliases):
             key = ((pb << 16) | (pc & 65535), row["m"], row["x"], row["e"])
             if key in frame_keys or key not in entries:
                 raise ValueError("Duplicate or unregistered frame-effect context")
@@ -93,8 +109,7 @@ def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True, *,
     scope_limits = {}
     for row in plan.get("native_owner_scope_contexts", []):
         pc = int(row["pc24"], 16)
-        for pb in ([pc >> 16] if not aliases else
-                   [pc >> 16 & 0x3F | n for n in (0, 0x40, 0x80, 0xC0)]):
+        for pb in context_banks(row, aliases):
             key = ((pb << 16) | (pc & 65535), row["m"], row["x"], row["e"])
             if key in scope_limits or key not in entries:
                 raise ValueError("Duplicate or unregistered owner-scope context")
@@ -112,6 +127,12 @@ def prepare(rom: Path, contexts: Path, output: Path, aliases: bool = True, *,
                    driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                    source_file="native_continuations.c", compiled=False, executed=False,
                    source_contexts=len(plan["candidate_contexts"]), physical_aliases=aliases)
+    exact_count = sum(row.get("physical_only", False)
+                      for row in plan["candidate_contexts"])
+    if exact_count:
+        receipt.update(physical_only_source_contexts=exact_count,
+                       legacy_source_contexts=len(plan["candidate_contexts"]) - exact_count,
+                       alias_recipe="Legacy rows follow the launch alias option; physical_only rows retain their exact PBR. Permissions use the same per-row recipe.")
     output.mkdir(parents=True, exist_ok=False)
     (output / receipt["source_file"]).write_text(result, encoding="utf-8", newline="\n")
     (output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
