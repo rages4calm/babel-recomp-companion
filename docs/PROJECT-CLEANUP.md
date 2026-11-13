@@ -5,7 +5,38 @@ copies after their consumers finish. Keep the current qualification batch, sourc
 receipts, required generation inputs, master builds and owner data. Do not grow a
 new full fixture tree for each small check; reuse one bounded scratch batch.
 
-## Current closeout — batch 022
+## Current closeout — batch 023
+
+Completed in place: **32,205 files / 9,407,344,680 logical bytes /
+3,127,474,696 reported last-link file-data bytes**, zero locks or errors.
+No archive, move or whole-project rescan was needed.
+
+- 231 obsolete passed batch-022 SDK EXE/OBJ files: 65,610,240 bytes, with all
+  1,232 retained files unchanged.
+- 31,974 superseded batch-022 native payloads: 9,341,734,440 logical bytes /
+  3,061,864,456 reported allocation bytes, with all 12,619 protected files
+  unchanged. The exact three roots contain 148 pairs / 296 capture prefixes.
+
+Removal followed fresh independent batch-023 qualification of the same 148
+routes, fresh inherited 43 semantic reviews and explicit releases from every
+reader. File/volume identities, sizes, times and link counts matched the frozen
+plan. Guard checks and the full dry-run passed before deletion. No permission,
+lock or unrelated process was forced.
+
+All 2,414 historical info JSONs, receipts, profiles, journals, logs, source,
+failures, states/seeds, Gem30 scout seed, fifteen compact dependencies, owner39,
+normal28PCM, immutable graph and current/prior runnable masters remain.
+**All old batch-021 renderer44 and batch-022 renderer22 raw remain.** Current
+batch-023 raw and failed attempts remain. Three `RAW-RETIRED-20261113.json`
+markers identify old batch-022 native roots; historical passed receipts are not
+rewritten. Retired raw is unavailable as a future golden.
+
+No retry CMD is needed: all approved targets are absent and there are zero locks.
+Logical bytes, reported file-data allocation and whole-volume free-space change
+are distinct measures. [Batch 023](NATIVE-BATCH-023.md) records the replacement
+proof and remaining native work.
+
+## Previous closeout — batch 022 (historical)
 
 Completed in place, with no archive or whole-project rescan: **26,587 files /
 7,495,941,324 logical bytes / 2,496,392,508 reported last-link file-data bytes**,
@@ -23,8 +54,9 @@ PCM tracks,15 compact unit inputs, two old attribution logs and playable masters
 The separate temporary-file operation also preserved its1,169 protected files.
 No permission, lock or unrelated process was forced.
 
-All current022 raw/failures, original source/receipts/metadata/profiles/journals/
-logs and states/seeds remain. The **entire old021 renderer44 raw set remains**,
+At its closeout, current022 raw/failures and all source/metadata remained.
+Its passed native payloads are now retired by023 above; all failures,
+source/receipts/metadata/profiles/journals/logs and states/seeds remain. The **entire old021 renderer44 raw set remains**,
 because the new22-capture renderer subset does not replace it in full. Three
 `RAW-RETIRED-20261113.json` markers identify the old native payload roots; old
 passed receipts remain historical and are not rewritten. Their retired raw files

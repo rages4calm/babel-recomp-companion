@@ -12,12 +12,25 @@
     "schema": "gaia fixed instruction owner scopes v1",
     "scope_only_ranges": [
       {"start": "0082DE", "end_exclusive": "008387"},
-      {"start": "02803B", "end_exclusive": "028191"}
+      {"start": "02803B", "end_exclusive": "028191"},
+      {"start": "03C5FF", "end_exclusive": "03CA00"}
+    ],
+    "mutable_operand_ranges": [
+      {"start": "03C617", "end_exclusive": "03C619"},
+      {"start": "03C61A", "end_exclusive": "03C61C"},
+      {"start": "03C62A", "end_exclusive": "03C62C"},
+      {"start": "03C62D", "end_exclusive": "03C62F"},
+      {"start": "03C729", "end_exclusive": "03C72B"},
+      {"start": "03C8E5", "end_exclusive": "03C8E7"},
+      {"start": "03C8EA", "end_exclusive": "03C8EC"},
+      {"start": "03C9C2", "end_exclusive": "03C9C4"},
+      {"start": "03C9C7", "end_exclusive": "03C9C9"},
+      {"start": "03C7BE", "end_exclusive": "03C7C0"}
     ],
     "vector_jumps": ["008007", "00800B"],
     "forbidden_sites": ["828049", "82804D", "828051", "828053", "828195"],
     "historical_whole_function_NMI_floors": ["82AF5F", "829DE2", "829E1D", "82B038"],
-    "contract": "The unchanged ranges and four historical NMI floors block whole-function AOT, not already-qualified single-instruction effects. Fixed instructions retain the original retirement, frames, bus effects and existing owners; new protected-range instructions require exact owner-scope restrictions. Only the two stock long-JMP vector instructions may be selected; reset and IRQ vectors remain excluded. RDNMI acknowledgements/poll controls stay outside this registry; the existing separate poll island is unchanged. Runtime all/single/file/programmatic exclusions are never bypassed."
+    "contract": "The unchanged ranges and four historical NMI floors block whole-function AOT, not already-qualified single-instruction effects. Fixed instructions retain the original retirement, frames, bus effects and existing owners; new protected-range instructions require exact owner-scope restrictions. Immutable actor/OAM effects must not intersect any byte of the ten live culling operand words; those words require a separately qualified live-operand contract. Only the two stock long-JMP vector instructions may be selected; reset and IRQ vectors remain excluded. RDNMI acknowledgements/poll controls stay outside this registry; the existing separate poll island is unchanged. Runtime all/single/file/programmatic exclusions are never bypassed."
   },
   "qualification": "Generation creates private replay candidates. Only matched execution at identical guest points can qualify a native path; fixed-instruction scope metadata is not execution or campaign proof."
 }

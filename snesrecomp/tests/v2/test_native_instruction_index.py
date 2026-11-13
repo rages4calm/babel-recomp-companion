@@ -86,7 +86,7 @@ int main(void){
   CHECK(!g_recomp_stack_top&&!g_pop_underflow,"real owner stack balanced");
   CHECK(interp_bridge_native_continuation_insns_total()==1&&interp_bridge_native_continuation_cycles_total()==2,"real native attribution");
   InterpNativeInstructionStats saved={0};CHECK(interp_bridge_native_instruction_stats(&saved,1)==1&&saved.insns==1&&saved.cycles==2,"real per-PC stats populated");
-  NativeInstructionEntry *old=s_native_instructions;uint16_t *ids=s_native_page_ids,*slots=s_native_page_slots;
+  NativeInstructionEntry *old=s_native_instructions;uint16_t *ids=s_native_page_ids;uint32_t *slots=s_native_page_slots;
   size_t bytes=live_bytes;
   for(unsigned failure=1;failure<=3;failure++){
     alloc_calls=0;fail_at=failure;
@@ -107,7 +107,7 @@ int main(void){
   CHECK(!lookup(0x828100,0,0,0)&&!lookup(0x828100,1,1,0),"exact mode misses");
   CHECK(!lookup(0x428100,1,0,0)&&!lookup(0x828100,1,0,1),"foreign alias and E1 rejected");
   unsigned id=s_native_page_ids[0x8281],slot=(0x00<<2)|(1<<1),position=(id-1)*1024+slot;
-  uint16_t good=s_native_page_slots[position];
+  uint32_t good=s_native_page_slots[position];
   s_native_page_slots[position]=8192;
   CHECK(mode?!lookup(0x828100,1,0,0):lookup(0x828100,1,0,0)!=NULL,"out of bounds direct entry fails closed without changing legacy");
   s_native_page_slots[position]=1;
@@ -128,7 +128,7 @@ int main(void){
   CHECK(interp_bridge_native_continuation_insns_total()==1&&interp_bridge_native_continuation_cycles_total()==2,"clear preserves process-global attribution");
   CHECK(interp_bridge_native_instruction_index_enabled()==mode,"clear preserves launch mode");
   /* Four M/X modes on 16384 valid sparse pages fill65535 slots.
-   * The direct page storage uses32MiB; entries have grown separately. */
+   * The wider direct page storage uses64MiB; entries are unchanged. */
   InterpNativeInstruction *full=calloc(65535,sizeof *full);CHECK(full!=NULL,"capacity descriptor allocation");
   if(full){
     for(unsigned i=0;i<65535;i++){
@@ -138,10 +138,10 @@ int main(void){
       full[i].m=(i>>1)&1;full[i].x=i&1;RAM[full[i].pc24]=0xea;
     }
     CHECK(interp_bridge_add_native_instructions(full,65535),"65535 mode descriptors on16384 sparse pages supported");
-    CHECK(live_bytes==65535*sizeof(NativeInstructionEntry)+131072+33554432,"exact sparse allocation bound");
+    CHECK(live_bytes==65535*sizeof(NativeInstructionEntry)+131072+67108864,"exact sparse allocation bound");
     for(unsigned i=0;i<65535;i+=127)CHECK(lookup(full[i].pc24,full[i].m,full[i].x,0)!=NULL,"sparse page descriptor lookup");
     NativeInstructionEntry *last=lookup(full[65534].pc24,1,0,0);
-    CHECK(last==s_native_instructions+65534&&last->descriptor.pc24==0x81ff00,"last uint16 descriptor ID65535 resolves exactly");
+    CHECK(last==s_native_instructions+65534&&last->descriptor.pc24==0x81ff00,"legacy descriptor ID65535 resolves exactly");
     unsigned page_id=s_native_page_ids[full[65534].pc24>>8];
     CHECK(s_native_page_slots[(page_id-1u)*1024u+2u]==65535,"direct slot stores65535 without truncation");
     g_c.m_flag=1;g_c.x_flag=0;cpu_mirrors_to_p(&g_c);
@@ -162,9 +162,11 @@ int main(void){
     CHECK(interp_bridge_add_native_instructions(full,65535),"full idempotent batch");
     last=lookup(full[65534].pc24,1,0,0);
     CHECK(last==s_native_instructions+65534&&last->insns==1&&last->cycles==2,"full idempotent rebuild preserves last ID and statistics");
-    InterpNativeInstruction overflow=nop_descriptor(0x828000);
-    CHECK(!interp_bridge_add_native_instructions(&overflow,1),"unique capacity overflow refused");
-    CHECK(interp_bridge_native_instruction_stats(NULL,0)==65535&&lookup(full[65534].pc24,1,0,0)==last&&last->insns==1&&last->cycles==2,"capacity refusal retains full indexes and used statistics");
+    InterpNativeInstruction overflow=nop_descriptor(0x828000);RAM[overflow.pc24]=0xea;
+    CHECK(interp_bridge_add_native_instructions(&overflow,1),"unique descriptor crosses former65535 boundary");
+    last=lookup(full[65534].pc24,1,0,0);
+    CHECK(interp_bridge_native_instruction_stats(NULL,0)==65536&&last==s_native_instructions+65534&&last->insns==1&&last->cycles==2,"boundary growth retains indexes and used statistics");
+    CHECK(lookup(overflow.pc24,1,0,0)==s_native_instructions+65535,"new descriptor ID65536 resolves exactly");
     free(full);
   }
   interp_bridge_clear_native_instructions();

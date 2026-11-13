@@ -205,7 +205,7 @@ static void registry_tests(void){
  bad=d;bad.scopes=2;bad.nmi_owner_pc24=0x0402;CHECK(!interp_bridge_add_native_wram_copy_instructions(&bad,1),"invalid NMI owner refused");
  InterpNativeWramCopyInstruction batch[]={d,d};batch[0].pc24=(d.pc24&0xff0000)|0x406;batch[1].e=1;
  CHECK(!interp_bridge_add_native_wram_copy_instructions(batch,2)&&interp_bridge_native_wram_copy_grants()==1,"late invalid batch leaves no prefix grants");
- CHECK(!interp_bridge_add_native_wram_copy_instructions(&d,65536),"over-capacity count refuses before dereference");
+ CHECK(!interp_bridge_add_native_wram_copy_instructions(&d,131073),"over-capacity count refuses before dereference");
  InterpNativeInstruction rom={0};rom.pc24=d.pc24;rom.length=1;rom.bytes[0]=0x8b;rom.step=d.step;
  CHECK(!interp_bridge_add_native_instructions(&rom,1),"ordinary ROM API still refuses low WRAM");
  rom.pc24=0x838000;rom.length=3;rom.bytes[0]=0x54;
@@ -220,7 +220,7 @@ static void registry_tests(void){
   }
   CHECK(interp_bridge_add_native_wram_copy_instructions(full,65535)&&interp_bridge_native_wram_copy_grants()==65535,"actual copy registry reaches65535 exact physical/mode entries");
   d.pc24=0x830402;d.scopes=1;d.nmi_owner_pc24=0;
-  CHECK(!interp_bridge_add_native_wram_copy_instructions(&d,1)&&interp_bridge_native_wram_copy_grants()==65535,"deduplicated capacity overflow leaves registry intact");
+  CHECK(interp_bridge_add_native_wram_copy_instructions(&d,1)&&interp_bridge_native_wram_copy_grants()==65536,"legacy65535 boundary now admits one additional exact WRAM key");
   free(full);interp_bridge_clear_native_instructions();
  }
 }

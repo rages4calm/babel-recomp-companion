@@ -38,10 +38,14 @@ def validate_owner_policy(entries, scope_limits, grant_keys, policy):
     canonical = lambda pc: pc & 0x3FFFFF
     ranges = [(canonical(int(r["start"], 16)), canonical(int(r["end_exclusive"], 16)))
               for r in contract["scope_only_ranges"]]
+    mutable = [(canonical(int(r["start"], 16)), canonical(int(r["end_exclusive"], 16)))
+               for r in contract.get("mutable_operand_ranges", [])]
     forbidden = {canonical(int(pc, 16)) for pc in contract["forbidden_sites"]}
     vectors = {canonical(int(pc, 16)) for pc in contract["vector_jumps"]}
     for key, entry in entries.items():
         pc = canonical(key[0])
+        if any(pc < hi and pc + len(entry["bytes"]) > lo for lo, hi in mutable):
+            raise ValueError("Immutable fixed instruction intersects a live patched operand")
         if pc in forbidden:
             raise ValueError("Protected RDNMI acknowledgement/poll control")
         vector = 0x8000 <= pc < 0x8014

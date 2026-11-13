@@ -250,33 +250,33 @@ def _metadata_source():
     CHECK(!interp_bridge_add_native_instructions(NULL,1),"NULL batch refused");
     interp_bridge_clear_native_instructions();
     setup(1,0x82,1,1,0,7,0,0);interp_bridge_clear_native_instructions();
-    InterpNativeInstruction *full=calloc(65535,sizeof *full);CHECK(full!=NULL,"registry capacity allocation");
+    InterpNativeInstruction *full=calloc(131072,sizeof *full);CHECK(full!=NULL,"registry capacity allocation");
     if(full){
       const unsigned banks[]={0x02,0x42,0x82,0xc2};
-      for(unsigned i=0;i<65535;i++){
-        full[i]=d;full[i].pc24=(banks[i/16384]<<16)| (0xc000u+i%16384);
+      for(unsigned i=0;i<131072;i++){
+        full[i]=d;full[i].pc24=(banks[i/32768]<<16)| (0x8000u+i%32768);
         full[i].length=1;full[i].step=native_capacity_nop;memset(full[i].bytes,0,4);full[i].bytes[0]=0xea;RAM[full[i].pc24]=0xea;
       }
-      CHECK(full[65534].pc24==0xc2fffe,"full capacity ends on valid upper-bank opcode");
-      CHECK(interp_bridge_add_native_instructions(full,65535),"full registry accepted");
-      CHECK(interp_bridge_native_instruction_stats(NULL,0)==65535,"all page buckets retained");
-      InterpNativeInstructionStats *stats=calloc(65535,sizeof *stats);CHECK(stats!=NULL,"full registry stats allocation");
+      CHECK(full[131071].pc24==0xc2ffff,"full capacity ends on valid upper-bank opcode");
+      CHECK(interp_bridge_add_native_instructions(full,131072),"full registry accepted");
+      CHECK(interp_bridge_native_instruction_stats(NULL,0)==131072,"all page buckets retained");
+      InterpNativeInstructionStats *stats=calloc(131072,sizeof *stats);CHECK(stats!=NULL,"full registry stats allocation");
       uint64 ni=interp_bridge_native_continuation_insns_total(),nc=interp_bridge_native_continuation_cycles_total();
       uint64 ii=interp816_insns_total(),ic=interp816_cycles_total();uint16 sp=g_c.S;
       interp_bridge_set_master_deadline(g_c.master_cycles+1);
-      CHECK(interp_bridge_run_until_quiescent(&g_c,full[65534].pc24)==1,"owning bridge executes descriptor ID65535");
+      CHECK(interp_bridge_run_until_quiescent(&g_c,full[131071].pc24)==1,"owning bridge executes descriptor ID131072");
       interp_bridge_set_master_deadline(0);
       CHECK(interp_bridge_native_continuation_insns_total()==ni+1&&interp_bridge_native_continuation_cycles_total()==nc+2,"last descriptor exact native attribution");
       CHECK(interp816_insns_total()==ii&&interp816_cycles_total()==ic&&g_c.S==sp,"last descriptor neither interpreted nor changes owner stack");
-      if(stats){CHECK(interp_bridge_native_instruction_stats(stats,65535)==65535&&stats[65534].pc24==0xc2fffe&&stats[65534].insns==1&&stats[65534].cycles==2,"last descriptor ID and per-site counters retained");}
-      CHECK(interp_bridge_add_native_instructions(full,65535),"full registry idempotent batch");
+      if(stats){CHECK(interp_bridge_native_instruction_stats(stats,131072)==131072&&stats[131071].pc24==0xc2ffff&&stats[131071].insns==1&&stats[131071].cycles==2,"last descriptor ID and per-site counters retained");}
+      CHECK(interp_bridge_add_native_instructions(full,131072),"full registry idempotent batch");
       d=full[0];d.pc24=0x838000;
       CHECK(!interp_bridge_add_native_instructions(&d,1),"unique capacity overflow atomic refusal");
-      InterpNativeInstruction conflict=full[65534];conflict.step=pure_decline;
+      InterpNativeInstruction conflict=full[131071];conflict.step=pure_decline;
       CHECK(!interp_bridge_add_native_instructions(&conflict,1),"full registry conflicting callback refusal");
-      CHECK(!interp_bridge_add_native_instructions(full,65536),"oversized batch refused before input traversal");
-      CHECK(interp_bridge_native_instruction_stats(NULL,0)==65535,"capacity refusal preserves registry");
-      if(stats){CHECK(interp_bridge_native_instruction_stats(stats,65535)==65535&&stats[65534].pc24==0xc2fffe&&stats[65534].insns==1&&stats[65534].cycles==2,"idempotence and all refusals preserve used last descriptor");free(stats);}
+      CHECK(!interp_bridge_add_native_instructions(full,131073),"oversized batch refused before input traversal");
+      CHECK(interp_bridge_native_instruction_stats(NULL,0)==131072,"capacity refusal preserves registry");
+      if(stats){CHECK(interp_bridge_native_instruction_stats(stats,131072)==131072&&stats[131071].pc24==0xc2ffff&&stats[131071].insns==1&&stats[131071].cycles==2,"idempotence and all refusals preserve used last descriptor");free(stats);}
       CHECK(interp_bridge_native_continuation_insns_total()==ni+1&&interp_bridge_native_continuation_cycles_total()==nc+2,"idempotence and refusals preserve global counters");free(full);
     }
     interp_bridge_clear_native_instructions();
