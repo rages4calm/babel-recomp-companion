@@ -5,7 +5,45 @@ copies after their consumers finish. Keep the current qualification batch, sourc
 receipts, required generation inputs, master builds and owner data. Do not grow a
 new full fixture tree for each small check; reuse one bounded scratch batch.
 
-## Current closeout — batch 024
+## Current closeout — batch 025
+
+Completed in place: **45,121 files / 13,564,669,962 logical bytes /
+4,432,448,528 reported last-link file-data bytes**, zero locks or errors.
+No archive, move, whole-project rescan or retry CMD was needed.
+
+- 41,222 superseded old 024 native 185 payloads: 12,187,951,242 logical bytes /
+  3,992,924,372 reported last-link bytes at the frozen forecast.
+- 3,899 old 024 renderer 25 payloads: 1,376,718,720 logical bytes /
+  439,524,156 reported last-link bytes at the frozen forecast.
+
+Removal follows independent fresh 185, final 195, inherited OLD 80, NEW 10 and root 25/
+MSU proofs, exact scope/identity guards, full preview and every reader release.
+All 17,547 retained files pass SHA/file-ID/size/time checks, including the
+inherited 583 named dependencies and additional 146 source inputs, with zero target
+intersections. No permission, lock or unrelated process was forced.
+
+All 3,402 historical info JSONs, source, receipts, profiles, journals, logs, states/
+seeds, scouts and failures remain. Owner 39/normal 28PCM/compact 15/masters, immutable
+graph and all current 025 evidence remain. **Entire 021 renderer 44 remains**,
+because the fresh subset does not replace it in full. Retirement markers identify
+removed old 024 raw without rewriting passed receipts; unavailable raw must not
+be used as future goldens. Already retired023/022 payloads were not read or
+retargeted. Eight tiny closed test executables were left alone.
+
+Current 025 closes zero pending reservations below its unchanged 9 GiB hard limit.
+Local ledger unit-copy and import failures are retained with versioned fixes;
+they did not require guest retries or higher limits. Closed root output was
+compressed with hashes/IDs/sizes/times unchanged, and future capture directories
+inherited compression before creation. File-data reports and whole-volume free
+space are distinct. [Batch 025](NATIVE-BATCH-025.md) records replacement evidence.
+
+## Previous closeout — batch 024 (historical)
+
+Its passed native185 and renderer25 raw are now retired by025 above. Original
+retention statements below describe024 closeout; source/metadata/failures/scouts/
+states and entire021 renderer44 remain.
+
+
 
 Completed in place: **42,421 files / 12,443,866,688 logical bytes /
 5,425,289,728 reported last-link file-data bytes**, zero locks or errors.

@@ -41,13 +41,26 @@ def validate_owner_policy(entries, scope_limits, grant_keys, policy):
     mutable = [(canonical(int(r["start"], 16)), canonical(int(r["end_exclusive"], 16)))
                for r in contract.get("mutable_operand_ranges", [])]
     forbidden = {canonical(int(pc, 16)) for pc in contract["forbidden_sites"]}
+    acknowledgements = set()
+    for row in contract.get("qualified_rdnmi_ack_contexts", []):
+        key = (int(row["pc24"], 16), row["m"], row["x"], row["e"])
+        if (key in acknowledgements or any(type(n) is not int for n in key)
+                or not 0 <= key[0] <= 0xFFFFFF or key[1:] != (1, 0, 0)
+                or canonical(key[0]) not in forbidden
+                or canonical(key[0]) in (0x02804D, 0x028051)):
+            raise ValueError("Invalid exact RDNMI acknowledgement policy")
+        acknowledgements.add(key)
     vectors = {canonical(int(pc, 16)) for pc in contract["vector_jumps"]}
     for key, entry in entries.items():
         pc = canonical(key[0])
         if any(pc < hi and pc + len(entry["bytes"]) > lo for lo, hi in mutable):
             raise ValueError("Immutable fixed instruction intersects a live patched operand")
         if pc in forbidden:
-            raise ValueError("Protected RDNMI acknowledgement/poll control")
+            if (key not in acknowledgements or entry["bytes"] != b"\xaf\x10\x42\x80"
+                    or entry.get("mnemonic") != "LDA"
+                    or type(scope_limits.get(key)) is not int
+                    or scope_limits[key] != 1 or key in grant_keys):
+                raise ValueError("Protected RDNMI acknowledgement/poll control")
         vector = 0x8000 <= pc < 0x8014
         if vector and (pc not in vectors or entry["bytes"][0] != 0x5C):
             raise ValueError("Reset/IRQ or non-long-jump vector remains protected")

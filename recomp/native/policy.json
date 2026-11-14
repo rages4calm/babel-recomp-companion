@@ -29,8 +29,13 @@
     ],
     "vector_jumps": ["008007", "00800B"],
     "forbidden_sites": ["828049", "82804D", "828051", "828053", "828195"],
+    "qualified_rdnmi_ack_contexts": [
+      {"pc24": "828049", "m": 1, "x": 0, "e": 0},
+      {"pc24": "828053", "m": 1, "x": 0, "e": 0},
+      {"pc24": "828195", "m": 1, "x": 0, "e": 0}
+    ],
     "historical_whole_function_NMI_floors": ["82AF5F", "829DE2", "829E1D", "82B038"],
-    "contract": "The unchanged ranges and four historical NMI floors block whole-function AOT, not already-qualified single-instruction effects. Fixed instructions retain the original retirement, frames, bus effects and existing owners; new protected-range instructions require exact owner-scope restrictions. Immutable actor/OAM effects must not intersect any byte of the ten live culling operand words; those words require a separately qualified live-operand contract. Only the two stock long-JMP vector instructions may be selected; reset and IRQ vectors remain excluded. RDNMI acknowledgements/poll controls stay outside this registry; the existing separate poll island is unchanged. Runtime all/single/file/programmatic exclusions are never bypassed."
+    "contract": "The unchanged ranges and four historical NMI floors block whole-function AOT, not already-qualified single-instruction effects. Fixed instructions retain the original retirement, frames, bus effects and existing owners; new protected-range instructions require exact owner-scope restrictions. Immutable actor/OAM effects must not intersect any byte of the ten live culling operand words; those words require a separately qualified live-operand contract. Only the two stock long-JMP vector instructions may be selected; reset and IRQ vectors remain excluded. The five RDNMI sites remain protected except the three explicitly qualified physical M1X0/E0 acknowledgement contexts: exact AF104280, scheduler scope only, no NMI grant or alias expansion. Poll controls remain excluded and the separate poll island is unchanged. Runtime all/single/file/programmatic exclusions are never bypassed."
   },
   "qualification": "Generation creates private replay candidates. Only matched execution at identical guest points can qualify a native path; fixed-instruction scope metadata is not execution or campaign proof."
 }
