@@ -165,7 +165,7 @@ static void refusals_and_capacity(void){
     s=src();s.ram_size--;CHECK(IogVisualObjectsBuild(&s,&v,&frame)==kIogVisualInvalidInput);
     s=src();s.rom_size--;CHECK(IogVisualObjectsBuild(&s,&v,&frame)==kIogVisualInvalidInput);
     s=src();CHECK(IogVisualObjectsBuild(&s,&v,(IogVisualFrame*)ram)==kIogVisualInvalidInput);
-    wr(0x644,8);CHECK(run(v)==kIogVisualUnsupportedScene);wr(0x644,12);CHECK(run(v)==kIogVisualReady);
+    wr(0x644,9);CHECK(run(v)==kIogVisualUnsupportedScene);wr(0x644,12);CHECK(run(v)==kIogVisualReady);
     ppu.obsel|=0x20;CHECK(run(v)==kIogVisualUnsupportedFormat);ppu.obsel=2;
     ppu.setini=2;CHECK(run(v)==kIogVisualUnsupportedFormat);ppu.setini=0;
     wr(0x6ee,0x1000);CHECK(run(v)==kIogVisualUnsupportedFormat);wr(0x6ee,0);
@@ -182,7 +182,7 @@ static void refusals_and_capacity(void){
 static void exact_room_selection(void){
     for(unsigned room=0;room<65536;room++){
         bool expected=false;
-        const unsigned allowed[]={0x01,0x0c,0x0e,0x0f,0x12,0x15,0x1e,0x23,0x25,0x26,
+        const unsigned allowed[]={0x02,0x03,0x04,0x05,0x06,0x08,0x0d,0x31,0x4c,0x61,0x83,0xe5,0xe6,0xe7,0xe8,0x01,0x0c,0x0e,0x0f,0x12,0x15,0x1e,0x23,0x25,0x26,
             0x27,0x28,0x29,0x2d,0x3d,0x3e,0x3f,0x40,0x41,0x42,0x45,0x46,0x4f,0x51,0x53,
             0x55,0x61,0x62,0x64,0x67,0x6d,0x6f,0x85,0x86,0x8a,0x8b,0xa7,0xb6,0xb8,0xcc,
             0xcd,0xce,0xdd,0xde,0xdf,0xe0,0xe1,0xe2,0xe3,0xea};
@@ -208,7 +208,7 @@ def main():
     exe = out/'visual_objects.exe'
     command = [args.compiler,'-std=c11','-O1','-Wall','-Wextra','-Werror',
                '-I'+str(ROOT/'src'),'-I'+str(ROOT/'snesrecomp/runner/src'),
-               str(source),*[str(s) for s in inputs],'-o',str(exe)]
+               str(source),*[str(s) for s in inputs],str(ROOT/'snesrecomp/runner/src/sha256.c'),'-o',str(exe)]
     build = subprocess.run(command, capture_output=True, text=True)
     (out/'build.log').write_text(build.stdout+build.stderr, encoding='utf-8')
     build.check_returncode()

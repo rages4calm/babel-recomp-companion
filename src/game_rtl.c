@@ -71,6 +71,7 @@ extern Ppu *g_ppu;
 
 /* 0 until the first frame has booted from the reset vector. */
 static uint32_t g_resume_pc;
+#ifndef IOG_RECEIVED_REFERENCE
 static bool g_world_observers_ready;
 
 /* Both tiers observe exactly the original instruction boundary. These
@@ -122,6 +123,20 @@ static void GameInitialize(void)
      * raw pad, so the game remaps an already-remapped controller word. */
     snes_set_rdnmi_beam_enabled(false);
 }
+#else
+#include "iog_received_observer.h"
+#include "iog_received_world.h"
+static void GameInitialize(void)
+{
+    /* SnesInit calls this before reset/guest execution. No stock-address
+     * hooks or generated dispatch are admitted for the received image. */
+    interp_bridge_set_interpret_all(1);
+    interp_bridge_clear_native_instructions();
+    interp_bridge_clear_native_rdnmi_polls();
+    snes_set_rdnmi_beam_enabled(false);
+    IogReceivedObserverInitialize();
+}
+#endif
 
 static uint32_t read_vector(uint32_t addr)
 {
@@ -143,9 +158,13 @@ static void game_run_interrupt(uint32_t vector, uint64_t frame_end, bool nmi_edg
 {
     cpu_push_interrupt_frame_at(&g_cpu, g_resume_pc);
     interp_bridge_set_master_deadline(frame_end);
+#ifndef IOG_RECEIVED_REFERENCE
     if (nmi_edge && vector == 0x00800Bu && IogNativeContinuationsNmiEnabled())
         (void)interp_bridge_run_native_nmi(&g_cpu, vector);
     else
+#else
+    (void)nmi_edge;
+#endif
         (void)interp_bridge_run_interrupt(&g_cpu, vector);
     /* Clearing matters: a deadline left armed stays true for every AOT block
      * prologue afterwards, which turns every compiled body into an immediate
@@ -160,7 +179,11 @@ static void game_run_interrupt(uint32_t vector, uint64_t frame_end, bool nmi_edg
 
 void GameRunOneFrame(void)
 {
+#ifndef IOG_RECEIVED_REFERENCE
     IogWorldSimulationTick();
+#else
+    IogReceivedObserverFrame();
+#endif
     const uint64_t frame_end = g_cpu.master_cycles + GAME_MASTER_CYCLES_PER_FRAME;
     const int booting = (g_resume_pc == 0);
     int slice;
@@ -205,9 +228,17 @@ void GameRunOneFrame(void)
          * handler rewrites VMAIN and the DMA source bank, so forcing it
          * mid-loop turned the rest of the tilemap into garbage. */
         if (g_snes->nmiEnabled) {
+#ifndef IOG_RECEIVED_REFERENCE
             IogWorldBeforeNmi();
+#else
+            IogReceivedObserverBeforeNmi();
+#endif
             game_run_interrupt(nmi_vector(), frame_end, true);
+#ifndef IOG_RECEIVED_REFERENCE
             IogWorldAfterNmi();
+#else
+            IogReceivedObserverAfterNmi();
+#endif
         }
     }
 
@@ -249,8 +280,12 @@ void GameDrawPpuFrame(void)
     int line, ch;
     unsigned hdma_lines = 0, irq_count = 0;
 
+#ifndef IOG_RECEIVED_REFERENCE
     IogWidescreenBeforeDraw();
     IogWorldBeginRaster();
+#else
+    IogReceivedWorldBeginRaster();
+#endif
 
     /* Re-arm HDMA from the last $420C (HDMAEN) the guest wrote — typically
      * during the NMI just run. The framework records it for exactly this. */
@@ -284,11 +319,19 @@ void GameDrawPpuFrame(void)
             }
             trigger = g_snes->vIrqEnabled ? (int)g_snes->vTimer : -1;
         }
+#ifndef IOG_RECEIVED_REFERENCE
         IogWidescreenBeforeLine(line);
         IogWorldCaptureLine(line);
+#else
+        IogReceivedWorldCaptureLine(line);
+#endif
         ppu_runLine(g_ppu, line);
     }
+#ifndef IOG_RECEIVED_REFERENCE
     IogWorldEndRaster(g_resume_pc, hdma_lines, irq_count);
+#else
+    IogReceivedWorldEndRaster();
+#endif
 }
 
 /* Savestates. snes_saveload stores the emulated machine, but the guest's
@@ -330,7 +373,11 @@ static void GameStateLoad(SaveLoadInfo *sli, uint32_t version)
     g_cpu.A = st.A, g_cpu.X = st.X, g_cpu.Y = st.Y, g_cpu.S = st.S, g_cpu.D = st.D;
     g_cpu.DB = st.DB, g_cpu.PB = st.PB, g_cpu.P = st.P, g_cpu.emulation = st.emulation;
     cpu_p_to_mirrors(&g_cpu);
+#ifndef IOG_RECEIVED_REFERENCE
     IogWorldReset();
+#else
+    IogReceivedObserverReset();
+#endif
 }
 
 const RtlGameInfo kGameInfo = {
@@ -350,5 +397,9 @@ void GameSessionReset(void)
      * been fine" is the usual desync culprit, because single-player never
      * re-enters the boot path twice in one process. */
     g_resume_pc = 0;
+#ifndef IOG_RECEIVED_REFERENCE
     IogWorldReset();
+#else
+    IogReceivedObserverReset();
+#endif
 }

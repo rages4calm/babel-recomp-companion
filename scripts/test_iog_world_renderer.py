@@ -33,6 +33,7 @@ static const char *ips_path;
 static SNESModActivationCallback ips_activation;
 static uint8_t source_field[256*224*4];
 static bool background_probe,static_plane_probe,stream_plane_probe,source_row_probe;
+static bool cloud_probe;
 static int expected_background_x,expected_background_y;
 static unsigned background_probe_calls;
 #define CHECK(c) do{checks++;if(!(c)){fprintf(stderr,"line%d: %s\n",__LINE__,#c);exit(1);}}while(0)
@@ -79,6 +80,15 @@ void PpuDrawDetachedLine(Ppu*p,int line){
  CHECK(p!=g_ppu&&(line==0||line==1));if(!line)return;detached_lines++;
  CHECK(p->renderPitch==1024&&!p->renderVram&&!p->hdFrame&&!p->overlayRenderBuffer[2]);
  for(unsigned n=0;n<256;n+=2)CHECK(p->oam[n]==0xf000);
+ if((p->bgmode&7)==7){
+  uint32_t*row=(uint32_t*)p->renderBuffer;
+  for(int x=0;x<256;x++){
+   unsigned index=IogMode7PlaneIndex(p,x,1);
+   CHECK(index==(unsigned)x); /* palette strip must retain ALL256 indices */
+   row[x]=0xff000000u|index*0x010101u;
+  }
+  return; /* palette transport stub, not a real PPU color-math claim */
+ }
  if(background_probe){
   unsigned row=background_probe_calls/3,start=(background_probe_calls%3)*224;
   CHECK(p->hScroll[1]==((expected_background_x+(int)start)&1023));
@@ -95,7 +105,7 @@ void PpuDrawDetachedLine(Ppu*p,int line){
     CHECK(p->vram[address]==0x600e);
    }
   }
-  if(Word(s.active_ram,0x644)==0x85&&!row&&start==448){
+  if(Word(s.active_ram,0x644)==0x85&&row==40&&start==448){
    /* The third chunk is entirely beyond the256px secondary allocation.
     * Its first cell is still real repeated scenery, not transparent fill. */
    unsigned tx=p->hScroll[1]>>3,ty=(p->vScroll[1]+1)>>3;
@@ -111,6 +121,12 @@ void PpuDrawDetachedLine(Ppu*p,int line){
   background_probe_calls++;
  }
  uint32_t*row=(uint32_t*)p->renderBuffer;
+ if(cloud_probe){
+  bool foreground=(p->screenEnabled[0]&1)!=0;
+  if(!foreground)CHECK(!p->extraObjectCount&&!(p->screenEnabled[0]&16));
+  for(unsigned x=0;x<256;x++)row[x]=foreground?0xffcc2211u:0xff3366eeu;
+  return;
+ }
  for(unsigned x=0;x<256;x++)row[x]=0xff000000u|((p->hScroll[0]+x)&1023)|(((p->vScroll[0]+1)&1023)<<10);
 }
 static void fixture(void){
@@ -131,6 +147,7 @@ static void fixture(void){
  identity_hashes=interpret_all_calls=0;interpreted=0;ips_path=NULL;
  background_probe=static_plane_probe=stream_plane_probe=false;background_probe_calls=0;
  source_row_probe=false;
+ cloud_probe=false;
 }
 static void publication(void){
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(s.pending&&!s.composed&&!s.active);
@@ -191,11 +208,11 @@ static void geometry_and_canaries(void){
  CHECK(IogWorldDraw(dst,pitch,source_field,w,h,0)==1);
  CHECK(IogWorldDraw(dst,pitch,source_field,w,h,1)==1);
  CHECK(!memcmp(&old,&g_cpu,sizeof(old))&&s.simulation_ticks==ticks);
- unsigned scaledw=256*h/224,left=(w-scaledw)/2;
+ unsigned left=(w-256)/2,top=(h-224)/2;
  for(int y=0;y<h;y++){
   for(int x=0;x<w;x++){
    const uint8_t*p=dst+y*pitch+x*4;
-   if(x>=(int)left&&x<(int)(left+scaledw))CHECK(!memcmp(p,source_field+((y*224/h)*256+(x-left)*256/scaledw)*4,4));
+   if(x>=(int)left&&x<(int)(left+256)&&y>=(int)top&&y<(int)(top+224))CHECK(!memcmp(p,source_field+((y-top)*256+x-left)*4,4));
    else CHECK(!p[0]&&!p[1]&&!p[2]&&!p[3]);
   }
   for(size_t b=(size_t)w*4;b<pitch;b++)CHECK(dst[y*pitch+b]==0xa5);
@@ -205,6 +222,52 @@ static void geometry_and_canaries(void){
  CHECK(!IogWorldDraw(dst,pitch,source_field,w,h,NAN));
  CHECK(!IogWorldDraw(dst,pitch,source_field,w,h,1.1));
  CHECK(!IogWorldDraw(dst,pitch,NULL,w,h,0));free(dst);
+}
+static void fallback_constant_pixel_scale(void){
+ const unsigned extents[]={4,5,6};
+ for(unsigned n=0;n<3;n++){
+  fixture();s.extent_quarters=extents[n];int w=0,h=0;IogWorldGeometry(1920,1080,&w,&h);
+  size_t pitch=(size_t)w*4,bytes=pitch*h;uint8_t*dst=malloc(bytes);CHECK(dst);
+  CHECK(IogWorldDraw(dst,pitch,source_field,w,h,0)==1);
+  int left=(w-256)/2,top=(h-224)/2;
+  for(int y=0;y<h;y++)for(int x=0;x<w;x++){
+   const uint8_t*p=dst+y*pitch+x*4;
+   if(x>=left&&x<left+256&&y>=top&&y<top+224)
+    CHECK(!memcmp(p,source_field+((y-top)*256+x-left)*4,4));
+   else CHECK(!p[0]&&!p[1]&&!p[2]&&!p[3]);
+  }
+  free(dst);
+ }
+}
+static void effect_camera_actor(unsigned at,unsigned entry,unsigned x,unsigned y){
+ word(at,entry);ram[at+2]=0x80;word(at+0x12,0x1000);word(at+0x14,x);word(at+0x16,y);
+}
+static void live_effect_camera_models(void){
+ EffectCamera camera;
+ fixture();CHECK(!ReadEffectCamera(ram,&camera));
+ word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xEAA3,0x0401,0x0201);
+ memcpy(before_ram,ram,sizeof(ram));CHECK(ReadEffectCamera(ram,&camera));
+ CHECK(camera.ratio[0]==0x0401&&camera.ratio[1]==0x0201&&!camera.uploaded_ring);
+ CHECK(!memcmp(before_ram,ram,sizeof(ram)));
+ CHECK(ProjectEffect(camera.ratio[0],8)==2&&ProjectEffect(camera.ratio[1],12)==6);
+ CHECK(ProjectEffect(0x0401,-1)==-1&&ProjectEffect(0x0401,-5)==-2);
+ CHECK(ProjectEffect(0x0101,-17)==-17&&ProjectEffect(0,45)==0);
+ word(0x1060,0xEAD7);CHECK(ReadEffectCamera(ram,&camera));CHECK(camera.ratio[0]==0x0401&&camera.ratio[1]==0x0201);
+ word(0x1060,0xEAB4);CHECK(ReadEffectCamera(ram,&camera));CHECK(camera.ratio[0]==0&&camera.ratio[1]==0x0201);
+ word(0x1060,0xEA26);ram[0x6EF]=4;CHECK(ReadEffectCamera(ram,&camera));
+ CHECK(camera.ratio[0]==0x0101&&camera.ratio[1]==0x0101&&camera.uploaded_ring);
+ ram[0x6EF]=0;CHECK(ReadEffectCamera(ram,&camera));CHECK(!camera.uploaded_ring);
+ word(0x1060,0xEAA3);word(0x1074,1);CHECK(!ReadEffectCamera(ram,&camera)); /* divisor0 */
+ word(0x1074,0x0401);ram[0x1062]=0x81;CHECK(!ReadEffectCamera(ram,&camera));
+ ram[0x1062]=0x80;word(0x1072,0);CHECK(!ReadEffectCamera(ram,&camera));
+ word(0x1072,0x1000);word(0x1066,0x1090);word(0x1094,0x1060);word(0x58,0x1090);
+ effect_camera_actor(0x1090,0xEAA3,0x0101,0x0101);CHECK(!ReadEffectCamera(ram,&camera)); /* ambiguous */
+ ram[0x1092]=0x81;CHECK(ReadEffectCamera(ram,&camera)); /* unrelated bank not a camera */
+ word(0x1096,0x1090);CHECK(!ReadEffectCamera(ram,&camera)); /* cycle */
+ word(0x1096,0);word(0x1094,0);CHECK(!ReadEffectCamera(ram,&camera)); /* bad backreference */
+ word(0x1094,0x1060);word(0x58,0x1060);CHECK(!ReadEffectCamera(ram,&camera)); /* bad tail */
+ word(0x58,0x1090);word(0x1066,0x1091);CHECK(!ReadEffectCamera(ram,&camera)); /* unaligned */
+ word(0x1066,0x1FC0);CHECK(!ReadEffectCamera(ram,&camera)); /* outside actor arena */
 }
 static void actual_window_enable_gates(void){
  /* Aqueduct enables window participation(TMW21) while W12/WOBJSEL has no
@@ -298,7 +361,10 @@ static void background_picture(unsigned scene,unsigned camera_x,unsigned camera_
  fixture();word(0x644,scene);word(0x68a,camera_x);word(0x68e,camera_y);
  word(0x68c,effect_x);word(0x690,effect_y);
  if(scene==0x4f||scene==0xcc){word(0x692,1024);word(0x696,1024);word(0x694,512);word(0x698,512);}
- if(scene==0x85){word(0x692,2048);word(0x696,768);word(0x694,256);word(0x698,768);}
+ if(scene==0x85){
+  word(0x692,2048);word(0x696,768);word(0x694,256);word(0x698,768);
+  word(0x6D6,0);word(0x6D8,0);word(0x6DA,2048);word(0x6DE,256);
+ }
  if(scene==0x55){word(0x692,512);word(0x696,512);word(0x694,512);word(0x698,512);}
  if(scene==0xea){
   word(0x692,256);word(0x696,256);word(0x694,512);word(0x698,256);
@@ -324,7 +390,7 @@ static void parallax_host_camera_and_static_upload(void){
   * obsolete full-rate recentering yields -1/-2 instead of this fixed phase. */
  background_picture(0x4f,8,12,2,3,5,7,false);
  background_picture(0x4f,12,16,3,4,5,7,false);
- background_picture(0x85,8,16,0,16,5,7,false); /* vertical-only, X is fixed */
+ background_picture(0x85,8,16,0,16,5,-33,false); /* vertical-only; bounded floor adds40px padding */
  background_picture(0xcc,760,592,0,0,5,7,false); /* fixed wall plate */
  background_picture(0x55,128,128,0,0,5,7,false); /* independent sky */
  /* SceneEA's finite256 world is centered at (-171,-40). Its uploaded512
@@ -332,6 +398,207 @@ static void parallax_host_camera_and_static_upload(void){
   * streamed control MUST modify detached map cells, then restore them. */
  background_picture(0xea,0,0,320,81,154,48,true);
  background_picture(0xea,0,0,320,81,154,48,false);
+}
+static void great_wall_authored_courses(void){
+ /* One allocation stores three256px courses. Observe the active original
+  * camera window, never show the other courses as zoomed-out scenery. */
+ for(unsigned course=0;course<3;course++){
+  fixture();word(0x644,0x85);word(0x692,2048);word(0x696,768);
+  word(0x694,256);word(0x698,768);word(0x68A,0);word(0x68E,course*256);
+  word(0x68C,0);word(0x690,course*256);
+  word(0x6D6,0);word(0x6D8,course*256);word(0x6DA,2048);word(0x6DE,(course+1)*256);
+  g_ppu->hScroll[0]=g_ppu->hScroll[1]=0;
+  g_ppu->vScroll[0]=g_ppu->vScroll[1]=(uint16_t)(course*256);
+  publication();memcpy(before_ram,ram,sizeof(ram));before_ppu=*g_ppu;
+  IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+  IogWorldEndRaster(0,225,0);CHECK(s.complete);
+  CHECK(s.width==598&&s.height==336&&s.view.world_y==(int)course*256-40);
+  CHECK(s.view.native_y==40&&s.view.padding_top==40&&s.view.padding_bottom==40);
+  for(int y=0;y<336;y++)for(int x=0;x<598;x++){
+   unsigned actual=s.output[y*598+x];
+   if(y<40||y>=296)CHECK(actual==0);
+   else CHECK(actual==(0xff000000u|(unsigned)x|(((course*256+(unsigned)y-39)&1023)<<10)));
+  }
+  /* Horizontal sky repetition remains available despite bounded courseY. */
+  CHECK(MapTile(&s.epochs[0],1,256,course*256,true)==MapTile(&s.epochs[0],1,0,course*256,true));
+  CHECK(!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(before_ppu.vram,g_ppu->vram,sizeof(before_ppu.vram)));
+ }
+}
+static void clouds_outside_terrain_not_objects(void){
+ fixture();word(0x644,0x55);word(0x692,512);word(0x696,512);
+ word(0x694,512);word(0x698,512);word(0x68a,128);word(0x68e,128);
+ g_ppu->hScroll[0]=128;g_ppu->vScroll[0]=128;g_ppu->screenEnabled[0]=19;
+ publication();before_ppu=*g_ppu;memcpy(before_ram,ram,sizeof(ram));
+ IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ cloud_probe=true;IogWorldEndRaster(0,225,0);cloud_probe=false;CHECK(s.complete);
+ for(int y=0;y<336;y++)for(int x=0;x<598;x++){
+  int wx=s.view.world_x+x,wy=s.view.world_y+y;
+  bool native=x>=s.view.native_x&&x<s.view.native_x+256&&y>=s.view.native_y&&y<s.view.native_y+224;
+  bool inside=native||(wx>=0&&wx<512&&wy>=0&&wy<512);
+  CHECK(s.output[y*598+x]==(inside?0xffcc2211u:0xff3366eeu));
+ }
+ CHECK(!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(before_ppu.vram,g_ppu->vram,sizeof(before_ppu.vram)));
+ /* An unrelated room must not gain an unbounded background. */
+ word(0x644,0x54);IogWorldReset();publication();IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ cloud_probe=true;IogWorldEndRaster(0,225,0);cloud_probe=false;CHECK(s.complete);
+ CHECK(s.output[0]==0);
+}
+static void generic_authored_window(void){
+ fixture();word(0x644,0x0D);word(0x692,1024);word(0x696,1024);
+ word(0x694,1024);word(0x698,1024);
+ word(0x6D6,256);word(0x6D8,256);word(0x6DA,768);word(0x6DE,512);
+ publication();memcpy(before_ram,ram,sizeof(ram));before_ppu=*g_ppu;
+ CHECK(!BoundedRoomScene(0x0D));
+ IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);CHECK(s.complete);
+ CHECK(s.view.world_x==213&&s.view.world_y==216);
+ CHECK(s.view.native_x==43&&s.view.native_y==40);
+ CHECK(s.view.padding_left==43&&s.view.padding_right==43);
+ CHECK(s.view.padding_top==40&&s.view.padding_bottom==40);
+ for(int y=0;y<336;y++)for(int x=0;x<598;x++){
+  uint32_t expected=x>=43&&x<555&&y>=40&&y<296?
+   0xff000000u|((213u+x)&1023)|(((217u+y)&1023)<<10):0;
+  CHECK(s.output[y*598+x]==expected);
+ }
+ CHECK(!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(before_ppu.vram,g_ppu->vram,sizeof(before_ppu.vram)));
+}
+static void mode7_fixture(void){
+ fixture();g_ppu->bgmode=7;g_ppu->inidisp=15;g_ppu->screenEnabled[0]=21;
+ g_ppu->screenEnabled[1]=0;memset(g_ppu->m7matrix,0,sizeof(g_ppu->m7matrix));
+ g_ppu->m7matrix[0]=g_ppu->m7matrix[3]=256;
+ /* A synthetic two-byte VRAM bus: tilemap low bytes and character high
+  * bytes are intentionally unrelated and cover all palette indices. */
+ for(unsigned n=0;n<32768;n++)g_ppu->vram[n]=(uint16_t)(((n*29u+11u)&255u)<<8)|((n*13u+7u)&255u);
+ CHECK(!s.active&&!s.pending&&!s.composed); /* no actor/OAM publication */
+}
+static void mode7_lifecycle_and_packet(const char*base){
+ mode7_fixture();memcpy(before_ram,ram,sizeof(ram));CpuState cpu=g_cpu;
+ IogWorldBeginRaster();CHECK(s.mode7&&s.valid&&!s.active);before_ppu=*g_ppu;
+ for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);CHECK(s.complete&&!strcmp(s.reason,"ready_mode7_plane"));
+ CHECK(s.epoch_count==1&&!s.publish_sequence&&!s.compose_sequence);
+ CHECK(s.view.native_x==171&&s.view.native_y==56);
+ CHECK(!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(&cpu,&g_cpu,sizeof(cpu)));
+ CHECK(!memcmp(&before_ppu,g_ppu,sizeof(before_ppu)));
+ size_t bytes=(size_t)s.width*s.height*4;uint8_t*dst=malloc(bytes);CHECK(dst);
+ CHECK(IogWorldDraw(dst,s.width*4,source_field,s.width,s.height,0)==1);
+ for(int y=0;y<s.height;y++)for(int x=0;x<s.width;x++){
+  const uint8_t*p=dst+(y*s.width+x)*4;
+  if(x>=171&&x<427&&y>=56&&y<280)
+   CHECK(!memcmp(p,source_field+((y-56)*256+x-171)*4,4));
+  else {
+   unsigned index=IogMode7PlaneIndex(&before_ppu,x-171,y-56+1);
+   CHECK(*(const uint32_t*)p==(0xff000000u|index*0x010101u));
+  }
+ }
+ free(dst);char path[4096];CHECK(snprintf(path,sizeof(path),"%s.mode7-test",base)>0);
+ CHECK(ExportSourcePacket(path,source_field));
+ /* Real raster matrices/control extend horizontally at their actual row.
+  * No authored transforms exist above/below the224-row perspective band. */
+ mode7_fixture();Ppu uniform=*g_ppu;memcpy(before_ram,ram,sizeof(ram));cpu=g_cpu;
+ IogWorldBeginRaster();CHECK(s.mode7&&!s.active);
+ for(int line=0;line<=224;line++){
+  if(line==112)g_ppu->m7matrix[0]=300;
+  if(line==160)g_ppu->m7sel=1;
+  IogWorldCaptureLine(line);
+ }
+ before_ppu=*g_ppu;IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_mode7_raster_band"));
+ CHECK(!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(&cpu,&g_cpu,sizeof(cpu)));
+ CHECK(!memcmp(&before_ppu,g_ppu,sizeof(before_ppu))&&!s.publish_sequence&&!s.compose_sequence);
+ uint8_t*band=calloc((size_t)s.width*s.height,4);CHECK(band);
+ CHECK(IogWorldDraw(band,s.width*4,source_field,s.width,s.height,0)==1);
+ unsigned projected_changes=0;Ppu raster=uniform;
+ for(int y=0;y<s.height;y++)for(int x=0;x<s.width;x++){
+  const uint8_t*p=band+(y*s.width+x)*4;
+  if(y<56||y>=280)CHECK(*(const uint32_t*)p==0);
+  else if(x>=171&&x<427)
+   CHECK(!memcmp(p,source_field+((y-56)*256+x-171)*4,4));
+  else {
+   int native_y=y-56+1;
+   memcpy(&raster,s.lines[native_y].registers,PPU_SAVESTATE_REGS_SIZE);
+   unsigned index=IogMode7PlaneIndex(&raster,x-171,native_y);
+   CHECK(*(const uint32_t*)p==(0xff000000u|index*0x010101u));
+   projected_changes+=index!=IogMode7PlaneIndex(&uniform,x-171,native_y);
+  }
+ }
+ CHECK(projected_changes>0);free(band);
+ CHECK(snprintf(path,sizeof(path),"%s.mode7-raster-test",base)>0);
+ CHECK(ExportSourcePacket(path,source_field));
+ for(unsigned refusal=0;refusal<6;refusal++){
+  mode7_fixture();
+  switch(refusal){
+   case 0:g_ppu->setini=0x40;break; /* EXTBG */
+   case 1:g_ppu->screenEnabled[1]=1;break;
+   case 2:g_ppu->mosaic=0x10;break;
+   case 3:g_ppu->screenWindowed[0]=1;g_ppu->windowsel=2;break;
+   case 4:g_ppu->windowsel=0x200000;break; /* color window */
+   case 5:g_ppu->screenEnabled[0]|=2;break; /* unsupported extra BG */
+  }
+  IogWorldBeginRaster();CHECK(!s.valid&&!s.mode7);
+ }
+ /* A layout change midway through raster also refuses instead of publishing
+  * a partially supported expanded frame. */
+ mode7_fixture();IogWorldBeginRaster();IogWorldCaptureLine(0);
+ g_ppu->screenEnabled[1]=1;IogWorldCaptureLine(1);
+ CHECK(!s.valid&&!strcmp(s.reason,"unsupported_line_effect"));
+}
+static void calibrated_mode7_capture(unsigned fault){
+ mode7_fixture();word(0xB6,1019);word(0xB8,177);word(0xBC,0);
+ /* Synthetic source table words only: no ROM graphics or extracted table. */
+ rom[0x1C695]=0x30;rom[0x1C696]=0x75; /* cos30000 */
+ rom[0x1C595]=0x88;rom[0x1C596]=0x13; /* sin5000 */
+ const IogMode7PerspectiveParameters p={177,1019,30000,5000};
+ IogWorldBeginRaster();CHECK(s.mode7&&s.valid&&!s.active);
+ for(int line=0;line<=224;line++){
+  CHECK(IogMode7PerspectiveSample(&p,line<224?line:223,g_ppu->m7matrix)==kIogMode7PerspectiveMatrix);
+  if(fault==1&&line==100)g_ppu->m7matrix[0]^=1;
+  if(fault==2&&line==112)word(0xB8,178); /* native matrices still match */
+  if(fault==3&&line==224)g_ppu->m7matrix[0]^=1; /* wrong terminal hold */
+  IogWorldCaptureLine(line);
+ }
+ memcpy(before_ram,ram,sizeof(ram));before_ppu=*g_ppu;CpuState cpu=g_cpu;
+ IogWorldEndRaster(0,225,0);CHECK(s.complete&&!s.active);
+ CHECK(!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(&before_ppu,g_ppu,sizeof(before_ppu)));
+ CHECK(!memcmp(&cpu,&g_cpu,sizeof(cpu)));
+ if(fault){CHECK(!s.mode7_perspective&&!strcmp(s.reason,"ready_mode7_raster_band"));}
+ else CHECK(s.mode7_perspective&&!strcmp(s.reason,"ready_mode7_perspective"));
+}
+static void mode7_producer_validated_extension(const char*base){
+ calibrated_mode7_capture(0);
+ CHECK(s.mode7_parameters.initial_divisor==177&&s.mode7_parameters.increment==1019);
+ CHECK(s.mode7_parameters.cosine==30000&&s.mode7_parameters.sine==5000);
+ const IogMode7PerspectiveParameters p={177,1019,30000,5000};
+ Ppu sample=before_ppu;unsigned sky_rows=0,upper_ground_rows=0,lower_rows=0;
+ uint8_t*dst=malloc((size_t)s.width*s.height*4);CHECK(dst);
+ CHECK(IogWorldDraw(dst,s.width*4,source_field,s.width,s.height,0)==1);
+ for(int row=0;row<s.height;row++){
+  int y=row-56+1,index=y>224?y-1:y;
+  IogMode7PerspectiveStatus status;
+  if(y>=1&&y<=224){index=y<224?y:223;}
+  status=IogMode7PerspectiveSample(&p,index,sample.m7matrix);
+  if(y<1){if(status==kIogMode7PerspectiveSky)sky_rows++;else upper_ground_rows++;}
+  if(y>224)lower_rows++;
+  for(int x=0;x<s.width;x++){
+   uint32_t plane=status==kIogMode7PerspectiveSky?0xff000000u:
+    0xff000000u|IogMode7PlaneIndex(&sample,x-171,y)*0x010101u;
+   CHECK(s.output[row*s.width+x]==plane);
+   const uint8_t*pixel=dst+(row*s.width+x)*4;
+   if(x>=171&&x<427&&row>=56&&row<280)
+    CHECK(!memcmp(pixel,source_field+((row-56)*256+x-171)*4,4));
+   else CHECK(*(const uint32_t*)pixel==plane);
+  }
+ }
+ CHECK(sky_rows>0&&upper_ground_rows>0&&lower_rows==56);free(dst);
+ char path[4096];CHECK(snprintf(path,sizeof(path),"%s.mode7-perspective-test",base)>0);
+ CHECK(ExportSourcePacket(path,source_field));
+ /* Reject fitted-looking but unbound inputs. Each fault leaves native
+  * center pixels available, but must not publish invented vertical rows. */
+ for(unsigned fault=1;fault<=3;fault++){
+  calibrated_mode7_capture(fault);
+  for(int y=0;y<336;y++)if(y<56||y>=280)
+   for(int x=0;x<598;x++)CHECK(s.output[y*598+x]==0);
+ }
 }
 static void projected_source_row_seam(void){
  fixture();word(0x644,0x55);word(0x692,512);word(0x696,512);
@@ -383,7 +650,7 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();projected_source_row_seam();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();great_wall_authored_courses();clouds_outside_terrain_not_objects();generic_authored_window();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 
@@ -419,6 +686,32 @@ def main():
     assert Path(str(packet)+'.epochs.bin').stat().st_size==meta['epochs']*meta['epoch_bytes']==131584
     assert Path(str(packet)+'.hud.bgra').read_bytes()==bytes(256*224*4)
     assert Path(str(packet)+'.field.bgra').read_bytes()==bytes((i*13+7)&255 for i in range(256*224*4))
+    mode7_prefix=str(packet)+'.mode7-test'
+    mode7=json.loads(Path(mode7_prefix+'.mode7.json').read_text())
+    assert mode7['schema']=='iog-mode7-plane-source-v1' and mode7['composition_paired'] is False
+    assert mode7['ready'] and mode7['complete'] and mode7['epoch_bytes']==66048
+    assert mode7['native_x']==171 and mode7['native_y']==56 and len(mode7['lines'])==225
+    assert Path(mode7_prefix+'.mode7.epochs.bin').stat().st_size==mode7['epochs']*66048
+    assert Path(mode7_prefix+'.mode7.field.bgra').read_bytes()==bytes((i*13+7)&255 for i in range(256*224*4))
+    assert not Path(mode7_prefix+'.source.json').exists()
+    raster_prefix=str(packet)+'.mode7-raster-test'
+    raster=json.loads(Path(raster_prefix+'.mode7.json').read_text())
+    assert raster['schema']=='iog-mode7-plane-source-v1' and raster['composition_paired'] is False
+    assert raster['ready'] and raster['complete'] and raster['native_y']==56
+    assert len(set(row['regs'] for row in raster['lines'][1:]))==3
+    assert Path(raster_prefix+'.mode7.epochs.bin').stat().st_size==raster['epochs']*66048
+    assert Path(raster_prefix+'.mode7.field.bgra').read_bytes()==bytes((i*13+7)&255 for i in range(256*224*4))
+    perspective_prefix=str(packet)+'.mode7-perspective-test'
+    perspective=json.loads(Path(perspective_prefix+'.mode7.json').read_text())
+    assert perspective['perspective_validated'] and perspective['ready'] and perspective['complete']
+    assert [perspective[k] for k in ('initial_divisor','increment','cosine','sine')]==[177,1019,30000,5000]
+    parameters=Path(perspective_prefix+'.mode7.parameters.bin').read_bytes()
+    assert len(parameters)==32 and int.from_bytes(parameters[6:8],'little')==1019
+    assert int.from_bytes(parameters[8:10],'little')==177
+    assert Path(perspective_prefix+'.mode7.plane.bgrx').stat().st_size==598*336*4
+    assert Path(perspective_prefix+'.mode7.field.bgra').read_bytes()==bytes((i*13+7)&255 for i in range(256*224*4))
+
+
     # Removing only the late-patch identity refresh must reproduce the stale
     # stock-eligibility failure with the very same synthetic patch and input.
     ips=ROOT/'src/iog_ips.c';text=ips.read_text();needle='    IogWorldInitialize();\n'
@@ -458,7 +751,7 @@ def main():
     row_run=subprocess.run([str(row_exe),str(out/'row-causal-packet')],env=env,capture_output=True,text=True)
     (out/'row-causal-run.log').write_text(row_run.stdout+row_run.stderr)
     assert row_run.returncode!=0 and 'p->vram[address]==0x600e' in row_run.stderr
-    inputs = [ROOT/'src/iog_world_renderer.c',ROOT/'src/iog_world_renderer.h',ROOT/'src/iog_visual_objects.h',ROOT/'src/iog_world_view.c',ROOT/'src/iog_world_view.h',ROOT/'src/iog_world_pixels.c',ROOT/'src/iog_world_pixels.h',ips,ROOT/'snesrecomp/runner/src/sha256.c',ROOT/'snesrecomp/runner/src/sha256.h']
+    inputs = [ROOT/'src/iog_mode7_perspective.h',ROOT/'src/iog_mode7_plane.h',ROOT/'src/iog_world_renderer.c',ROOT/'src/iog_world_renderer.h',ROOT/'src/iog_visual_objects.h',ROOT/'src/iog_world_view.c',ROOT/'src/iog_world_view.h',ROOT/'src/iog_world_pixels.c',ROOT/'src/iog_world_pixels.h',ips,ROOT/'snesrecomp/runner/src/sha256.c',ROOT/'snesrecomp/runner/src/sha256.h']
     result = dict(passed=run.returncode==0,command=command,
         scope='Actual world module/SDKheaders; stubbed scene/visual/detachedpixels, no real game/APU/PPU parity or GPU',
         sources={str(s.relative_to(ROOT)):hashlib.sha256(s.read_bytes()).hexdigest()for s in inputs},
@@ -468,6 +761,14 @@ def main():
         repeating_secondary_samples_and_clipped_foreground_passed=True,
         actual_detached_parallax_phases_and_static_upload_passed=True,
         projected_uploaded_and_decoded_source_rows_agree_passed=True,
+        live_linked_camera_ratios_and_refusals_passed=True,
+        uniform_mode7_lifecycle_unpaired_packet_and_same_scale_fallback_passed=True,
+        mode7_palette_strip_transport_stub_not_real_PPU_colormath=True,
+        calibrated_mode7_full_extent_horizon_and_parameter_matrix_phase_refusals=True,
+        nonuniform_mode7_raster_rows_expand_horizontally_with_vertical_padding=True,
+        camera_model_read_does_not_mutate_guest_RAM=True,
+        fallback_world_pixel_scale_preserved_at_all_three_extents=True,
+        great_wall_three_authored_courses_do_not_expose_spare_pages=True,
         foreground_source_row_causal_mutant_rejected=True,
         source_row_causal_exit_code=row_run.returncode,
         removed_secondary_repeat_causal_mutant_rejected=True,
