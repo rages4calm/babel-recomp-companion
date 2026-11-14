@@ -11,6 +11,11 @@ do not redo completed audits or recreate validation archives without a reason.
   Babel-specific changes. Never replace the vendor tree without a delta inventory.
 - Keep interpreter/reference paths available. Generated C is not native coverage;
   distinguish source, build, structural analysis, bounded execution and campaign proof.
+- Native area testing must also inspect the complete player-facing picture at
+  the actual widescreen/extent/filter settings. Check movement in both axes,
+  expanded edges, parallax, transitions, menus and relevant combat/boss phases.
+  Native-viewport pixel parity and CPU comparisons alone are not visual approval;
+  record visual failures even when structural checks say the renderer is ready.
 - Never commit ROMs, ROM-derived generated source/binaries, saves, states,
   soundtrack packs, game screenshots or private validation data. Do not blanket-add
   the workspace; inspect the staged diff and tracked-file list before pushing.

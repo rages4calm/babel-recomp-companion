@@ -52,6 +52,15 @@ layouts keep their original field and black padding. Original classroom geometry
 actors and authored decoration remain. The original MSU opening and short NVIDIA
 1080p xBR/1.5x check pass, with the checkpoint and image byte-identical to 024.
 
+**Manual playtest follow-up:** the expanded backgrounds in Great Wall, Sky
+Garden, Viper, Solid Arm and Pyramid needed further correction. Their small
+scenery planes now repeat correctly and use their own camera rates; Viper's
+cloud seam and Solid Arm's animated backdrop are also corrected. The eight
+manual saves were checked with 56 bounded comparison pairs and eight actual
+1080p smooth/1.5x GPU views. This is limited to those test scenes; earlier CPU
+and central-field checks were not full visual approval.
+[Fix, validation and remaining limits](docs/MANUAL-SAVE-RENDERER-FIX.md).
+
 Optional outlining shares effect bodies while keeping exact PC/mode wrappers.
 No CPU benchmark campaign ran for this batch. The earlier
 [performance issue](https://github.com/rages4calm/babel-recomp-companion/issues/4)

@@ -7,6 +7,34 @@ Owner priority: finish the remaining native game code so broader improvements ca
 begin. Keep performance checks focused on visible lag, skipped frames, input
 response and regressions. Avoid repeating microbenchmarks for tiny CPU differences.
 
+## Manual-save renderer follow-up — November 13
+
+Owner restricted this follow-up to the eight manual test saves, not another
+native batch or a wider area sweep. Read
+[the correction and evidence limits](docs/MANUAL-SAVE-RENDERER-FIX.md).
+The updated `.local/manual-test-slots-025/Play Test Saves.cmd` selects
+`renderer-fix/babel-background-fix-v2.exe`, SHA
+`713f96f3071ce481361e4ab3ec6bc1e9092d64a0f14b6973504df6e0e7631cf4`.
+Original-view and prior-build launchers remain alongside it. States/settings,
+owner installation and qualified025 inputs are unchanged.
+
+- Five scene models only: Great Wall85, Sky Garden4F, Viper55, Solid ArmEA,
+  PyramidCC. Fix secondary map repetition and host-camera parallax; retain EA's
+  uploaded animated ring. Correct the projected uploaded-cell source row too.
+- Final 48 movement/menu/attack pairs plus eight settled transition/arena/Aura
+  pairs pass sampled guest memory, PPU and original-field equality; 10,080 CPU
+  frame boundaries match. Eight actual NVIDIA1080p smooth/1.5x views and full
+  directional/settled picture sheets inspected. No campaign/boss-victory claim.
+- Actual-title synthetic module harness:4,008,421 checks; removed-repeat and
+  wrong-source-row faults rejected. No CPU/context, vendor or generated changes.
+- Intermediate v1 missed the Viper seam and is NOT selected. Final v2 receipts
+  `REPLAY-v2.json`, `SETTLED-v2.json`, `CPU-BOUNDARIES-v2.json`, `GPU-v2.json`,
+  `unit-world-v2/receipt.json`, `build-v2.json`, `LAUNCH-UPDATE.json` are private.
+- Issue5 records this Companion defect. Prior central-field/native checks missed
+  bad expanded scenery: they must not be restated as full visual qualification.
+  `AGENTS.md` now requires whole-view visual checks at actual player settings
+  alongside native testing. Other areas and remaining native gaps resume later.
+
 ## Qualified continuation — batch 025
 
 Source baseline `672b153689d97fdfd238956c853817f971cff8b2`; private executable
