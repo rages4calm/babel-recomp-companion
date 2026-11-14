@@ -24,4 +24,15 @@ typedef struct IogMapScenerySource {
 bool IogMapSceneryRender(const IogMapScenerySource *source,
     unsigned x, unsigned y, unsigned crop_width, unsigned crop_height,
     unsigned step, uint32_t *output, size_t output_bytes, size_t pitch_bytes);
+/* Two aligned, finite Mode1 layers in the same world coordinate system.
+ * physical_primary is0 for BG1 or1 for BG2; secondary is the other plane.
+ * Exact priority: BG1 high > BG2 high > BG1 low > BG2 low (tile bit13).
+ * Crop must fit primary. Outside secondary's own extent is transparent;
+ * no wrapping, scrolling offsets, color math, sprites or HUD are applied.
+ * Both index0 returns transparent0; an opaque atlas caller may fill CGRAM0.
+ * All source/output validation completes before any output is written. */
+bool IogMapSceneryRenderMode1Composite(const IogMapScenerySource *primary,
+    const IogMapScenerySource *secondary, unsigned physical_primary,
+    unsigned x, unsigned y, unsigned crop_width, unsigned crop_height,
+    unsigned step, uint32_t *output, size_t output_bytes, size_t pitch_bytes);
 #endif

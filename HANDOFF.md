@@ -11,53 +11,53 @@ Keep performance checks focused on visible smoothness, not repeated benchmarks.
 
 ## ACTIVE: full-game presentation and GaiaLabs maps
 
-Continue this priority before native gaps; EVERY zone and its transitions remain
-in scope. Read [first full-game batch](docs/VISUAL-FULLGAME-001.md),
-[coverage](docs/VISUAL-COVERAGE.md) and [map direction](docs/MAP-SYSTEM-DIRECTION.md).
-No whole-game approval or finished in-game map is claimed.
+Continue this priority before native gaps. Read [current batch](docs/VISUAL-FULLGAME-002.md),
+[prior batch](docs/VISUAL-FULLGAME-001.md), [coverage](docs/VISUAL-COVERAGE.md)
+and [map direction](docs/MAP-SYSTEM-DIRECTION.md). Whole-game visual approval
+is still outstanding. Active scratch is `.local/batch-001/visual-fullgame-002`.
 
-- Original latest immutable candidate: `.local/batch-001/visual-fullgame-001/babel-visual-v7.exe`,
-  SHA `21b4e1174be8ee93ee4533ad1999498b56b77dbd2b3bb84aaf680e03d8db0241`.
-  Adds live camera models, authored-window clipping, same-scale fallback,
-  calibrated per-row Mode7 perspective extension and Viper55 background-only
-  clouds outside terrain.64 structural admissions, not64 approved zones.
-- v7 passes56 retained-reference pairs /10,080 candidate frame boundaries;
-  eight actual NVIDIA1080p smooth/1.5x views captured and inspected. World-module
-  harness7,533,146 checks; real PPU Mode7/scenery tests are separate.
-  v6 Mode7 travel4000f/189 retained snapshot fields matches; full perspective
-  validates all224 source rows plus terminal hold. Mode7 packets explicitly
-  have no composition/OAM pairing. No repeated benchmark/native promotion.
-- GreatWall uppercourse85→86 full1352f prior v2 comparison passes; three live
-  course windows tested. Later86 remains unfinished. Preserve actual authored
-  padding, never spare floor pages. Per-band HDMA/horizon planes remain gaps;
-  do not treat a global camera model as their fix.
-- GaiaLabs private reference is interpreter-only, stock native hooks/plugins
-  disabled, separately identified/saved. Received v11 classroom prototype is
-  default-off (`IOG_RECEIVED_WORLD_RENDERER=1`),598x336/1.5x from real384 raster.
-  Exact publication/map/layout guards and source-backed exterior mask pass
-  bounded free/dialogue/directional tests. Not an all-room/native profile.
-  Keep v10 failed pictures; v11 current receipt is in `gaialabs-reference/`.
-- Actual received worldmap walking/turning works in assisted reference preview;
-  artwork is not an upgraded/new map. Natural access and location entry/return
-  remain unqualified. The user supplied an Original video at16:33 as comparison;
-  media retrieval failed, so do not claim a video visual comparison was done.
-- Map scenery decoder matches24 actual PPU fixtures; exploration and clean
-  scenery/radar compositors pass pure tests. They are foundations, not connected
-  game UI/persistent observations. Require qualified visibility, content/layout/
-  floor identities; collision alone is not optical occlusion. No unimplemented
-  launcher map switches. Captured-map preview is diagnostic, not a campaign map.
-- First32 exploratory scene entries are NOT visual approvals. Updated survey
-  freezes producer identity, delays probe and uses capture-bound data. Next32
-  v7 finishes31 paired/in-bounds captures, but source audit finds uniform
-  incoming camera22 forcing wrong512x512 bounds. Retain these as diagnostics,
-  corrected producer requires source+ROM-validated inbound warp recipes.
-  Targeted33/2D/2E/39 captures fix the apparent edge/floor defects with
-  authentic entrances and unchangedv7renderer; no movement/quest approval.
-  Future surveys must preserve bad poses/entries. Issue6 stays open. Stable owner test
-  launcher still selects the earlier eight-save fix; fallback stays available.
-- Official SNESRecomp main still80a41241 at live check, matches framework pin.
-  Original graph016/effects025/WRAM021/master018 retained; received uses separate
-  private build. Preserve private ZIP/ROM/BSO; no exact dev-build recipe claim.
+- Latest Original: `babel-maps-v9.exe` in that batch, SHA
+  `5b290e854742cb216f08c808e8693547b846cc7d6ccd99b31542dcae386b3f44`.
+  Both owner test launchers now select it; previous build and original-view
+  fallbacks remain. Original graph016/effects025/WRAM021 retained, no new native
+  CPU coverage or performance claim in this presentation batch.
+- Actual map/radar UI is connected. Open Companion with I, then M or its Map
+  page. Arrows pan, +/- zoom, Home/C center; mouse toolbar/drag work. Ctrl+M
+  toggles radar (Ctrl+R belongs to the SDK reset). Gamepad Map shoulders zoom,
+  Y centers, B returns. Player journal lives in guarded `saves/maps`, bound to
+  content/scene/layout/floor identity. Discovery persists across reload/rewind.
+- Current v9 persistence test observes97→107 discovered cells, retains107
+  after rewind and fresh process. Six modal input events leave guest cycles
+  and full WRAM hash unchanged. User manually confirmed live mouse dragging;
+  automated live drag was interrupted by concurrent input, not counted as pass.
+- Runtime uses actual primary artwork and conservative static-collision flood
+  discovery bounded by camera and radius. Qualified classroom08 merges aligned
+  secondary artwork. Not optical LOS or fully classified material walkability.
+  Other layered scenery, marker bindings and full-zone discovery need work.
+  Radar hides during dialogue/menu/fade and unsupported source geometry.
+- v8 passes56 retained-reference pairs /10,080 candidate frame boundaries.
+  v9 adds conservative occupancy acceptance and Companion key-repeat guard;
+  current town smoke and Itory1A/1C comparisons pass. These preserve prior
+  native/guest snapshots, not fresh campaign qualification.
+- Itory15/1A/1C now use source/ROM-calibrated per-row horizon producers,
+  finite vertical artwork and verified flat terminal-color continuation.
+  v6 actual NVIDIA1080p/1.5x captures reviewed;2600 compared CPU boundaries
+  match. Later map-only edits do not replace that linked visual evidence.
+  66 structural scene admissions do not mean66 approved zones.
+- Received GaiaLabs map reference v5 SHA
+  `672a1d1955858edbc4cc983487639ac2a9c8e2117658e6522cff91195bc88ddc`.
+  Separate interpreter-only build, no stock native hooks/plugins. Radar/full
+  400f each,399 ready,77 explored, traces match retained v11 and modal is frozen.
+  Classroom floor/art checked. Not an all-room or native GaiaLabs profile.
+- GreatWall85→86 course, later86, other per-band effects, world-map natural
+  entry/return and every room/transition remain unfinished. Earlier broad scene
+  surveys with bad incoming camera22 remain diagnostics. Use authentic source-
+  and ROM-verified inbound entries, never turn those surveys into approvals.
+- Official SNESRecomp main checked live:80a41241e39bfffd384506fbe7ca65b386e03050,
+  matches pin. Confirmed Windows FORCEINLINE/header conflict reported as
+  [upstream287](https://github.com/RetroPortingToolKit/snesrecomp/issues/287),
+  locally guarded without vendor-tree replacement. Public issue6 stays open.
+  Private ROM/ZIP/BSO, states, audio and captures stay untracked.
 
 ## Manual-save renderer follow-up — November 13
 

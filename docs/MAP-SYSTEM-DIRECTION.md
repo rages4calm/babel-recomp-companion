@@ -66,8 +66,19 @@ The first native helpers and packet-based map preview are documented in
 [the full-game batch](VISUAL-FULLGAME-001.md). Camera-rectangle diagnostic masks
 are not earned exploration or optical line of sight. Likewise, zero collision
 is only an unobstructed-cell diagnostic; slopes, water, ledges and occupied cells
-need more precise radar classification. The runtime bindings remain unfinished.
+need more precise radar classification. The runtime and in-game controls are now connected for qualified sources;
+see [current implementation and limits](VISUAL-FULLGAME-002.md).
 
 Qualify transitions, room changes, load/rewind, menu/dialogue overlap, viewport
 resizing and both input styles. Include source provenance and explicit runtime
 evidence; native UI graphics alone do not establish native game logic.
+
+## Implemented first runtime
+
+The Companion Map page and radar now use actual observed game frames and a
+portable persistent discovery journal. Mouse dragging is manually confirmed in
+the live game; keyboard/gamepad modal input and restart persistence have runtime
+receipts. This first version shows the player, discovered scenery and a clean
+collision radar. Chest/enemy/exit filters and full-game source bindings remain
+unimplemented, so no controls promise those features yet. The wider experience
+above remains the direction rather than a completed checklist.

@@ -6,6 +6,7 @@
 struct CpuState;
 void IogWorldInitialize(void);
 bool IogWorldEnabled(void);
+bool IogWorldStockVerified(void);
 void IogWorldReset(void);
 void IogWorldSimulationTick(void);
 void IogWorldGeometry(int drawable_w, int drawable_h, int *width, int *height);

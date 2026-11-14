@@ -30,6 +30,7 @@
 #include "iog_widescreen.h"
 #include "iog_scene_view.h"
 #include "iog_world_renderer.h"
+#include "iog_map_host.h"
 #include "iog_randomizer.h"
 #include "iog_inventory.h"
 #include "iog_i18n.h"
@@ -56,8 +57,33 @@
 #define SNES_GAME_VERSION "dev"
 #endif
 
+static void IogPollRadarHotkey(void)
+{
+    if(RtlSpeculativeFrame())return;
+    static bool was_down;
+    const uint8_t *keys=snesrecomp_sdl_get_keyboard_state();
+    bool down=keys&&keys[SDL_SCANCODE_M]&&
+        (keys[SDL_SCANCODE_LCTRL]||keys[SDL_SCANCODE_RCTRL]);
+    if(down&&!was_down)IogMapHostRadarToggle();
+    was_down=down;
+}
+
 #ifdef IOG_RECEIVED_REFERENCE
 #include "iog_received_world.h"
+#include "iog_received_observer.h"
+static void IogReferenceAfterFrame(const SnesDesktopHostFrameStats *stats)
+{
+    (void)stats;
+    IogVisualReceivedSource source;
+    bool verified=IogReceivedWorldEnabled()&&IogReceivedObserverPicture(&source);
+    IogMapHostFrame(verified,IOG_RECEIVED_REFERENCE_SHA256);
+}
+static int IogReferenceDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int w,int h,double alpha)
+{
+    int drawn=IogReceivedWorldDraw(dst,pitch,field,w,h,alpha);
+    if(drawn)IogMapHostDrawRadar(dst,pitch,w,h);
+    return drawn;
+}
 static void IogReferenceFrame(int dw,int dh,int *w,int *h)
 {
     (void)dw;(void)dh;*w=384;*h=224;
@@ -87,8 +113,17 @@ static const SnesDesktopHostGame kGameHost = {
     .native_widescreen = 1,
     .prepare_frame = IogReferenceFrame,
     .presentation_geometry = IogReceivedWorldGeometry,
-    .draw_frame = IogReceivedWorldDraw,
+    .draw_frame = IogReferenceDraw,
     .compute_viewport = IogReceivedViewport,
+    .after_run_frame = IogReferenceAfterFrame,
+    .before_run_frame = IogPollRadarHotkey,
+    .on_reset = IogMapHostReset,
+    .on_shutdown = IogMapHostShutdown,
+    .companion_open = IogMapHostOpen,
+    .companion_nav = IogMapHostNav,
+    .companion_key = IogMapHostKey,
+    .companion_image = IogMapHostImage,
+    .companion_pointer = IogMapHostPointer,
 };
 #else
 static IogSceneView s_scene_view;
@@ -168,6 +203,7 @@ static void IogPollLanguageHotkey(void)
 
 static void IogBeforeRunFrame(void)
 {
+    IogPollRadarHotkey();
     static int initialized;
     if (!initialized) {
         initialized = 1;
@@ -192,14 +228,16 @@ static void IogEndSimFrame(const uint8_t *field, unsigned number)
 static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
                            int width, int height, double alpha)
 {
-    if (IogWorldEnabled())
-        return IogWorldDraw(dst, pitch, field, width, height, alpha);
-    return IogSceneViewDraw(&s_scene_view, dst, pitch, field, width, height, alpha);
+    int drawn=IogWorldEnabled()?IogWorldDraw(dst,pitch,field,width,height,alpha):
+        IogSceneViewDraw(&s_scene_view,dst,pitch,field,width,height,alpha);
+    if(drawn)IogMapHostDrawRadar(dst,pitch,width,height);
+    return drawn;
 }
 
 static void IogResetSceneView(void)
 {
     IogWorldReset();
+    IogMapHostReset();
     IogInitSceneView();
     IogSceneViewReset(&s_scene_view);
     IogWidescreenSetPreviewCenteredHud(false);
@@ -220,7 +258,12 @@ static void IogViewport(int fw, int fh, int dw, int dh, SnesDisplayViewport *out
 }
 
 void IogSettingsInstall(void);   /* iog_settings.c */
-static void IogAfterRunFrame(const SnesDesktopHostFrameStats *st) { (void)st; IogCompanionAfterFrame(); }
+static void IogAfterRunFrame(const SnesDesktopHostFrameStats *st)
+{
+    (void)st;
+    IogMapHostFrame(IogWorldStockVerified()&&!IogRandomizerActive(),SNESRECOMP_ROM_EXPECTED_SHA256);
+    IogCompanionAfterFrame();
+}
 
 static const SnesDesktopHostGame kGameHost = {
     .display_name        = "Illusion Of Gaia Usa",
@@ -248,6 +291,7 @@ static const SnesDesktopHostGame kGameHost = {
     .presentation_geometry = IogPresentationGeometry,
     .compute_viewport    = IogViewport,
     .on_reset            = IogResetSceneView,
+    .on_shutdown         = IogMapHostShutdown,
     .after_config        = IogSettingsInstall,
     .after_run_frame     = IogAfterRunFrame,
     .companion_open      = IogCompanionOpen,

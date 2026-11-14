@@ -139,6 +139,14 @@ def main():
         assert token not in host
     assert ".prepare_frame = IogReferenceFrame" in host
     assert ".native_widescreen = 1" in host
+    # Map host callbacks are title-neutral host UI/data observers. They do not
+    # admit stock Companion/inventory/i18n or generated guest dispatch.
+    for callback, function in (("companion_open", "IogMapHostOpen"),
+        ("companion_nav", "IogMapHostNav"), ("companion_key", "IogMapHostKey"),
+        ("companion_image", "IogMapHostImage"), ("companion_pointer", "IogMapHostPointer")):
+        assert re.search(r"\." + callback + r"\s*=\s*" + function + r"\b", host)
+    assert ".on_reset = IogMapHostReset" in host
+    assert ".on_shutdown = IogMapHostShutdown" in host
     frame = body(outputs["reference", "main"], "static void IogReferenceFrame(int dw,int dh,int *w,int *h)")
     assert "*w=384;*h=224;" in re.sub(r"\s+", "", frame)
     assert "PpuSetWidescreenBg3Widen(g_ppu,1)" in re.sub(r"\s+", "", frame)
@@ -160,7 +168,13 @@ def main():
     for definition in ("SNESRECOMP_INTERPRETER_ONLY:BOOL=ON", "SNESRECOMP_ENABLE_MODS:BOOL=OFF"):
         assert definition in cache
     title_objects = re.findall(r"(?m)^build .*?/src/(iog_[^ :]+)\.obj:", ninja)
-    assert sorted(title_objects) == sorted(["iog_received_observer.c","iog_received_world.c","iog_visual_objects.c","iog_world_pixels.c","iog_world_view.c"]), title_objects
+    allowed_reference_objects = [
+        "iog_received_observer.c", "iog_received_world.c", "iog_visual_objects.c",
+        "iog_world_pixels.c", "iog_world_view.c", "iog_map_discovery.c",
+        "iog_map_view.c", "iog_map_scenery.c", "iog_map_runtime.c",
+        "iog_map_ui.c", "iog_map_host.c",
+    ]
+    assert sorted(title_objects) == sorted(allowed_reference_objects), title_objects
     assert not re.search(r"(?m)^build .*src/gen/", ninja)
     checks["configured_reference_has_no_stock_plugins_or_generated_objects"] = True
     unit = out / "observer-phase.c"; unit.write_text(OBSERVER_PHASE_HARNESS)

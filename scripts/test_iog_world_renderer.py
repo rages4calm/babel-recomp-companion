@@ -34,6 +34,8 @@ static SNESModActivationCallback ips_activation;
 static uint8_t source_field[256*224*4];
 static bool background_probe,static_plane_probe,stream_plane_probe,source_row_probe;
 static bool cloud_probe;
+static bool horizon_probe,horizon_expected_valid,horizon_flat_expected;
+static unsigned horizon_main_calls,horizon_background_calls;
 static int expected_background_x,expected_background_y;
 static unsigned background_probe_calls;
 #define CHECK(c) do{checks++;if(!(c)){fprintf(stderr,"line%d: %s\n",__LINE__,#c);exit(1);}}while(0)
@@ -121,6 +123,31 @@ void PpuDrawDetachedLine(Ppu*p,int line){
   background_probe_calls++;
  }
  uint32_t*row=(uint32_t*)p->renderBuffer;
+ if(horizon_probe){
+  bool foreground=(p->screenEnabled[0]&1)!=0;
+  unsigned call=foreground?horizon_main_calls++:horizon_main_calls-1;
+  unsigned y=call/3,start=(call%3)*224;
+  if(!foreground){horizon_background_calls++;CHECK(!p->extraObjectCount&&!(p->screenEnabled[0]&16));}
+  CHECK(y<336);
+  if(horizon_expected_valid){
+   CHECK(p->vScroll[1]==(horizon_flat_expected&&y>=255?254:y));
+   if(y+1<256){
+    /* Native camera160 and168 both clamp to hostX-43. Auto bands keep
+     * their fractional drift; the proportional last band uses3/8, not the
+     * zero horizontal ratio of the vertical-only camera actor. */
+    unsigned phase=y+1<32?((0x1a3f-203)>>4):y+1<64?((0x2237-203)>>4):y+1<96?((0x0ff9-203)>>4):1010;
+    CHECK(p->hScroll[1]==((phase+start)&1023));
+   }else{
+    unsigned tx=p->hScroll[1]>>3,ty=(p->vScroll[1]+1)>>3;
+    unsigned address=PPU_bgTilemapAdr(p,1)+((ty&31)<<5)+(tx&31);
+    if(tx&32)address+=0x400;
+    CHECK(p->vram[address]==(horizon_flat_expected?1:0)); /* finiteY or verified flat terminal row */
+   }
+  }
+  for(unsigned x=0;x<256;x++)row[x]=foreground?0xffcc2211u:
+   (y+1<256?(0xff000000u|((p->hScroll[1]+x)&1023)|((y+1)<<10)):(horizon_flat_expected?0xff101010u:0));
+  return;
+ }
  if(cloud_probe){
   bool foreground=(p->screenEnabled[0]&1)!=0;
   if(!foreground)CHECK(!p->extraObjectCount&&!(p->screenEnabled[0]&16));
@@ -148,6 +175,7 @@ static void fixture(void){
  background_probe=static_plane_probe=stream_plane_probe=false;background_probe_calls=0;
  source_row_probe=false;
  cloud_probe=false;
+ horizon_probe=false;horizon_expected_valid=false;horizon_flat_expected=false;horizon_main_calls=horizon_background_calls=0;
 }
 static void publication(void){
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(s.pending&&!s.composed&&!s.active);
@@ -443,6 +471,88 @@ static void clouds_outside_terrain_not_objects(void){
  cloud_probe=true;IogWorldEndRaster(0,225,0);cloud_probe=false;CHECK(s.complete);
  CHECK(s.output[0]==0);
 }
+static void raster_rom_word(unsigned at,unsigned value){rom[at]=(uint8_t)value;rom[at+1]=(uint8_t)(value>>8);}
+static void horizon_picture(unsigned scene,unsigned camera,bool fault,unsigned tail){
+ fixture();word(0x644,scene);word(0x692,512);word(0x696,512);word(0x694,512);word(0x698,256);
+ word(0x68a,camera);word(0x68e,64);word(0x68c,0);word(0x690,0);word(0x6e4,0);
+ word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xEAB4,0x0101,0);
+ word(0x6d6,0);word(0x6d8,0);word(0x6da,512);word(0x6de,512);
+ g_ppu->hScroll[0]=(uint16_t)camera;g_ppu->vScroll[0]=64;g_ppu->vScroll[1]=0;
+ g_ppu->screenEnabled[0]=19;
+ if(tail){
+  word(0x2804,1);word(0x2806,1);
+  unsigned at=PPU_bgTileAdr(g_ppu,1)+16+7;
+  g_ppu->vram[at]=tail==1?0x00ff:0x80ff;
+  g_ppu->cgram[1]=0x0842;g_ppu->cgram[3]=0x7fff;
+ }
+ raster_rom_word(0x1cc02,0x8000);raster_rom_word(0x18000,0x7800);rom[0x18002]=0x7e;rom[0x18003]=0x0f;rom[0x18004]=8;
+ const unsigned heights[]={32,32,32,200},addresses[]={0x720,0x722,0x724,0x726},speeds[]={24,32,40,45};
+ unsigned phase[]={0x1a3f+camera-160,0x2237+camera-160,0x0ff9+camera-160,camera*6+45};
+ for(unsigned i=0;i<4;i++){
+  unsigned at=0x18005+i*8;raster_rom_word(at,65536-heights[i]);raster_rom_word(at+2,addresses[i]);
+  raster_rom_word(at+4,i==3?0x020c:0);raster_rom_word(at+6,speeds[i]);word(addresses[i],phase[i]);
+ }
+ g_ppu->hScroll[1]=(uint16_t)(phase[0]>>4);
+ publication();memcpy(before_ram,ram,sizeof ram);CpuState cpu=g_cpu;
+ IogWorldBeginRaster();
+ for(unsigned line=0;line<=224;line++){
+  unsigned band=line<32?0:line<64?1:line<96?2:3;
+  g_ppu->hScroll[1]=(uint16_t)((phase[band]>>4)&1023);
+  if(fault&&line==100)g_ppu->hScroll[1]^=1;
+  IogWorldCaptureLine((int)line);
+ }
+ before_ppu=*g_ppu;horizon_probe=true;horizon_expected_valid=!fault;horizon_flat_expected=tail==1&&!fault;
+ IogWorldEndRaster(0,225,0);horizon_probe=false;
+ CHECK(s.complete&&s.width==598&&s.height==336&&s.view.world_x==-43&&s.view.world_y==8);
+ CHECK(s.view.native_y==56); /* background row is independent of this offset */
+ CHECK(horizon_main_calls==3*336);
+ CHECK(horizon_background_calls==(fault?0:3*336));
+ CHECK(!strcmp(s.reason,fault?"ready_legacy_raster_effect":"ready"));
+ for(unsigned y=0;y<336;y++)for(unsigned x=0;x<598;x++){
+  bool foreground=x>=43&&x<555;
+  unsigned phase_x=y+1<32?((0x1a3f-203)>>4):y+1<64?((0x2237-203)>>4):y+1<96?((0x0ff9-203)>>4):1010;
+  uint32_t want=foreground?0xffcc2211u:(!fault&&y+1<256?
+   0xff000000u|((phase_x+x)&1023)|((y+1)<<10):horizon_flat_expected?0xff101010u:0);
+  CHECK(s.output[y*598+x]==want);
+ }
+ CHECK(!memcmp(before_ram,ram,sizeof ram)&&!memcmp(&cpu,&g_cpu,sizeof cpu)&&!memcmp(&before_ppu,g_ppu,sizeof before_ppu));
+}
+static void flat_horizon_tail_guards(void){
+ fixture();PictureEpoch e;memset(&e,0,sizeof e);
+ e.ram[0x694]=0;e.ram[0x695]=2;e.ram[0x698]=0;e.ram[0x699]=1;
+ e.ram[0x6a0]=0;e.ram[0x6a1]=0xc0;e.ram[0x6b0]=0;e.ram[0x6b1]=0x28;
+ e.ram[0x2804]=e.ram[0x2806]=1;
+ unsigned at=PPU_bgTileAdr(g_ppu,1)+16;
+ e.vram[at+7]=0x00ff;e.cgram[1]=0x0842;
+ CHECK(HorizonFlatTail(&e,g_ppu));
+ /* One transparent texel, even with the same zero palette color, refuses. */
+ e.vram[at+7]=0x00fe;CHECK(!HorizonFlatTail(&e,g_ppu));e.vram[at+7]=0x00ff;
+ /* A reflected patterned tile remains nonuniform; no endpoint-only test. */
+ e.vram[at+7]=0x80ff;e.cgram[3]=0x7fff;
+ CHECK(!HorizonFlatTail(&e,g_ppu));e.ram[0x2805]=e.ram[0x2807]=0x40;
+ CHECK(!HorizonFlatTail(&e,g_ppu));
+ /* Palette aliases are visually uniform; distinct colors are not. */
+ e.cgram[3]=e.cgram[1];CHECK(HorizonFlatTail(&e,g_ppu));e.cgram[3]=0x7fff;
+ /* Vertical flip samples row0, not the opaque row7. */
+ e.ram[0x2805]=e.ram[0x2807]=0x80;CHECK(!HorizonFlatTail(&e,g_ppu));
+ e.vram[at]=0x00ff;CHECK(HorizonFlatTail(&e,g_ppu));
+ /* Only one far-half metatile differs; checking the left edge is insufficient. */
+ e.ram[0x2805]=e.ram[0x2807]=0;e.vram[at+7]=0x00ff;
+ e.ram[0xc1ff]=1;e.ram[0x280c]=e.ram[0x280e]=2;
+ e.vram[at+16+7]=0x00fe;CHECK(!HorizonFlatTail(&e,g_ppu));
+ e.vram[at+16+7]=0x00ff;CHECK(HorizonFlatTail(&e,g_ppu));
+ e.ram[0x280d]=e.ram[0x280f]=4;e.cgram[17]=0x7fff;
+ CHECK(!HorizonFlatTail(&e,g_ppu));e.cgram[17]=e.cgram[1];CHECK(HorizonFlatTail(&e,g_ppu));
+ e.ram[0xc1ff]=0;e.ram[0x695]=1;CHECK(!HorizonFlatTail(&e,g_ppu));
+}
+static void calibrated_finite_horizon(void){
+ flat_horizon_tail_guards();
+ horizon_picture(0x1a,160,false,1);horizon_picture(0x1c,168,false,1);
+ horizon_picture(0x1a,160,false,2);horizon_picture(0x1c,168,false,2);
+ horizon_picture(0x1a,160,false,0);horizon_picture(0x1a,168,false,0);
+ horizon_picture(0x1c,160,false,0);horizon_picture(0x1c,168,false,0);
+ horizon_picture(0x1a,160,true,0);horizon_picture(0x1c,168,true,0);
+}
 static void generic_authored_window(void){
  fixture();word(0x644,0x0D);word(0x692,1024);word(0x696,1024);
  word(0x694,1024);word(0x698,1024);
@@ -650,7 +760,7 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();great_wall_authored_courses();clouds_outside_terrain_not_objects();generic_authored_window();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 
@@ -669,7 +779,7 @@ def main():
     exe = out/'world_renderer.exe'
     command = [args.compiler,'-std=c11','-O1','-Wall','-Wextra','-Werror',
                '-I'+str(out),'-I'+str(ROOT/'src'),'-I'+str(ROOT/'snesrecomp/runner/src'),
-               str(source),str(ROOT/'src/iog_world_view.c'),str(ROOT/'src/iog_world_pixels.c'),'-o',str(exe)]
+               str(source),str(ROOT/'src/iog_world_view.c'),str(ROOT/'src/iog_world_pixels.c'),str(ROOT/'src/iog_raster_parallax.c'),'-o',str(exe)]
     build = subprocess.run(command, capture_output=True, text=True)
     (out/'build.log').write_text(build.stdout+build.stderr, encoding='utf-8');build.check_returncode()
     env = {k:v for k,v in os.environ.items() if not k.startswith(('SNESRECOMP_','IOG_'))}
@@ -751,7 +861,7 @@ def main():
     row_run=subprocess.run([str(row_exe),str(out/'row-causal-packet')],env=env,capture_output=True,text=True)
     (out/'row-causal-run.log').write_text(row_run.stdout+row_run.stderr)
     assert row_run.returncode!=0 and 'p->vram[address]==0x600e' in row_run.stderr
-    inputs = [ROOT/'src/iog_mode7_perspective.h',ROOT/'src/iog_mode7_plane.h',ROOT/'src/iog_world_renderer.c',ROOT/'src/iog_world_renderer.h',ROOT/'src/iog_visual_objects.h',ROOT/'src/iog_world_view.c',ROOT/'src/iog_world_view.h',ROOT/'src/iog_world_pixels.c',ROOT/'src/iog_world_pixels.h',ips,ROOT/'snesrecomp/runner/src/sha256.c',ROOT/'snesrecomp/runner/src/sha256.h']
+    inputs = [ROOT/'src/iog_raster_parallax.c',ROOT/'src/iog_raster_parallax.h',ROOT/'src/iog_mode7_perspective.h',ROOT/'src/iog_mode7_plane.h',ROOT/'src/iog_world_renderer.c',ROOT/'src/iog_world_renderer.h',ROOT/'src/iog_visual_objects.h',ROOT/'src/iog_world_view.c',ROOT/'src/iog_world_view.h',ROOT/'src/iog_world_pixels.c',ROOT/'src/iog_world_pixels.h',ips,ROOT/'snesrecomp/runner/src/sha256.c',ROOT/'snesrecomp/runner/src/sha256.h']
     result = dict(passed=run.returncode==0,command=command,
         scope='Actual world module/SDKheaders; stubbed scene/visual/detachedpixels, no real game/APU/PPU parity or GPU',
         sources={str(s.relative_to(ROOT)):hashlib.sha256(s.read_bytes()).hexdigest()for s in inputs},
@@ -767,6 +877,10 @@ def main():
         calibrated_mode7_full_extent_horizon_and_parameter_matrix_phase_refusals=True,
         nonuniform_mode7_raster_rows_expand_horizontally_with_vertical_padding=True,
         camera_model_read_does_not_mutate_guest_RAM=True,
+        calibrated_finite_horizon_per_band_scroll_and_fixed_Y_passed=True,
+        finite_horizon_does_not_repeat_vertical_sky_or_unmask_foreground_OBJ=True,
+        finite_horizon_flat_tail_opaque_uniform_palette_flip_and_full_extent_guards_passed=True,
+        corrupted_horizon_capture_retains_legacy_raster_policy=True,
         fallback_world_pixel_scale_preserved_at_all_three_extents=True,
         great_wall_three_authored_courses_do_not_expose_spare_pages=True,
         foreground_source_row_causal_mutant_rejected=True,
