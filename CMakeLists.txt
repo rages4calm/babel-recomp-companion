@@ -75,7 +75,11 @@ if(NINTENDO_SWITCH AND SNESRECOMP_SWITCH_MESA_DIR)
     message(STATUS "Switch: Mesa from ${SNESRECOMP_SWITCH_MESA_DIR}")
 endif()
 
+set(IOG_MAP_SOURCES
+    src/iog_map_discovery.c src/iog_map_view.c src/iog_map_scenery.c
+    src/iog_map_runtime.c src/iog_map_ui.c src/iog_map_host.c)
 set(IOG_SOURCES
+    ${IOG_MAP_SOURCES}
     ${SNESRECOMP_RUNNER_SOURCES}
     src/main.c
     src/host_contract.c
@@ -85,6 +89,7 @@ set(IOG_SOURCES
     src/iog_widescreen.c
     src/iog_scene_view.c
     src/iog_world_renderer.c
+    src/iog_raster_parallax.c
     src/iog_world_view.c
     src/iog_world_pixels.c
     src/iog_visual_objects.c
@@ -105,7 +110,7 @@ if(IOG_RECEIVED_REFERENCE)
     # No title plugins, stock-address observers, asset patches or generated code.
     set(IOG_SOURCES ${SNESRECOMP_RUNNER_SOURCES} src/main.c src/host_contract.c src/game_rtl.c
         src/iog_received_observer.c src/iog_received_world.c src/iog_visual_objects.c
-        src/iog_world_pixels.c src/iog_world_view.c)
+        src/iog_world_pixels.c src/iog_world_view.c ${IOG_MAP_SOURCES})
 endif()
 if(ANDROID)
     # Android: the game is the "main" library SDL's activity loads.

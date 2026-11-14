@@ -128,7 +128,82 @@ static void actual_ppu(void){
   immutable();cases++;
  }
 }
-int main(void){crops();failures();actual_ppu();printf("map scenery PASS %u assertions, %u actual PPU fixtures\n",checks,cases);return 0;}
+
+static uint8_t secondary_ram[65536],secondary_before[65536];
+static IogMapScenerySource second;
+static void composite_setup(unsigned priority0,unsigned priority1,unsigned alpha){
+ memset(mapram,0,sizeof mapram);memset(secondary_ram,0,sizeof secondary_ram);
+ memset(characters,0,sizeof characters);memset(palette,0,sizeof palette);
+ palette[17]=31;palette[33]=31<<5;
+ unsigned tile0=1|(1<<10)|(priority0<<13),tile1=1|(2<<10)|(priority1<<13);
+ for(unsigned n=0;n<4;n++){
+  mapram[0x2000+n*2]=(uint8_t)tile0;mapram[0x2001+n*2]=(uint8_t)(tile0>>8);
+  secondary_ram[0x2000+n*2]=(uint8_t)tile1;secondary_ram[0x2001+n*2]=(uint8_t)(tile1>>8);
+ }
+ for(unsigned y=0;y<8;y++){
+  characters[16+y]=(alpha==1||alpha==3)?0:alpha==4?0xaa:0xff;
+  characters[0x2000+16+y]=(alpha==2||alpha==3)?0:alpha==4?0x55:0xff;
+ }
+ map=(IogMapScenerySource){mapram,sizeof mapram,characters,palette,32768,256,256,256,0xa000,0x2000,0};
+ second=(IogMapScenerySource){secondary_ram,sizeof secondary_ram,characters,palette,32768,256,256,256,0xa000,0x2000,0x2000};
+ memcpy(oldram,mapram,sizeof mapram);memcpy(secondary_before,secondary_ram,sizeof secondary_ram);
+ memcpy(oldcharacters,characters,sizeof characters);memcpy(oldpalette,palette,sizeof palette);
+}
+static void composite_immutable(void){immutable();CHECK(!memcmp(secondary_ram,secondary_before,sizeof secondary_ram));}
+static void actual_composite_ppu(void){
+ for(unsigned p0=0;p0<2;p0++)for(unsigned p1=0;p1<2;p1++)for(unsigned alpha=0;alpha<5;alpha++){
+  composite_setup(p0,p1,alpha);memset(&source,0,sizeof source);ppu_reset(&source);
+  memcpy(source.vram,characters,sizeof characters);memcpy(source.cgram,palette,sizeof palette);
+  source.bgmode=1;source.screenEnabled[0]=3;source.inidisp=15;source.lastBrightnessMult=255;
+  source.bgXsc[0]=0x60;source.bgXsc[1]=0x68;source.bgTileAdr=0x20;source.renderFlags=kPpuRenderFlags_NewRenderer;
+  unsigned t0=1|(1<<10)|(p0<<13),t1=1|(2<<10)|(p1<<13);
+  for(unsigned n=0;n<1024;n++){source.vram[0x6000+n]=(uint16_t)t0;source.vram[0x6800+n]=(uint16_t)t1;}
+  memset(actual,0xa5,sizeof actual);source.renderBuffer=(uint8_t*)actual;source.renderPitch=256*4;
+  for(unsigned physical=0;physical<2;physical++){
+   const IogMapScenerySource *a=physical?&second:&map,*b=physical?&map:&second;
+   const unsigned lines[]={1,8,16,112,224};
+   for(unsigned n=0;n<5;n++){
+    unsigned line=lines[n];PpuDrawDetachedLine(&source,(int)line);
+    CHECK(IogMapSceneryRenderMode1Composite(a,b,physical,0,line,256,1,1,canvas,sizeof canvas,256*4));
+    for(unsigned x=0;x<256;x++){
+     uint32_t want=actual[(line-1)*256+x]&0xffffff;
+     if((canvas[x]&0xffffff)!=want){fprintf(stderr,"composite PPU p0=%u p1=%u alpha=%u physical=%u x=%u got=%08x want=%08x\n",p0,p1,alpha,physical,x,canvas[x],want);exit(3);}
+     CHECK((canvas[x]&0xffffff)==want);
+     CHECK((canvas[x]>>24)==(alpha==3?0:255));
+    }
+   }
+   composite_immutable();cases++;
+  }
+ }
+}
+static void composite_guards_and_finite(void){
+ composite_setup(0,1,0);map.width=512;
+ /* BG2 high wins inside its256px plate; beyond it only BG1 exists. */
+ for(unsigned step=1;step<=8;step*=2){
+  memset(canvas,0xa5,sizeof canvas);CHECK(IogMapSceneryRenderMode1Composite(&map,&second,0,250,250,20,6,step,canvas,sizeof canvas,128));
+  unsigned w=(20+step-1)/step,h=(6+step-1)/step;
+  for(unsigned y=0;y<h;y++)for(unsigned x=0;x<w;x++)CHECK(canvas[y*32+x]==(250+x*step<256?0xff00ff00u:0xffff0000u));
+  for(unsigned y=0;y<h;y++)for(unsigned x=w;x<32;x++)CHECK(canvas[y*32+x]==0xa5a5a5a5u);
+ }
+ memset(canvas,0xa5,sizeof canvas);memcpy(oldcanvas,canvas,sizeof canvas);IogMapScenerySource good=second;
+ #define CFAIL(a,b,physical,x,y,w,h,step,buf,cap,pitch) do{CHECK(!IogMapSceneryRenderMode1Composite(a,b,physical,x,y,w,h,step,buf,cap,pitch));CHECK(!memcmp(canvas,oldcanvas,sizeof canvas));composite_immutable();}while(0)
+ CFAIL(&map,NULL,0,0,0,8,8,1,canvas,sizeof canvas,32);
+ CFAIL(NULL,&second,0,0,0,8,8,1,canvas,sizeof canvas,32);
+ CFAIL(&map,&second,2,0,0,8,8,1,canvas,sizeof canvas,32);
+ CFAIL(&map,&second,0,UINT_MAX,0,8,8,1,canvas,sizeof canvas,32);
+ CFAIL(&map,&second,0,0,0,8,8,3,canvas,sizeof canvas,32);
+ CFAIL(&map,&second,0,0,0,8,8,1,canvas,255,32);
+ CFAIL(&map,&second,0,0,0,8,8,1,canvas,sizeof canvas,SIZE_MAX-3);
+ second.vram_words=0;CFAIL(&map,&second,0,300,0,8,8,1,canvas,sizeof canvas,32);second=good;
+ second.width=512;second.ram_bytes=0xa100;CFAIL(&map,&second,0,0,0,264,8,1,canvas,sizeof canvas,264*4);second=good;
+ second.definitions_address=65535;CFAIL(&map,&second,0,0,0,8,8,1,canvas,sizeof canvas,32);second=good;
+ CFAIL(&map,&second,0,0,0,1,1,1,(uint32_t*)secondary_ram,sizeof secondary_ram,4);
+ CFAIL(&map,&second,0,0,0,1,1,1,(uint32_t*)characters,sizeof characters,4);
+ CFAIL(&map,&second,0,0,0,1,1,1,(uint32_t*)palette,sizeof palette,4);
+ CFAIL(&map,&second,0,0,0,1,1,1,(uint32_t*)&second,sizeof second,4);
+ #undef CFAIL
+}
+int main(void){crops();failures();actual_ppu();actual_composite_ppu();composite_guards_and_finite();printf("map scenery PASS %u assertions, %u actual PPU fixtures\n",checks,cases);return 0;}
 '''
 
 
@@ -154,7 +229,7 @@ def main():
     assert identities == {str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files}, 'Test source changed during compilation/execution'
     (out/'receipt.json').write_text(json.dumps({'passed': True, 'command': command, 'stdout': result.stdout,
         'sources': identities, 'compiled_and_executed_source_identities_unchanged': True,
-        'scope': 'Synthetic packed-map oracle and real SDK Mode1 4bpp PPU full-brightness single-layer pixels. Crop/steps/alpha/flips/page boundaries/guards/immutability. No game, content integration, windows, color math, HDMA, sprites, animation, GPU or complete-zone qualification.'}, indent=2)+'\n')
+        'scope': 'Synthetic packed-map oracle and real SDK Mode1 4bpp PPU full-brightness single-layer and two-layer BG1hi/BG2hi/BG1lo/BG2lo priority pixels, both physical-primary orders. Crop/steps/alpha/flips/page boundaries/guards/immutability. No game, content integration, windows, color math, HDMA, sprites, animation, GPU or complete-zone qualification.'}, indent=2)+'\n')
     print(result.stdout.strip())
 
 

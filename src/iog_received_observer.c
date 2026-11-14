@@ -13,7 +13,13 @@
 #include <string.h>
 #include <stdint.h>
 #ifdef _WIN32
+/* SDK types.h defines FORCEINLINE as plain C inline. Let WinNT supply its
+ * own force-inline spelling inside the system-header boundary, then restore
+ * the SDK macro. Otherwise MinGW emits duplicate WinNT helpers at -O0. */
+#pragma push_macro("FORCEINLINE")
+#undef FORCEINLINE
 #include <windows.h>
+#pragma pop_macro("FORCEINLINE")
 #else
 #include <sys/stat.h>
 #include <unistd.h>

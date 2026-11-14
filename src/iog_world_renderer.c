@@ -9,6 +9,7 @@
 #include "iog_world_pixels.h"
 #include "iog_mode7_plane.h"
 #include "iog_mode7_perspective.h"
+#include "iog_raster_parallax.h"
 #include "iog_scene_view.h"
 #include "iog_randomizer.h"
 #include "common_cpu_infra.h"
@@ -109,6 +110,7 @@ bool IogWorldEnabled(void)
 }
 
 void IogWorldSimulationTick(void) { ++s.simulation_ticks; }
+bool IogWorldStockVerified(void) { return s.stock; }
 
 void IogWorldInitialize(void)
 {
@@ -253,6 +255,31 @@ static unsigned MapTile(const PictureEpoch *e,int logical,int x,int y,bool repea
     unsigned address=map+(((y>>8)*(w>>8)+(x>>8))<<8)+(((y>>4)&15)<<4)+((x>>4)&15);
     if(address>=65536 || defs+ram[address]*8+7>=65536) return 0xFFFFFFFFu;
     return Word(ram,defs+ram[address]*8+((y>>3)&1)*4+((x>>3)&1)*2);
+}
+
+/* A finite horizon may end in an opaque, completely flat border. Continue
+ * that verified border below the image instead of switching to a different
+ * backdrop color. This never repeats mountains/sky or invents map geometry.
+ * Nonuniform or transparent terminal rows retain explicit finite padding. */
+static bool HorizonFlatTail(const PictureEpoch *e,const Ppu *p)
+{
+    unsigned physical=1u^((e->ram[0x6EE]>>7)&1u),expected=0;
+    for(unsigned x=0;x<512;x++) {
+        unsigned tile=MapTile(e,1,(int)x,255,false);
+        if(tile==0xffffffffu)return false;
+        unsigned px=x&7,py=7;
+        if(tile&0x4000)px=7-px;
+        if(tile&0x8000)py=0;
+        unsigned at=(PPU_bgTileAdr(p,physical)+(tile&1023)*16+py)&32767;
+        unsigned a=e->vram[at],b=e->vram[(at+8)&32767],bit=7-px;
+        unsigned index=((a>>bit)&1)|(((a>>(bit+8))&1)<<1)|
+            (((b>>bit)&1)<<2)|(((b>>(bit+8))&1)<<3);
+        if(!index)return false;
+        unsigned color=e->cgram[((tile>>10)&7)*16+index]&32767;
+        if(x&&color!=expected)return false;
+        expected=color;
+    }
+    return true;
 }
 
 /* These are the five scenery models exercised by the manual F4--F8 saves.
@@ -590,8 +617,20 @@ static bool RenderWorld(void)
          authored_bounds.bottom!=(int)Word(first->ram,0x696));
     EffectCamera effect_camera;
     bool tracked_effect=ReadEffectCamera(s.active_ram,&effect_camera);
+    IogRasterParallax horizon_model={0};
+    bool horizon=false;
+    if(tracked_effect && effect_camera.ratio[1]==0 && s.epoch_count==1) {
+        uint16_t hscroll[225];Ppu probe=s.base;
+        for(unsigned i=0;i<225;i++) {
+            memcpy(&probe,s.lines[i].registers,PPU_SAVESTATE_REGS_SIZE);
+            hscroll[i]=probe.hScroll[1];
+        }
+        const Cart *cart=g_snes?g_snes->cart:NULL;
+        if(cart)horizon=IogRasterParallaxPrepare(cart->rom,cart->romImageSize,s.stock,
+            first->ram,sizeof(first->ram),hscroll,225,&horizon_model);
+    }
     bool deferred_raster_effect=false;
-    if(tracked_effect) {
+    if(tracked_effect && !horizon) {
         /* A camera actor does not describe per-band HDMA derivatives.
          * Keep those on their prior sampling policy until their actual
          * raster producer is bound; a global ratio would be misleading. */
@@ -605,6 +644,7 @@ static bool RenderWorld(void)
             }
         }
     }
+    bool flat_horizon_tail=horizon&&HorizonFlatTail(first,p);
     if(bounded) {
         PictureBounds bounds;
         if(!RoomPictureBounds(first,camera_x,camera_y,&bounds)) {
@@ -678,7 +718,7 @@ static bool RenderWorld(void)
                 int camy=ScrollWorld(e->ram,0x68E + logical*2,p->vScroll[physical]);
                 int wx=camx-left+start,wy=camy+native_y;
                 bool effect=logical==1 && (!bounded || scene==0x85) && !classroom &&
-                    (tracked_effect || EffectPlaneScene(scene));
+                    (tracked_effect || horizon || EffectPlaneScene(scene));
                 if(effect) {
                     /* Reframe at this plane's rate. Subtracting the whole
                      * foreground offset makes a quarter-speed/fixed backdrop
@@ -695,6 +735,16 @@ static bool RenderWorld(void)
                         EffectProjection(scene,true,s.view.world_y)-
                         EffectProjection(scene,true,camera_y))+row;
                 }
+                if(logical==1&&horizon) {
+                    /* This finite sky/mountain plate has its own screen row.
+                     * Use the actual producer's fractional phase and band,
+                     * not the foreground's clamped native_y. */
+                    wy=camy+row;
+                    if(wy>=255&&flat_horizon_tail)wy=254;
+                    uint16_t phase;
+                    if(IogRasterParallaxSample(&horizon_model,wy+1,s.view.world_x,&phase))
+                        wx=(int)phase+start;
+                }
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)wy&1023;
                 /* Layer-1 position bypass deliberately performs no map
@@ -706,8 +756,11 @@ static bool RenderWorld(void)
                 for(int x=wx&~7;x<wx+width;x+=8) {
                     /* BG sampling uses hardware line1 while OBJ evaluation
                      * uses line0 for the same first output row. */
-                    unsigned tile=MapTile(e,logical,x,wy+1,
-                        effect && (!bounded || scene==0x85) && !classroom);
+                    int sample_x=x;
+                    bool finite_horizon=logical==1&&horizon;
+                    if(finite_horizon){sample_x%=512;if(sample_x<0)sample_x+=512;}
+                    unsigned tile=MapTile(e,logical,sample_x,wy+1,
+                        !finite_horizon&&effect && (!bounded || scene==0x85) && !classroom);
                     if(tile==0xFFFFFFFFu) tile=(unsigned)blank[logical];
                     /* Overlapping authentic cells use the actual uploaded
                      * VRAM entry, including partially updated scroll strips. */
@@ -734,8 +787,8 @@ static bool RenderWorld(void)
             PpuSetExtraObjects(p,s.objects,count);
             IogWorldPixelsDrawLine(p,0);IogWorldPixelsDrawLine(p,1);
             uint32_t composite[Chunk];
-            bool cloud_sky=scene==0x55 && !bounded && !authored &&
-                Word(e->ram,0x694)==512 && Word(e->ram,0x698)==512 &&
+            bool cloud_sky=((scene==0x55 && !bounded && !authored &&
+                Word(e->ram,0x694)==512 && Word(e->ram,0x698)==512)||horizon) &&
                 (p->screenEnabled[0]&(1u<<(1^((e->ram[0x6EE]>>7)&1))));
             if(cloud_sky) {
                 /* Viper's source meta declares a separate cloud plane. Draw

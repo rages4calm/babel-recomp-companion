@@ -30,6 +30,7 @@
 
 #include "iog_companion.h"
 #include "iog_inventory.h"
+#include "iog_map_host.h"
 int IogCompletionPercent(void);
 #include "iog_i18n.h"
 
@@ -37,8 +38,8 @@ extern Ppu *g_ppu;
 
 enum { kW = 256, kH = 224, kCapW = 512, kCapH = 240 };
 enum { kPadSelect = 0x004, kPadDown = 0x020, kPadA = 0x100 };
-enum { kPageItems, kPageStatus, kPageSaves, kPageSettings, kPageCount };
-static const char *const kPageNames[kPageCount] = {"Items", "Status", "Saves", "Config"};
+enum { kPageItems, kPageStatus, kPageSaves, kPageSettings, kPageMap, kPageCount };
+static const char *const kPageNames[kPageCount] = {"Items", "Status", "Saves", "Config", "Map"};
 
 static uint32_t g_inv[kCapW * kCapH], g_stat[kCapW * kCapH];
 static int g_inv_w, g_stat_w, g_have_inv, g_have_stat;
@@ -107,8 +108,11 @@ static int Capture(int status, uint32_t *dst, int *w)
     if (!status) snes_host_speculative_set_grab(GrabFont);
     int cw = 0, ch = 0;
     if (!InPlayQuiet()) return 0;
-    if (!snes_host_speculative_capture(CapInput, CapStop, &c, 120, SNES_SPEC_FULL_BRIGHTNESS,
-                                       dst, kCapW * kCapH, &cw, &ch))
+    IogMapHostSuspend(true);
+    int captured=snes_host_speculative_capture(CapInput, CapStop, &c, 120, SNES_SPEC_FULL_BRIGHTNESS,
+                                       dst, kCapW * kCapH, &cw, &ch);
+    IogMapHostSuspend(false);
+    if (!captured)
         return 0;
     *w = cw;
     return 1;
@@ -452,6 +456,9 @@ static void Compose(void)
     case kPageItems: DrawItems(); break;
     case kPageStatus: DrawStatus(); break;
     case kPageSaves: DrawSaves(); break;
+    case kPageMap:
+        Fill(0,0,kW,kH,0x152131);PageList();
+        Hint("Map unavailable here", "Q/E: Pages", "B: Back");break;
     default: DrawSettings(); break;
     }
     for (int y = 0; y < kH; y++)
@@ -463,14 +470,18 @@ static void Compose(void)
 }
 
 /* ---- actions ---------------------------------------------------------------- */
-static void Close(void) { g_open = 0; }
+static void Close(void) { IogMapHostClose();g_open = 0; }
 
 static void SetPage(int p)
 {
+    g_ptr_down=0;
+    IogMapHostClose();
     g_page = (p + kPageCount) % kPageCount;
     g_confirm = -1;
     if (g_page == kPageStatus && !g_have_stat && !g_live)   /* live: drawn values */
         g_have_stat = Capture(1, g_stat, &g_stat_w);
+    if(g_page==kPageMap&&!g_live)IogMapHostOpen();
+    if(g_page==kPageItems&&!g_have_inv&&!g_live)IogCompanionCaptureInventory();
 }
 
 static void Equip(int slot)
@@ -536,7 +547,7 @@ int IogCompanionOpen(void)
     if (!g_snes || !Rd(0x09AA)) return 0;   /* not in play */
     /* The pictures belong to this moment: re-take them (the game is paused,
      * so the short wait is not a hitch in play). Status on first visit. */
-    IogCompanionCaptureInventory();
+    if(g_page!=kPageMap)IogCompanionCaptureInventory();
     g_have_stat = 0;
     if (g_page == kPageStatus) g_have_stat = Capture(1, g_stat, &g_stat_w);
     const int eq = (int16_t)Rd(0x0AC4);
@@ -544,6 +555,7 @@ int IogCompanionOpen(void)
     g_confirm = -1;
     g_prev_nav = ~0u;
     g_open = 1;
+    if(g_page==kPageMap)IogMapHostOpen();
     return 1;
 }
 
@@ -553,6 +565,11 @@ void IogCompanionNav(uint32_t in, uint32_t ticks)
     const uint32_t p = in & ~g_prev_nav;
     g_prev_nav = in;
     if (!g_open && !g_live_seen) return;
+    if(g_open&&g_page==kPageMap&&IogMapHostAvailable()){
+        IogMapHostNav(in,ticks);
+        if(p&SNES_PAD_B)SetPage(kPageItems);
+        return;
+    }
     g_live = !g_open;   /* beside the running game: the right stick */
     if (p & SNES_PAD_B) {
         if (g_live) return;
@@ -571,12 +588,19 @@ void IogCompanionNav(uint32_t in, uint32_t ticks)
 
 void IogCompanionKey(int key, int repeat)
 {
+    if(repeat&&(key=='m'||key=='i'||key==27))return;
+    if(g_open&&g_page==kPageMap&&key!='q'&&key!='e'&&key!='i'){
+        IogMapHostKey(key,repeat);
+        if(key==27||key=='m')SetPage(kPageItems);
+        return;
+    }
     (void)repeat;
     /* SDL keycodes: Escape, I, arrows, Enter, Q/E pages, S save. */
     switch (key) {
     case 27: case 'i': if (g_confirm >= 0) g_confirm = -1; else Close(); break;
     case 'q': SetPage(g_page - 1); break;
     case 'e': SetPage(g_page + 1); break;
+    case 'm':SetPage(kPageMap);break;
     case '\r': case ' ': Activate(); break;
     case 's': SaveHere(); break;
     case 0x40000050: Move(-1, 0); break;   /* SDLK_LEFT  */
@@ -589,6 +613,11 @@ void IogCompanionKey(int key, int repeat)
 
 void IogCompanionPointer(int px, int py, int down)
 {
+    if(g_open&&g_page==kPageMap){
+        IogMapHostPointer(px,py,down);
+        if(!IogMapHostIsOpen())SetPage(kPageItems);
+        return;
+    }
     g_live = !g_open;
     const int x = px / 2, y = py / 2;   /* panel -> 1x */
     const int was = g_ptr_down;
@@ -630,6 +659,7 @@ void IogCompanionPointer(int px, int py, int down)
 int IogCompanionImage(const uint32_t **px, int *w, int *h)
 {
     if (!g_open) return 0;
+    if(g_page==kPageMap&&IogMapHostImage(px,w,h))return 1;
     g_live = 0;
     Compose();
     *px = g_panel;
