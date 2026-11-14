@@ -4,8 +4,10 @@
  * no game graphics or extracted tables are embedded here. */
 #include "iog_visual_objects.h"
 #include "snes/ppu.h"
+#include "sha256.h"
 
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
 static uint16_t Word(const uint8_t *p, unsigned at)
@@ -49,20 +51,36 @@ bool IogVisualObjectsSupportsScene(uint16_t scene)
 {
     switch (scene) {
     case 0x01: case 0x02: case 0x03: case 0x04: case 0x05:
-    case 0x06: case 0x08: case 0x0c: case 0x0e: case 0x0f: case 0x12:
+    case 0x06: case 0x08: case 0x0c: case 0x0d: case 0x0e: case 0x0f: case 0x12:
     case 0x15: case 0x1e: case 0x23: case 0x25: case 0x26:
     case 0x27: case 0x28: case 0x29: case 0x2d: case 0x31: case 0x3d:
     case 0x3e: case 0x3f: case 0x40: case 0x41: case 0x42:
-    case 0x45: case 0x46: case 0x4f: case 0x51: case 0x53:
+    case 0x45: case 0x46: case 0x4c: case 0x4f: case 0x51: case 0x53:
     case 0x55: case 0x61: case 0x62: case 0x64: case 0x67:
-    case 0x6d: case 0x6f: case 0x85: case 0x86: case 0x8a:
+    case 0x6d: case 0x6f: case 0x83: case 0x85: case 0x86: case 0x8a:
     case 0x8b: case 0xa7: case 0xb6: case 0xb8: case 0xcc:
     case 0xcd: case 0xce: case 0xdd: case 0xde: case 0xdf:
     case 0xe0: case 0xe1: case 0xe2: case 0xe3: case 0xe5:
     case 0xe6: case 0xe7: case 0xe8: case 0xea:
         return true;
     default:
-        return false;
+        /* One explicit developer-survey scene at a time. This does not
+         * promote an unknown room into the shipping admission list; all
+         * layout, object, ROM and publication guards still apply below. */
+        {
+            const char *token=getenv("IOG_WORLD_SURVEY_SCENE");
+            if(!token || strlen(token)!=2)return false;
+            unsigned value=0;
+            for(unsigned n=0;n<2;n++) {
+                char c=token[n];unsigned digit;
+                if(c>='0'&&c<='9')digit=(unsigned)(c-'0');
+                else if(c>='a'&&c<='f')digit=(unsigned)(c-'a'+10);
+                else if(c>='A'&&c<='F')digit=(unsigned)(c-'A'+10);
+                else return false;
+                value=value*16+digit;
+            }
+            return scene<0xF0 && scene==value;
+        }
     }
 }
 
@@ -118,7 +136,7 @@ static IogVisualStatus Actors(const IogVisualSource *s, ActorOrder *list,
 }
 
 static bool PlayerGraphics(const IogVisualSource *s, unsigned actor,
-    uint8_t *bank, uint16_t *base)
+    uint8_t *bank, uint16_t *base, uint16_t lookup)
 {
     unsigned offset;
     if (Word(s->ram, 0x9ae) & 0x8000) {
@@ -132,8 +150,8 @@ static bool PlayerGraphics(const IogVisualSource *s, unsigned actor,
         if (form > 2) return false;
         offset = form * 6;
     }
-    return BusWord(s, 0x81, (uint16_t)(0xd974 + offset), base) &&
-        Byte(s, 0x81, (uint16_t)(0xd976 + offset), bank);
+    return BusWord(s, 0x81, (uint16_t)(lookup + offset), base) &&
+        Byte(s, 0x81, (uint16_t)(lookup + 2 + offset), bank);
 }
 
 static bool Pixels(const IogVisualSource *s, IogVisualPart *part,
@@ -201,8 +219,8 @@ static IogVisualStatus Add(const IogVisualSource *s, IogVisualFrame *out,
     return kIogVisualReady;
 }
 
-IogVisualStatus IogVisualObjectsBuild(const IogVisualSource *s,
-    const IogVisualViewport *view, IogVisualFrame *out)
+static IogVisualStatus BuildLayout(const IogVisualSource *s,
+    const IogVisualViewport *view, IogVisualFrame *out, bool received, uint32_t prefix)
 {
     if (!s || !view || !out) return kIogVisualInvalidInput;
     if (Overlap(out, sizeof(*out), s, sizeof(*s)) || Overlap(out, sizeof(*out), view, sizeof(*view)) ||
@@ -210,18 +228,18 @@ IogVisualStatus IogVisualObjectsBuild(const IogVisualSource *s,
         (s->ppu && Overlap(out, sizeof(*out), s->ppu, sizeof(*s->ppu)))) return kIogVisualInvalidInput;
     out->part_count = out->actor_count = out->hidden_actors = out->outside_parts = 0;
     out->status = kIogVisualInvalidInput; out->scene = 0; out->viewport = *view;
-    if (!s->ram || s->ram_size != 0x20000 || !s->rom || s->rom_size != 0x200000 || !s->ppu ||
+    if (!s->ram || s->ram_size != 0x20000 || !s->rom || s->rom_size != (received ? 0x320000u : 0x200000u) || !s->ppu ||
         !view->width || view->width > 4096 || !view->height || view->height > 512 ||
         view->world_x > INT32_MAX - 4096 || view->world_y > INT32_MAX - 512)
         return out->status;
-    if (!s->stock_identity_verified) { out->status = kIogVisualUnsupportedFormat; return out->status; }
+    if (!received && !s->stock_identity_verified) { out->status = kIogVisualUnsupportedFormat; return out->status; }
     out->scene = Word(s->ram, 0x644);
-    if (!IogVisualObjectsSupportsScene(out->scene)) { out->status = kIogVisualUnsupportedScene; return out->status; }
+    if (received ? out->scene != 8 : !IogVisualObjectsSupportsScene(out->scene)) { out->status = kIogVisualUnsupportedScene; return out->status; }
     if ((s->ppu->bgmode & 7) != 1 || PPU_objSize(s->ppu) || PPU_objInterlace(s->ppu) ||
-        (Word(s->ram, 0x6ee) & 0x1000)) { out->status = kIogVisualUnsupportedFormat; return out->status; }
+        (!received && (Word(s->ram, 0x6ee) & 0x1000))) { out->status = kIogVisualUnsupportedFormat; return out->status; }
     ActorOrder actors[kIogVisualMaxActors] = {{0,0}};
     IogVisualStatus status = Actors(s, actors, out);
-    uint32_t order = 0;
+    uint32_t order = prefix;
     if (status != kIogVisualReady) goto done;
     /* The reader uses a negative-X terminator, not the producer's D8 cursor
      * (which is reset during composition and can be zero on render-only
@@ -251,7 +269,7 @@ IogVisualStatus IogVisualObjectsBuild(const IogVisualSource *s,
         int32_t y0 = ay - (int16_t)Word(s->ram, actor + 0x1a) - 1;
         bool player = (flags & 0x8000) != 0;
         uint8_t graphics_bank = 0; uint16_t graphics_base = 0;
-        if (player && !PlayerGraphics(s, actor, &graphics_bank, &graphics_base)) { status = kIogVisualUnsupportedFormat; goto done; }
+        if (player && !PlayerGraphics(s, actor, &graphics_bank, &graphics_base, received ? 0xf179 : 0xd974)) { status = kIogVisualUnsupportedFormat; goto done; }
         for (unsigned i = 0; i < count; i++) {
             uint16_t record = (uint16_t)(ptr + 9 + i * 7), attr;
             uint8_t size, xoff, yoff;
@@ -269,4 +287,98 @@ done:
     out->status = status;
     if (status != kIogVisualReady) out->part_count = 0;
     return status;
+}
+
+
+IogVisualStatus IogVisualObjectsBuild(const IogVisualSource *s,
+    const IogVisualViewport *view, IogVisualFrame *out)
+{
+    return BuildLayout(s, view, out, false, 0);
+}
+
+/* Identity metadata only. No received code, tables or game assets are embedded.
+ * Verify once after loading, then keep the ROM allocation immutable/alive for
+ * the lifetime of the returned identity. Never reuse it across ROM reloads. */
+static const char *const ReceivedPins[3] = {
+    "dded02334752a7122d4db8da4df4aa56d6997c078065e69183865dc23202973f",
+    "70485bc087dd11937ebd8794a39b3c76638f135ea873b63bfda0639a943697ad",
+    "dec96c815acd857455134a3ce2210678cc98285a62b196d912ae7c352756faa6"
+};
+static bool DigestMatches(const uint8_t digest[32], const char *pin)
+{
+    static const char hex[] = "0123456789abcdef";
+    for (unsigned i=0;i<32;i++)
+        if (hex[digest[i]>>4]!=pin[2*i] || hex[digest[i]&15]!=pin[2*i+1]) return false;
+    return true;
+}
+IogVisualStatus IogVisualReceivedVerify(const uint8_t *rom, size_t size,
+    IogVisualReceivedIdentity *identity)
+{
+    if (!identity || !rom || Overlap(identity,sizeof(*identity),rom,size))
+        return kIogVisualInvalidInput;
+    memset(identity,0,sizeof(*identity));
+    if (size!=0x320000) return kIogVisualIdentityMismatch;
+    sha256_compute(rom,size,identity->digests[0]);
+    sha256_compute(rom+0x3dafe,118,identity->digests[1]);
+    sha256_compute(rom+0x1f179,54,identity->digests[2]);
+    for(unsigned i=0;i<3;i++) if(!DigestMatches(identity->digests[i],ReceivedPins[i])) {
+        memset(identity,0,sizeof(*identity));return kIogVisualIdentityMismatch;
+    }
+    identity->rom=rom;identity->rom_size=size;
+    return kIogVisualReady;
+}
+
+IogVisualStatus IogVisualReceivedBuild(const IogVisualReceivedSource *s,
+    const IogVisualViewport *view, IogVisualReceivedFrame *out)
+{
+    if(!s || !view || !out) return kIogVisualInvalidInput;
+    if(Overlap(out,sizeof(*out),s,sizeof(*s)) || Overlap(out,sizeof(*out),view,sizeof(*view)) ||
+       Overlap(out,sizeof(*out),s->ram,s->ram_size) ||
+       (s->identity && (Overlap(out,sizeof(*out),s->identity,sizeof(*s->identity)) ||
+        Overlap(out,sizeof(*out),s->identity->rom,s->identity->rom_size))) ||
+       (s->ppu && Overlap(out,sizeof(*out),s->ppu,sizeof(*s->ppu))) ||
+       Overlap(out,sizeof(*out),s->staging,s->staging_size) ||
+       Overlap(out,sizeof(*out),s->published,s->published_size)) return kIogVisualInvalidInput;
+    out->screen_count=0;out->world.part_count=0;out->status=kIogVisualInvalidInput;
+    if(!s->ram || s->ram_size!=0x20000 || !s->ppu || !s->identity) return out->status;
+    const IogVisualReceivedIdentity *id=s->identity;
+    if(!id->rom || id->rom_size!=0x320000) return out->status=kIogVisualIdentityMismatch;
+    for(unsigned i=0;i<3;i++) if(!DigestMatches(id->digests[i],ReceivedPins[i]))
+        return out->status=kIogVisualIdentityMismatch;
+    /* This binding is qualified only for the observed Will classroom. In
+     * particular the received0600 direct path and other body records refuse. */
+    if(Word(s->ram,0x644)!=8 || Word(s->ram,0xad4)!=0 || (Word(s->ram,0x9ae)&0x8000))
+        return out->status=kIogVisualSourceUnqualified;
+    if(!s->staging || !s->published || s->staging_size!=544 || s->published_size!=544 ||
+       !s->compose_epoch || s->compose_epoch!=s->publication_epoch ||
+       memcmp(s->staging,s->published,544)) return out->status=kIogVisualPublicationMismatch;
+    unsigned bytes=(Word(s->ram,0x6ee)&0x1000)?Word(s->ram,0xda):0;
+    if(bytes>512 || bytes%4 || bytes!=s->observed_direct_bytes)
+        return out->status=kIogVisualMalformedSource;
+    if(memcmp(s->ram+0x11fc0,s->staging,bytes)) return out->status=kIogVisualPublicationMismatch;
+    for(unsigned n=0;n<bytes/4;n++)
+        if(((s->staging[512+n/4]>>((n%4)*2))&3)!=2)
+            return out->status=kIogVisualMalformedSource;
+    IogVisualSource world={s->ram,s->ram_size,id->rom,id->rom_size,s->ppu,false};
+    IogVisualStatus status=BuildLayout(&world,view,&out->world,true,bytes/4);
+    if(status!=kIogVisualReady) return out->status=status;
+    for(unsigned n=0;n<bytes/4;n++) {
+        const uint8_t *p=s->ram+0x11fc0+n*4;
+        IogVisualPart picture;memset(&picture,0,sizeof(picture));
+        picture.tile_attributes=Word(p,2);picture.width=picture.height=16;
+        picture.palette=(picture.tile_attributes>>9)&7;picture.priority=(picture.tile_attributes>>12)&3;
+        picture.hflip=!!(picture.tile_attributes&0x4000);picture.vflip=!!(picture.tile_attributes&0x8000);
+        if(!Pixels(&world,&picture,false,0,0)) {
+            out->world.part_count=0;return out->status=kIogVisualMalformedSource;
+        }
+        IogVisualScreenPart *part=&out->screen[n];
+        memset(part,0,sizeof(*part));part->x=p[0];part->y=p[1];part->order=n+1;
+        part->tile_attributes=picture.tile_attributes;part->width=part->height=16;
+        part->palette=picture.palette;part->priority=picture.priority;
+        part->hflip=picture.hflip;part->vflip=picture.vflip;
+        memcpy(part->pixels,picture.pixels,sizeof(part->pixels));
+        memcpy(part->indices,picture.indices,sizeof(part->indices));
+    }
+    out->screen_count=(uint16_t)(bytes/4);
+    return out->status=kIogVisualReady;
 }

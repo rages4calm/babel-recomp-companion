@@ -3,13 +3,65 @@
 Updated November 13, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
-Owner priority: finish the remaining native game code so broader improvements can
-begin. Keep performance checks focused on visible lag, skipped frames, input
-response and regressions. Avoid repeating microbenchmarks for tiny CPU differences.
+Owner priority changed November 13: fix presentation across EVERY zone before
+returning to native gaps. Cover widescreen/1.5x, scrolling, Mode1/Mode7,
+floor/room bounds, menus and transitions; integrate approved GaiaLabs maps with
+Retranslation as built-in main content. Stock USA is the internal reference.
+Keep performance checks focused on visible smoothness, not repeated benchmarks.
+
+## ACTIVE: full-game presentation and GaiaLabs maps
+
+Continue this priority before native gaps; EVERY zone and its transitions remain
+in scope. Read [first full-game batch](docs/VISUAL-FULLGAME-001.md),
+[coverage](docs/VISUAL-COVERAGE.md) and [map direction](docs/MAP-SYSTEM-DIRECTION.md).
+No whole-game approval or finished in-game map is claimed.
+
+- Original latest immutable candidate: `.local/batch-001/visual-fullgame-001/babel-visual-v7.exe`,
+  SHA `21b4e1174be8ee93ee4533ad1999498b56b77dbd2b3bb84aaf680e03d8db0241`.
+  Adds live camera models, authored-window clipping, same-scale fallback,
+  calibrated per-row Mode7 perspective extension and Viper55 background-only
+  clouds outside terrain.64 structural admissions, not64 approved zones.
+- v7 passes56 retained-reference pairs /10,080 candidate frame boundaries;
+  eight actual NVIDIA1080p smooth/1.5x views captured and inspected. World-module
+  harness7,533,146 checks; real PPU Mode7/scenery tests are separate.
+  v6 Mode7 travel4000f/189 retained snapshot fields matches; full perspective
+  validates all224 source rows plus terminal hold. Mode7 packets explicitly
+  have no composition/OAM pairing. No repeated benchmark/native promotion.
+- GreatWall uppercourse85→86 full1352f prior v2 comparison passes; three live
+  course windows tested. Later86 remains unfinished. Preserve actual authored
+  padding, never spare floor pages. Per-band HDMA/horizon planes remain gaps;
+  do not treat a global camera model as their fix.
+- GaiaLabs private reference is interpreter-only, stock native hooks/plugins
+  disabled, separately identified/saved. Received v11 classroom prototype is
+  default-off (`IOG_RECEIVED_WORLD_RENDERER=1`),598x336/1.5x from real384 raster.
+  Exact publication/map/layout guards and source-backed exterior mask pass
+  bounded free/dialogue/directional tests. Not an all-room/native profile.
+  Keep v10 failed pictures; v11 current receipt is in `gaialabs-reference/`.
+- Actual received worldmap walking/turning works in assisted reference preview;
+  artwork is not an upgraded/new map. Natural access and location entry/return
+  remain unqualified. The user supplied an Original video at16:33 as comparison;
+  media retrieval failed, so do not claim a video visual comparison was done.
+- Map scenery decoder matches24 actual PPU fixtures; exploration and clean
+  scenery/radar compositors pass pure tests. They are foundations, not connected
+  game UI/persistent observations. Require qualified visibility, content/layout/
+  floor identities; collision alone is not optical occlusion. No unimplemented
+  launcher map switches. Captured-map preview is diagnostic, not a campaign map.
+- First32 exploratory scene entries are NOT visual approvals. Updated survey
+  freezes producer identity, delays probe and uses capture-bound data. Next32
+  v7 finishes31 paired/in-bounds captures, but source audit finds uniform
+  incoming camera22 forcing wrong512x512 bounds. Retain these as diagnostics,
+  corrected producer requires source+ROM-validated inbound warp recipes.
+  Targeted33/2D/2E/39 captures fix the apparent edge/floor defects with
+  authentic entrances and unchangedv7renderer; no movement/quest approval.
+  Future surveys must preserve bad poses/entries. Issue6 stays open. Stable owner test
+  launcher still selects the earlier eight-save fix; fallback stays available.
+- Official SNESRecomp main still80a41241 at live check, matches framework pin.
+  Original graph016/effects025/WRAM021/master018 retained; received uses separate
+  private build. Preserve private ZIP/ROM/BSO; no exact dev-build recipe claim.
 
 ## Manual-save renderer follow-up — November 13
 
-Owner restricted this follow-up to the eight manual test saves, not another
+Historical scope (now superseded): owner restricted this follow-up to the eight manual test saves, not another
 native batch or a wider area sweep. Read
 [the correction and evidence limits](docs/MANUAL-SAVE-RENDERER-FIX.md).
 The updated `.local/manual-test-slots-025/Play Test Saves.cmd` selects

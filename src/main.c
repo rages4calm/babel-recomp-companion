@@ -56,6 +56,41 @@
 #define SNES_GAME_VERSION "dev"
 #endif
 
+#ifdef IOG_RECEIVED_REFERENCE
+#include "iog_received_world.h"
+static void IogReferenceFrame(int dw,int dh,int *w,int *h)
+{
+    (void)dw;(void)dh;*w=384;*h=224;
+    /* This received build authors its menus/dialogue across BG3 too. The
+     * generic PPU otherwise deliberately clamps that layer to 256 columns. */
+    if(g_ppu) PpuSetWidescreenBg3Widen(g_ppu,1);
+}
+static void IogReceivedViewport(int fw,int fh,int dw,int dh,SnesDisplayViewport *out)
+{
+    if(!out||fw<=0||fh<=0)return;
+    int num=1,den=1;
+    if(!IogReceivedWorldEnabled())SnesDisplayAspect_GetPixelAspect((SnesDisplayAspect)g_config.display_aspect,&num,&den);
+    *out=SnesDisplayAspect_FitViewport((double)fw*num/((double)fh*den),dw,dh);
+}
+static const SnesDesktopHostGame kGameHost = {
+    .display_name = "GaiaLabs received-content reference (interpreted)",
+    .window_title = "GaiaLabs reference - not native qualification",
+    .region = SNESRECOMP_ROM_REGION,
+    .rom_file = IOG_RECEIVED_REFERENCE_ROM_FILE,
+    .expected_sha256_hex = IOG_RECEIVED_REFERENCE_SHA256,
+    .expected_crc32_hex = NULL,
+    .game_id = "iog-gaialabs-reference-" IOG_RECEIVED_REFERENCE_SHA256,
+    .build_version = "received-reference-dev",
+    .game_info = &kGameInfo,
+    .num_players = 1,
+    .sram_path = "saves/received-reference.srm",
+    .native_widescreen = 1,
+    .prepare_frame = IogReferenceFrame,
+    .presentation_geometry = IogReceivedWorldGeometry,
+    .draw_frame = IogReceivedWorldDraw,
+    .compute_viewport = IogReceivedViewport,
+};
+#else
 static IogSceneView s_scene_view;
 static bool s_scene_view_initialized;
 
@@ -222,12 +257,17 @@ static const SnesDesktopHostGame kGameHost = {
     .companion_image     = IogCompanionImage,
     .companion_live      = IogCompanionLive,
 };
+#endif
 
 #ifndef __ANDROID__
 #undef main   /* desktop: keep plain main() even if SDL_main.h remapped it */
 #endif
 int main(int argc, char **argv)
 {
+#ifdef IOG_RECEIVED_REFERENCE
+    fprintf(stderr,"[gaialabs] Received-content reference: interpreter only; stock hooks/plugins disabled\n");
+#else
     fprintf(stderr, "%s\n", IOG_EXECUTION_ID);
+#endif
     return snesrecomp_desktop_main(&kGameHost, argc, argv);
 }

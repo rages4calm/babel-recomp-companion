@@ -7,6 +7,15 @@ The original author's credit, support link and full acknowledgments remain below
 
 ## Companion development status
 
+**Current priority: full-game visuals and built-in GaiaLabs maps.** The first
+new batch fixes same-scale fallback at transitions, authored floor bounds and
+Viper's outside-terrain clouds, and adds validated Mode7 perspective extension.
+The separate GaiaLabs reference now has a bounded384-column classroom adapter
+at1.5x. Actual-scenery map decoding, clean radar composition and exploration
+storage are tested foundations; game controls and persistent gameplay discovery
+are not connected yet. This is not complete visual coverage or a native GaiaLabs
+release. [Changes, tests and remaining gaps](docs/VISUAL-FULLGAME-001.md).
+
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. Qualified private
 [batch 025](docs/NATIVE-BATCH-025.md) adds **887 exact instruction/mode contexts**:

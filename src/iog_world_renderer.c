@@ -7,6 +7,8 @@
 #include "iog_visual_objects.h"
 #include "iog_world_view.h"
 #include "iog_world_pixels.h"
+#include "iog_mode7_plane.h"
+#include "iog_mode7_perspective.h"
 #include "iog_scene_view.h"
 #include "iog_randomizer.h"
 #include "common_cpu_infra.h"
@@ -35,14 +37,15 @@ typedef struct PictureLine {
 static struct {
     bool initialized, enabled, stock, pending, composed, active, complete, valid;
     bool copy_reference;
-    bool source_packet;
+    bool source_packet,mode7,mode7_perspective;
+    IogMode7PerspectiveParameters mode7_parameters;
     int width, height, extent_quarters, epoch_count;
     unsigned frame;
     unsigned simulation_ticks, presentation_calls;
     uint64_t compose_sequence, publish_sequence;
     uint32_t nmi_oam_writes;
     uint8_t pending_ram[131072], active_ram[131072], staging[544];
-    Ppu base, detached;
+    Ppu base, detached, mode7_source;
     PictureEpoch epochs[Epochs];
     PictureLine lines[225];
     IogVisualFrame visual;
@@ -67,6 +70,15 @@ static bool ActiveWorldWindow(const Ppu *p)
            ((p->windowsel>>(layer*4))&10u)) return true;
     }
     return false;
+}
+
+static bool Mode7PlaneLayout(const Ppu *p)
+{
+    return (p->bgmode&7)==7 && !PPU_m7extBg(p) && !p->frameInterlace &&
+        !PPU_objInterlace(p) && !(p->mosaic>>4) &&
+        (p->screenEnabled[0]&1) && !(p->screenEnabled[0]&~21u) &&
+        !p->screenEnabled[1] && !ActiveWorldWindow(p) &&
+        !(p->windowsel&0xA00000u);
 }
 static int ScrollWorld(const uint8_t *ram,unsigned at,unsigned scroll)
 {
@@ -169,13 +181,19 @@ void IogWorldBeginRaster(void)
 {
     if(!s.enabled || !g_ppu || !g_snes) return;
     s.complete=false; s.valid=false; s.epoch_count=0;
+    s.mode7=s.mode7_perspective=false;
     memset(&s.view,0,sizeof(s.view));
     s.reason="unsupported_scene_or_layout";
     memset(s.hud,0,sizeof(s.hud));
     /* The live field is unchanged. Extraction records the real BG3 pixels. */
     PpuBindOverlaySurface(g_ppu,kPpuOverlaySource_Bg3,(uint8_t*)s.hud,256*4);
     PpuSetOverlayCapture(g_ppu,kPpuOverlaySource_Bg3,0,0,256,224,0);
-    if(!s.stock || IogRandomizerActive() || !s.active) return;
+    if(!s.stock || IogRandomizerActive()) return;
+    if(Mode7PlaneLayout(g_ppu)) {
+        s.base=*g_ppu;s.mode7=s.valid=true;s.reason="awaiting_mode7_plane";
+        return;
+    }
+    if(!s.active) return;
     IogSceneViewSource source;
     IogSceneViewReadWorldSource(g_snes->ram,131072,g_ppu,false,&source);
     if(source.gate!=kIogSceneViewReady || source.scene!=Word(s.active_ram,0x644)) return;
@@ -188,7 +206,8 @@ void IogWorldBeginRaster(void)
 void IogWorldCaptureLine(int line)
 {
     if(!s.enabled || !s.valid || line<0 || line>224) return;
-    if((g_ppu->bgmode&7)!=1 || g_ppu->frameInterlace || (g_ppu->mosaic>>4)!=0 ||
+    if((s.mode7?!Mode7PlaneLayout(g_ppu):(g_ppu->bgmode&7)!=1) ||
+       g_ppu->frameInterlace || (g_ppu->mosaic>>4)!=0 ||
        ActiveWorldWindow(g_ppu)) {
         s.valid=false; s.reason="unsupported_line_effect"; return;
     }
@@ -199,6 +218,7 @@ void IogWorldCaptureLine(int line)
     /* Metadata, definitions and maps can change at a real raster IRQ. Record
      * only changed epochs; line register input is always captured separately. */
     bool changed=!prior || prior->vram_writes!=g_ppu->vramWriteCount ||
+        (s.mode7 && memcmp(prior->ram+0xB0,g_snes->ram+0xB0,0x20)) ||
         memcmp(prior->cgram,g_ppu->cgram,sizeof(prior->cgram)) ||
         memcmp(prior->ram+0x644,g_snes->ram+0x644,0xBE) ||
         memcmp(prior->ram+0x2000,g_snes->ram+0x2000,0x1000) ||
@@ -255,6 +275,57 @@ static int EffectProjection(unsigned scene,bool vertical,int position)
     }
 }
 
+typedef struct EffectCamera { unsigned ratio[2]; bool uploaded_ring; } EffectCamera;
+
+/* Observe the actual, composition-paired camera producer. Allocation sizes
+ * cannot distinguish a fixed backdrop from quarter-speed scenery. Packed
+ * actor parameters are multiplier/divisor bytes used by stock MulDivide. */
+static bool ReadEffectCamera(const uint8_t *ram,EffectCamera *out)
+{
+    unsigned actor=Word(ram,0x56),count=0,previous=0;
+    bool found=false;
+    *out=(EffectCamera){{0,0},false};
+    while(actor) {
+        if(actor<0x1000 || actor>=0x1FC0 || (actor-0x1000)%0x30 || ++count>84 ||
+           Word(ram,actor+4)!=previous)
+            return false;
+        if((ram[actor+2]&0x3F)==0 && (Word(ram,actor+0x12)&0x1000)) {
+            EffectCamera next={{0,0},false};bool known=true;
+            switch(Word(ram,actor)) {
+            case 0xEAA3: case 0xEAD7: /* Track / Accumulate */
+                next.ratio[0]=Word(ram,actor+0x14);
+                next.ratio[1]=Word(ram,actor+0x16);break;
+            case 0xEAB4: /* Vertical */
+                next.ratio[1]=Word(ram,actor+0x16);break;
+            case 0xEA26: /* Wrapped drift includes both camera deltas. */
+                next.ratio[0]=next.ratio[1]=0x0101;
+                next.uploaded_ring=(ram[0x6EF]&4)!=0;break;
+            default:known=false;break;
+            }
+            if(known) {
+                for(unsigned axis=0;axis<2;axis++) {
+                    unsigned ratio=next.ratio[axis];
+                    if(ratio && (!(ratio>>8) ||
+                       (unsigned)Word(ram,0x692+axis*4)*(ratio&255)>65535u))
+                        return false;
+                }
+                if(found) return false;
+                *out=next;found=true;
+            }
+        }
+        previous=actor;actor=Word(ram,actor+6);
+    }
+    return found && Word(ram,0x58)==previous;
+}
+
+static int ProjectEffect(unsigned ratio,int position)
+{
+    int denominator=(int)(ratio>>8),numerator=(int)(ratio&255);
+    if(!denominator)return 0;
+    int product=position*numerator;
+    return product>=0?product/denominator:-((-product+denominator-1)/denominator);
+}
+
 /* Original scene08 contains a real 512x256 room, including the east hall and
  * town stairs. Its second 512x512 layer also contains spare material below
  * that room; those cells are not additional scenery. Stock primary metatile
@@ -290,7 +361,7 @@ static bool BoundedRoomScene(unsigned scene)
 {
     switch(scene) {
     case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x31:
-    case 0xE5: case 0xE6: case 0xE7: case 0xE8: return true;
+    case 0x85: case 0xE5: case 0xE6: case 0xE7: case 0xE8: return true;
     default: return false;
     }
 }
@@ -302,12 +373,25 @@ static bool BoundedRoomScene(unsigned scene)
  * offscreen terrain stream. Retain their authoritative field, as well as
  * Dark Gaia's original camera scroll between phase pages and the ending,
  * rather than exposing extra animation/other-phase material. */
+static bool AuthoredWindow(const PictureEpoch *e,PictureBounds *out)
+{
+    const uint8_t *ram=e->ram;
+    *out=(PictureBounds){Word(ram,0x6D6),Word(ram,0x6D8),
+        Word(ram,0x6DA),Word(ram,0x6DE)};
+    return out->right<=(int)Word(ram,0x692) && out->bottom<=(int)Word(ram,0x696) &&
+        out->right-out->left>=256 && out->bottom-out->top>=224 &&
+        !((out->left|out->top|out->right|out->bottom)&255);
+}
+
 static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
     PictureBounds *out)
 {
     const uint8_t *ram=e->ram;
     unsigned scene=Word(ram,0x644),width=Word(ram,0x692),height=Word(ram,0x696);
     unsigned expected_width=scene==0x04?512:256,expected_height=256;
+    /* Rampway storage contains three courses. Only the current authored
+     * camera window is this visit's floor; the other pages are not scenery. */
+    if(scene==0x85) {expected_width=2048;expected_height=768;}
     if(scene==0x03 || scene==0x04 || scene==0xE6 || scene==0xE8) expected_height=512;
     if(scene==0x06) expected_height=1280;
     if(!BoundedRoomScene(scene) || width!=expected_width || height!=expected_height) return false;
@@ -317,12 +401,7 @@ static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
     }
     /* 06DE is the uncorrected bottom edge; 06DC additionally contains the
      * original visible-height correction. Neither word is a player edit. */
-    *out=(PictureBounds){Word(ram,0x6D6),Word(ram,0x6D8),
-        Word(ram,0x6DA),Word(ram,0x6DE)};
-    return out->left>=0 && out->top>=0 && out->right<=(int)width &&
-        out->bottom<=(int)height && out->right-out->left>=256 &&
-        out->bottom-out->top>=224 &&
-        !((out->left|out->top|out->right|out->bottom)&255);
+    return AuthoredWindow(e,out);
 }
 
 static void RoomPictureView(int camera_x,int camera_y,const PictureBounds *bounds)
@@ -364,8 +443,110 @@ static void Detach(Ppu *p)
     p->wsOamFullXOn=0;p->wsOamMotionGraceOn=0;
 }
 
+/* A uniform affine plane can continue outside the original screen without
+ * inventing perspective/HDMA rows. OBJ and interface pixels remain the real
+ * original field, overlaid at identical world-pixel scale during presentation.
+ * Other Mode7 compositions retain the same-scale reference fallback. */
+static bool RenderMode7Plane(void)
+{
+    if(!s.valid || !s.epoch_count) return false;
+    /* Mode7 observes its own raster epochs, not the prior Mode1 OAM pair. */
+    s.visual.part_count=0;
+    Ppu *source=&s.mode7_source,*palette=&s.detached;
+    *source=s.base;memcpy(source,s.lines[1].registers,PPU_SAVESTATE_REGS_SIZE);
+    int16_t matrix[8];memcpy(matrix,source->m7matrix,sizeof(matrix));
+    unsigned control=source->m7sel;bool uniform=true;
+    for(int line=1;line<=224;line++) {
+        memcpy(source,s.lines[line].registers,PPU_SAVESTATE_REGS_SIZE);
+        if(!Mode7PlaneLayout(source)) {s.reason="mode7_unsupported_raster";return false;}
+        if(source->m7sel!=control || memcmp(source->m7matrix,matrix,sizeof(matrix)))
+            uniform=false;
+    }
+    const PictureEpoch *initial=&s.epochs[s.lines[0].epoch];
+    unsigned angle=Word(initial->ram,0xBC)&511u;
+    const Cart *cart=g_snes?g_snes->cart:NULL;
+    if(cart && cart->rom && cart->romImageSize==2097152) {
+        unsigned sin_at=0x1C595+angle*2,cos_at=0x1C695+angle*2;
+        s.mode7_parameters=(IogMode7PerspectiveParameters){
+            (uint16_t)Word(initial->ram,0xB8),(uint16_t)Word(initial->ram,0xB6),
+            IogMode7PerspectiveSigned(Word(cart->rom,cos_at)),
+            IogMode7PerspectiveSigned(Word(cart->rom,sin_at))};
+        int16_t captured[224][4];bool stable=true;
+        for(int line=0;line<=224;line++) {
+            memcpy(source,s.lines[line].registers,PPU_SAVESTATE_REGS_SIZE);
+            if(line<224)memcpy(captured[line],source->m7matrix,sizeof(captured[line]));
+            if(memcmp(source->m7matrix+4,matrix+4,4*sizeof(int16_t)) ||
+               source->m7sel!=control)stable=false;
+            const PictureEpoch *e=&s.epochs[s.lines[line].epoch];
+            if(memcmp(e->ram+0xB6,initial->ram+0xB6,8))stable=false;
+        }
+        s.mode7_perspective=stable &&
+            !memcmp(source->m7matrix,captured[223],sizeof(captured[223])) &&
+            IogMode7PerspectiveMatches(&s.mode7_parameters,captured);
+    }
+    *palette=s.base;Detach(palette);memset(palette->vram,0,sizeof(palette->vram));
+    /* Ask the actual detached PPU for all256 palette results, including
+     * backdrop, brightness, clipping and fixed-color math. This avoids a
+     * second, approximate color compositor for the extended plane. */
+    for(unsigned tile=0;tile<32;tile++) palette->vram[tile]=(uint16_t)tile;
+    for(unsigned tile=0;tile<32;tile++) {
+        for(unsigned x=0;x<8;x++) {
+            unsigned address=tile*64+8+x;
+            palette->vram[address]=(palette->vram[address]&255)|((tile*8+x)<<8);
+        }
+    }
+    int left=(s.width-256)/2,top=(s.height-224)/2;
+    s.view=(IogWorldView){0};s.view.width=(uint16_t)s.width;s.view.height=(uint16_t)s.height;
+    s.view.world_x=-left;s.view.world_y=-top;
+    s.view.native_x=(uint16_t)left;s.view.native_y=(uint16_t)top;
+    uint32_t colors[256];int prior_epoch=-1;
+    uint8_t prior_registers[PPU_SAVESTATE_REGS_SIZE];
+    memset(prior_registers,0,sizeof(prior_registers));
+    for(int row=0;row<s.height;row++) {
+        int y=row-top+1;
+        /* Perspective/raster planes use the real224 row transforms across
+         * the entire expanded width. There is no authored transform above
+         * or below that band: preserve padding instead of inventing HDMA. */
+        if(!uniform && !s.mode7_perspective && (y<1 || y>224)) {
+            memset(s.output+row*s.width,0,s.width*4);continue;
+        }
+        PictureLine *line=&s.lines[Clamp(y,1,224)];
+        PictureEpoch *epoch=&s.epochs[line->epoch];
+        memcpy(source,line->registers,PPU_SAVESTATE_REGS_SIZE);
+        if(prior_epoch!=(int)line->epoch ||
+           memcmp(prior_registers,line->registers,sizeof(prior_registers))) {
+            memcpy(source->vram,epoch->vram,sizeof(source->vram));
+            memcpy(palette,line->registers,PPU_SAVESTATE_REGS_SIZE);
+            memcpy(palette->cgram,epoch->cgram,sizeof(palette->cgram));
+            palette->screenEnabled[0]=1;palette->screenEnabled[1]=0;
+            palette->screenWindowed[0]=palette->screenWindowed[1]=0;
+            memset(palette->m7matrix,0,sizeof(palette->m7matrix));
+            palette->m7matrix[0]=palette->m7matrix[3]=256;palette->m7sel=0;
+            IogWorldPixelsDrawLine(palette,0);IogWorldPixelsDrawLine(palette,1);
+            memcpy(colors,s.row,sizeof(colors));
+            memcpy(prior_registers,line->registers,sizeof(prior_registers));
+            prior_epoch=line->epoch;
+        }
+        if(s.mode7_perspective && (y<1 || y>224)) {
+            int index=y>224?y-1:y;
+            IogMode7PerspectiveStatus status=IogMode7PerspectiveSample(
+                &s.mode7_parameters,index,source->m7matrix);
+            if(status!=kIogMode7PerspectiveMatrix) {
+                uint32_t color=status==kIogMode7PerspectiveSky?colors[0]:0;
+                for(int x=0;x<s.width;x++)s.output[row*s.width+x]=color;
+                continue;
+            }
+        }
+        for(int x=0;x<s.width;x++)
+            s.output[row*s.width+x]=colors[IogMode7PlaneIndex(source,x-left,y)];
+    }
+    s.reason=s.mode7_perspective?"ready_mode7_perspective":
+        uniform?"ready_mode7_plane":"ready_mode7_raster_band";return true;
+}
+
 static bool RenderWorld(void)
 {
+    if(s.mode7) return RenderMode7Plane();
     if(!s.valid || !s.epoch_count || s.width<256 || s.height<224) return false;
     PictureEpoch *first=&s.epochs[s.lines[1].epoch];
     unsigned scene=Word(s.active_ram,0x644);
@@ -402,13 +583,35 @@ static bool RenderWorld(void)
         s.reason="invalid_world_view";return false;
     }
     bool bounded=BoundedRoomScene(Word(s.active_ram,0x644));
+    PictureBounds authored_bounds;
+    bool authored=!bounded && !classroom && AuthoredWindow(first,&authored_bounds) &&
+        (authored_bounds.left || authored_bounds.top ||
+         authored_bounds.right!=(int)Word(first->ram,0x692) ||
+         authored_bounds.bottom!=(int)Word(first->ram,0x696));
+    EffectCamera effect_camera;
+    bool tracked_effect=ReadEffectCamera(s.active_ram,&effect_camera);
+    bool deferred_raster_effect=false;
+    if(tracked_effect) {
+        /* A camera actor does not describe per-band HDMA derivatives.
+         * Keep those on their prior sampling policy until their actual
+         * raster producer is bound; a global ratio would be misleading. */
+        Ppu *probe=&s.mode7_source;
+        unsigned background=1u^((s.active_ram[0x6EE]>>7)&1u);
+        for(int line=1;line<=224;line++) {
+            memcpy(probe,s.lines[line].registers,PPU_SAVESTATE_REGS_SIZE);
+            if(probe->hScroll[background]!=p->hScroll[background] ||
+               probe->vScroll[background]!=p->vScroll[background]) {
+                tracked_effect=false;deferred_raster_effect=true;break;
+            }
+        }
+    }
     if(bounded) {
         PictureBounds bounds;
         if(!RoomPictureBounds(first,camera_x,camera_y,&bounds)) {
             s.reason="unsupported_room_window";return false;
         }
         RoomPictureView(camera_x,camera_y,&bounds);
-    }
+    } else if(authored) RoomPictureView(camera_x,camera_y,&authored_bounds);
     int left=s.view.native_x,top=s.view.native_y;
     IogVisualViewport viewport={s.view.world_x,s.view.world_y,
         s.view.width,s.view.height};
@@ -442,6 +645,9 @@ static bool RenderWorld(void)
            !RoomPictureBounds(e,camera_x,camera_y,&bounds))) {
             s.reason="unsupported_room_window";return false;
         }
+        if(authored && !AuthoredWindow(e,&bounds)) {
+            s.reason="unsupported_authored_window";return false;
+        }
         /* Objects were decoded from the exact composition/OAM publication
          * pair. Recolor the one visible row with this raster's palette. */
         size_t count=0;
@@ -471,16 +677,23 @@ static bool RenderWorld(void)
                 int camx=ScrollWorld(e->ram,0x68A+logical*2,p->hScroll[physical]);
                 int camy=ScrollWorld(e->ram,0x68E + logical*2,p->vScroll[physical]);
                 int wx=camx-left+start,wy=camy+native_y;
-                bool effect=logical==1 && EffectPlaneScene(scene);
+                bool effect=logical==1 && (!bounded || scene==0x85) && !classroom &&
+                    (tracked_effect || EffectPlaneScene(scene));
                 if(effect) {
                     /* Reframe at this plane's rate. Subtracting the whole
                      * foreground offset makes a quarter-speed/fixed backdrop
                      * slide as the player moves inside a clamped host view.
                      * Live raster scroll still carries drift and HDMA. */
-                    wx=camx+EffectProjection(scene,false,s.view.world_x)-
-                        EffectProjection(scene,false,camera_x)+start;
-                    wy=camy+EffectProjection(scene,true,s.view.world_y)-
-                        EffectProjection(scene,true,camera_y)+row;
+                    wx=camx+(tracked_effect?
+                        ProjectEffect(effect_camera.ratio[0],s.view.world_x)-
+                        ProjectEffect(effect_camera.ratio[0],camera_x):
+                        EffectProjection(scene,false,s.view.world_x)-
+                        EffectProjection(scene,false,camera_x))+start;
+                    wy=camy+(tracked_effect?
+                        ProjectEffect(effect_camera.ratio[1],s.view.world_y)-
+                        ProjectEffect(effect_camera.ratio[1],camera_y):
+                        EffectProjection(scene,true,s.view.world_y)-
+                        EffectProjection(scene,true,camera_y))+row;
                 }
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)wy&1023;
@@ -488,12 +701,13 @@ static bool RenderWorld(void)
                  * streaming. Solid Arm's animated backdrop lives in the
                  * uploaded VRAM ring; rebuilding it from allocation data
                  * replaces the animation with unrelated map cells. */
-                if(effect && scene==0xEA && (e->ram[0x6EF]&4)) continue;
+                if(effect && ((tracked_effect && effect_camera.uploaded_ring) ||
+                   (scene==0xEA && (e->ram[0x6EF]&4)))) continue;
                 for(int x=wx&~7;x<wx+width;x+=8) {
                     /* BG sampling uses hardware line1 while OBJ evaluation
                      * uses line0 for the same first output row. */
                     unsigned tile=MapTile(e,logical,x,wy+1,
-                        effect && !bounded && !classroom);
+                        effect && (!bounded || scene==0x85) && !classroom);
                     if(tile==0xFFFFFFFFu) tile=(unsigned)blank[logical];
                     /* Overlapping authentic cells use the actual uploaded
                      * VRAM entry, including partially updated scroll strips. */
@@ -519,6 +733,23 @@ static bool RenderWorld(void)
             for(size_t i=0;i<count;i++) s.objects[i].x-=start;
             PpuSetExtraObjects(p,s.objects,count);
             IogWorldPixelsDrawLine(p,0);IogWorldPixelsDrawLine(p,1);
+            uint32_t composite[Chunk];
+            bool cloud_sky=scene==0x55 && !bounded && !authored &&
+                Word(e->ram,0x694)==512 && Word(e->ram,0x698)==512 &&
+                (p->screenEnabled[0]&(1u<<(1^((e->ram[0x6EE]>>7)&1))));
+            if(cloud_sky) {
+                /* Viper's source meta declares a separate cloud plane. Draw
+                 * only that plane outside terrain bounds; unmasking the full
+                 * composite would expose spare floor pages and off-map actors.
+                 * Preserve the ordinary composite everywhere inside the room
+                 * and across the complete authoritative native field. */
+                memcpy(composite,s.row,(size_t)width*4);
+                unsigned terrain=(e->ram[0x6EE]>>7)&1;
+                p->screenEnabled[0]&=(uint8_t)~((1u<<terrain)|16u);
+                p->screenEnabled[1]&=(uint8_t)~((1u<<terrain)|16u);
+                PpuSetExtraObjects(p,NULL,0);
+                IogWorldPixelsDrawLine(p,0);IogWorldPixelsDrawLine(p,1);
+            }
             /* Only tilemap entries were changed on the owned picture. All
              * epochs have identical VRAM (checked above), so restoring these
              * bounded cells replaces a full64KB copy for every chunk/row. */
@@ -533,12 +764,13 @@ static bool RenderWorld(void)
                  * whole authoritative field during shake. This may include
                  * a hardware-wrapped edge; expanded outside-map space is
                  * still padding, never guessed or repeated terrain. */
-                if(bounded?(native_pixel || (worldx>=bounds.left && worldx<bounds.right &&
+                bool inside=(bounded||authored)?(native_pixel || (worldx>=bounds.left && worldx<bounds.right &&
                    worldy>=bounds.top && worldy<bounds.bottom)):
                    classroom?OriginalClassroomPixel(e,worldx,worldy):
                    (native_pixel||(worldx>=0&&worldx<(int)Word(e->ram,0x692)&&
-                   worldy>=0&&worldy<(int)Word(e->ram,0x696))))
-                    s.output[row*s.width+start+x]=s.row[x];
+                   worldy>=0&&worldy<(int)Word(e->ram,0x696)));
+                if(inside || cloud_sky)
+                    s.output[row*s.width+start+x]=cloud_sky&&inside?composite[x]:s.row[x];
             }
         }
     }
@@ -550,7 +782,8 @@ static bool RenderWorld(void)
         if((color>>24) && x+hudx>=0 && x+hudx<s.width)
             s.output[y*s.width+x+hudx]=color;
     }
-    s.reason="ready";return true;
+    s.reason=deferred_raster_effect && !EffectPlaneScene(scene)?
+        "ready_legacy_raster_effect":"ready";return true;
 }
 
 void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count)
@@ -599,6 +832,33 @@ static bool PacketFile(const char *base,const char *suffix,const void *data,size
 static bool ExportSourcePacket(const char *base,const uint8_t *field)
 {
     const uint16_t endian=1;
+    if(s.mode7) {
+        if(!s.valid || !s.epoch_count || *(const uint8_t*)&endian!=1) return false;
+        bool ok=PacketFile(base,".mode7.field.bgra",field,256*224*4);
+        ok=PacketFile(base,".mode7.parameters.bin",s.epochs[s.lines[0].epoch].ram+0xB0,0x20) && ok;
+        if(s.complete) ok=PacketFile(base,".mode7.plane.bgrx",s.output,
+            (size_t)s.width*s.height*4) && ok;
+        char path[4096];int n=snprintf(path,sizeof(path),"%s.mode7.epochs.bin",base);
+        if(n<0 || (size_t)n>=sizeof(path))return false;
+        FILE *f=fopen(path,"wb");if(!f)return false;
+        for(int i=0;i<s.epoch_count;i++)
+            if(fwrite(s.epochs[i].vram,1,65536,f)!=65536 ||
+               fwrite(s.epochs[i].cgram,1,512,f)!=512)ok=false;
+        if(fclose(f))ok=false;
+        n=snprintf(path,sizeof(path),"%s.mode7.json",base);
+        if(n<0 || (size_t)n>=sizeof(path))return false;
+        f=fopen(path,"wb");if(!f)return false;
+        if(fprintf(f,"{\"schema\":\"iog-mode7-plane-source-v1\",\"frame\":%u,\"ready\":%s,\"composition_paired\":false,\"width\":%d,\"height\":%d,\"native_x\":%u,\"native_y\":%u,\"perspective_validated\":%s,\"initial_divisor\":%u,\"increment\":%u,\"cosine\":%d,\"sine\":%d,\"epoch_bytes\":66048,\"epochs\":%d,\"lines\":[",s.frame,s.complete?"true":"false",s.width,s.height,s.view.native_x,s.view.native_y,s.mode7_perspective?"true":"false",s.mode7_parameters.initial_divisor,s.mode7_parameters.increment,s.mode7_parameters.cosine,s.mode7_parameters.sine,s.epoch_count)<0)ok=false;
+        for(int line=0;line<=224;line++) {
+            if(fprintf(f,"%s{\"epoch\":%u,\"regs\":\"",line?",":"",s.lines[line].epoch)<0)ok=false;
+            for(unsigned k=0;k<PPU_SAVESTATE_REGS_SIZE;k++)
+                if(fprintf(f,"%02x",s.lines[line].registers[k])<0)ok=false;
+            if(fprintf(f,"\"}")<0)ok=false;
+        }
+        if(fprintf(f,"],\"complete\":%s}\n",ok?"true":"false")<0)ok=false;
+        if(fclose(f))ok=false;
+        return ok;
+    }
     if(!s.valid || !s.active || !s.epoch_count || *(const uint8_t*)&endian!=1) return false;
     bool ok=PacketFile(base,".active.wram.bin",s.active_ram,sizeof(s.active_ram));
     ok=PacketFile(base,".hud.bgra",s.hud,sizeof(s.hud)) && ok;
@@ -642,14 +902,19 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
        pitch<(size_t)width*4||!isfinite(alpha)||alpha<0||alpha>1) return 0;
     if(s.complete && width==s.width && height==s.height) {
         for(int y=0;y<height;y++) memcpy(dst+y*pitch,s.output+y*width,width*4);
+        if(s.mode7) {
+            int left=(width-256)/2,top=(height-224)/2;
+            for(int y=0;y<224;y++) memcpy(dst+(y+top)*pitch+left*4,
+                field+y*256*4,256*4);
+        }
     } else {
         for(int y=0;y<height;y++) memset(dst+y*pitch,0,width*4);
-        /* Unsupported scenes preserve the original field at a uniform scale. */
-        int scaledw=256*height/224,left=(width-scaledw)/2;
-        for(int y=0;y<height;y++) for(int x=0;x<scaledw;x++) {
-            if(x+left>=0&&x+left<width) memcpy(dst+y*pitch+(x+left)*4,
-                field+((y*224/height)*256+x*256/scaledw)*4,4);
-        }
+        /* Keep the same world-pixel scale across supported rooms, menus and
+         * fallback effects. Filling the taller host frame magnifies the old
+         * field and makes every unsupported doorway produce a zoom jump. */
+        int left=(width-256)/2,top=(height-224)/2;
+        for(int y=0;y<224;y++) memcpy(dst+(y+top)*pitch+left*4,
+            field+y*256*4,256*4);
     }
     const char *output=getenv("IOG_WORLD_OUTPUT");
     const char *frame=getenv("IOG_WORLD_OUTPUT_FRAME");

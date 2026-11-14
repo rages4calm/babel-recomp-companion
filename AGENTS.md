@@ -3,6 +3,10 @@
 Read HANDOFF.md first, then the current baseline audit. Continue from receipts;
 do not redo completed audits or recreate validation archives without a reason.
 
+Current priority: full-game visual coverage and approved GaiaLabs maps with
+Retranslation built into the main content, before returning to native gaps.
+Fix neighboring rooms and transitions too; scene admission is not visual approval.
+
 - Work only in this project. Lagoon, EarthBound and shared Companion projects
   are read-only references unless the owner explicitly requests changes there.
 - Preserve Babel author mr0ta / mrOt4, every existing upstream credit and all

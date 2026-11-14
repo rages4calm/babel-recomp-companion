@@ -32,14 +32,36 @@ endif()
 # gate all hang off this one switch; a build without it cannot exchange mods
 # with a peer that has them, and the framework says so at every lobby init.
 # Must precede the include: runner.cmake reads it to add the loader sources.
-set(SNESRECOMP_ENABLE_MODS ON CACHE BOOL
-    "Mod package loader + trusted plugins (required for every title)" FORCE)
+option(IOG_RECEIVED_REFERENCE "Private interpreted GaiaLabs received-content reference host" OFF)
+set(IOG_RECEIVED_REFERENCE_SHA256 "" CACHE STRING "Exact private received bare-ROM SHA-256")
+set(IOG_RECEIVED_REFERENCE_ROM_FILE "" CACHE STRING "Private received ROM basename")
+if(IOG_RECEIVED_REFERENCE)
+    set(SNESRECOMP_ENABLE_MODS OFF CACHE BOOL "No stock plugins in received reference" FORCE)
+else()
+    set(SNESRECOMP_ENABLE_MODS ON CACHE BOOL
+        "Mod package loader + trusted plugins (required for every title)" FORCE)
+endif()
 # Interpreter-only by default: the game runs from the player's own ROM at
 # run time and the binary carries nothing derived from it, so it can be
 # distributed and builds without any regeneration step. Private mixed-native
 # builds have separate matched-route qualification; generated source alone is
 # not execution coverage. OFF links the selected locally generated program.
 set(SNESRECOMP_INTERPRETER_ONLY ON CACHE BOOL "Interpreter-only build (no ROM-derived code)")
+if(IOG_RECEIVED_REFERENCE)
+    if(NOT SNESRECOMP_INTERPRETER_ONLY OR SNESRECOMP_SETUP_HOST)
+        message(FATAL_ERROR "Received reference requires a playable interpreter-only build")
+    endif()
+    if(IOG_NATIVE_EFFECTS_SOURCE OR IOG_NATIVE_WRAM_EFFECTS_SOURCE OR IOG_GENERATED_DIR)
+        message(FATAL_ERROR "Received reference refuses generated/native-effect inputs")
+    endif()
+    string(LENGTH "${IOG_RECEIVED_REFERENCE_SHA256}" _received_hash_length)
+    if(NOT _received_hash_length EQUAL 64 OR IOG_RECEIVED_REFERENCE_SHA256 MATCHES "[^0-9a-f]")
+        message(FATAL_ERROR "Received reference requires an exact lowercase ROM SHA-256")
+    endif()
+    if(NOT IOG_RECEIVED_REFERENCE_ROM_FILE MATCHES "^[A-Za-z0-9 ._-]+\\.(smc|sfc)$")
+        message(FATAL_ERROR "Received reference requires a plain ROM basename")
+    endif()
+endif()
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 
 # Nintendo Switch: an optional Mesa for Switch SDK (danfromtico/mesa-switch,
@@ -79,6 +101,12 @@ set(IOG_SOURCES
     src/iog_text.c
     src/gen_stubs.c
 )
+if(IOG_RECEIVED_REFERENCE)
+    # No title plugins, stock-address observers, asset patches or generated code.
+    set(IOG_SOURCES ${SNESRECOMP_RUNNER_SOURCES} src/main.c src/host_contract.c src/game_rtl.c
+        src/iog_received_observer.c src/iog_received_world.c src/iog_visual_objects.c
+        src/iog_world_pixels.c src/iog_world_view.c)
+endif()
 if(ANDROID)
     # Android: the game is the "main" library SDL's activity loads.
     add_library(IllusionOfGaiaUsaSNESRecomp SHARED ${IOG_SOURCES})
@@ -91,6 +119,14 @@ endif()
 # friends) for src/main.c, and tools/regen.sh, scripts/package_release.sh and
 # the release workflow read the same file. A revision bump is one edit there.
 snesrecomp_rom_identity(IllusionOfGaiaUsaSNESRecomp ${CMAKE_SOURCE_DIR}/rom_identity.txt)
+if(IOG_RECEIVED_REFERENCE)
+    # Stock identity macros remain stock: these admission fields are separate.
+    target_compile_definitions(IllusionOfGaiaUsaSNESRecomp PRIVATE
+        IOG_RECEIVED_REFERENCE=1
+        IOG_RECEIVED_DIAGNOSTICS_ROOT="${CMAKE_SOURCE_DIR}/.local"
+        IOG_RECEIVED_REFERENCE_SHA256="${IOG_RECEIVED_REFERENCE_SHA256}"
+        IOG_RECEIVED_REFERENCE_ROM_FILE="${IOG_RECEIVED_REFERENCE_ROM_FILE}")
+endif()
 
 # The game ships as "babel-recomp" (babel-recomp, babel-recomp.exe,
 # babel-recomp.nro); the CMake target keeps its internal name. The Vita's is
@@ -109,11 +145,15 @@ endif()
 # That is what release zips contain; the player's machine produces the
 # playable binary from their own ROM. Without the option an empty src/gen/ is
 # still a hard error (the framework owns the message).
-set(IOG_GENERATED_DIR "${CMAKE_SOURCE_DIR}/src/gen" CACHE PATH
-    "Private generated-code directory (never distribute ROM-derived output)")
+if(IOG_RECEIVED_REFERENCE)
+    set(IOG_GENERATED_DIR "" CACHE PATH "No generated code in received reference" FORCE)
+else()
+    set(IOG_GENERATED_DIR "${CMAKE_SOURCE_DIR}/src/gen" CACHE PATH
+        "Private generated-code directory (never distribute ROM-derived output)")
+endif()
 set(IOG_GENERATED_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/recomp" CACHE PATH
     "Matching generated function declarations for the selected private program")
-snesrecomp_target_generated_code(IllusionOfGaiaUsaSNESRecomp ${IOG_GENERATED_DIR})
+snesrecomp_target_generated_code(IllusionOfGaiaUsaSNESRecomp "${IOG_GENERATED_DIR}")
 set(IOG_NATIVE_EFFECTS_SOURCE "" CACHE FILEPATH "Private generated continuation effects")
 if(IOG_NATIVE_EFFECTS_SOURCE)
     if(SNESRECOMP_INTERPRETER_ONLY)
@@ -159,6 +199,7 @@ endif()
 # it is now also enforced: a project with packages that never calls this fails
 # to configure.
 # Text layout for runtime localization (no text: the player's ROMs supply it).
+if(NOT IOG_RECEIVED_REFERENCE)
 add_custom_command(TARGET IllusionOfGaiaUsaSNESRecomp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_SOURCE_DIR}/i18n/structure.txt
@@ -166,7 +207,10 @@ add_custom_command(TARGET IllusionOfGaiaUsaSNESRecomp POST_BUILD
     COMMENT "Staging i18n/structure.txt"
     VERBATIM)
 
-snesrecomp_target_mod_catalog(IllusionOfGaiaUsaSNESRecomp ${CMAKE_SOURCE_DIR}/mods/preloaded)
+    snesrecomp_target_mod_catalog(IllusionOfGaiaUsaSNESRecomp ${CMAKE_SOURCE_DIR}/mods/preloaded)
+else()
+    snesrecomp_target_mod_catalog(IllusionOfGaiaUsaSNESRecomp NONE)
+endif()
 # Any other directory the game reads exe-relative (a translations/ table, ...)
 # is staged with snesrecomp_target_stage_dir, never with a separate ALL target.
 

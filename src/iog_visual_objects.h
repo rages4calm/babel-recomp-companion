@@ -16,7 +16,10 @@ typedef enum IogVisualStatus {
     kIogVisualUnsupportedScene,
     kIogVisualUnsupportedFormat,
     kIogVisualMalformedSource,
-    kIogVisualCapacity
+    kIogVisualCapacity,
+    kIogVisualSourceUnqualified,
+    kIogVisualIdentityMismatch,
+    kIogVisualPublicationMismatch
 } IogVisualStatus;
 
 typedef struct IogVisualSource {
@@ -73,5 +76,47 @@ bool IogVisualObjectsSupportsScene(uint16_t scene);
  * Inputs/output must not overlap. */
 IogVisualStatus IogVisualObjectsBuild(const IogVisualSource *source,
     const IogVisualViewport *viewport, IogVisualFrame *out);
+
+/* Separate pinned received-content contract; never set stock_identity_verified
+ * for this format. A verified identity is cached for one immutable ROM buffer. */
+typedef struct IogVisualReceivedIdentity {
+    const uint8_t *rom;
+    size_t rom_size;
+    uint8_t digests[3][32];
+} IogVisualReceivedIdentity;
+typedef struct IogVisualReceivedSource {
+    const uint8_t *ram;
+    size_t ram_size;
+    const struct Ppu *ppu;
+    const IogVisualReceivedIdentity *identity;
+    const uint8_t *staging, *published;
+    size_t staging_size, published_size;
+    uint64_t compose_epoch, publication_epoch;
+    uint16_t observed_direct_bytes;
+} IogVisualReceivedSource;
+/* The direct-prefix source is screen-space OAM, not world positions. Keeping
+ * it separate prevents inventing camera/world ownership for UI or markers. */
+typedef struct IogVisualScreenPart {
+    int16_t x,y;
+    uint32_t order;
+    uint16_t tile_attributes;
+    uint8_t width,height,palette,priority,hflip,vflip;
+    uint16_t pixels[kIogVisualPartPixels];
+    uint8_t indices[kIogVisualPartPixels];
+} IogVisualScreenPart;
+typedef struct IogVisualReceivedFrame {
+    IogVisualStatus status;
+    uint16_t screen_count;
+    IogVisualFrame world;
+    IogVisualScreenPart screen[128];
+} IogVisualReceivedFrame;
+IogVisualStatus IogVisualReceivedVerify(const uint8_t *rom, size_t size,
+    IogVisualReceivedIdentity *identity);
+/* Read-only composer-entry RAM plus matching post-compose/publication packet.
+ * Currently qualified only for received classroom08 / Will / direct1FC0.
+ * Requires all544 published bytes and matching observation epochs. No runtime
+ * renderer activation or interpreter/native dispatch policy is implied. */
+IogVisualStatus IogVisualReceivedBuild(const IogVisualReceivedSource *source,
+    const IogVisualViewport *viewport,IogVisualReceivedFrame *out);
 
 #endif
