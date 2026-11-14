@@ -7,7 +7,92 @@ Owner priority: finish the remaining native game code so broader improvements ca
 begin. Keep performance checks focused on visible lag, skipped frames, input
 response and regressions. Avoid repeating microbenchmarks for tiny CPU differences.
 
-## Qualified continuation — batch 024
+## Qualified continuation — batch 025
+
+Source baseline `672b153689d97fdfd238956c853817f971cff8b2`; private executable
+`194d65974e55cdc90e56e3b0780885e7bc1f0986d255ad1e40ec2eb8d4b097ee`.
+Read [batch 025](docs/NATIVE-BATCH-025.md). Reuse immutable 016 graph and single 018
+build; owner `build/` stays 005. No installation, release, graph regeneration or
+benchmarks. Keep current scratch `.local/batch-001/native-025` intact.
+
+- Adds 887 exact physical contexts: 884 script/actor/boss plus three RDNMI
+  acknowledgements. Old 78,449 ROM/twelve WRAM rows remain, total 79,348. All 887
+  observed across fresh 185, 2,452,003 instructions/12,337,381 cycles. New 396 frame
+  grants for COP/RTI, zero new NMI; all new scopes scheduler 1. ACK0frame/0NMI.
+- Only title policy/driver plus ROM-free tests change. All 524 compiled production
+  sources, interpreter/bridge/emitter/poll/ABI/saves/runtimeguards unchanged.
+  Five forbidden RDNMI PC list remains, with explicit exceptions ONLY physical
+  828049/8053/8195 M1X0E0/LDAaf104280/scope 1/noNMI. Other aliases/modes/shapes/
+  owners refused; two original poll sites unchanged. Four AOT barriers, 20 mutable
+  culling bytes and old 4,084 ROM/four WRAM NMI grants remain. Default-off switches,
+  interpreter/reference and old lookup retained. Generated source stays private.
+- Fresh 185: 370 captures/1,356,600 frames/3,114 sets PASS. Same 185 interpreter
+  13,767,490→1,430,109 (**89.612420% less**), native guest 99.994153%. Every old
+  ROM/WRAM per-site count exact, every new site's interpreter decrease equals its
+  native work. Earlier 105/129/148/171 now 99.997673/99.997316/99.996443/99.994562%;
+  their new work is ACK3 only, not the 884 script contexts. Separate denominators.
+- Final 195: 390 captures/1,415,200 frames/3,200 sets PASS, native guest 99.989589%.
+  NEW 10: 20 captures/58,600 frames/86 sets, 43 exact 256 fields/2,465,792 pixels;
+  separate 99.891208%. Solid Arm upper/left/right, Water bridge/refusal, fourth
+  platform, genuine Powder handoff/refusal, Shadow sink/abort. Shadow 0x24 is
+  disclosed inventory assistance; form 2 is earned. No enemy/outcome pokes. New
+  Kara handoff is narrow, not free-control proof. All OLD 80 semantics freshly pass.
+- Source 20 attempts/63,700 actual frames, all failures retained. Original 14
+  goals 9 met/5 unresolved (Aura2, Mine2, strictKara freecontrol), plus separately
+  defined narrow n07 fixture. No further source loops. Earlier castle/Euro exit
+  approaches remain unqualified. No campaign/full-native/SPC/host-speed claim.
+- Fresh 8 ACK core tests: 9,576 REF/native pairs/443,764 checks, four activated
+  skip-read faults rejected;13 title-policy/8 alias/5 actor pass. Prior SDK 972/2skip and
+  priorMode7eight REUSED_NOT_FRESH; old 786 SDK+Mode 7test byte-exact, current 788
+  sources/990 collection only. No full-suite rerun. Private fixture/namespace/unit
+  failures preserved with versioned fixes, not upgraded or reported upstream.
+- RawSPC host observer/info differences:185=1,554/18,195=1,597/18; NEW 10=43/0.
+  Same fullCPU/device/executedAPU/port-order/state/PCM/queue criteria; raw values
+  unnormalized. No new masks, global beam/continuous-SPC/hardware waveform claims.
+- Renderer 25/83,500f PASS, including original lesson/both doors/town/combat/boss
+  and original Mode 7 field/padded fallback; no new admissions/61-format refresh.
+  MSU opening 4,400f + NVIDIA 1080p xBR/1.5x 240f pass, seed/image byte-exact 024,
+  oldcold perPC exact; ACK3 executes 12,148 instructions/60,740cycles. Latest
+  `native-025/Play Original Classroom.cmd`, no owner installation changes.
+- Corrected localdisk ledger1643c95d has 10 independent literal guards, unchanged
+  9GiB hard cap. Initial 1025 namespace-copy bug retainedFAILED, corrected before
+  more sources; first 16.1MBsource stayedbelowintendedcap. Original allocation
+  gateFAIL retained; immutable firstpair passed comparable readback, only other 184
+  ran onresume, no replay. Source/candidate combined 896MiB, root actual 536,356,997B.
+  Current ledger closes 0reservations belowhard; no further captures scheduled.
+- Cleanup 45,121 files/13,564,669,962 logical/4,432,448,528 reported last-link bytes,
+  zero locks/errors, no archive/CMD. Retired old 024 native 185+renderer 25 raw after
+  final195/OLD 80/new 10/root 25/MSU/reader releases. Keep 3,402 info JSON/allmetadata/
+  failures/scouts/states/seeds/source/owner 39/PCM28/compact 15/masters/graph/current 025
+  and ENTIRE 021 renderer 44. Retired raw unavailable as goldens.
+- Official SDK 80a41241/Gaia e825dddde/RomAtlas b9ae425 unchanged at finalreadback;
+  issues 265/285 open 0 comments. Qualified Python 3.14.10/Clang 22.1.8/CMake 4.4.5/
+  Ninja 1.13.2 retained; RomAtlas qualifieddecoder reuse, no new-mainbuild claim.
+
+NEXT primary: `counter-audit-additions/combined195-v1/remaining-union-v2.json`
+SHA90f435ea964d8635434500dee8ec9fbbe8c06e0d0bcec0b6d1fc75859ce4d717.
+2,664,242 interpreted cycles: old registered causeUNKNOWN1,460,737; unregistered
+ROM/mode 1,059,735; mutable actor 127,504; ACK registered causeUNKNOWN15,715;
+SP 316/actorSP194/reset30/othernew884refused8/actorunknown3. Biggest unregistered
+8B9C7F/8C/BA M0X0:205,872/123,612/123,252cycles. Opcode/source/owner not qualified;
+do not infer from address. Registered categories are not causal telemetry.
+Keep185rank `native-gap/remaining-full185-v1.json` (1,430,109cy) and 105/129/148/171
+separate. Retain runtime guards/fallback; qualify source/passive cause evidence.
+No repeated benchmarks, raw comparisons, SDK execution or graph regeneration.
+
+Primary proofs: final185 d7e51e15, final195v2 66bc2deb, NEW 10v2 5a2dd13c,
+OLD 80 43b004c3, sourcef9271937, engine d3f8b194, ACK corec76b1098, generated
+preservation, critical22/Mode 7/MSU, correctedledger/retirement final receipts.
+First failed allocation and private failures remain failed; metadata-onlyv2
+supplements bind actual producer/function lineage without redoing raw analyses.
+
+## Previous qualified continuation — batch 024 (historical)
+
+Batch 025 retires its passed native185 and renderer25 raw after replacement proof.
+Source, metadata, failures, scouts and states/seeds remain. Original retention and
+next-work instructions below are historical and superseded by current 025 above.
+
+
 
 Source baseline `cc984267df0d98ba5a8c68e678e4434520a23535`; private executable
 `172ff8743f08c0edc02abf54bc2c5fefefa09385b65251d75201d50765dea1aa`.

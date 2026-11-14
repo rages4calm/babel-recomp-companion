@@ -1,5 +1,12 @@
 # Native batch 024 — Mode 7 perspective and world-map coverage
 
+> Historical receipt. [Batch 025](NATIVE-BATCH-025.md) retires this batch's passed
+> native185 and renderer25 raw after fresh replacement proof and reader releases.
+> Source, metadata, failures, scouts, states/seeds and runnable masters remain.
+> Original retention statements below describe the earlier closeout. Retired raw
+> is unavailable as a golden; entire 021 renderer44 remains.
+
+
 Source baseline `cc984267df0d98ba5a8c68e678e4434520a23535`, November 13, 2026.
 Private candidate SHA-256:
 `172ff8743f08c0edc02abf54bc2c5fefefa09385b65251d75201d50765dea1aa`.

@@ -103,3 +103,22 @@ The previous 972-pass/two-skip SDK result is explicitly reused against 786
 unchanged source files. The eight new tests ran separately; collection reports
 982 tests, and no fresh full-suite run is claimed. Current game execution is
 qualified independently. [Batch 024](NATIVE-BATCH-024.md) records the exact scope.
+
+
+## Batch 025 exact acknowledgement qualification
+
+Official main remains 80a41241 at the final November 13 check; no vendor/runtime
+replacement or new engine mechanism is introduced. Three exact physical
+M1X0/E0 RDNMI acknowledgements now have explicit title-policy permission for the
+existing fixed-effect path, scheduler scope only, no NMI/frame grants or alias
+expansion. The five protected-PC list and two original poll sites stay; all other
+modes/bytes/owners remain excluded. Original bridge/interpreter/emitter/ABI/save/
+retirement/event/live-byte behavior and 524 compiled-source files are unchanged.
+
+Eight fresh real-device tests execute 9,576 REF/native pairs/443,764 checks,
+including actual read-clear/beam edges, ordinary/native-NMI refusals and four
+activated skip-read fault rejections. Thirteen title-policy, eight alias and five
+actor-policy tests pass. Prior SDK972/two skipped and prior Mode7 eight are reused,
+not fresh; old 786 sources plus the Mode7 test are byte-exact. The 990-test
+collection is not a fresh full-suite run. [Batch 025](NATIVE-BATCH-025.md) records
+the fresh185/expanded195 execution, partial source goals and observation limits.
