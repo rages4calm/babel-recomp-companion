@@ -32,6 +32,9 @@ static unsigned identity_hashes,interpret_all_calls;static int interpreted;
 static const char *ips_path;
 static SNESModActivationCallback ips_activation;
 static uint8_t source_field[256*224*4];
+static bool background_probe,static_plane_probe,stream_plane_probe,source_row_probe;
+static int expected_background_x,expected_background_y;
+static unsigned background_probe_calls;
 #define CHECK(c) do{checks++;if(!(c)){fprintf(stderr,"line%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 static void word(unsigned at,unsigned value){ram[at]=(uint8_t)value;ram[at+1]=(uint8_t)(value>>8);}
 bool IogRandomizerActive(void){return randomizer;}
@@ -76,6 +79,37 @@ void PpuDrawDetachedLine(Ppu*p,int line){
  CHECK(p!=g_ppu&&(line==0||line==1));if(!line)return;detached_lines++;
  CHECK(p->renderPitch==1024&&!p->renderVram&&!p->hdFrame&&!p->overlayRenderBuffer[2]);
  for(unsigned n=0;n<256;n+=2)CHECK(p->oam[n]==0xf000);
+ if(background_probe){
+  unsigned row=background_probe_calls/3,start=(background_probe_calls%3)*224;
+  CHECK(p->hScroll[1]==((expected_background_x+(int)start)&1023));
+  CHECK(p->vScroll[1]==((expected_background_y+(int)row)&1023));
+  if(source_row_probe&&row==112&&start==224){
+   /* The foreground's original field starts here, but a fixed backdrop
+    * has already advanced112 rows. Its uploaded left256 columns and the
+    * independently decoded right columns must sample the SAME row14. */
+   const unsigned columns[]={248,256};
+   for(unsigned n=0;n<2;n++){
+    unsigned tx=columns[n]>>3;
+    unsigned address=PPU_bgTilemapAdr(p,1)+(14u<<5)+(tx&31);
+    if(tx&32)address+=0x400;
+    CHECK(p->vram[address]==0x600e);
+   }
+  }
+  if(Word(s.active_ram,0x644)==0x85&&!row&&start==448){
+   /* The third chunk is entirely beyond the256px secondary allocation.
+    * Its first cell is still real repeated scenery, not transparent fill. */
+   unsigned tx=p->hScroll[1]>>3,ty=(p->vScroll[1]+1)>>3;
+   unsigned address=PPU_bgTilemapAdr(p,1)+((ty&31)<<5)+(tx&31);
+   if(tx&32)address+=0x400;
+   CHECK(p->vram[address]==0x789a);
+  }
+  if(static_plane_probe)for(unsigned n=0x1800;n<0x2000;n++)CHECK(p->vram[n]==0x5555);
+  if(stream_plane_probe&&!background_probe_calls){
+   bool changed=false;for(unsigned n=0x1800;n<0x2000;n++)changed|=p->vram[n]!=0x5555;
+   CHECK(changed); /* A missing streaming patch cannot pass the static test. */
+  }
+  background_probe_calls++;
+ }
  uint32_t*row=(uint32_t*)p->renderBuffer;
  for(unsigned x=0;x<256;x++)row[x]=0xff000000u|((p->hScroll[0]+x)&1023)|(((p->vScroll[0]+1)&1023)<<10);
 }
@@ -95,6 +129,8 @@ static void fixture(void){
  for(unsigned i=0;i<sizeof(source_field);i++)source_field[i]=(uint8_t)(i*13+7);
  detached_lines=visual_builds=0;
  identity_hashes=interpret_all_calls=0;interpreted=0;ips_path=NULL;
+ background_probe=static_plane_probe=stream_plane_probe=false;background_probe_calls=0;
+ source_row_probe=false;
 }
 static void publication(void){
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(s.pending&&!s.composed&&!s.active);
@@ -227,6 +263,100 @@ static void signed_camera_shake(void){
  publication();IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
  IogWorldEndRaster(0x828051,225,0);CHECK(!s.complete&&!strcmp(s.reason,"invalid_world_view"));
 }
+static void repeating_secondary_samples(void){
+ fixture();PictureEpoch*e=&s.epochs[0];memset(e,0,sizeof(*e));
+ memcpy(e->ram,ram,sizeof(e->ram));
+ e->ram[0x694]=0;e->ram[0x695]=1; /* 256 by 768, not a power-of-two height */
+ e->ram[0x698]=0;e->ram[0x699]=3;
+ e->ram[0xc000]=1;e->ram[0xc2ff]=2;e->ram[0xc100]=3;
+ for(unsigned n=0;n<4;n++){
+  e->ram[0x2808+n*2]=(uint8_t)(0x10+n);e->ram[0x2809+n*2]=0x11;
+  e->ram[0x2810+n*2]=(uint8_t)(0x20+n);e->ram[0x2811+n*2]=0x22;
+  e->ram[0x2818+n*2]=(uint8_t)(0x30+n);e->ram[0x2819+n*2]=0x33;
+ }
+ uint8_t*before=malloc(sizeof(e->ram));CHECK(before);memcpy(before,e->ram,sizeof(e->ram));
+ CHECK(MapTile(e,1,0,0,true)==0x1110);
+ CHECK(MapTile(e,1,-1,-1,true)==0x2223);
+ CHECK(MapTile(e,1,256,768,true)==0x1110);
+ CHECK(MapTile(e,1,512,1024,true)==0x3330);
+ CHECK(MapTile(e,1,-1,0,false)==0xffffffffu);
+ CHECK(MapTile(e,1,256,0,false)==0xffffffffu);
+ CHECK(MapTile(e,1,0,768,false)==0xffffffffu);
+ CHECK(MapTile(e,0,-1,0,false)==0xffffffffu);
+ CHECK(MapTile(e,0,768,0,false)==0xffffffffu);
+ CHECK(!memcmp(before,e->ram,sizeof(e->ram)));free(before);
+ e->ram[0x695]=2;e->ram[0x699]=2;e->ram[0xc3ff]=2; /* 512 by 512 */
+ CHECK(MapTile(e,1,512,512,true)==0x1110);
+ CHECK(MapTile(e,1,-1,-1,true)==0x2223);
+ CHECK(MapTile(e,1,1536,1536,true)==0x1110);
+ CHECK(!EffectPlaneScene(1)&&!EffectPlaneScene(8)&&!EffectPlaneScene(0xe5));
+ CHECK(EffectProjection(0x4f,false,-1)==-1&&EffectProjection(0x4f,true,-5)==-2);
+ CHECK(EffectProjection(0x4f,false,7)==1&&EffectProjection(0x4f,true,8)==2);
+}
+static void background_picture(unsigned scene,unsigned camera_x,unsigned camera_y,
+ unsigned effect_x,unsigned effect_y,int expected_x,int expected_y,bool static_plane){
+ fixture();word(0x644,scene);word(0x68a,camera_x);word(0x68e,camera_y);
+ word(0x68c,effect_x);word(0x690,effect_y);
+ if(scene==0x4f||scene==0xcc){word(0x692,1024);word(0x696,1024);word(0x694,512);word(0x698,512);}
+ if(scene==0x85){word(0x692,2048);word(0x696,768);word(0x694,256);word(0x698,768);}
+ if(scene==0x55){word(0x692,512);word(0x696,512);word(0x694,512);word(0x698,512);}
+ if(scene==0xea){
+  word(0x692,256);word(0x696,256);word(0x694,512);word(0x698,256);
+  word(0x6ee,static_plane?0x400:0);
+  for(unsigned n=0x1800;n<0x2000;n++)g_ppu->vram[n]=0x5555;
+ }
+ g_ppu->hScroll[0]=(uint16_t)camera_x;g_ppu->vScroll[0]=(uint16_t)camera_y;
+ /* Nonzero live raster offsets exercise preservation of drift/HDMA; their
+  * values deliberately differ from the logical secondary camera. */
+ g_ppu->hScroll[1]=(uint16_t)(effect_x+5);g_ppu->vScroll[1]=(uint16_t)(effect_y+7);
+ publication();memcpy(before_ram,ram,sizeof(ram));before_ppu=*g_ppu;CpuState cpu=g_cpu;
+ IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ background_probe=true;static_plane_probe=static_plane;stream_plane_probe=scene==0xea&&!static_plane;
+ expected_background_x=expected_x;expected_background_y=expected_y;
+ IogWorldEndRaster(0,225,0);CHECK(s.complete&&background_probe_calls==3*336);
+ CHECK(!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(&cpu,&g_cpu,sizeof(cpu)));
+ CHECK(!memcmp(before_ppu.vram,g_ppu->vram,sizeof(before_ppu.vram)));
+ CHECK(!memcmp(s.detached.vram,s.epochs[0].vram,sizeof(s.detached.vram)));
+}
+static void parallax_host_camera_and_static_upload(void){
+ /* Both quarter-speed cases clamp the host view at origin0. The original
+  * camera moves 8/12 ->12/16, but the backdrop must stay at phase5/7. The
+  * obsolete full-rate recentering yields -1/-2 instead of this fixed phase. */
+ background_picture(0x4f,8,12,2,3,5,7,false);
+ background_picture(0x4f,12,16,3,4,5,7,false);
+ background_picture(0x85,8,16,0,16,5,7,false); /* vertical-only, X is fixed */
+ background_picture(0xcc,760,592,0,0,5,7,false); /* fixed wall plate */
+ background_picture(0x55,128,128,0,0,5,7,false); /* independent sky */
+ /* SceneEA's finite256 world is centered at (-171,-40). Its uploaded512
+  * ring is authoritative in position-bypass mode; the otherwise identical
+  * streamed control MUST modify detached map cells, then restore them. */
+ background_picture(0xea,0,0,320,81,154,48,true);
+ background_picture(0xea,0,0,320,81,154,48,false);
+}
+static void projected_source_row_seam(void){
+ fixture();word(0x644,0x55);word(0x692,512);word(0x696,512);
+ word(0x694,512);word(0x698,512);word(0x68a,0);word(0x68e,288);
+ word(0x68c,0);word(0x690,0);
+ g_ppu->hScroll[0]=g_ppu->hScroll[1]=0;
+ g_ppu->vScroll[0]=288;g_ppu->vScroll[1]=0;
+ /* Synthetic streamed background: every8px row has its own tile value,
+  * shared across all columns. The uploaded ring agrees with map rows0..31.
+  * This makes a source-row mismatch visible without using game assets. */
+ for(unsigned py=0;py<2;py++)for(unsigned px=0;px<2;px++)
+  for(unsigned y=0;y<16;y++)for(unsigned x=0;x<16;x++)
+   ram[0xc000+((py*2+px)<<8)+(y<<4)+x]=(uint8_t)(py*16+y);
+ for(unsigned n=0;n<32;n++)for(unsigned q=0;q<4;q++)word(0x2800+n*8+q*2,0x6000+n*2+q/2);
+ for(unsigned y=0;y<32;y++)for(unsigned x=0;x<64;x++)
+  g_ppu->vram[0x1800+(y<<5)+(x&31)+(x&32?0x400:0)]=(uint16_t)(0x6000+y);
+ publication();memcpy(before_ram,ram,sizeof(ram));before_ppu=*g_ppu;CpuState cpu=g_cpu;
+ IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ background_probe=source_row_probe=true;expected_background_x=expected_background_y=0;
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&s.view.world_y==176&&s.view.native_y==112&&background_probe_calls==3*336);
+ CHECK(!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(&cpu,&g_cpu,sizeof(cpu)));
+ CHECK(!memcmp(before_ppu.vram,g_ppu->vram,sizeof(before_ppu.vram)));
+ CHECK(!memcmp(s.detached.vram,s.epochs[0].vram,sizeof(s.detached.vram)));
+}
 static void late_ips_identity(const char*base){
  char path[4096];CHECK(snprintf(path,sizeof(path),"%s.synthetic.ips",base)>0);
  const uint8_t valid[]={'P','A','T','C','H',0,0,0,0,1,1,'E','O','F'};
@@ -253,7 +383,7 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();projected_source_row_seam();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 
@@ -301,6 +431,33 @@ def main():
     causal_run=subprocess.run([str(causal_exe),str(out/'causal-packet')],env=env,capture_output=True,text=True)
     (out/'causal-run.log').write_text(causal_run.stdout+causal_run.stderr)
     assert causal_run.returncode!=0 and '!s.stock&&identity_hashes==2' in causal_run.stderr
+    renderer=ROOT/'src/iog_world_renderer.c';renderer_text=renderer.read_text()
+    wrap_needle='if(repeat && w && h) {'
+    assert renderer_text.count(wrap_needle)==1
+    wrap_mutant=out/'world_without_secondary_repeat.c'
+    wrap_mutant.write_text(renderer_text.replace(wrap_needle,'if(false && repeat && w && h) {'),encoding='utf-8')
+    wrap_source=out/'secondary_repeat_causal.c'
+    wrap_source.write_text(HARNESS.replace('#include "iog_world_renderer.c"','#include "'+wrap_mutant.as_posix()+'"'),encoding='utf-8')
+    wrap_exe=out/'secondary_repeat_causal.exe';wrap_command=command.copy()
+    wrap_command[wrap_command.index(str(source))]=str(wrap_source);wrap_command[-1]=str(wrap_exe)
+    wrap_build=subprocess.run(wrap_command,capture_output=True,text=True)
+    (out/'repeat-causal-build.log').write_text(wrap_build.stdout+wrap_build.stderr);wrap_build.check_returncode()
+    wrap_run=subprocess.run([str(wrap_exe),str(out/'repeat-causal-packet')],env=env,capture_output=True,text=True)
+    (out/'repeat-causal-run.log').write_text(wrap_run.stdout+wrap_run.stderr)
+    assert wrap_run.returncode!=0 and 'MapTile(e,1,-1,-1,true)==0x2223' in wrap_run.stderr
+    row_needle='int source_y=wy-camy;'
+    assert renderer_text.count(row_needle)==1
+    row_mutant=out/'world_with_foreground_source_row.c'
+    row_mutant.write_text(renderer_text.replace(row_needle,'int source_y=native_y;'),encoding='utf-8')
+    row_source=out/'source_row_causal.c'
+    row_source.write_text(HARNESS.replace('#include "iog_world_renderer.c"','#include "'+row_mutant.as_posix()+'"'),encoding='utf-8')
+    row_exe=out/'source_row_causal.exe';row_command=command.copy()
+    row_command[row_command.index(str(source))]=str(row_source);row_command[-1]=str(row_exe)
+    row_build=subprocess.run(row_command,capture_output=True,text=True)
+    (out/'row-causal-build.log').write_text(row_build.stdout+row_build.stderr);row_build.check_returncode()
+    row_run=subprocess.run([str(row_exe),str(out/'row-causal-packet')],env=env,capture_output=True,text=True)
+    (out/'row-causal-run.log').write_text(row_run.stdout+row_run.stderr)
+    assert row_run.returncode!=0 and 'p->vram[address]==0x600e' in row_run.stderr
     inputs = [ROOT/'src/iog_world_renderer.c',ROOT/'src/iog_world_renderer.h',ROOT/'src/iog_visual_objects.h',ROOT/'src/iog_world_view.c',ROOT/'src/iog_world_view.h',ROOT/'src/iog_world_pixels.c',ROOT/'src/iog_world_pixels.h',ips,ROOT/'snesrecomp/runner/src/sha256.c',ROOT/'snesrecomp/runner/src/sha256.h']
     result = dict(passed=run.returncode==0,command=command,
         scope='Actual world module/SDKheaders; stubbed scene/visual/detachedpixels, no real game/APU/PPU parity or GPU',
@@ -308,6 +465,13 @@ def main():
         stdout=run.stdout,stderr=run.stderr,source_packet_format_and_payload_passed=True,
         actual_SHA256_over_synthetic_ROM=True,synthetic_ROM_digest=synthetic_digest,
         late_IPS_refresh_and_failed_patch_preservation_passed=True,removed_refresh_causal_mutant_rejected=True,
+        repeating_secondary_samples_and_clipped_foreground_passed=True,
+        actual_detached_parallax_phases_and_static_upload_passed=True,
+        projected_uploaded_and_decoded_source_rows_agree_passed=True,
+        foreground_source_row_causal_mutant_rejected=True,
+        source_row_causal_exit_code=row_run.returncode,
+        removed_secondary_repeat_causal_mutant_rejected=True,
+        secondary_repeat_causal_exit_code=wrap_run.returncode,
         causal_exit_code=causal_run.returncode,causal_command=causal_command)
     (out/'receipt.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     run.check_returncode();print(run.stdout.strip())

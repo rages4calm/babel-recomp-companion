@@ -215,15 +215,44 @@ void IogWorldCaptureLine(int line)
     s.lines[line].epoch=(uint8_t)(s.epoch_count-1);
 }
 
-static unsigned MapTile(const PictureEpoch *e,int logical,int x,int y)
+static unsigned MapTile(const PictureEpoch *e,int logical,int x,int y,bool repeat)
 {
     const uint8_t *ram=e->ram; unsigned off=logical*2;
     unsigned w=Word(ram,0x692+off),h=Word(ram,0x696+off);
+    /* The secondary scenery is a scrolling plane, not another finite world.
+     * CameraFullRefresh/WrapMapIndex repeat its small map into the hardware
+     * ring. Keep that period beyond the original field too (including the
+     * negative side of the host view). Never repeat foreground terrain or
+     * the separate floors/material stored in bounded interior maps. */
+    if(repeat && w && h) {
+        x%= (int)w;if(x<0)x+=(int)w;
+        y%= (int)h;if(y<0)y+=(int)h;
+    }
     if(x<0 || y<0 || x>=(int)w || y>=(int)h) return 0xFFFFFFFFu;
     unsigned map=Word(ram,0x69E + off),defs=Word(ram,0x6AE + off);
     unsigned address=map+(((y>>8)*(w>>8)+(x>>8))<<8)+(((y>>4)&15)<<4)+((x>>4)&15);
     if(address>=65536 || defs+ram[address]*8+7>=65536) return 0xFFFFFFFFu;
     return Word(ram,defs+ram[address]*8+((y>>3)&1)*4+((x>>3)&1)*2);
+}
+
+/* These are the five scenery models exercised by the manual F4--F8 saves.
+ * Do not infer the camera rate from allocation sizes: the original actors
+ * choose it. Other rooms retain their existing sampling pending a visual
+ * qualification of their own. This changes the host picture only. */
+static bool EffectPlaneScene(unsigned scene)
+{
+    return scene==0x85 || scene==0x4F || scene==0x55 || scene==0xEA || scene==0xCC;
+}
+
+static int EffectProjection(unsigned scene,bool vertical,int position)
+{
+    switch(scene) {
+    case 0x85: return vertical?position:0; /* ScrollCameraVertical, 1:1 Y */
+    case 0x4F: /* ScrollCameraTrack, packed ratio $0401 on both axes */
+        return position>=0?position/4:-((-position+3)/4);
+    case 0x55: case 0xCC: return 0; /* independent sky / fixed wall plate */
+    default: return position; /* Solid Arm drift adds the camera delta */
+    }
 }
 
 /* Original scene08 contains a real 512x256 room, including the east hall and
@@ -442,18 +471,36 @@ static bool RenderWorld(void)
                 int camx=ScrollWorld(e->ram,0x68A+logical*2,p->hScroll[physical]);
                 int camy=ScrollWorld(e->ram,0x68E + logical*2,p->vScroll[physical]);
                 int wx=camx-left+start,wy=camy+native_y;
+                bool effect=logical==1 && EffectPlaneScene(scene);
+                if(effect) {
+                    /* Reframe at this plane's rate. Subtracting the whole
+                     * foreground offset makes a quarter-speed/fixed backdrop
+                     * slide as the player moves inside a clamped host view.
+                     * Live raster scroll still carries drift and HDMA. */
+                    wx=camx+EffectProjection(scene,false,s.view.world_x)-
+                        EffectProjection(scene,false,camera_x)+start;
+                    wy=camy+EffectProjection(scene,true,s.view.world_y)-
+                        EffectProjection(scene,true,camera_y)+row;
+                }
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)wy&1023;
+                /* Layer-1 position bypass deliberately performs no map
+                 * streaming. Solid Arm's animated backdrop lives in the
+                 * uploaded VRAM ring; rebuilding it from allocation data
+                 * replaces the animation with unrelated map cells. */
+                if(effect && scene==0xEA && (e->ram[0x6EF]&4)) continue;
                 for(int x=wx&~7;x<wx+width;x+=8) {
                     /* BG sampling uses hardware line1 while OBJ evaluation
                      * uses line0 for the same first output row. */
-                    unsigned tile=MapTile(e,logical,x,wy+1);
+                    unsigned tile=MapTile(e,logical,x,wy+1,
+                        effect && !bounded && !classroom);
                     if(tile==0xFFFFFFFFu) tile=(unsigned)blank[logical];
                     /* Overlapping authentic cells use the actual uploaded
                      * VRAM entry, including partially updated scroll strips. */
-                    if(native_y>=0&&native_y<224 && x+8>camx && x<camx+256) {
+                    int source_y=wy-camy;
+                    if(source_y>=0&&source_y<224 && x+8>camx && x<camx+256) {
                         unsigned tx=((unsigned)source_hscroll[physical]+(x-camx))>>3;
-                        unsigned ty=((unsigned)source_vscroll[physical]+native_y+1)>>3;
+                        unsigned ty=((unsigned)source_vscroll[physical]+source_y+1)>>3;
                         unsigned address=PPU_bgTilemapAdr(p,physical)+((ty&31)<<5)+(tx&31);
                         if(PPU_bgTilemapWider(p,physical)&&(tx&32)) address+=0x400;
                         tile=e->vram[address&32767];
