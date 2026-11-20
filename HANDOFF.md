@@ -103,14 +103,19 @@ on Original v33. The [GaiaLabs dialogue import](docs/GAIALABS-ORIGINAL-INTEGRATI
 now installs 793 replacements, including returning prompts and fragments.
 Private build and replay receipts are in
 `.local/batch-001/visual-fullgame-030`.
+Batch 031 fixes [four more widescreen intervals](docs/VISUAL-COVERAGE.md#prison-letter-crystal-ring-diamond-mine-and-south-cape-house)
+and qualifies a fresh classroom-to-South-Cape route on Original v34. The
+[GaiaLabs dialogue import](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue)
+now installs 821 replacements. Private build, pack and replay receipts
+are in `.local/batch-001/visual-fullgame-031`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 030's
-`babel-originalv33final.exe` and its private dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 031's
+`babel-originalv34final.exe` and its private dialogue pack, and
 continues the isolated test profile's save. The test executable has the
-required `i18n/structure.txt` alongside it. `Play Original v32 Rollback.cmd`
+required `i18n/structure.txt` alongside it. `Play Original v33 Rollback.cmd`
 selects the previous build. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.

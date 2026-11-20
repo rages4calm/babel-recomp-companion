@@ -40,7 +40,7 @@ typedef struct PictureLine {
 static struct {
     bool initialized, enabled, stock, pending, composed, active, complete, valid;
     bool copy_reference;
-    bool source_packet,mode7,mode7_perspective,absent_secondary,sky_field;
+    bool source_packet,mode7,mode7_perspective,absent_secondary,sky_field,stock_actor_field;
     int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
     int width, height, extent_quarters, epoch_count;
@@ -224,6 +224,51 @@ static bool StorySkyFieldLayout(const Ppu *p,const uint8_t *ram)
         !p->windowsel && !p->cgwsel && !p->cgadsub;
 }
 
+static bool StockActorFieldLayout(const Ppu *p,const uint8_t *ram)
+{
+    /* These dialogue and reward scripts can publish OAM outside the observed
+     * composer. Keep their live actors in the native field and extend only
+     * the verified room scenery. */
+    unsigned scene=Word(ram,0x644);
+    if(Word(ram,0x642) || p->bgmode!=9 || p->mosaic || p->windowsel ||
+       p->screenEnabled[0]!=(scene==0x46?0x15:0x17) || p->screenEnabled[1] ||
+       p->cgwsel!=0x80 || scene!=Word(s.active_ram,0x644) ||
+       memcmp(ram+0x68A,s.active_ram+0x68A,0x6C0-0x68A) ||
+       memcmp(ram+0x6D6,s.active_ram+0x6D6,0x6F0-0x6D6))
+        return false;
+    switch(scene) {
+    case 0x0B:
+        return Word(ram,0x6EE)==0x0185 && p->cgadsub==0x83 && !g_snesrecomp_last_hdmaen &&
+            Word(ram,0x692)==512 && Word(ram,0x694)==512 &&
+            Word(ram,0x696)==768 && Word(ram,0x698)==768;
+    case 0x46:
+        return Word(ram,0x6EE)==5 && p->cgadsub==0xA1 && !g_snesrecomp_last_hdmaen &&
+            Word(ram,0x692)==512 && Word(ram,0x694)==256 &&
+            Word(ram,0x696)==512 && Word(ram,0x698)==256;
+    case 0xDF:
+        return Word(ram,0x6EE)==1 && p->cgadsub==0xA3 && g_snesrecomp_last_hdmaen==6 &&
+            Word(ram,0x692)==2048 && Word(ram,0x694)==256 &&
+            Word(ram,0x696)==512 && Word(ram,0x698)==1024;
+    default:
+        return false;
+    }
+}
+
+static bool SouthCapeHouseMosaic(const Ppu *p,const uint8_t *ram)
+{
+    /* The dinner sequence returns from the upper map page to the living
+     * room. The normal authored bounds still hide all other house floors. */
+    return Word(ram,0x644)==0x06 && Word(ram,0x6EE)==5 &&
+        p->bgmode==9 && (p->mosaic&15)==3 && !p->windowsel &&
+        p->screenEnabled[0]==0x17 && !p->screenEnabled[1] &&
+        p->cgwsel==0x80 && p->cgadsub==0xA3 && g_snesrecomp_last_hdmaen==2 &&
+        !Word(ram,0x68A) && !Word(ram,0x68E) &&
+        Word(ram,0x692)==256 && Word(ram,0x696)==1280 &&
+        Word(ram,0x694)==512 && Word(ram,0x698)==512 &&
+        !Word(ram,0x6D6) && !Word(ram,0x6D8) &&
+        Word(ram,0x6DA)==256 && Word(ram,0x6DE)==256;
+}
+
 static bool BabelQueenMosaic(const Ppu *p,const uint8_t *ram)
 {
     /* The Queen's exit mosaics the stock starfield and foreground on the
@@ -274,7 +319,7 @@ static bool StockMosaicLayout(const Ppu *p,const uint8_t *ram)
 {
     return AngkorVisionMosaic(p,ram) || DaoVillageMosaic(p,ram) ||
         MansionAndSolidArmMosaic(p,ram) || BabelQueenMosaic(p,ram) ||
-        BabelLandingMosaic(p,ram) || ShipDreamMosaic(p,ram);
+        BabelLandingMosaic(p,ram) || ShipDreamMosaic(p,ram) || SouthCapeHouseMosaic(p,ram);
 }
 
 static int PositiveMod(int value,int divisor)
@@ -379,7 +424,7 @@ void IogWorldBeginRaster(void)
     s.complete=false; s.valid=false; s.epoch_count=0;
     s.mode7=s.mode7_perspective=false;
     s.absent_secondary=false;
-    s.sky_field=false;
+    s.sky_field=s.stock_actor_field=false;
     s.mode7_split=0;
     memset(&s.view,0,sizeof(s.view));
     s.reason="unsupported_scene_or_layout";
@@ -399,7 +444,8 @@ void IogWorldBeginRaster(void)
      * the known repeating sky after a paired frame has established the room. */
     bool sky_field=!s.active && s.publish_sequence && StorySkyLayout(s.active_ram) &&
         StorySkyFieldLayout(g_ppu,g_snes->ram);
-    if(!s.active && !sky_field) return;
+    bool actor_field=!s.active && s.publish_sequence && StockActorFieldLayout(g_ppu,g_snes->ram);
+    if(!s.active && !sky_field && !actor_field) return;
     IogSceneViewSource source;
     IogSceneViewReadWorldSource(g_snes->ram,131072,g_ppu,false,&source);
     if(source.gate!=kIogSceneViewReady || source.scene!=Word(s.active_ram,0x644)) return;
@@ -408,6 +454,7 @@ void IogWorldBeginRaster(void)
        (ActiveWorldWindow(g_ppu) && !KnownWorldWindow(g_ppu,g_snes->ram))) return;
     s.base=*g_ppu;
     s.sky_field=sky_field;
+    s.stock_actor_field=actor_field;
     s.absent_secondary=source.absent_secondary;
     s.valid=true; s.reason="awaiting_picture";
 }
@@ -417,6 +464,9 @@ void IogWorldCaptureLine(int line)
     if(!s.enabled || !s.valid || line<0 || line>224) return;
     if(s.sky_field && !StorySkyFieldLayout(g_ppu,g_snes->ram)) {
         s.valid=false; s.reason="unsupported_story_sky"; return;
+    }
+    if(s.stock_actor_field && !StockActorFieldLayout(g_ppu,g_snes->ram)) {
+        s.valid=false; s.reason="unsupported_stock_actor_field"; return;
     }
     if(s.absent_secondary && (Word(g_snes->ram,0x644)!=Word(s.active_ram,0x644) ||
        !IogSceneViewAbsentPyramidSecondary(g_snes->ram,g_ppu))) {
@@ -1185,7 +1235,8 @@ static bool RenderWorld(void)
     if(s.mode7) return RenderMode7Plane();
     if(!s.valid || !s.epoch_count || s.width<256 || s.height<224) return false;
     PictureEpoch *first=&s.epochs[s.lines[1].epoch];
-    const uint8_t *picture_ram=s.sky_field?first->ram:s.active_ram;
+    bool live_actors=s.sky_field || s.stock_actor_field;
+    const uint8_t *picture_ram=live_actors?first->ram:s.active_ram;
     unsigned scene=Word(picture_ram,0x644);
     bool classroom=scene==0x08;
     if(classroom) for(int n=0;n<s.epoch_count;n++)
@@ -1347,7 +1398,7 @@ static bool RenderWorld(void)
     IogVisualSource source={s.active_ram,sizeof(s.active_ram),g_snes->cart->rom,
         g_snes->cart->romImageSize,&s.detached,true};
     s.visual.part_count=0;
-    if(!s.sky_field && IogVisualObjectsBuild(&source,&viewport,&s.visual)!=kIogVisualReady) {
+    if(!live_actors && IogVisualObjectsBuild(&source,&viewport,&s.visual)!=kIogVisualReady) {
         s.reason="unsupported_visual_object";return false;
     }
     *p=s.base;Detach(p);
@@ -1608,6 +1659,7 @@ static bool RenderWorld(void)
         }
     }
     if(s.sky_field) {s.reason="ready_story_sky_field";return true;}
+    if(s.stock_actor_field) {s.reason="ready_stock_actor_field";return true;}
     /* Keep HUD physical size while the world camera shows a larger extent.
      * It is an independently extracted original UI plane, not world terrain. */
     CompositeHud((uint8_t *)s.output,s.width*4);
@@ -1668,6 +1720,9 @@ static bool PacketFile(const char *base,const char *suffix,const void *data,size
 static bool ExportSourcePacket(const char *base,const uint8_t *field)
 {
     const uint16_t endian=1;
+    if(s.complete && s.stock_actor_field && *(const uint8_t*)&endian==1)
+        return PacketFile(base,".field.bgra",field,256*224*4) &&
+            PacketFile(base,".hud.bgra",s.hud,sizeof(s.hud));
     if(s.mode7) {
         if(!s.valid || !s.epoch_count || *(const uint8_t*)&endian!=1) return false;
         bool ok=PacketFile(base,".mode7.field.bgra",field,256*224*4);
@@ -1738,9 +1793,9 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
        pitch<(size_t)width*4||!isfinite(alpha)||alpha<0||alpha>1) return 0;
     if(s.complete && width==s.width && height==s.height) {
         for(int y=0;y<height;y++) memcpy(dst+y*pitch,s.output+y*width,width*4);
-        if(s.sky_field) {
+        if(s.sky_field || s.stock_actor_field) {
             /* Keep live objects but replace visible source HUD pixels with
-             * the verified sky before drawing BG3 at its usual display scale.
+             * verified scenery before drawing BG3 at its usual display scale.
              * A different source color can be an object over the HUD. */
             for(int y=0;y<224;y++) for(int x=0;x<256;x++) {
                 int index=y*256+x;

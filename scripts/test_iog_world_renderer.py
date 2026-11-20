@@ -1242,10 +1242,61 @@ static void story_sky_after_unpaired_upload(void){
  g_ppu->windowsel=0;word(0x644,0x59);
  IogWorldBeginRaster();CHECK(!s.valid&&!s.sky_field);
 }
+static void stock_actor_field_after_unpaired_upload(void){
+ static uint8_t dst[598*336*4];
+ const unsigned scene[]={0x0b,0xdf,0x46};
+ const unsigned flags[]={0x0185,1,5},math[]={0x83,0xa3,0xa1};
+ const unsigned w[]={512,2048,512},bw[]={512,256,256};
+ const unsigned h[]={768,512,512},bh[]={768,1024,256};
+ for(unsigned test=0;test<3;test++){
+  fixture();
+  word(0x644,scene[test]);word(0x6ee,flags[test]);
+  word(0x68c,256);word(0x690,256);
+  word(0x692,w[test]);word(0x694,bw[test]);
+  word(0x696,h[test]);word(0x698,bh[test]);
+  word(0x6da,w[test]);word(0x6de,h[test]);
+  g_ppu->bgmode=9;g_ppu->inidisp=15;g_ppu->screenEnabled[0]=test==2?0x15:0x17;
+  g_ppu->cgwsel=0x80;g_ppu->cgadsub=math[test];
+  g_snesrecomp_last_hdmaen=test==1?6:0;
+  IogWorldBeginRaster();CHECK(!s.valid&&!s.stock_actor_field);
+  publication();
+  IogWorldBeforeNmi();g_ppu->oamWriteCount++;g_ppu->oam[17]^=1;IogWorldAfterNmi();
+  CHECK(!s.active);
+  IogWorldBeginRaster();CHECK(s.valid&&s.stock_actor_field&&!s.mode7&&!s.sky_field);
+  for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+  IogWorldEndRaster(0,225,0);
+  CHECK(s.complete&&!strcmp(s.reason,"ready_stock_actor_field")&&!visual_builds);
+  CHECK(IogWorldDraw(dst,598*4,source_field,598,336,0));
+  for(int y=0;y<224;y++)
+   CHECK(!memcmp(dst+((y+s.view.native_y)*598+s.view.native_x)*4,source_field+y*256*4,256*4));
+  CHECK(!memcmp(dst,s.output,s.view.native_x*4));
+  word(0x642,1);IogWorldBeginRaster();CHECK(!s.valid&&!s.stock_actor_field);
+  word(0x642,0);word(0x68a,258);IogWorldBeginRaster();CHECK(!s.valid);
+  word(0x68a,256);IogWorldBeginRaster();CHECK(s.valid);IogWorldCaptureLine(0);
+  word(0x6bc,0x1c00);IogWorldCaptureLine(1);CHECK(!s.valid);
+  g_snesrecomp_last_hdmaen=0;
+ }
+}
+static void south_cape_house_mosaic(void){
+ fixture();
+ word(0x644,6);word(0x6ee,5);word(0x68a,0);word(0x68e,0);
+ word(0x692,256);word(0x694,512);word(0x696,1280);word(0x698,512);
+ word(0x6da,256);word(0x6de,256);
+ g_ppu->bgmode=9;g_ppu->mosaic=0x83;g_ppu->mosaicStartLine=1;
+ g_ppu->screenEnabled[0]=0x17;g_ppu->cgwsel=0x80;g_ppu->cgadsub=0xa3;
+ g_snesrecomp_last_hdmaen=2;
+ publication();IogWorldBeginRaster();CHECK(s.valid&&!s.mode7);
+ IogWorldCaptureLine(0);IogWorldCaptureLine(1);CHECK(s.valid);
+ word(0x6de,512);IogWorldCaptureLine(2);CHECK(!s.valid);
+ g_snesrecomp_last_hdmaen=0;
+}
 static void mode7_lifecycle_and_packet(const char*base){
  ship_dream_mosaic();
  late_story_mosaics();
  story_sky_after_unpaired_upload();
+ stock_actor_field_after_unpaired_upload();
+ IogWorldReset();
+ south_cape_house_mosaic();
  mode7_angkor_neighbor_mosaic();
  mode7_menu_dismissal();
  mode7_fixture();memcpy(before_ram,ram,sizeof(ram));CpuState cpu=g_cpu;
