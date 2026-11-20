@@ -1436,7 +1436,7 @@ static int GaiaSpeakerTemplate(unsigned id)
     return id < 8 || (id >= 0x12 && id <= 0x15);
 }
 
-enum { kGaiaBase, kGaiaSupplement, kGaiaExtended };
+enum { kGaiaBase, kGaiaSupplement, kGaiaExtended, kGaiaStockAnchors };
 
 static int GaiaDialogue(const char *text, Toks *out)
 {
@@ -1449,7 +1449,17 @@ static int GaiaDialogue(const char *text, Toks *out)
     int columns = 0, rows = 1, glyphs = 0, page_start = 1;
     while (*text) {
         Tok token = {.type = T_CMD, .ref = -1};
-        if ((returns || extended) && !strncmp(text, "[BCD:", 5)) {
+        if (extended && !strncmp(text, "[PRT:", 5)) {
+            unsigned offset;
+            int length = 0;
+            if (sscanf(text + 5, "%6X]%n", &offset, &length) != 1 ||
+                length != 7 || strspn(text + 5, "0123456789ABCDEF") != 6 ||
+                (offset != 0x08de96 && offset != 0x069705))
+                return 0;
+            token.code = CMD_PRT;
+            token.a[0] = offset;
+            text += 12;
+        } else if ((returns || extended) && !strncmp(text, "[BCD:", 5)) {
             unsigned digits, address;
             int length = 0;
             if (sscanf(text, "[BCD:%1u,%4X]%n", &digits, &address, &length) != 2 ||
@@ -1887,7 +1897,8 @@ static int GaiaStockExactRows(const Toks *stock, Toks *out, const Toks *text)
 /* A standalone prose box can reflow without moving script commands. Its
  * authored page breaks still cap an inherited box, where the caller's
  * dimensions are unknown. An explicit box can insert manual page waits. */
-static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text)
+static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text,
+                          int allow_stock_calls)
 {
     const int sn = stock->n, tn = text->n;
     if (!sn || !tn || stock->t[sn - 1].code != text->t[tn - 1].code)
@@ -1901,6 +1912,7 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text)
     if (!returning && stock->t[sn - 1].code != CMD_END)
         return 0;
     int start = 0, width = 0, height = 0, speaker = -1, position = 0;
+    uint32_t call = 0;
     while (start < sn && !GaiaPageText(&stock->t[start])) {
         const Tok *t = &stock->t[start++];
         switch (t->code) {
@@ -1930,6 +1942,20 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text)
             width = 24;
             height = 4;
             break;
+        case CMD_PRT:
+            if (!allow_stock_calls || call || position)
+                return 0;
+            if (t->a[0] == 0x88de96 && !width && !height) {
+                /* This Dark Space prefix opens and clears its four-row box. */
+                width = 24;
+                height = 4;
+            } else if (t->a[0] != 0x869705 || width != 24 || height != 3) {
+                return 0;
+            }
+            /* Both stock callees finish with FIN then RET. The original call
+             * and bank are preserved, including the existing prefix overlay. */
+            call = t->a[0] & 0x3fffff;
+            break;
         case 0xc3: case 0xc8: case 0xce: case CMD_SFX: case 0xd5:
             break;
         default:
@@ -1937,7 +1963,7 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text)
         }
         Push(out, t);
     }
-    if (position)
+    if (position || (allow_stock_calls && !call))
         return 0;
     const int inherited = width == 0 && height == 0;
     int end = sn - (returning ? 2 : 1);
@@ -1974,6 +2000,12 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text)
         if ((int)text->t[first++].a[0] != speaker)
             return 0;
     }
+    if (call) {
+        if (first >= tn || text->t[first].type != T_CMD ||
+            text->t[first].code != CMD_PRT || text->t[first].a[0] != call)
+            return 0;
+        first++;
+    }
     const int last = tn - (returning ? 2 : 1);
     for (int i = first; i < last; i++) {
         const Tok *t = &text->t[i];
@@ -1986,7 +2018,7 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text)
     const int before = out->n;
     if (!GaiaWrapPage(text->t + first, text->t + last, out, width, height, 1))
         return 0;
-    if (inherited || returning) {
+    if (inherited || returning || call) {
         int waits = 0;
         for (int i = before; i < out->n; i++)
             waits += out->t[i].type == T_CMD && out->t[i].code == CMD_FIN;
@@ -1996,6 +2028,80 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text)
     for (int i = end; i < sn; i++)
         Push(out, &stock->t[i]);
     return 1;
+}
+
+/* A speaker change partitions the dialogue at its preceding page wait. The
+ * translated source must identify the same speaker at every such boundary. */
+static int GaiaSpeakerPhaseEnd(const Toks *tokens, int start, int source, int *speaker)
+{
+    int phase = start;
+    int printed = 0;
+    int at_prefix = 1;
+    *speaker = -1;
+    for (int i = start; i < tokens->n; ++i) {
+        const Tok *t = &tokens->t[i];
+        const int marker = source ? t->type == T_MARK && !t->code :
+            t->type == T_CMD && t->code == 0xc2 && GaiaSpeakerTemplate(t->a[0]);
+        if (marker) {
+            if (!at_prefix)
+                return -1;
+            if (printed)
+                return phase;
+            if (*speaker >= 0)
+                return -1;
+            *speaker = (int)t->a[0];
+        } else if (t->type == T_GLYPH) {
+            at_prefix = 0;
+            printed = 1;
+        } else if (t->type == T_CMD && t->code == CMD_FIN) {
+            phase = i + 1;
+            at_prefix = 1;
+        } else if (t->type == T_CMD && t->code == CMD_N) {
+            at_prefix = 0;
+        }
+    }
+    return tokens->n;
+}
+
+static int GaiaStockSpeakerPhases(const Toks *stock, Toks *out, const Toks *text)
+{
+    Toks stock_phase = {0}, text_phase = {0};
+    int start = 0, first = 0, phases = 0, ok = 0;
+    while (start < stock->n && first < text->n) {
+        int stock_speaker, text_speaker;
+        int stop = GaiaSpeakerPhaseEnd(stock, start, 0, &stock_speaker);
+        int last = GaiaSpeakerPhaseEnd(text, first, 1, &text_speaker);
+        if (stop <= start || last <= first || stock_speaker != text_speaker ||
+            (stop == stock->n) != (last == text->n))
+            goto done;
+        const int internal = stop < stock->n;
+        if (!internal && !phases)
+            goto done;
+        stock_phase.n = text_phase.n = 0;
+        for (int i = start; i < stop; i++)
+            Push(&stock_phase, &stock->t[i]);
+        for (int i = first; i < last; i++)
+            Push(&text_phase, &text->t[i]);
+        if (internal) {
+            /* A synthetic RET makes the prose pass retain the phase's final
+             * FIN and its exact number of page waits. Strip it before encoding. */
+            const Tok boundary = {.type = T_CMD, .code = CMD_RET, .ref = -1};
+            Push(&stock_phase, &boundary);
+            Push(&text_phase, &boundary);
+        }
+        if (!GaiaStockProse(&stock_phase, out, &text_phase, 0))
+            goto done;
+        if (internal)
+            out->n--;
+        phases++;
+        start = stop;
+        first = last;
+    }
+    ok = phases > 1 && start == stock->n && first == text->n;
+done:
+    free(stock_phase.t);
+    free(text_phase.t);
+    return ok;
 }
 
 /* Keep the original window and control bytes on their exact page boundary.
@@ -2134,7 +2240,16 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
         ok = GaiaStockExactRows(&original, out, text);
         if (!ok) {
             out->n = 0;
-            ok = GaiaStockProse(&original, out, text);
+            ok = GaiaStockProse(&original, out, text, 0);
+        }
+        free(original.t);
+        return ok;
+    }
+    if (supplement == kGaiaStockAnchors) {
+        ok = GaiaStockProse(&original, out, text, 1);
+        if (!ok) {
+            out->n = 0;
+            ok = GaiaStockSpeakerPhases(&original, out, text);
         }
         free(original.t);
         return ok;
@@ -2231,6 +2346,46 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
     return ok;
 }
 
+/* These two stock labels expose an interior entry after setup commands only.
+ * The prefix remains in ROM for the base caller, while either entry reaches
+ * the same relocated body. Do not repurpose this for markers after text. */
+static uint32_t GaiaMarkerTailOffset(const Rom *stock, const Label *label)
+{
+    static const uint8_t pause[] = {0xc9, 0x40};
+    static const uint8_t templates[] = {0xc2, 0x0b, 0xc2, 0x02};
+    const uint8_t *prefix;
+    size_t len;
+    if (!label->has_marker || label->unk16)
+        return 0;
+    switch (label->off) {
+    case 0x049b82: prefix = pause; len = sizeof(pause); break;
+    case 0x09be70: prefix = templates; len = sizeof(templates); break;
+    default: return 0;
+    }
+    if (label->marker != len || label->off + len > stock->size ||
+        memcmp(stock->rom + label->off, prefix, len))
+        return 0;
+    return label->off + (uint32_t)len;
+}
+
+static int GaiaStockMarkerTail(const Rom *stock, uint32_t offset, Toks *out, const Toks *text)
+{
+    Toks original = {0};
+    int ok = Decode(stock, offset, &original, 0, 0) &&
+        original.n && original.t[original.n - 1].code == CMD_END &&
+        GaiaStockProse(&original, out, text, 0);
+    if (ok) {
+        int waits = 0;
+        for (int i = 0; i < original.n; i++)
+            waits += original.t[i].type == T_CMD && original.t[i].code == CMD_FIN;
+        for (int i = 0; i < out->n; i++)
+            waits -= out->t[i].type == T_CMD && out->t[i].code == CMD_FIN;
+        ok = waits == 0;
+    }
+    free(original.t);
+    return ok;
+}
+
 IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
                              const char *structure_path, const char *dialogue_path)
 {
@@ -2260,7 +2415,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
     int malformed = 0;
     /* Append supplemental entries only after the original overlay layout.
      * Save states can hold an active dialogue pointer into those banks. */
-    for (int supplement = kGaiaBase; supplement <= kGaiaExtended && !malformed; supplement++) {
+    for (int supplement = kGaiaBase; supplement <= kGaiaStockAnchors && !malformed; supplement++) {
         uint32_t last = 0;
         while (fgets(line, sizeof(line), file)) {
             size_t size = strlen(line);
@@ -2286,8 +2441,14 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             const Label *label = &structure.l[li];
             last = label->off;
             pack->strings_total += !supplement;
+            const int tail = !strncmp(text, "[TAIL][EXT]", 11);
+            if (tail) {
+                if (supplement != kGaiaStockAnchors)
+                    continue;
+                text += 6;
+            }
             const int extended = !strncmp(text, "[EXT]", 5);
-            if (extended && supplement != kGaiaExtended)
+            if (extended && supplement < kGaiaExtended)
                 continue;
             Toks tokens = {0};
             if (!GaiaDialogue(text, &tokens)) {
@@ -2295,15 +2456,28 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
                 malformed = 1;
                 break;
             }
-            uint32_t span = StringSpan(&stock, label->off);
-            int safe = !label->unk16 && !label->has_marker && span >= 5;
-            for (int i = 0; safe && i < structure.nl; i++)
-                if (i != li && structure.l[i].off >= label->off &&
-                    structure.l[i].off - label->off < 5)
+            const uint32_t patch_at = tail ? GaiaMarkerTailOffset(&stock, label) : label->off;
+            uint32_t span = patch_at ? StringSpan(&stock, patch_at) : 0;
+            int safe = !label->unk16 && (tail || !label->has_marker) && span >= 5;
+            for (int i = 0; safe && i < structure.nl; i++) {
+                const Label *entry = &structure.l[i];
+                if (i != li && entry->off >= patch_at && entry->off - patch_at < 5)
                     safe = 0;
+                if (tail && i != li && entry->has_marker &&
+                    entry->off + entry->marker >= patch_at &&
+                    entry->off + entry->marker - patch_at < 5)
+                    safe = 0;
+            }
+            for (int i = 0; safe && tail && i < pack->npatches; i++) {
+                const IogPatch *prev = &pack->patches[i];
+                if (prev->offset < patch_at + 5 && prev->offset + prev->len > patch_at)
+                    safe = 0;
+            }
             Item item = {0};
             int accepted = 0;
-            if (safe) {
+            if (safe && tail) {
+                accepted = GaiaStockMarkerTail(&stock, patch_at, &item.toks, &tokens);
+            } else if (safe) {
                 int first = extended ? kGaiaExtended : kGaiaBase;
                 for (int stage = first; stage <= supplement; stage++) {
                     item.toks.n = 0;
@@ -2334,7 +2508,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
                 }
                 unsigned bank = (unsigned)pack->nbanks - 1;
                 Encode(NULL, &item, pack->banks[bank] + fill);
-                AddRedirect(pack, label->off, CMD_PRT, ((kVBankFirst + bank) << 16) | (kVBase + fill), CMD_RET);
+                AddRedirect(pack, patch_at, CMD_PRT, ((kVBankFirst + bank) << 16) | (kVBase + fill), CMD_RET);
                 fill += len;
                 pack->strings_translated++;
             }
@@ -2342,7 +2516,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             free(tokens.t);
         }
         malformed |= ferror(file);
-        if (supplement < kGaiaExtended && !malformed && fseek(file, 0, SEEK_SET))
+        if (supplement < kGaiaStockAnchors && !malformed && fseek(file, 0, SEEK_SET))
             malformed = 1;
     }
     fclose(file);

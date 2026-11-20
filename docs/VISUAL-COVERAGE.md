@@ -691,6 +691,23 @@ Fresh saves produced by the repaired scenes continued through the prison
 gate into the Aqueduct and through the Crystal Ring equip sequence and a
 Babel middle-floor door round trip.
 
+## Save-resume framing and connected route regression
+
+Original v35 keeps the first visible frame wide after loading in six
+verified Mode 1 layouts. The ordinary sprite publication arrives one
+frame later. The renderer checks the observed room and camera against
+the incoming composition, extends the verified scenery, and uses the
+live PPU actors and HUD. Unsupported layouts and modal restores can
+still use fallback.
+
+The exact build passed a controller route from cold boot to the
+classroom, out to South Cape, and back through the classroom door with
+no save-state or story-flag setup. The full sampled 598×336 picture,
+scene timing, and music transitions matched v34. Further linked
+replays covered the Mu approach, Dao to the Jeweler's Mansion, and the
+walkable and stock world maps. The Mu replay gained the first loaded
+frame and matched the recorded gameplay and later picture.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

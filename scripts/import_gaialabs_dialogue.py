@@ -18,6 +18,7 @@ PATCHES = "modules/base/patches"
 LABEL = re.compile(r"dialogstring_([0-9A-F]{6})!\s+`([^`]*)`?!?\s*(?:;.*)?")
 TAG = re.compile(r"\[([A-Z][A-Z0-9]*)(?::([0-9A-F]+))?\]")
 BOX_TAG = re.compile(r"\[(DLG|SIZ):([0-9A-F]{1,2}),([0-9A-F]{1,2})\]")
+PRINT_TAG = re.compile(r"\[PRT:@dialogstring_(08DE96|069705)\]")
 GLYPHS = frozenset(" 0123456789.,\":ABCDEFGHIJKLMNOPQRSTUVWXYZ!/*-()"
                    "abcdefghijklmnopqrstuvwxyz;?'")
 TYPOGRAPHY = str.maketrans({"…": "...", "ˮ": '"'})
@@ -26,6 +27,10 @@ STOCK_SPEAKER_TEMPLATES = frozenset(range(8)) | frozenset(range(0x12, 0x16))
 RETURN_WIDTH = 24
 EXTENDED_SOURCE_WIDTH = 26
 MAX_PAGE_ROWS = 7
+TAIL_PREFIXES = {
+    "049B82": (2, "[PAU:40]"),
+    "09BE70": (4, "[TPL:2]"),
+}
 
 
 def read_source(repo, path):
@@ -57,6 +62,27 @@ def stock_labels(path):
                 raise ValueError(f"Duplicate marker-free stock label at {offset}")
             labels[offset] = fields[1]
     return labels
+
+
+def stock_tail_labels(path):
+    labels = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        fields = line.split()
+        if len(fields) != 5 or fields[0] != "S" or fields[2] != "widestring":
+            continue
+        offset = fields[3].upper()
+        if offset in TAIL_PREFIXES and int(fields[4], 16) == TAIL_PREFIXES[offset][0]:
+            if offset in labels:
+                raise ValueError(f"Duplicate stock tail label at {offset}")
+            labels[offset] = fields[1]
+    return labels
+
+
+def convert_tail(offset, source, names):
+    prefix, marker, tail = source.partition("[::]")
+    if not marker or prefix != TAIL_PREFIXES[offset][1] or "[::]" in tail:
+        raise ValueError("Stock tail prefix differs")
+    return "[TAIL]" + convert_return(tail, names, extended=True)
 
 
 def convert(source, names):
@@ -192,6 +218,11 @@ def convert_return(source, names, *, extended=False):
         if extended and part == "[WAI]":
             parts.append(part)
             continue
+        if extended and (call := PRINT_TAG.fullmatch(part)):
+            # Keep the stock call target available for operand verification.
+            # These two script families name the same shared stock fragments.
+            parts.append(f"[PRT:{call[1]}]")
+            continue
         if match := TAG.fullmatch(part):
             command, arg = match.groups()
             value = int(arg, 16) if arg is not None else -1
@@ -254,7 +285,9 @@ def main():
         parser.error("chapters must be between 1 and 36")
 
     names = load_names(args.checkout.resolve())
-    labels = stock_labels(ROOT / "i18n/structure.txt")
+    structure = ROOT / "i18n/structure.txt"
+    labels = stock_labels(structure)
+    tails = stock_tail_labels(structure)
     rows, excluded, seen = [], {}, set()
     for chapter in sorted(set(args.chapters)):
         source = read_source(args.checkout, f"{PATCHES}/chapter{chapter:02d}.patch.asm")
@@ -269,6 +302,12 @@ def main():
                 raise ValueError(f"Duplicate replacement at {offset}")
             seen.add(offset)
             if offset not in labels:
+                if offset in tails:
+                    try:
+                        rows.append((offset, tails[offset], convert_tail(offset, content, names)))
+                    except ValueError as error:
+                        excluded[offset] = str(error)
+                    continue
                 excluded[offset] = "No unique marker-free stock label"
                 continue
             try:
