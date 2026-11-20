@@ -1429,12 +1429,29 @@ static const char *GlyphText(uint8_t code)
     return "#";
 }
 
+/* Stock templates that set the speaker colours/SFX without moving the cursor
+ * or reopening the box. $11 is the stock route menu, not a speaker. */
+static int GaiaSpeakerTemplate(unsigned id)
+{
+    return id < 8 || (id >= 0x12 && id <= 0x15);
+}
+
 static int GaiaDialogue(const char *text, Toks *out)
 {
-    int columns = 0, rows = 1, glyphs = 0;
+    int columns = 0, rows = 1, glyphs = 0, page_start = 1;
     while (*text) {
         Tok token = {.type = T_CMD, .ref = -1};
-        if (!strncmp(text, "[N]", 3)) {
+        if (!strncmp(text, "[TPL:", 5)) {
+            unsigned id;
+            int length = 0;
+            if (!page_start || sscanf(text, "[TPL:%2X]%n", &id, &length) != 1 ||
+                length != 8 || strspn(text + 5, "0123456789ABCDEF") != 2 ||
+                !GaiaSpeakerTemplate(id))
+                return 0;
+            token.type = T_MARK;
+            token.a[0] = id;
+            text += length;
+        } else if (!strncmp(text, "[N]", 3)) {
             token.code = CMD_N;
             text += 3;
             columns = 0;
@@ -1456,8 +1473,96 @@ static int GaiaDialogue(const char *text, Toks *out)
             glyphs++;
         }
         Push(out, &token);
+        page_start = token.type == T_CMD && token.code == CMD_FIN;
     }
     return 0;
+}
+
+/* Accept a speaker change only where stock does so at a finished page.
+ * The upstream text must identify the complete stock speaker sequence. */
+static int GaiaSpeakerSequenceMatches(const Toks *original, const Toks *text)
+{
+    int candidate = 0;
+    for (int i = 0; i < original->n; i++) {
+        const Tok *token = &original->t[i];
+        if (token->type != T_CMD || token->code != 0xc2 ||
+            !GaiaSpeakerTemplate(token->a[0]))
+            continue;
+        while (candidate < text->n && text->t[candidate].type != T_MARK)
+            candidate++;
+        if (candidate == text->n || text->t[candidate++].a[0] != token->a[0])
+            return 0;
+    }
+    for (; candidate < text->n; candidate++)
+        if (text->t[candidate].type == T_MARK)
+            return 0;
+    return 1;
+}
+
+static int GaiaSoftBreak(const Tok *token)
+{
+    return token->type == T_CMD || token->code == 0xac;
+}
+
+/* Reflow only pages that exceed their stock box height. Treat the source
+ * line breaks as spaces so, for example, the last word of a sentence does
+ * not become a page by itself when it can fit in the current box. */
+static int GaiaWrapPage(const Tok *start, const Tok *end, Toks *out, int width, int height)
+{
+    int columns = 0, rows = 1;
+    while (start < end) {
+        while (start < end && GaiaSoftBreak(start))
+            start++;
+        const Tok *word = start;
+        while (start < end && !GaiaSoftBreak(start))
+            start++;
+        int length = (int)(start - word);
+        if (!length)
+            break;
+        if (length > width)
+            return 0;
+        if (columns) {
+            Tok gap = {.type = T_GLYPH, .code = 0xac, .ref = -1};
+            if (columns + 1 + length > width) {
+                gap.type = T_CMD;
+                gap.code = ++rows > height ? CMD_FIN : CMD_N;
+                if (gap.code == CMD_FIN)
+                    rows = 1;
+                columns = 0;
+            } else {
+                columns++;
+            }
+            Push(out, &gap);
+        }
+        while (word < start)
+            Push(out, word++);
+        columns += length;
+    }
+    return columns > 0;
+}
+
+static int GaiaFitPage(const Tok *start, const Tok *end, Toks *out,
+                       int width, int height, int reflow_allowed)
+{
+    int columns = 0, rows = 1, has_glyph = 0;
+    for (const Tok *token = start; token < end; token++) {
+        if (token->type == T_CMD) {
+            columns = 0;
+            rows++;
+        } else {
+            columns++;
+            has_glyph |= token->code != 0xac;
+            if (columns > width)
+                return 0;
+        }
+    }
+    if (rows > height)
+        return reflow_allowed && GaiaWrapPage(start, end, out, width, height);
+    if (!has_glyph)
+        return 0;
+    while (start < end)
+        Push(out, start++);
+    return 1;
 }
 
 static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const Toks *text)
@@ -1465,7 +1570,8 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
     static const uint8_t template_rows[] = {1, 2, 3, 4, 1, 2, 3, 4, 4};
     Toks original = {0};
     int ok = Decode(stock, offset, &original, 0, 0);
-    int prefix = 1, width = 0, height = 0;
+    int prefix = 1, width = 0, height = 0, initial_speakers = 0;
+    int changes_speaker = 0, other_controls = 0;
     for (int i = 0; ok && i < original.n; i++) {
         const Tok *t = &original.t[i];
         if (t->type == T_GLYPH || t->code == CMD_N || t->code == CMD_FIN) {
@@ -1475,13 +1581,21 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
         } else if (t->code == 0xc3 || t->code == 0xce) {
             if (prefix)
                 Push(out, t);
+            else if (t->code != 0xc3 || i + 2 != original.n)
+                other_controls = 1;
+        } else if (!prefix && t->code == 0xc2 && GaiaSpeakerTemplate(t->a[0]) &&
+                   i > 0 && original.t[i - 1].type == T_CMD &&
+                   original.t[i - 1].code == CMD_FIN) {
+            changes_speaker = 1;
         } else if (prefix && (t->code == 0xc1 || t->code == 0xc2 || t->code == 0xc7 ||
                               t->code == 0xc8 || t->code == 0xd3 || t->code == 0xd5)) {
             if (t->code == 0xc2 && t->a[0] >= 8 && t->a[0] <= 0x10) {
                 width = 24;
                 height = template_rows[t->a[0] - 8];
-            } else if (t->code == 0xc2 && t->a[0] == 0x11) {
+            } else if (t->code == 0xc2 && !GaiaSpeakerTemplate(t->a[0])) {
                 ok = 0;  /* Includes the stock route-choice prompt. */
+            } else if (t->code == 0xc2) {
+                initial_speakers++;
             } else if (t->code == 0xc7) {
                 width = (int)t->a[0] * 2 - 2;
                 height = (int)t->a[1];
@@ -1496,22 +1610,30 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
     }
     ok = ok && !prefix && width > 0 && height > 0 && original.n &&
         original.t[original.n - 1].code == CMD_END;
-    int columns = 0, rows = 1;
-    for (int i = 0; ok && i + 1 < text->n; i++) {
-        const Tok *token = &text->t[i];
-        if (token->type == T_GLYPH) {
-            ok = ++columns <= width;
-        } else if (token->code == CMD_N) {
-            columns = 0;
-            ok = ++rows <= height;
-        } else if (token->code == CMD_FIN) {
-            columns = 0;
-            rows = 1;
+    if (changes_speaker)
+        ok = ok && !other_controls && initial_speakers == (text->t[0].type == T_MARK) &&
+            GaiaSpeakerSequenceMatches(&original, text);
+    for (int i = 0; ok && i < text->n;) {
+        if (text->t[i].type == T_MARK) {
+            /* The initial stock template is already in the prefix. */
+            if (changes_speaker && i) {
+                Tok speaker = text->t[i];
+                speaker.type = T_CMD;
+                speaker.code = 0xc2;
+                Push(out, &speaker);
+            }
+            i++;
         }
+        int start = i;
+        while (i + 1 < text->n &&
+               (text->t[i].type != T_CMD || text->t[i].code != CMD_FIN))
+            i++;
+        ok = GaiaFitPage(text->t + start, text->t + i, out, width, height, !other_controls);
+        if (i + 1 < text->n)
+            Push(out, &text->t[i]);
+        i++;
     }
     if (ok) {
-        for (int i = 0; i + 1 < text->n; i++)
-            Push(out, &text->t[i]);
         /* The original palette reset can affect neighboring dialogue. */
         if (original.n >= 2) {
             const Tok *last = &original.t[original.n - 2];

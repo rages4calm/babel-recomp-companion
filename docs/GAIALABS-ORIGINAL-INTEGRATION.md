@@ -6,13 +6,14 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The first import covers **632 of 1,138** chapter-dialogue replacements in the
+The import now covers **696 of 1,138** chapter-dialogue replacements in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer produces 862 candidate entries. The runtime accepts 632 that
-have a known stock text window and fit its dimensions. Entries that need
-choice tables, relocated pointers, a new font, or unverified script commands
-continue to use the original text. This pass covers dialogue. Menus, sprite
-lettering and the remaining chapter lines still need integration.
+The importer produces 862 candidates. The runtime accepts 696 with known
+stock windows. The latest pass accepts 14 shorter-box entries and 50 entries
+whose page-boundary speaker sequence matches the stock commands. The 632
+previously accepted dialogue payloads are byte-identical. Entries requiring
+choice tables, relocated pointers, a new font, or unverified commands still
+use the original text. Menu and sprite lettering are pending.
 
 The text uses the Original localization overlay. Start with a local Git
 checkout containing the pinned revision, then generate a pack into the
@@ -32,6 +33,9 @@ remain with GaiaLabs and contributors in the pinned source.
 An SDL virtual controller opened and advanced translated dialogue in the
 classroom at 1920×1080 with MSU-1 active. The same route used stock text
 with the original-language setting and with a refused import.
+In the latest build, a controller advanced Hamlet's reflowed two-line text
+and Kara's three-page conversation from separately assisted Original room
+checkpoints. The stock-language test restored the original Hamlet text.
 
 ## World map and widescreen
 

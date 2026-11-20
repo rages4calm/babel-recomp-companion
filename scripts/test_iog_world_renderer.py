@@ -27,6 +27,7 @@ HARNESS = r'''
 static Snes machine;static Cart cart;static Ppu original,before_ppu;
 static uint8_t ram[131072],rom[2097152],before_ram[131072];
 CpuState g_cpu;Snes *g_snes=&machine;Ppu *g_ppu=&original;
+uint8_t g_snesrecomp_last_hdmaen;
 static unsigned checks,detached_lines,visual_builds;static bool randomizer,scene_ready=true;
 static unsigned identity_hashes,interpret_all_calls;static int interpreted;
 static const char *ips_path;
@@ -597,11 +598,23 @@ static void generic_authored_window(void){
  CHECK(s.view.padding_left==43&&s.view.padding_right==43);
  CHECK(s.view.padding_top==40&&s.view.padding_bottom==40);
  for(int y=0;y<336;y++)for(int x=0;x<598;x++){
-  uint32_t expected=x>=43&&x<555&&y>=40&&y<296?
+  uint32_t expected=x>=43&&x<555&&y>=40&&y<295?
    0xff000000u|((213u+x)&1023)|(((217u+y)&1023)<<10):0;
   CHECK(s.output[y*598+x]==expected);
  }
  CHECK(!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(before_ppu.vram,g_ppu->vram,sizeof(before_ppu.vram)));
+ /* A stair changes the floor bounds early. The remaining old floor is still
+  * authoritative inside the native field, with no peek at the next floor. */
+ IogWorldReset();word(0x6D8,0);word(0x6DE,256);publication();
+ IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_authored_window_pan"));
+ CHECK(s.view.native_x==171&&s.view.native_y==56);
+ for(int y=0;y<336;y++)for(int x=0;x<598;x++){
+  uint32_t expected=x>=171&&x<427&&y>=56&&y<280?
+   0xff000000u|((85u+x)&1023)|(((201u+y)&1023)<<10):0;
+  CHECK(s.output[y*598+x]==expected);
+ }
 }
 static void mode7_fixture(void){
  fixture();g_ppu->bgmode=7;g_ppu->inidisp=15;g_ppu->screenEnabled[0]=21;

@@ -33,6 +33,34 @@ does not establish that secondary scenery should stop at the floor boundary.
 Per-line HDMA camera derivatives also cannot be inferred from a global actor
 ratio. Deferred raster-camera paths remain explicit review work.
 
+## Original ship and Freejia routes
+
+The Original renderer now admits the Wrecked Ship and Gold Ship decks
+(`2B`, `2C`), the Gold Ship cabin (`2E`), and the Freejia house and hotel
+(`33`, `39`). The Wrecked Ship cabin (`2D`) already admitted the same stock
+format and was retested with its deck. The original lighting and camera
+windows govern the expanded picture.
+
+The hotel stair pan previously showed parts of the next floor below the
+active floor because its new camera bounds take effect before the camera
+arrives. While the camera is outside the new bounds, the renderer preserves
+the original field and HUD at the same scale. In settled authored rooms, the
+expanded bottom edge respects the tile fetch's one-row lookahead. This
+removes a one-pixel strip observed in the wreck's upstairs cabin.
+
+The v10 controller runs traversed both ship door round trips, both cabin
+stairs in both directions, both Freejia town-door round trips and both hotel
+stair directions. They used separately assisted stock checkpoints followed
+by SDL virtual controller events. The hotel pan retains all 57,344 native
+viewport pixels while removing 22,204 leaked floor pixels. Matching guest
+state and CPU results do not substitute for the 1080p square-pixel 1.5×
+visual checks. Further rooms and story phases remain open.
+
+The retained v7 travel build separately passed the story-gated Freejia to
+Diamond Mine round trip with movement inside both areas and MSU-1 changes.
+That test used three linked controller checkpoints. The locked mine and
+stock-route recovery also passed.
+
 The optional manual visual receipt binds the eight historical samples to their
 actual build and dependency hashes. A later source edit changes those samples
 to historical evidence. Neither current nor historical samples are silently
