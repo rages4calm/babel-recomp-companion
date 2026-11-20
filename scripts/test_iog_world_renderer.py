@@ -143,6 +143,14 @@ void PpuDrawDetachedLine(Ppu*p,int line){
   water_wave_lines++;
  }
  uint32_t*row=(uint32_t*)p->renderBuffer;
+ if(PPU_mosaicSize(p)>1){
+  unsigned size=PPU_mosaicSize(p);
+  CHECK(p->mosaicStartLine==0);
+  for(unsigned x=0;x<256;x++)
+   row[x]=0xff000000u|((p->hScroll[0]+x-x%size)&1023)|
+     ((p->vScroll[0]&1023)<<10);
+  return;
+ }
  if(wall_probe){
   unsigned y=wall_calls/3,start=(wall_calls%3)*224;wall_calls++;
   int wy=s.view.world_y+(int)y;
@@ -234,7 +242,54 @@ static void phase_queue(void){
  CHECK(!s.pending&&!s.composed&&!s.active&&!s.complete&&!s.valid&&!s.epoch_count);
  fixture();randomizer=true;IogWorldCaptureAtCompose(&g_cpu,0x03c714);CHECK(!s.pending);
 }
+static void stock_arrival_wave(void){
+ static Dma dma;
+ enum { CameraX=112, CameraY=48, Start=0x8a1e };
+ fixture();
+ word(0x644,0x0b);word(0x68a,CameraX);word(0x68c,CameraX);
+ word(0x68e,CameraY);word(0x690,CameraY);word(0x6ee,0x0185);
+ word(0x692,512);word(0x694,512);word(0x696,768);word(0x698,768);
+ g_snes->dma=&dma;g_snesrecomp_last_hdmaen=0xc0;
+ for(unsigned i=6;i<=7;i++)
+  dma.channel[i]=(DmaChannel){.mode=2,.indirect=true,.bAdr=13+2*(i-6),
+   .aBank=0x7e,.aAdr=0x8800,.indBank=0x7e};
+ ram[0x8800]=0xff;word(0x8801,Start);
+ ram[0x8803]=0xe0;word(0x8804,Start+254);
+ for(unsigned sample=0;sample<512;sample++)
+  word(0x8900+2*sample,CameraX+2+(sample%128)%19);
+ g_ppu->vScroll[0]=g_ppu->vScroll[1]=CameraY;
+ publication();IogWorldBeginRaster();
+ for(int line=0;line<=224;line++){
+  g_ppu->hScroll[0]=g_ppu->hScroll[1]=(uint16_t)Word(ram,Start+2*Clamp(line,0,222));
+  IogWorldCaptureLine(line);
+ }
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_stock_transition_wave"));
+ const int x=s.view.native_x,row=s.view.native_y;
+ unsigned top=Word(ram,Start+2*((unsigned)(1-row)&127));
+ unsigned tail=Word(ram,Start+2*(223&127));
+ CHECK((s.output[x]&1023)==top);
+ CHECK((s.output[(row+224)*s.width+x]&1023)==tail);
+ /* A disagreement anywhere in either raster channel retains fallback. */
+ unsigned h=offsetof(Ppu,hScroll);
+ s.lines[101].registers[h]^=1;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ s.lines[101].registers[h]^=1;
+ /* Even authentic samples may only extend this scene after proving the
+  * repeat. Simulate a live writer that changed a streamed table sample. */
+ s.epochs[0].ram[Start+2*150]^=1;
+ s.lines[150].registers[h]^=1;
+ s.lines[150].registers[h+2]^=1;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ s.epochs[0].ram[Start+2*150]^=1;
+ s.lines[150].registers[h]^=1;
+ s.lines[150].registers[h+2]^=1;
+ dma.channel[7].bAdr=16;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ g_snesrecomp_last_hdmaen=0;
+}
 static void epochs_and_read_only(void){
+ stock_arrival_wave();
  fixture();publication();int w=0,h=0;IogWorldGeometry(1280,720,&w,&h);CHECK(w==598&&h==336);
  memcpy(before_ram,ram,sizeof(ram));before_ppu=*g_ppu;CpuState before_cpu=g_cpu;IogWorldBeginRaster();CHECK(s.valid);
  for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
@@ -558,6 +613,35 @@ static void babel_starfield(void){
   s.lines[99].registers[offsetof(Ppu,cgadsub)]^=1;
   CHECK(!RenderWorld()&&!strcmp(s.reason,"unsupported_babel_starfield"));
  }
+ /* The rematches' normal star producer shares the two-plane victory
+  * table. A nonperiodic raster must retain the captured edge phases. */
+ static Dma victory_dma;
+ fixture();word(0x644,0xf4);word(0x6ee,0x0405);
+ word(0x68e,0);word(0x694,512);word(0x698,512);word(0x6d8,0);word(0x6da,512);word(0x6de,256);
+ g_ppu->screenEnabled[0]=19;
+ g_ppu->vScroll[0]=24;g_ppu->cgwsel=2;g_ppu->cgadsub=0x31;
+ g_snes->dma=&victory_dma;g_snesrecomp_last_hdmaen=0xc2;
+ for(unsigned i=6;i<=7;i++)victory_dma.channel[i]=(DmaChannel){
+  .mode=2,.indirect=true,.bAdr=(uint8_t)(13+2*(i-6)),.aBank=0x7e,.aAdr=0x8800,.indBank=0x7e};
+ victory_dma.channel[1]=victory_dma.channel[7];
+ victory_dma.channel[1].aAdr=0x8a00;
+ const uint8_t table[]={0xff,0,0x89,0xe0,0xfe,0x89,0};memcpy(ram+0x8800,table,sizeof table);
+ for(unsigned line=0;line<223;line++)word(0x8900+2*line,256+(line%21));
+ publication();IogWorldBeginRaster();
+ for(unsigned line=0;line<=224;line++){
+  uint16_t sample=Word(ram,0x8900+2*(line<223?line:222));
+  g_ppu->hScroll[0]=g_ppu->hScroll[1]=sample;
+  IogWorldCaptureLine((int)line);
+ }
+ cloud_probe=true;IogWorldEndRaster(0,225,0);cloud_probe=false;
+ CHECK(s.complete&&!strcmp(s.reason,"ready_stock_transition_wave"));
+ CHECK(s.output[s.width-1]==0xff3366eeu);
+ victory_dma.channel[1].bAdr=16;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ victory_dma.channel[1].bAdr=15;
+ s.lines[99].registers[offsetof(Ppu,hScroll)+2]^=1;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ g_snesrecomp_last_hdmaen=0;g_snes->dma=NULL;
 }
 static void mansion_fog(void){
  fixture();word(0x644,0xe9);
@@ -962,7 +1046,29 @@ static void mode7_menu_dismissal(void){
  IogWorldBeginRaster();CHECK(!s.valid&&!s.mode7);
  g_snesrecomp_last_hdmaen=0;
 }
+static void mode7_angkor_neighbor_mosaic(void){
+ fixture();word(0x644,0xBF);word(0x692,512);word(0x696,512);
+ word(0x68a,128);word(0x68e,64);
+ g_ppu->bgmode=9;g_ppu->mosaic=0x63;g_ppu->screenEnabled[0]=21;
+ g_ppu->hScroll[0]=128;g_ppu->vScroll[0]=64;
+ g_ppu->mosaicStartLine=1;g_ppu->renderFlags=kPpuRenderFlags_NewRenderer;
+ publication();IogWorldBeginRaster();CHECK(s.valid&&!s.mode7);
+ for(int y=0;y<=224;y++)IogWorldCaptureLine(y);
+ IogWorldEndRaster(0,225,0);CHECK(s.complete);
+ /* The first visible chunk seam is deliberately unaligned with size seven. */
+ for(int y=0;y<336;y++)for(int x=218;x<231;x++){
+  int sx=x-s.view.native_x,sy=y-s.view.native_y+1;
+  int mx=((sx%7)+7)%7,my=((sy%7)+7)%7;
+  CHECK(s.output[y*598+x]==(0xff000000u|(unsigned)(128+sx-mx)|
+      ((unsigned)(64+sy-my)<<10)));
+ }
+ /* Changed block phase or an unrelated room must keep source fallback. */
+ IogWorldBeginRaster();CHECK(s.valid);IogWorldCaptureLine(0);
+ g_ppu->mosaic=0x53;IogWorldCaptureLine(1);CHECK(!s.valid);
+ word(0x644,0xBE);CHECK(!AngkorVisionMosaic(g_ppu,ram));
+}
 static void mode7_lifecycle_and_packet(const char*base){
+ mode7_angkor_neighbor_mosaic();
  mode7_menu_dismissal();
  mode7_fixture();memcpy(before_ram,ram,sizeof(ram));CpuState cpu=g_cpu;
  IogWorldBeginRaster();CHECK(s.mode7&&s.valid&&!s.active);before_ppu=*g_ppu;

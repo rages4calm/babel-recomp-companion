@@ -534,6 +534,43 @@ interpreter remained available and were replayed across the western Sky
 Garden transition. The production launcher profile booted with MSU-1 and
 the 757-entry dialogue pack.
 
+## Prison, Babel victory waves and Angkor vision
+
+Original v30 recognizes the stock two-layer horizontal wave in the South
+Cape prison arrival (`0B`), the Babel entrance after the final Mystic Statue
+(`DE`), and the Dark Vampires victory in Babel (`F4`). These effects could
+previously fall back to the centered original field. The renderer validates
+the original HDMA producer and each captured row. It continues the wave
+outside the original field only when the captured source repeats. It keeps
+the authentic foreground, stars and room boundaries.
+
+The other rematch wave layouts keep their original fallback. Test builds that
+accepted them intermittently alternated between the expanded and original
+field. These layouts need consistent frame-to-frame validation.
+
+The linked Dark Vampires replay kept all 124 victory-wave frames expanded
+and returned to the Babel middle floor (`E0`). The sampled original field,
+full pixel-reference picture and seven guest state fields matched.
+
+The Spirit Guide's Angkor Wat transition (`BF` → `C0` → `BF`) also keeps
+the temple at the correct extent during the measured mosaic phases. The
+widened tile chunks align to the original mosaic grid and preserve the
+Mode 7 vision's existing renderer. Unknown raster layouts still use fallback.
+
+The prison ripple and the Babel entrance ripple match the captured original
+gameplay field at 1.5× after masking the separately placed HUD. Virtual
+controller input continued through the prison into the Aqueduct and from
+the Babel entrance to the rooftop. The Angkor route used an assisted stock
+arrival followed by controller dialogue input. Seventy outgoing mosaic
+frames kept the wider picture, and the sampled Mode 7 vision and temple
+return matched v29. The tested reference-pixel pictures and seven guest
+state fields matched. A forced interpreter replay also passed for the
+Babel entrance route.
+
+The headless checks used SDL virtual controllers and 598×336 square-pixel
+output. The isolated launcher profile booted with the 757-entry dialogue
+pack and MSU-1 enabled.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

@@ -41,10 +41,9 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 
 ## Development status
 
-Original v29 fixes bottom-edge sprites in Mu and Sky Garden, mountain scroll
-in the lower Great Wall gallery, and the one-frame snap when the stock
-destination menu closes at 1.5×.
-[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#bottom-edges-lower-great-wall-and-map-dismissal)
+Original v30 keeps the wider view through the South Cape prison arrival,
+the Dark Vampires victory wave and the fade into Angkor Wat's Mode 7 vision.
+[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#prison-babel-victory-waves-and-angkor-vision)
 
 The Original v27 controller replays verify the linked Solid Arm fight and
 return to Babel, the rooftop, both Dark Gaia forms and the ending through

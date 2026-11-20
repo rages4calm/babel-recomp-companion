@@ -172,6 +172,23 @@ static int ScrollWorld(const uint8_t *ram,unsigned at,unsigned scroll)
     return result;
 }
 
+static bool AngkorVisionMosaic(const Ppu *p,const uint8_t *ram)
+{
+    /* The Spirit Guide's transition into the Mode 7 vision mosaics the
+     * ordinary temple picture. Only the known stock background grid is
+     * supported; unrelated effects retain their normal fallback. */
+    return Word(ram,0x644)==0xBF && p->bgmode==9 && (p->mosaic&15)==3 &&
+        !p->windowsel && p->screenEnabled[0]==21 && !p->screenEnabled[1] &&
+        Word(ram,0x692)==512 && Word(ram,0x696)==512 &&
+        Word(ram,0x694)==768 && Word(ram,0x698)==1024;
+}
+
+static int PositiveMod(int value,int divisor)
+{
+    int remainder=value%divisor;
+    return remainder<0?remainder+divisor:remainder;
+}
+
 bool IogWorldEnabled(void)
 {
     if(!s.initialized) {
@@ -287,7 +304,7 @@ void IogWorldBeginRaster(void)
     IogSceneViewReadWorldSource(g_snes->ram,131072,g_ppu,false,&source);
     if(source.gate!=kIogSceneViewReady || source.scene!=Word(s.active_ram,0x644)) return;
     if(PPU_objInterlace(g_ppu) || g_ppu->frameInterlace ||
-       (g_ppu->mosaic>>4)!=0 ||
+       ((g_ppu->mosaic>>4)!=0 && !AngkorVisionMosaic(g_ppu,g_snes->ram)) ||
        (ActiveWorldWindow(g_ppu) && !KnownWorldWindow(g_ppu,g_snes->ram))) return;
     s.base=*g_ppu;
     s.absent_secondary=source.absent_secondary;
@@ -303,7 +320,10 @@ void IogWorldCaptureLine(int line)
     }
     bool mode7_line=s.mode7 && (!s.mode7_split || line<s.mode7_split);
     if((mode7_line?!Mode7PlaneLayout(g_ppu,Word(g_snes->ram,0x644)):(g_ppu->bgmode&7)!=1) ||
-       g_ppu->frameInterlace || (g_ppu->mosaic>>4)!=0 ||
+       g_ppu->frameInterlace ||
+       (((g_ppu->mosaic|s.base.mosaic)>>4)!=0 &&
+          (!AngkorVisionMosaic(g_ppu,g_snes->ram) || g_ppu->mosaic!=s.base.mosaic ||
+           (line>0 && g_ppu->mosaicStartLine!=1))) ||
        (ActiveWorldWindow(g_ppu) && !KnownWorldWindow(g_ppu,g_snes->ram))) {
         s.valid=false; s.reason="unsupported_line_effect"; return;
     }
@@ -525,21 +545,90 @@ static bool MansionFog(const PictureEpoch *e,const Ppu *p,
 /* All five rematches retain their stars in an uploaded BG2 ring under the
  * ending wave. The stars may be on either screen. Leave both enables and
  * backdrop math in the captured state rather than moving BG2 to main. */
-static bool BabelStarfield(const PictureEpoch *e,const Ppu *p)
+static bool BabelStarfieldLayout(const PictureEpoch *e,const Ppu *p)
 {
     const uint8_t *ram=e->ram;
     unsigned scene=Word(ram,0x644);
-    if(scene<0xF2 || scene>0xF6 || (Word(ram,0x6EE)&0x0480)!=0x0400 ||
-       Word(ram,0x694)!=512 || Word(ram,0x698)!=512 ||
-       PPU_bigTiles(p,1) || !PPU_bgTilemapWider(p,1) || PPU_bgTilemapHigher(p,1) ||
-       ((p->screenEnabled[0]|p->screenEnabled[1])&2)==0 ||
-       p->cgwsel!=0x02 || p->cgadsub!=0x31)
-        return false;
-    return UploadedRingWave(p,1,true);
+    return scene>=0xF2 && scene<=0xF6 && (Word(ram,0x6EE)&0x0480)==0x0400 &&
+       Word(ram,0x694)==512 && Word(ram,0x698)==512 &&
+       !PPU_bigTiles(p,1) && PPU_bgTilemapWider(p,1) && !PPU_bgTilemapHigher(p,1) &&
+       ((p->screenEnabled[0]|p->screenEnabled[1])&2) &&
+       p->cgwsel==0x02 && p->cgadsub==0x31;
 }
 
 enum { WaterWavePeriod = 8 };
 enum { VillageHeatPeriod = 32 };
+enum { StockWaveTable = 0x8800, StockWaveRing = 0x8900, StockWavePeriod = 128 };
+
+/* Validate the shared horizontal HDMA producer on both backgrounds and
+ * every visible line before using its ring outside the original field. */
+static unsigned StockHorizontalWave(const PictureEpoch *e,const Ppu *p,int camera_x,
+                                   unsigned hdma_mask,bool *repeats)
+{
+    const uint8_t *ram=e->ram;
+    if(s.epoch_count!=1 || g_snesrecomp_last_hdmaen!=hdma_mask || !g_snes->dma)
+        return 0;
+
+    const unsigned channels[]={6,7,1};
+    for(unsigned i=0;i<sizeof(channels)/sizeof(channels[0]);i++) {
+        unsigned ch=channels[i];
+        if(!(hdma_mask&(1u<<ch))) continue;
+        const DmaChannel *c=&g_snes->dma->channel[ch];
+        /* The rematches' original BG2 wave uses a double buffer on ch1.
+         * The verified ch7 write supplies the final BG2 value each line. */
+        bool table_matches=c->aAdr==StockWaveTable || (ch==1 && c->aAdr==0x8A00);
+        if(c->mode!=2 || !c->indirect || c->fromB || c->bAdr!=(ch==6?13:15) ||
+           c->aBank!=0x7E || !table_matches || c->indBank!=0x7E)
+            return 0;
+    }
+    const uint8_t *table=ram+StockWaveTable;
+    unsigned origin=Word(table,1);
+    enum { RingBytes=2*StockWavePeriod, LastWaveLine=222 };
+    if(table[0]!=0xFF || table[3]!=0xE0 || table[6] ||
+       origin<StockWaveRing || origin+2*(LastWaveLine+1)>StockWaveRing+4*RingBytes ||
+       (origin&1) || Word(table,4)!=origin+254)
+        return 0;
+    bool varied=false,periodic=true;
+    const size_t h=offsetof(Ppu,hScroll),v=offsetof(Ppu,vScroll);
+    for(int line=0;line<=224;line++) {
+        const uint8_t *regs=s.lines[line].registers;
+        unsigned sample=(unsigned)Clamp(line,0,LastWaveLine);
+        unsigned shift=Word(ram,origin+2*sample)&1023;
+        int distance=(int)((shift-(unsigned)camera_x+512)&1023)-512;
+        if(distance < -64 || distance > 64 || (Word(regs,h)&1023)!=shift ||
+           (Word(regs,h+2)&1023)!=shift ||
+           (Word(regs,v)&1023)!=(p->vScroll[0]&1023) ||
+           (Word(regs,v+2)&1023)!=(p->vScroll[1]&1023) ||
+           regs[offsetof(Ppu,bgXsc)]!=p->bgXsc[0] ||
+           regs[offsetof(Ppu,bgXsc)+1]!=p->bgXsc[1] ||
+           Word(regs,offsetof(Ppu,bgTileAdr))!=p->bgTileAdr)
+            return 0;
+        periodic&=(Word(ram,origin+2*(sample%StockWavePeriod))&1023)==shift;
+        varied|=distance!=0;
+    }
+    *repeats=periodic;
+    return varied?origin:0;
+}
+
+static bool ArrivalWaveLayout(unsigned scene,const PictureEpoch *e,const Ppu *p,
+                              int camera_x,int camera_y)
+{
+    const uint8_t *ram=e->ram;
+    if(Word(ram,0x644)!=scene || Word(ram,0x692)!=512 ||
+       (int16_t)Word(ram,0x68A)!=camera_x || (int16_t)Word(ram,0x68E)!=camera_y ||
+       (p->vScroll[0]&1023)!=((unsigned)camera_y&1023) ||
+       (p->vScroll[1]&1023)!=((unsigned)camera_y&1023))
+        return false;
+    if(scene==0x0B)
+        return Word(ram,0x694)==512 && Word(ram,0x696)==768 &&
+            Word(ram,0x698)==768 && Word(ram,0x6EE)==0x0185 &&
+            Word(ram,0x68C)==Word(ram,0x68A) && Word(ram,0x690)==Word(ram,0x68E);
+    return scene==0xDE && Word(ram,0x694)==256 && Word(ram,0x696)==256 &&
+        Word(ram,0x698)==256 && Word(ram,0x6EE)==0x0001 &&
+        Word(ram,0x6D6)==256 && !Word(ram,0x6D8) &&
+        Word(ram,0x6DA)==512 && Word(ram,0x6DE)==256 &&
+        !Word(ram,0x68C) && !Word(ram,0x690) && camera_x==256 && camera_y==0;
+}
 
 /* Scene AC binds one 32-line heat table to both vertical scroll registers.
  * Keep the actual raster across the native field. Extend it only when both
@@ -931,6 +1020,17 @@ static bool RenderWorld(void)
     int camera_x=(int16_t)Word(s.active_ram,0x68A);
     int camera_y=(int16_t)Word(s.active_ram,0x68E);
     bool village_heat=scene==0xAC && VillageHeat(first,p);
+    bool babel_starfield_layout=s.epoch_count==1 && BabelStarfieldLayout(first,p);
+    bool transition_wave_repeats=false;
+    unsigned transition_wave=(scene==0x0B || scene==0xDE) &&
+        ArrivalWaveLayout(scene,first,p,camera_x,camera_y)?
+            StockHorizontalWave(first,p,camera_x,0xC0,&transition_wave_repeats):0;
+    if(!transition_wave_repeats) transition_wave=0;
+    /* The entire Dark Vampires return uses this validated layout. The
+     * other rematches still need a continuous capture of both phases. */
+    if(babel_starfield_layout && scene==0xF4 && Word(first->ram,0x6EE)==0x0405)
+        transition_wave=StockHorizontalWave(first,p,camera_x,0xC2,&transition_wave_repeats);
+    bool babel_victory_wave=transition_wave && babel_starfield_layout;
     bool source_plate=SourcePlateScene(scene);
     if(source_plate) {
         /* These verified compositions expose only their native field. Their
@@ -942,7 +1042,7 @@ static bool RenderWorld(void)
            !RoomPictureBounds(first,camera_x,camera_y,&bounds)) {
             s.reason="unsupported_room_window";return false;
         }
-    } else if(!village_heat &&
+    } else if(!village_heat && !transition_wave &&
               (ScrollWorld(s.active_ram,0x68A,p->hScroll[physical])!=camera_x ||
                ScrollWorld(s.active_ram,0x68E,p->vScroll[physical])!=camera_y)) {
         s.reason="camera_publication_mismatch";return false;
@@ -981,7 +1081,7 @@ static bool RenderWorld(void)
     bool freejia_wave = tracked_effect && s.epoch_count == 1 &&
         FreejiaRingWave(first,p,&effect_camera);
     bool mansion_fog=tracked_effect && s.epoch_count==1 && MansionFog(first,p,&effect_camera);
-    bool babel_stars=s.epoch_count==1 && BabelStarfield(first,p);
+    bool babel_stars=babel_victory_wave || (babel_starfield_layout && UploadedRingWave(p,1,true));
     bool water_wave = WaterWave(first,p);
     bool dao_heat=DaoHeatWave(first,p);
     if (scene == 0x32 && !freejia_wave) {
@@ -1060,6 +1160,8 @@ static bool RenderWorld(void)
         authored_window_pan=!RoomPictureView(camera_x,camera_y,&authored_bounds);
     }
     int left=s.view.native_x,top=s.view.native_y;
+    const int mosaic=PPU_mosaicSize((&s.base));
+    const int stock_mosaic_origin=(s.base.renderFlags&kPpuRenderFlags_NewRenderer)?0:1;
     IogVisualViewport viewport={s.view.world_x,s.view.world_y,
         s.view.width,s.view.height};
     s.detached=s.base;
@@ -1125,10 +1227,14 @@ static bool RenderWorld(void)
         }
         for(int start=0;start<s.width;start+=Chunk) {
             int width=Clamp(s.width-start,0,Chunk);
+            /* Each detached chunk must start on the stock mosaic grid.
+             * Discard the prefix after drawing so seams never reset it. */
+            int skip=mosaic>1?PositiveMod(start-left,mosaic):0;
+            int chunk_x=start-skip;
             unsigned dirty[64],dirty_count=0;
             memcpy(p,line->registers,PPU_SAVESTATE_REGS_SIZE);
             if(KnownWorldWindow(p,e->ram))
-                RebaseWindow1(p,left-start);
+                RebaseWindow1(p,left-chunk_x);
             uint16_t source_hscroll[2]={p->hScroll[0],p->hScroll[1]};
             uint16_t source_vscroll[2]={p->vScroll[0],p->vScroll[1]};
             if(s.copy_reference) memcpy(p->vram,e->vram,sizeof(p->vram));
@@ -1138,7 +1244,7 @@ static bool RenderWorld(void)
                 int physical=logical^((e->ram[0x6EE]>>7)&1);
                 int camx=ScrollWorld(e->ram,0x68A+logical*2,p->hScroll[physical]);
                 int camy=ScrollWorld(e->ram,0x68E + logical*2,p->vScroll[physical]);
-                int wx=camx-left+start,wy=camy+native_y;
+                int wx=camx-left+chunk_x,wy=camy+native_y;
                 bool star_plane=logical==1 && babel_stars;
                 bool effect=logical==1 && (!bounded || scene==0x85) && !classroom &&
                     (tracked_effect || horizon || EffectPlaneScene(scene));
@@ -1151,7 +1257,7 @@ static bool RenderWorld(void)
                         ProjectEffect(effect_camera.ratio[0],s.view.world_x)-
                         ProjectEffect(effect_camera.ratio[0],camera_x):
                         EffectProjection(scene,false,s.view.world_x)-
-                        EffectProjection(scene,false,camera_x))+start;
+                        EffectProjection(scene,false,camera_x))+chunk_x;
                     wy=camy+(tracked_effect?
                         ProjectEffect(effect_camera.ratio[1],s.view.world_y)-
                         ProjectEffect(effect_camera.ratio[1],camera_y):
@@ -1166,7 +1272,7 @@ static bool RenderWorld(void)
                     if(wy>=255&&flat_horizon_tail)wy=254;
                     uint16_t phase;
                     if(IogRasterParallaxSample(&horizon_model,wy+1,s.view.world_x,&phase))
-                        wx=(int)phase+start;
+                        wx=(int)phase+chunk_x;
                 }
                 if(logical==1&&wall_bands) {
                     /* Great Wall's sky/wall bands have different X rates at
@@ -1177,9 +1283,10 @@ static bool RenderWorld(void)
                      * captured field when the expanded view pulls back. */
                     if(IogRasterParallaxSample(&wall_model,wy+1,
                             wall_field_phase?wall_source_camera:s.view.world_x,&phase))
-                        wx=(int)phase+start-(wall_field_phase?left:0);
+                        wx=(int)phase+chunk_x-(wall_field_phase?left:0);
                 }
-                if(logical==1&&(freejia_wave||mansion_fog||star_plane)&&(native_y<0 || native_y>=224)) {
+                if(logical==1&&(freejia_wave||mansion_fog||(star_plane&&!babel_victory_wave))&&
+                   (native_y<0 || native_y>=224)) {
                     int phase=(native_y%RingWavePeriod+RingWavePeriod)%RingWavePeriod+1;
                     unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,hScroll)+physical*2);
                     int wave_x=ScrollWorld(e->ram,0x68C,scroll);
@@ -1203,9 +1310,20 @@ static bool RenderWorld(void)
                     unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,vScroll)+physical*2);
                     wy+=ScrollWorld(e->ram,0x68E + logical*2,scroll)-camy;
                 }
+                if(transition_wave && transition_wave_repeats && (native_y<0 || native_y>=224)) {
+                    /* The final two hardware lines hold sample 222. Begin
+                     * the lower extension at the next actual wave sample. */
+                    int sample=native_y<0?native_y+1:native_y-1;
+                    unsigned phase=(unsigned)sample&(StockWavePeriod-1);
+                    unsigned scroll=Word(e->ram,transition_wave+2*phase);
+                    wx+=ScrollWorld(e->ram,0x68A + logical*2,scroll)-camx;
+                }
                 if(logical==1 && adrift_ocean && native_y<0 && wy<0) wy=0;
+                bool mosaic_layer=mosaic>1 && PPU_mosaicEnabled(p,physical);
+                if(mosaic_layer)
+                    wy-=PositiveMod(native_y+1-stock_mosaic_origin,mosaic);
                 p->hScroll[physical]=(uint16_t)wx&1023;
-                p->vScroll[physical]=(uint16_t)wy&1023;
+                p->vScroll[physical]=(uint16_t)(wy+(mosaic_layer?1:0))&1023;
                 if(star_plane) continue;
                 /* Layer-1 position bypass deliberately performs no map
                  * streaming. Solid Arm's animated backdrop lives in the
@@ -1216,7 +1334,7 @@ static bool RenderWorld(void)
                 int sample_y=wy+1;
                 if(logical==1 && adrift_ocean && sample_y>=256)
                     sample_y=160+((sample_y-160)%32);
-                for(int x=wx&~7;x<wx+width;x+=8) {
+                for(int x=wx&~7;x<wx+width+skip;x+=8) {
                     /* BG sampling uses hardware line1 while OBJ evaluation
                      * uses line0 for the same first output row. */
                     int sample_x=x;
@@ -1238,7 +1356,7 @@ static bool RenderWorld(void)
                         uint16_t phase;
                         if(IogRasterParallaxSample(&wall_model,wy+1,wall_source_camera,&phase))source_x=phase;
                     }
-                    if(source_y>=0&&source_y<224 && x+8>source_x && x<source_x+256) {
+                    if(source_y>=-(int)mosaic_layer&&source_y<224 && x+8>source_x && x<source_x+256) {
                         unsigned tx=((unsigned)source_hscroll[physical]+(x-source_x))>>3;
                         unsigned ty=((unsigned)source_vscroll[physical]+source_y+1)>>3;
                         unsigned address=PPU_bgTilemapAdr(p,physical)+((ty&31)<<5)+(tx&31);
@@ -1256,9 +1374,11 @@ static bool RenderWorld(void)
                     p->vram[address]=(uint16_t)tile;
                 }
             }
-            for(size_t i=0;i<count;i++) s.objects[i].x-=start;
+            for(size_t i=0;i<count;i++) s.objects[i].x-=chunk_x;
             PpuSetExtraObjects(p,s.objects,count);
-            IogWorldPixelsDrawLine(p,0);IogWorldPixelsDrawLine(p,1);
+            IogWorldPixelsDrawLine(p,0);
+            if(mosaic>1) p->mosaicStartLine=0;
+            IogWorldPixelsDrawLine(p,1);
             uint32_t composite[Chunk];
             bool cloud_sky=((scene==0x55 && !bounded && !authored &&
                 Word(e->ram,0x694)==512 && Word(e->ram,0x698)==512)||horizon||adrift_ocean) &&
@@ -1270,7 +1390,7 @@ static bool RenderWorld(void)
                  * composite would expose spare floor pages and off-map actors.
                  * Preserve the ordinary composite everywhere inside the room
                  * and across the complete authoritative native field. */
-                memcpy(composite,s.row,(size_t)width*4);
+                memcpy(composite,s.row+skip,(size_t)width*4);
                 unsigned terrain=(e->ram[0x6EE]>>7)&1;
                 p->screenEnabled[0]&=(uint8_t)~((1u<<terrain)|16u);
                 p->screenEnabled[1]&=(uint8_t)~((1u<<terrain)|16u);
@@ -1282,7 +1402,7 @@ static bool RenderWorld(void)
              * bounded cells replaces a full64KB copy for every chunk/row. */
             for(unsigned n=0;n<dirty_count;n++)
                 p->vram[dirty[n]]=first->vram[dirty[n]];
-            for(size_t i=0;i<count;i++) s.objects[i].x+=start;
+            for(size_t i=0;i<count;i++) s.objects[i].x+=chunk_x;
             for(int x=0;x<width;x++) {
                 int worldx=viewport.world_x+start+x,worldy=viewport.world_y+row;
                 bool native_pixel=native_y>=0&&native_y<224&&
@@ -1302,7 +1422,7 @@ static bool RenderWorld(void)
                 if(castle_marker && !native_pixel && worldx>=480 && worldy>=735)
                     inside=false;
                 if(inside || backdrop_only || story_sky)
-                    s.output[row*s.width+start+x]=backdrop_only&&inside?composite[x]:s.row[x];
+                    s.output[row*s.width+start+x]=backdrop_only&&inside?composite[x]:s.row[x+skip];
             }
         }
     }
@@ -1318,6 +1438,7 @@ static bool RenderWorld(void)
         water_wave?"ready_water_wave":
         dao_heat?"ready_dao_heat":
         village_heat?"ready_village_heat":
+        transition_wave?"ready_stock_transition_wave":
         mansion_fog?"ready_mansion_fog":
         babel_stars?"ready_babel_starfield":
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;
