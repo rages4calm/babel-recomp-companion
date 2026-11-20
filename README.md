@@ -10,8 +10,9 @@ The original author's credit, support link and full acknowledgments remain below
 **Current priority: full-game visuals and built-in GaiaLabs world map/Retranslation.**
 Six more Great Wall rooms have corrected scrolling at widescreen/1.5×, and
 Select opens controller settings from our local scenery map. The private
-GaiaLabs integration preview supports widescreen world travel and
-[renders South Cape's authored scenery at 1.5×](docs/GAIALABS-SOUTH-CAPE.md).
+GaiaLabs integration preview supports widescreen world travel,
+[South Cape at 1.5×](docs/GAIALABS-SOUTH-CAPE.md), and
+[widescreen scenery in nearby rooms](docs/GAIALABS-SOUTH-CAPE-ROOMS.md).
 The corrected town arrival and normal road back to the world map work in the
 tested route. Full-game visuals and main-content integration
 are still in progress.

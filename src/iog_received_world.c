@@ -23,6 +23,7 @@ extern Ppu *g_ppu;
 enum { Width = 598, Height = 336, Chunk = 224 };
 static struct {
   bool initialized, enabled, valid, complete, mode7, town, town_enabled;
+  bool interior, interiors_enabled, dark_space;
   int width, height, frame;
   const char *reason;
   unsigned lines;
@@ -54,6 +55,34 @@ static int ScrollWorld(int camera, unsigned scroll) {
     world += 1024;
   return world;
 }
+/* Both allocations matter. Several houses keep other floors in BG1, while
+ * the larger BG2 allocation can hold unrelated composition data. */
+static bool InteriorLayout(unsigned scene, const uint8_t *ram, const Ppu *ppu,
+                           int left, int top, int right, int bottom) {
+  static const uint16_t dimensions[][4] = {
+      {256, 1280, 256, 1024}, /* 02: cave */
+      {256, 512, 512, 512},   /* 03 */
+      {512, 512, 512, 512},   /* 04 */
+      {256, 512, 256, 512},   /* 05 */
+      {256, 512, 1280, 512},  /* 06 */
+      {256, 512, 256, 512},   /* 07 */
+  };
+  const uint16_t *size = dimensions[scene - 2];
+  for (unsigned i = 0; i < 4; ++i) {
+    if (Word(ram, 0x692 + i * 2) != size[i])
+      return false;
+  }
+  for (unsigned layer = 0; layer < 2; ++layer) {
+    unsigned bytes = size[layer] * (unsigned)size[layer + 2] / 256;
+    if (Word(ram, 0x69a + layer * 2) != bytes ||
+        PPU_bigTiles(ppu, layer) || !PPU_bgTilemapWider(ppu, layer) ||
+        PPU_bgTilemapHigher(ppu, layer))
+      return false;
+  }
+  return left == 0 && right == size[0] && !(top & 255) &&
+      bottom == top + 256 && bottom <= size[2] &&
+      !ppu->windowsel && !(ram[0x6ee] & 0x80);
+}
 bool IogReceivedWorldEnabled(void) {
   if (!s.initialized) {
     s.initialized = true;
@@ -65,6 +94,8 @@ bool IogReceivedWorldEnabled(void) {
 #endif
     const char *town = getenv("IOG_RECEIVED_SOUTH_CAPE");
     s.town_enabled = !town || strcmp(town, "0");
+    const char *interiors = getenv("IOG_RECEIVED_SOUTH_CAPE_ROOMS");
+    s.interiors_enabled = !interiors || strcmp(interiors, "0");
     const char *a = getenv("IOG_RECEIVED_WORLD_AUDIT");
     if (s.enabled && a && *a)
       s.audit = fopen(a, "wb");
@@ -164,6 +195,8 @@ void IogReceivedWorldBeginRaster(void) {
   s.frame++;
   s.valid = s.complete = false;
   s.town = false;
+  s.interior = false;
+  s.dark_space = false;
   s.lines = 0;
   s.reason = "unpaired_or_unqualified";
   memset(s.ui, 0, sizeof(s.ui));
@@ -183,12 +216,26 @@ void IogReceivedWorldBeginRaster(void) {
   }
   unsigned scene = Word(s.source.ram, 0x644);
   s.town = scene == 1;
+  s.interior = scene >= 2 && scene <= 7;
+  if (scene == 0xe6 && s.interiors_enabled &&
+      Word(g_snes->ram, 0x644) == scene && (g_ppu->bgmode & 7) == 1) {
+    /* Dark Space uses a separately scrolled subscreen. Preserve the composed
+     * 256-pixel field and its live effects. The 64-pixel VRAM margins on
+     * either side contain unrelated tiles from the wrapped hardware map. */
+    s.dark_space = true;
+    s.reason = "received_dark_space_field";
+    return;
+  }
   if (s.town && !s.town_enabled) {
     s.reason = "south_cape_fallback_requested";
     return;
   }
-  if (PPU_forcedBlank(g_ppu) || (!s.town && PPU_brightness(g_ppu) != 15) ||
-      (scene != 8 && !s.town) || (g_ppu->bgmode & 7) != 1 ||
+  if (s.interior && !s.interiors_enabled) {
+    s.reason = "south_cape_room_fallback_requested";
+    return;
+  }
+  if (PPU_forcedBlank(g_ppu) ||
+      !IogVisualReceivedSupportsScene(scene) || (g_ppu->bgmode & 7) != 1 ||
       PPU_objInterlace(g_ppu) || g_ppu->frameInterlace || (g_ppu->mosaic >> 4))
     return;
   memcpy(s.ram, g_snes->ram, sizeof(s.ram));
@@ -200,14 +247,16 @@ void IogReceivedWorldBeginRaster(void) {
    * to the actual768x256 map. Spare storage beyond it stays black. */
   unsigned map_width = s.town ? 1280 : 768;
   if (Word(s.ram, 0x644) != scene ||
-      Word(s.ram, 0x692) != map_width || Word(s.ram, 0x696) != (s.town ? 1024 : 256) ||
-      Word(s.ram, 0x694) != map_width || Word(s.ram, 0x698) != (s.town ? 1024 : 512) ||
+      (!s.interior && (Word(s.ram, 0x692) != map_width ||
+       Word(s.ram, 0x696) != (s.town ? 1024 : 256) ||
+       Word(s.ram, 0x694) != map_width ||
+       Word(s.ram, 0x698) != (s.town ? 1024 : 512))) ||
       Word(s.ram, 0x69e) != 0xa000 || Word(s.ram, 0x6a0) != 0xc000 ||
       Word(s.ram, 0x6ae) != 0x2000 || Word(s.ram, 0x6b0) != 0x2800) {
     s.reason = "map_layout";
     return;
   }
-  if (!s.town && !Exterior()) {
+  if (scene == 8 && !Exterior()) {
     s.reason = "exterior_map_identity";
     return;
   }
@@ -221,7 +270,9 @@ void IogReceivedWorldBeginRaster(void) {
   }
   int l = Word(s.ram, 0x6d6), r = Word(s.ram, 0x6da), t = Word(s.ram, 0x6d8),
       b = Word(s.ram, 0x6de);
-  if (l != 0 || r != (s.town ? 768 : 512) || t != 0 || b != (s.town ? 1024 : 256)) {
+  if (!s.interior &&
+      (l != 0 || (s.town ? r != 768 : (r != 512 && r != 768)) ||
+       t != 0 || b != (s.town ? 1024 : 256))) {
     s.reason = "authored_window";
     return;
   }
@@ -246,11 +297,26 @@ void IogReceivedWorldBeginRaster(void) {
     }
     s.right = (int)map_width;
   }
-  if (!IogWorldViewCompute(camera, cy, s.right, s.bottom, (uint16_t)s.width,
+  if (s.interior) {
+    if (!InteriorLayout(scene, s.ram, g_ppu, l, t, r, b) ||
+        Word(s.source.ram, 0x68c) != (unsigned)camera ||
+        Word(s.source.ram, 0x690) != (unsigned)cy) {
+      s.reason = "interior_layout";
+      return;
+    }
+    s.left = l;
+    s.right = r;
+  }
+  int origin_x = s.interior ? l : 0;
+  int origin_y = s.interior ? t : 0;
+  if (!IogWorldViewCompute(camera - origin_x, cy - origin_y,
+                           s.right - origin_x, s.bottom - origin_y, (uint16_t)s.width,
                            (uint16_t)s.height, &s.view)) {
     s.reason = "world_view";
     return;
   }
+  s.view.world_x += origin_x;
+  s.view.world_y += origin_y;
   IogVisualViewport view = {s.view.world_x, s.view.world_y, (uint16_t)s.width,
                             (uint16_t)s.height};
   if (IogVisualReceivedBuild(&s.source, &view, &s.visual) != kIogVisualReady) {
@@ -283,13 +349,13 @@ void IogReceivedWorldCaptureLine(int line) {
     s.reason = "raster_layout_change";
     return;
   }
-  if (s.town && (g_ppu->windowsel ||
+  if ((s.town || s.interior) && (g_ppu->windowsel ||
       (g_ppu->hScroll[0] & 1023) != (Word(s.source.ram, 0x68a) & 1023) ||
       (g_ppu->hScroll[1] & 1023) != (Word(s.source.ram, 0x68c) & 1023) ||
       (g_ppu->vScroll[0] & 1023) != (Word(s.source.ram, 0x68e) & 1023) ||
       (g_ppu->vScroll[1] & 1023) != (Word(s.source.ram, 0x690) & 1023))) {
     s.valid = false;
-    s.reason = "town_raster_scroll";
+    s.reason = "unaligned_raster_scroll";
     return;
   }
   memcpy(s.registers[line], g_ppu, PPU_SAVESTATE_REGS_SIZE);
@@ -333,6 +399,11 @@ static bool Render(void) {
     }
   }
   memset(s.output, 0, sizeof(s.output));
+  /* The PPU samples tile row y+1. Keep the following map page out of
+   * the picture. Will's house also has unused cells in its last metatile row. */
+  int last = s.bottom - (s.interior ? 1 : 0);
+  if (s.interior && Word(s.ram, 0x644) == 6)
+    last = s.bottom - 16;
   for (int row = 0; row < s.height; row++) {
     int ny = row - s.view.native_y, line = Clamp(ny, 0, 223) + 1;
     size_t count = 0;
@@ -412,8 +483,8 @@ static bool Render(void) {
         s.objects[n].x += start;
       for (int x = 0; x < width; x++) {
         int wx = s.view.world_x + start + x, wy = s.view.world_y + row;
-        if (wx >= s.left && wx < s.right && wy >= s.top && wy < s.bottom &&
-            (s.town || !s.exterior[(wy / 16) * 48 + wx / 16]))
+        if (wx >= s.left && wx < s.right && wy >= s.top && wy < last &&
+            (s.town || s.interior || !s.exterior[(wy / 16) * 48 + wx / 16]))
           s.output[row * s.width + start + x] = s.row[x];
       }
     }
@@ -428,7 +499,8 @@ void IogReceivedWorldEndRaster(void) {
   } else if (s.valid && s.lines == 225) {
     s.complete = Render();
     if (s.complete)
-      s.reason = s.town ? "received_south_cape_ready" : "received_classroom_ready";
+      s.reason = s.town ? "received_south_cape_ready" :
+          s.interior ? "received_south_cape_room_ready" : "received_classroom_ready";
   }
   if (s.audit) {
     fprintf(s.audit,
@@ -465,9 +537,12 @@ int IogReceivedWorldDraw(uint8_t *dst, size_t pitch, const uint8_t *field,
   for (int y = 0; y < h; y++)
     memset(dst + y * pitch, 0, w * 4);
   if (!s.complete) {
-    int l = (w - 384) / 2, t = (h - 224) / 2;
+    int field_width = s.dark_space ? 256 : 384;
+    int source_x = (384 - field_width) / 2;
+    int l = (w - field_width) / 2, t = (h - 224) / 2;
     for (int y = 0; y < 224; y++)
-      memcpy(dst + (y + t) * pitch + l * 4, field + y * 384 * 4, 384 * 4);
+      memcpy(dst + (y + t) * pitch + l * 4,
+             field + (y * 384 + source_x) * 4, field_width * 4);
     ExportPicture(dst,pitch,w,h);return 1;
   }
   if (s.mode7) {
@@ -478,7 +553,7 @@ int IogReceivedWorldDraw(uint8_t *dst, size_t pitch, const uint8_t *field,
     memcpy(dst + y * pitch, s.output + y * w, w * 4);
   /* UI is independent of the world extent. Its authored384-column surface
    * and screen-space direct prefix retain their readable reference scale. */
-  int uh = s.town ? 224 : h;
+  int uh = (s.town || s.interior) ? 224 : h;
   int uy = (h - uh) / 2;
   int uw = 384 * uh / 224, ux = (w - uw) / 2;
   for (unsigned n = s.visual.screen_count; n > 0; n--) {
