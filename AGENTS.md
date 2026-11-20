@@ -26,8 +26,20 @@ Fix neighboring rooms and transitions too; scene admission is not visual approva
 - Keep one bounded scratch batch under ignored .local/; compact completed evidence.
 - Use shared CompanionLauncher/CompanionAchievements contracts. Do not add UI
   options for unimplemented engine features. Preserve native settings and owner data.
+- For game interface design and review, use the
+  [Game UI/UX skill](https://github.com/gamedev-skills/awesome-gamedev-agent-skills/blob/main/skills/disciplines/game-ui-ux/SKILL.md)
+  as the default workflow. Consult the
+  [game development skills catalog](https://github.com/gamedev-skills/awesome-gamedev-agent-skills)
+  for related tasks and the
+  [Recomp UI overlay reference](https://github.com/RetroPortingToolKit/recomp-ui#in-game-settings-overlay)
+  for in-game settings integration. Verify controller focus and navigation,
+  overlay input capture, and UI scaling in the game.
 - User authorizes source/README/repository updates on the existing fork. Releases
   and new public repositories need separate authorization. Tag builds must not
   automatically publish a release.
+- Route Companion bug reports to the Companion fork. Keep confirmed defects in
+  maintained dependencies on their own trackers, using an existing issue when
+  it matches. Treat mrOt4's Babel repository as a historical reference for
+  credit and documentation.
 - Make routine decisions; investigate evidence instead of guessing. Delegate
   independent work with explicit file ownership and respect concurrent edits.

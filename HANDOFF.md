@@ -72,6 +72,9 @@ through Sand Fanger, the remaining Babel rematches and Gem's Solid Arm
 quest. The upper Great Wall sky now stays aligned after the west exit
 from the boss area. Private receipts are in
 `.local/batch-001/visual-fullgame-023`.
+Batch 024 [continues Solid Arm through the ending](docs/VISUAL-COVERAGE.md#solid-arm-through-the-ending)
+on Original v27. Private controller replays, pictures and fallback comparisons
+are in `.local/batch-001/visual-fullgame-024`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.

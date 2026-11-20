@@ -437,6 +437,43 @@ captures stayed byte-identical.
 The linked routes use virtual controller input and a 598×336 square-pixel
 1.5× output. The stock map fallback passed on the v27 production build.
 
+## Solid Arm through the ending
+
+Batch 024 continued on the same Original v27 build and 757-entry dialogue
+pack. From the linked active Solid Arm save, D-pad movement positioned Will
+at the west side of the arena and face-button attacks took the boss from
+40 HP to zero. The original farewell and return script sent Will from the
+Jeweler's Mansion (`EA`) back to Babel (`E3`). The replay then verified
+movement on both axes in Babel. The save retained its earlier Strength and
+Defense boosts. This fight and return used controller input without new
+memory writes.
+
+The same earned return save also linked through Babel's upper stairs, the
+father's final Mystic Statue sequence and the court on the rooftop (`E4`).
+The rooftop checks exercised the spirit conversations, Kara's fusion, the
+flight (`E7`) and the original entrance to Dark Gaia's arena (`E8`). On
+that same chain, controller movement and attacks defeated both Dark Gaia
+forms (20 and 40 HP) as Shadow and earned the original epilogue transition
+(`E8` → `E5`). The post-Queen branch repeated the summit and both fights
+from batch 023's rematch route and supplied the earned epilogue checkpoint
+for the ending replay. Both branches retained boosted player stats.
+
+From that earned epilogue, the game progressed through the Changed World
+map (`90`), the return to the epilogue (`E5`), New Babel (`89`), the full
+credits (`F7`) and the final school scene (`F0`). The credits ran unskipped.
+The replay held on the final school cast and visible END card after the
+school actor reached its last scripted step. These runs used virtual SDL
+controller input through the game's normal input path.
+
+The active arenas, projectiles, room transitions and authored story framing
+were reviewed at square-pixel 1.5× on a 598×336 widescreen canvas. The
+rooftop, comet flight and final encounter kept their authored boundaries.
+All 14 sampled views on the Babel-to-Dark-Gaia branch matched the original
+picture in the source field after masking the Companion HUD. At live
+Solid Arm and Dark Gaia checkpoints and an ending classroom checkpoint, the
+default, forced-interpreter and reference-pixel paths produced the same scene
+history, complete widescreen picture and all seven compared guest state fields.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's
