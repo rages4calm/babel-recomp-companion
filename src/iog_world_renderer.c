@@ -742,6 +742,20 @@ static bool CastleMapMarker(const PictureEpoch *e)
         Word(ram,0xA5FE)==0xFDFC;
 }
 
+static bool AngelEntranceHasStorageTail(const PictureEpoch *e)
+{
+    const uint8_t *ram=e->ram;
+    PictureBounds bounds;
+    unsigned secondary_width=Word(ram,0x694),secondary_height=Word(ram,0x698);
+    bool secondary=(secondary_width==1280 && secondary_height==1024) ||
+        (secondary_width==512 && (secondary_height==512 || secondary_height==256));
+    return Word(ram,0x644)==0x69 && Word(ram,0x692)==768 &&
+        Word(ram,0x696)==256 && secondary &&
+        Word(ram,0x69E)==0xA000 && Word(ram,0x6AE)==0x2000 && Word(ram,0x6EE)==5 &&
+        AuthoredWindow(e,&bounds) && !bounds.left && !bounds.top &&
+        bounds.right==768 && bounds.bottom==256;
+}
+
 static bool RoomPictureView(int camera_x,int camera_y,const PictureBounds *bounds)
 {
     IogWorldView view;
@@ -1067,6 +1081,10 @@ static bool RenderWorld(void)
         if(authored && !AuthoredWindow(e,&bounds)) {
             s.reason="unsupported_authored_window";return false;
         }
+        /* The fixed-height Angel entrance ends at the stock aperture.
+         * The allocation below it exposes only the green clear backdrop. */
+        if(native_y>=224 && !camera_y && AngelEntranceHasStorageTail(e))
+            continue;
         bool castle_marker=CastleMapMarker(e);
         /* Objects were decoded from the exact composition/OAM publication
          * pair. Recolor the one visible row with this raster's palette. */
