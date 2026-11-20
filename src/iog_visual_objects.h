@@ -112,8 +112,9 @@ typedef struct IogVisualReceivedFrame {
 } IogVisualReceivedFrame;
 IogVisualStatus IogVisualReceivedVerify(const uint8_t *rom, size_t size,
     IogVisualReceivedIdentity *identity);
+bool IogVisualReceivedSupportsScene(unsigned scene);
 /* Read-only composer-entry RAM plus matching post-compose/publication packet.
- * Currently qualified only for received classroom08 / Will / direct1FC0.
+ * Uses the received Will body and direct OAM source at 7F:1FC0.
  * Requires all544 published bytes and matching observation epochs. No runtime
  * renderer activation or interpreter/native dispatch policy is implied. */
 IogVisualStatus IogVisualReceivedBuild(const IogVisualReceivedSource *source,
