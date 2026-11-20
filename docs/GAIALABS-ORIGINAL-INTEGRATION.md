@@ -6,7 +6,7 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **851 of 1,138** chapter-dialogue replacements in the
+The import now covers **876 of 1,138** chapter-dialogue replacements in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
 The importer produces 1,091 candidates. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
@@ -59,8 +59,18 @@ back, earning Lance's Letter in both the new and original Neil dialogue
 paths. Both had the same room-transition timing. The translated page fit
 the stock box at square-pixel 1.5×.
 
-The importer excludes 47 declarations. The runtime leaves 240 candidates
-in stock form, for 287 stock chapter entries in total. The remaining
+Original v38 adds 25 stock choice responses in Freejia, Angel Village,
+Watermia, Euro, Native Village, Angkor Wat, Dao and the Moon Tribe camp.
+The existing prompt opens the box, and the results keep its stock clear
+command, dimensions and branch. Translation is restricted to verified
+call sites. All 851 prior payloads and virtual addresses are preserved.
+Three v38 controller replays entered Native Village from the Dao route and
+tested the map child's choice at 1.5×. From the same restored position and
+declared prerequisite flags, both stock and translated Yes unlocked Angkor.
+Translated No left it locked.
+
+The importer excludes 47 declarations. The runtime leaves 215 candidates
+in stock form, for 262 stock chapter entries in total. The remaining
 constraints include marker prefixes with printable text, unverified
 script targets, window bounds, and timed controls. Full menu and sprite
 lettering and custom-font coverage remain open.

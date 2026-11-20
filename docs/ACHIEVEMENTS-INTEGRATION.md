@@ -80,8 +80,12 @@ does not award completion.
 The Original v37 host emitted one jewel event after a controlled inventory
 write. Loading the earlier state and then the later state emitted no duplicate.
 The same diagnostic route with its cheat settings enabled emitted no event.
-This checks the adapter's load and cheat guards. Natural pickup, room-clear
-and ending events still need playback qualification.
+A 75,000-frame controller replay from an earned final-form Dark Gaia checkpoint
+defeated the boss, passed through Changed World and New Babel, and let the full
+credits run. It emitted exactly one ending event on the first END scene frame.
+The checkpoint retained prior player stat boosts. There were no further state
+loads, live cheats or memory writes during the replay. Natural jewel pickup
+and room-clear events still need playback qualification.
 
 Standalone foundation build (no ROM or game build required):
 

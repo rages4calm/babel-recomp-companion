@@ -313,6 +313,35 @@ static void CheckSharedBoxes(void)
     free(out.t);
 }
 
+static void CheckInheritedChoices(void)
+{
+    const uint32_t result = 0x088d1f;
+    const uint8_t commands[] = {0xce, 0x40, 0xc3, 0, CMD_END};
+    const size_t size = result + sizeof(commands);
+    uint8_t *raw = calloc(size, 1);
+    CHECK(raw != NULL);
+    memcpy(raw + result - sizeof(commands), commands, sizeof(commands));
+    memcpy(raw + result, commands, sizeof(commands));
+    Rom stock = {.rom = raw, .size = size};
+    Toks text = {0}, out = {0};
+    CHECK(GaiaDialogue("A longer result[N]keeps this box open.[END]", &text));
+    CHECK(!GaiaStockWindow(&stock, result, &out, &text, kGaiaSharedBox));
+    out.n = 0;
+    CHECK(GaiaStockWindow(&stock, result, &out, &text, kGaiaInheritedChoice));
+    CHECK(CountToken(&out, T_CMD, 0xce, 0) == 1);
+    CHECK(CountToken(&out, T_CMD, 0xc3, 0) == 1);
+    CHECK(CountToken(&out, T_CMD, CMD_END, 0) == 1);
+    CHECK(CountToken(&out, T_CMD, CMD_FIN, 0) == 0);
+    out.n = 0;
+    CHECK(!GaiaStockWindow(&stock, result - sizeof(commands), &out, &text,
+                           kGaiaInheritedChoice));
+    raw[result] = 0xc8;
+    CHECK(!GaiaStockWindow(&stock, result, &out, &text, kGaiaInheritedChoice));
+    free(text.t);
+    free(out.t);
+    free(raw);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -350,6 +379,7 @@ int main(void)
     CheckMarkerTails();
     CheckMeasuredLayouts();
     CheckSharedBoxes();
+    CheckInheritedChoices();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }

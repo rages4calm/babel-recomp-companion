@@ -41,7 +41,7 @@ static struct {
     bool initialized, enabled, stock, pending, composed, active, complete, valid;
     bool copy_reference;
     bool source_packet,mode7,mode7_perspective,absent_secondary,sky_field,stock_actor_field;
-    bool awaiting_restore,restored_actor_field;
+    bool awaiting_restore,restored_actor_field,modal_plate;
     int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
     int width, height, extent_quarters, epoch_count;
@@ -97,6 +97,26 @@ static bool DreamWorldWindow(const Ppu *p,const uint8_t *ram)
 static bool KnownWorldWindow(const Ppu *p,const uint8_t *ram)
 {
     return DaoWorldWindow(p,ram) || DreamWorldWindow(p,ram);
+}
+
+static bool StockModalPlate(const Ppu *p,const uint8_t *ram)
+{
+    unsigned scene=Word(ram,0x644);
+    if((scene!=0xFD && scene!=0xFF) || Word(ram,0x6EE)!=0x85 ||
+       p->bgmode!=9 || p->windowsel || p->frameInterlace ||
+       PPU_objInterlace(p) || PPU_forcedBlank(p) || p->bgTileAdr!=0x622 ||
+       p->bgXsc[1]!=0x0C || p->bgXsc[2]!=0x78) return false;
+    /* Both layouts switch to dedicated source art and a screen-space UI.
+     * Reframe the live plate, including its objects and color effects. */
+    if(scene==0xFF)
+        return !p->mosaic && p->bgXsc[0]==0x04 && p->screenEnabled[0]==0x17 &&
+            !p->screenEnabled[1] && p->cgwsel==0x80 && !p->cgadsub &&
+            g_snesrecomp_last_hdmaen==6;
+    /* The ceremony's exit mosaics both scenery backgrounds before return. */
+    return (!p->mosaic || (p->mosaic&15)==3) &&
+        p->bgXsc[0]==0x08 && p->screenEnabled[0]==0x13 &&
+        p->screenEnabled[1]==0x11 && p->cgwsel==0x82 && p->cgadsub==2 &&
+        g_snesrecomp_last_hdmaen==2;
 }
 
 static void RebaseWindow1(Ppu *p,int offset)
@@ -395,6 +415,7 @@ void IogWorldInitialize(void)
 void IogWorldReset(void)
 {
     s.pending=s.composed=s.active=s.complete=s.valid=false;
+    s.modal_plate=false;
     s.awaiting_restore=true;
     s.publish_sequence=0;
     s.reason="reset_or_unpaired_upload";
@@ -456,6 +477,7 @@ void IogWorldBeginRaster(void)
     s.mode7=s.mode7_perspective=false;
     s.absent_secondary=false;
     s.sky_field=s.stock_actor_field=s.restored_actor_field=false;
+    s.modal_plate=false;
     s.mode7_split=0;
     memset(&s.view,0,sizeof(s.view));
     s.reason="unsupported_scene_or_layout";
@@ -464,6 +486,11 @@ void IogWorldBeginRaster(void)
     PpuBindOverlaySurface(g_ppu,kPpuOverlaySource_Bg3,(uint8_t*)s.hud,256*4);
     PpuSetOverlayCapture(g_ppu,kPpuOverlaySource_Bg3,0,0,256,224,0);
     if(!s.stock || IogRandomizerActive()) return;
+    if(StockModalPlate(g_ppu,g_snes->ram)) {
+        s.modal_plate=true;
+        s.reason="ready_stock_modal_plate";
+        return;
+    }
     int map_lines=WorldMapMode7Lines();
     if(map_lines && map_lines<224) s.mode7_split=map_lines+1;
     if(map_lines || Mode7PlaneLayout(g_ppu,Word(g_snes->ram,0x644))) {
@@ -1717,7 +1744,7 @@ static bool RenderWorld(void)
 void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count)
 {
     if(!s.enabled && !s.audit) return;
-    ++s.frame;s.complete=s.enabled && RenderWorld();
+    ++s.frame;s.complete=s.enabled && (s.modal_plate || RenderWorld());
     if(!s.enabled) {s.reason="reference_renderer";s.width=256;s.height=224;}
     if(s.audit) {
         const CpuState *c=&g_cpu;
@@ -1727,7 +1754,7 @@ void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count
             c->_flag_C,c->_flag_I,c->_flag_D,(unsigned long long)c->cycles,
             (unsigned long long)c->master_cycles,hdma_lines,irq_count,s.width,s.height,
             (unsigned long long)s.compose_sequence,(unsigned long long)s.publish_sequence,
-            s.epoch_count,s.complete?s.visual.part_count:0,s.complete?"true":"false",s.reason?s.reason:"uninitialized");
+            s.epoch_count,s.complete&&!s.modal_plate?s.visual.part_count:0,s.complete?"true":"false",s.reason?s.reason:"uninitialized");
         /* Raw operand values make accidental widened gameplay policy visible
          * in every frame, instead of trusting a configuration label. */
         static const unsigned sites[]={0x3C617,0x3C61A,0x3C62A,0x3C62D,0x3C729,
@@ -1760,6 +1787,8 @@ static bool PacketFile(const char *base,const char *suffix,const void *data,size
 static bool ExportSourcePacket(const char *base,const uint8_t *field)
 {
     const uint16_t endian=1;
+    if(s.complete && s.modal_plate && *(const uint8_t*)&endian==1)
+        return PacketFile(base,".field.bgra",field,256*224*4);
     if(s.complete && s.stock_actor_field && *(const uint8_t*)&endian==1)
         return PacketFile(base,".field.bgra",field,256*224*4) &&
             PacketFile(base,".hud.bgra",s.hud,sizeof(s.hud));
@@ -1831,7 +1860,16 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
     ++s.presentation_calls;
     if(!dst||!field||width<256||width>MaxWidth||height<224||height>MaxHeight||
        pitch<(size_t)width*4||!isfinite(alpha)||alpha<0||alpha>1) return 0;
-    if(s.complete && width==s.width && height==s.height) {
+    if(s.complete && s.modal_plate && 256*height/224<=width) {
+        int plate_width=256*height/224,left=(width-plate_width)/2;
+        for(int y=0;y<height;y++) {
+            uint8_t *row=dst+y*pitch;
+            memset(row,0,width*4);
+            const uint8_t *source=field+(y*224/height)*256*4;
+            for(int x=0;x<plate_width;x++)
+                memcpy(row+(left+x)*4,source+(x*256/plate_width)*4,4);
+        }
+    } else if(s.complete && !s.modal_plate && width==s.width && height==s.height) {
         for(int y=0;y<height;y++) memcpy(dst+y*pitch,s.output+y*width,width*4);
         if(s.sky_field || s.stock_actor_field) {
             /* Keep live objects but replace visible source HUD pixels with

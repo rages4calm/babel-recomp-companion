@@ -1437,7 +1437,7 @@ static int GaiaSpeakerTemplate(unsigned id)
 }
 
 enum { kGaiaBase, kGaiaSupplement, kGaiaExtended, kGaiaStockAnchors, kGaiaStockLayout,
-       kGaiaSharedBox };
+       kGaiaSharedBox, kGaiaInheritedChoice };
 
 static int GaiaDialogue(const char *text, Toks *out)
 {
@@ -2395,6 +2395,30 @@ static int GaiaStockPageControls(const Toks *original, Toks *out, const Toks *te
     return src == original->n && dst == text->n;
 }
 
+/* These USA choice results clear the interior of an existing box. Each
+ * stock COP branch reaches the result from a known 26-column prompt without
+ * closing its box. IogI18nBindStock verifies the ROM digest before import. */
+static int GaiaChoiceRows(uint32_t offset)
+{
+    switch (offset) {
+    case 0x06C136: /* Angel annex */
+    case 0x088D1F: case 0x088D54: case 0x088E0F: case 0x088E72:
+    case 0x088F15: case 0x088F71: case 0x08901E: case 0x089078:
+    case 0x089178: case 0x089190: /* Native Village */
+        return 3;
+    case 0x05C1E2: case 0x05C21F: /* Freejia slave market */
+    case 0x06C8DC: case 0x06C8F7: /* Angel Village */
+    case 0x0796DE: case 0x07977A: case 0x079C4A: /* Watermia */
+    case 0x07C860: case 0x07C8D5: /* Euro */
+    case 0x08A2EC: /* Angkor Wat */
+    case 0x08AEF7: case 0x08AF16: case 0x08B27F: /* Dao */
+    case 0x09D2D0: /* Moon Tribe camp */
+        return 4;
+    default:
+        return 0;
+    }
+}
+
 static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const Toks *text,
                            int supplement)
 {
@@ -2463,6 +2487,14 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
             ok = GaiaStockSpeakerPhases(&original, out, &normalized, 1, 1);
         }
         free(normalized.t);
+        free(original.t);
+        return ok;
+    }
+    if (supplement == kGaiaInheritedChoice) {
+        GaiaBoxState box = {26, GaiaChoiceRows(offset), 0};
+        ok = box.height && original.n && original.t[0].type == T_CMD &&
+             original.t[0].code == 0xce &&
+             GaiaStockProse(&original, out, text, 0, 1, &box);
         free(original.t);
         return ok;
     }
@@ -2627,7 +2659,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
     int malformed = 0;
     /* Append supplemental entries only after the original overlay layout.
      * Save states can hold an active dialogue pointer into those banks. */
-    for (int supplement = kGaiaBase; supplement <= kGaiaSharedBox && !malformed; supplement++) {
+    for (int supplement = kGaiaBase; supplement <= kGaiaInheritedChoice && !malformed; supplement++) {
         uint32_t last = 0;
         while (fgets(line, sizeof(line), file)) {
             size_t size = strlen(line);
@@ -2735,7 +2767,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             free(tokens.t);
         }
         malformed |= ferror(file);
-        if (supplement < kGaiaSharedBox && !malformed && fseek(file, 0, SEEK_SET))
+        if (supplement < kGaiaInheritedChoice && !malformed && fseek(file, 0, SEEK_SET))
             malformed = 1;
     }
     fclose(file);

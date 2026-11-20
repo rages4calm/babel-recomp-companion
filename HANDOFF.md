@@ -135,13 +135,32 @@ movement and the inventory round trip at 1.5× with virtual controller input.
 The generated selection, build and displacement receipts are private under
 `visual-fullgame-034/native-design`. Interpreter fallback remains available.
 
+Original v38 [holds 1.5× scale through the inventory and Sand Fanger's
+ceremony](docs/VISUAL-COVERAGE.md#inventory-and-sand-fanger-ceremony-framing)
+and raises the GaiaLabs import to 876 chapter replacements. A continuous
+v37 replay from the final Dark Gaia form through END also qualified the
+story achievement signal with exactly one read-only diagnostic event.
+
+The optional SPC700 pilot adds a narrow Gaia-specific hook to the pinned
+SNESRecomp `runner/src/snes/spc.c`, with a private header setting in the
+project's CMake build. Standard builds retain the stock SPC interpreter.
+The private trial qualified four live timer opcodes during cold startup
+and a restored Mt. Kress route with MSU-1 disabled. Paired captures matched
+the APU state, scheduler state, and sampled game and graphics data. The
+forced-interpreter control retired zero pilot instructions. The ROM-free test
+is `scripts/test_iog_native_spc.py`. The private trial and header are in
+`visual-fullgame-034/native-design/spc`. The SDK pin
+matched upstream main at `22c01ef1`. A separate scheduler mismatch is tracked
+in [SNESRecomp #293](https://github.com/RetroPortingToolKit/snesrecomp/issues/293).
+
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
 `.local/batch-001/visual-fullgame-010`. It selects batch 034's
-`babel-originalv37kress.exe` and retains the same private dialogue pack and
+`babel-originalv38kress.exe` and retains the same private dialogue pack and
 continues the isolated test profile's save. The test executable has the
-required `i18n/structure.txt` alongside it. `Play Original v37 Pre-Kress
+required `i18n/structure.txt` alongside it. `Play Original v37 Kress Rollback.cmd`
+selects the previously tested Kress build. `Play Original v37 Pre-Kress
 Rollback.cmd` selects the dialogue and visual build before the Kress changes.
 `Play Original v36 Rollback.cmd` selects the earlier build. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
