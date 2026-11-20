@@ -7,10 +7,15 @@ The original author's credit, support link and full acknowledgments remain below
 
 ## Companion development status
 
-**Current priority: full-game visuals and built-in GaiaLabs world map/Retranslation.**
+**Current priority: full-game visuals for the Original-based Companion, with
+approved Retranslation and GaiaLabs world map support.**
+The Original build has a [stock-compatible dialogue import and wider world-map
+menu](docs/GAIALABS-ORIGINAL-INTEGRATION.md). The walkable world map is in
+development.
 Six more Great Wall rooms have corrected scrolling at widescreen/1.5×, and
 Select opens controller settings from our local scenery map. The private
-GaiaLabs integration preview supports widescreen world travel,
+GaiaLabs compatibility preview uses a separate development build to verify
+features. It supports widescreen world travel,
 [South Cape at 1.5×](docs/GAIALABS-SOUTH-CAPE.md), and
 [widescreen scenery in nearby rooms](docs/GAIALABS-SOUTH-CAPE-ROOMS.md).
 The corrected town arrival and normal road back to the world map work in the

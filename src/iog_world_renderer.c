@@ -15,12 +15,14 @@
 #include "common_cpu_infra.h"
 #include "common_rtl.h"
 #include "snes/cart.h"
+#include "snes/dma.h"
 #include "snes/snes.h"
 #include "snes/ppu.h"
 #include "snes/interp_bridge.h"
 #include "sha256.h"
 #include "snesrecomp_rom_identity.h"
 #include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +41,7 @@ static struct {
     bool initialized, enabled, stock, pending, composed, active, complete, valid;
     bool copy_reference;
     bool source_packet,mode7,mode7_perspective;
+    int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
     int width, height, extent_quarters, epoch_count;
     unsigned frame;
@@ -80,6 +83,22 @@ static bool Mode7PlaneLayout(const Ppu *p)
         (p->screenEnabled[0]&1) && !(p->screenEnabled[0]&~21u) &&
         !p->screenEnabled[1] && !ActiveWorldWindow(p) &&
         !(p->windowsel&0xA00000u);
+}
+static int WorldMapModeSplit(void)
+{
+    if(Word(g_snes->ram,0x644)!=0xfe || !(g_snesrecomp_last_hdmaen&0x40))
+        return 0;
+    const DmaChannel *channel=&g_snes->dma->channel[6];
+    if(channel->mode || channel->indirect || channel->fromB ||
+       channel->bAdr!=5 || channel->aBank!=0x7e ||
+       (channel->aAdr!=0x8800 && channel->aAdr!=0x8900))
+        return 0;
+    const uint8_t *table=g_snes->ram+channel->aAdr;
+    if(table[0]!=127 || table[1]!=7 || table[2]<24 || table[2]>97 ||
+       table[3]!=7 || table[4]!=1 || table[5]!=9 || table[6]!=0)
+        return 0;
+    const char *enable=getenv("IOG_WORLD_MAP_SPLIT");
+    return enable && !strcmp(enable,"0") ? 0 : 127+table[2];
 }
 static int ScrollWorld(const uint8_t *ram,unsigned at,unsigned scroll)
 {
@@ -184,6 +203,7 @@ void IogWorldBeginRaster(void)
     if(!s.enabled || !g_ppu || !g_snes) return;
     s.complete=false; s.valid=false; s.epoch_count=0;
     s.mode7=s.mode7_perspective=false;
+    s.mode7_split=0;
     memset(&s.view,0,sizeof(s.view));
     s.reason="unsupported_scene_or_layout";
     memset(s.hud,0,sizeof(s.hud));
@@ -191,7 +211,8 @@ void IogWorldBeginRaster(void)
     PpuBindOverlaySurface(g_ppu,kPpuOverlaySource_Bg3,(uint8_t*)s.hud,256*4);
     PpuSetOverlayCapture(g_ppu,kPpuOverlaySource_Bg3,0,0,256,224,0);
     if(!s.stock || IogRandomizerActive()) return;
-    if(Mode7PlaneLayout(g_ppu)) {
+    s.mode7_split=WorldMapModeSplit();
+    if(s.mode7_split || Mode7PlaneLayout(g_ppu)) {
         s.base=*g_ppu;s.mode7=s.valid=true;s.reason="awaiting_mode7_plane";
         return;
     }
@@ -208,7 +229,8 @@ void IogWorldBeginRaster(void)
 void IogWorldCaptureLine(int line)
 {
     if(!s.enabled || !s.valid || line<0 || line>224) return;
-    if((s.mode7?!Mode7PlaneLayout(g_ppu):(g_ppu->bgmode&7)!=1) ||
+    bool mode7_line=s.mode7 && (!s.mode7_split || line<s.mode7_split);
+    if((mode7_line?!Mode7PlaneLayout(g_ppu):(g_ppu->bgmode&7)!=1) ||
        g_ppu->frameInterlace || (g_ppu->mosaic>>4)!=0 ||
        ActiveWorldWindow(g_ppu)) {
         s.valid=false; s.reason="unsupported_line_effect"; return;
@@ -353,6 +375,38 @@ static int ProjectEffect(unsigned ratio,int position)
     return product>=0?product/denominator:-((-product+denominator-1)/denominator);
 }
 
+enum { FreejiaWavePeriod = 64 };
+
+/* Freejia's BG1 is the drifting secondary layer despite the PPU layer
+ * numbering. Its slow-wave thinker repeats a single 64-line HDMA table.
+ * Require agreement with the live raster and keep the uploaded tile ring. */
+static bool FreejiaRingWave(const PictureEpoch *e, const Ppu *p,
+                           const EffectCamera *camera)
+{
+    const uint8_t *ram = e->ram;
+    if (Word(ram,0x644) != 0x32 || !(ram[0x6EE] & 128) ||
+        Word(ram,0x694) != 256 || Word(ram,0x698) != 256 ||
+        !camera->uploaded_ring || camera->ratio[0] != 0x0101 ||
+        camera->ratio[1] != 0x0101 ||
+        PPU_bigTiles(p,0) || PPU_bgTilemapWider(p,0) || PPU_bgTilemapHigher(p,0))
+        return false;
+    unsigned vscroll = Word(s.lines[1].registers,offsetof(Ppu,vScroll)) & 1023;
+    bool varied = false;
+    unsigned first = Word(s.lines[1].registers,offsetof(Ppu,hScroll)) & 1023;
+    for (unsigned line = 1; line <= 224; line++) {
+        const uint8_t *regs = s.lines[line].registers;
+        unsigned hscroll = Word(regs,offsetof(Ppu,hScroll)) & 1023;
+        unsigned phase = (line - 1) % FreejiaWavePeriod + 1;
+        if ((Word(regs,offsetof(Ppu,vScroll)) & 1023) != vscroll ||
+            hscroll != (Word(s.lines[phase].registers,offsetof(Ppu,hScroll)) & 1023) ||
+            regs[offsetof(Ppu,bgXsc)] != p->bgXsc[0] ||
+            Word(regs,offsetof(Ppu,bgTileAdr)) != p->bgTileAdr)
+            return false;
+        varied |= hscroll != first;
+    }
+    return varied;
+}
+
 /* Original scene08 contains a real 512x256 room, including the east hall and
  * town stairs. Its second 512x512 layer also contains spare material below
  * that room; those cells are not additional scenery. Stock primary metatile
@@ -483,7 +537,8 @@ static bool RenderMode7Plane(void)
     *source=s.base;memcpy(source,s.lines[1].registers,PPU_SAVESTATE_REGS_SIZE);
     int16_t matrix[8];memcpy(matrix,source->m7matrix,sizeof(matrix));
     unsigned control=source->m7sel;bool uniform=true;
-    for(int line=1;line<=224;line++) {
+    int map_end=s.mode7_split?s.mode7_split-1:224;
+    for(int line=1;line<=map_end;line++) {
         memcpy(source,s.lines[line].registers,PPU_SAVESTATE_REGS_SIZE);
         if(!Mode7PlaneLayout(source)) {s.reason="mode7_unsupported_raster";return false;}
         if(source->m7sel!=control || memcmp(source->m7matrix,matrix,sizeof(matrix)))
@@ -492,7 +547,7 @@ static bool RenderMode7Plane(void)
     const PictureEpoch *initial=&s.epochs[s.lines[0].epoch];
     unsigned angle=Word(initial->ram,0xBC)&511u;
     const Cart *cart=g_snes?g_snes->cart:NULL;
-    if(cart && cart->rom && cart->romImageSize==2097152) {
+    if(!s.mode7_split && cart && cart->rom && cart->romImageSize==2097152) {
         unsigned sin_at=0x1C595+angle*2,cos_at=0x1C695+angle*2;
         s.mode7_parameters=(IogMode7PerspectiveParameters){
             (uint16_t)Word(initial->ram,0xB8),(uint16_t)Word(initial->ram,0xB6),
@@ -534,7 +589,8 @@ static bool RenderMode7Plane(void)
         /* Perspective/raster planes use the real224 row transforms across
          * the entire expanded width. There is no authored transform above
          * or below that band: preserve padding instead of inventing HDMA. */
-        if(!uniform && !s.mode7_perspective && (y<1 || y>224)) {
+        if((s.mode7_split && (y<1 || y>map_end)) ||
+           (!uniform && !s.mode7_perspective && (y<1 || y>224))) {
             memset(s.output+row*s.width,0,s.width*4);continue;
         }
         PictureLine *line=&s.lines[Clamp(y,1,224)];
@@ -567,7 +623,8 @@ static bool RenderMode7Plane(void)
         for(int x=0;x<s.width;x++)
             s.output[row*s.width+x]=colors[IogMode7PlaneIndex(source,x-left,y)];
     }
-    s.reason=s.mode7_perspective?"ready_mode7_perspective":
+    s.reason=s.mode7_split?"ready_mode7_destination_menu":
+        s.mode7_perspective?"ready_mode7_perspective":
         uniform?"ready_mode7_plane":"ready_mode7_raster_band";return true;
 }
 
@@ -636,8 +693,14 @@ static bool RenderWorld(void)
                     first->ram,sizeof(first->ram),hscroll,225,&wall_model);
         }
     }
+    bool freejia_wave = tracked_effect && s.epoch_count == 1 &&
+        FreejiaRingWave(first,p,&effect_camera);
+    if (scene == 0x32 && !freejia_wave) {
+        s.reason = "unsupported_freejia_wave";
+        return false;
+    }
     bool deferred_raster_effect=false;
-    if(tracked_effect && !horizon && !wall_bands) {
+    if(tracked_effect && !horizon && !wall_bands && !freejia_wave) {
         /* A camera actor does not describe per-band HDMA derivatives.
          * Keep those on their prior sampling policy until their actual
          * raster producer is bound; a global ratio would be misleading. */
@@ -760,6 +823,12 @@ static bool RenderWorld(void)
                     if(IogRasterParallaxSample(&wall_model,wy+1,s.view.world_x,&phase))
                         wx=(int)phase+start;
                 }
+                if(logical==1&&freejia_wave&&(native_y<0 || native_y>=224)) {
+                    int phase=(native_y%FreejiaWavePeriod+FreejiaWavePeriod)%FreejiaWavePeriod+1;
+                    unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,hScroll));
+                    int wave_x=ScrollWorld(e->ram,0x68C,scroll);
+                    wx+=wave_x-camx;
+                }
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)wy&1023;
                 /* Layer-1 position bypass deliberately performs no map
@@ -859,8 +928,8 @@ static bool RenderWorld(void)
         if((color>>24) && x+hudx>=0 && x+hudx<s.width)
             s.output[y*s.width+x+hudx]=color;
     }
-    s.reason=deferred_raster_effect && !EffectPlaneScene(scene)?
-        "ready_legacy_raster_effect":"ready";return true;
+    s.reason=freejia_wave?"ready_freejia_wave":
+        deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;
 }
 
 void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count)
