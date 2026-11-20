@@ -21,11 +21,14 @@ HARNESS = r'''
 static unsigned checks;
 void Die(const char *error){fprintf(stderr,"%s\n",error);exit(2);}
 #define C(x) do{checks++;if(!(x)){fprintf(stderr,"line %u: %s; SDL: %s\n",__LINE__,#x,SDL_GetError());exit(1);}}while(0)
-static int mapped(SDL_Gamepad *pad){
+static uint32 trigger_modifiers(SDL_Gamepad *pad){
  uint32 modifiers=0;
  if(SDL_GetGamepadAxis(pad,SDL_GAMEPAD_AXIS_LEFT_TRIGGER)>=12000)modifiers|=1u<<kGamepadBtn_L2;
  if(SDL_GetGamepadAxis(pad,SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)>=12000)modifiers|=1u<<kGamepadBtn_R2;
- return FindCmdForGamepadButton(kGamepadBtn_Start,modifiers);
+ return modifiers;
+}
+static int mapped(SDL_Gamepad *pad){
+ return FindCmdForGamepadButton(kGamepadBtn_Start,trigger_modifiers(pad));
 }
 int main(void){
  SDL_SetMainReady();C(SDL_Init(SDL_INIT_GAMEPAD));
@@ -48,6 +51,10 @@ int main(void){
  int zero_right=SDL_GetGamepadAxis(pad,SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
  C(zero_left==16383&&zero_right==16383);
  int zero_command=mapped(pad);C(zero_command==kKeys_SaveStateMenu);
+ C(FindCmdForGamepadButton(kGamepadBtn_L2,trigger_modifiers(pad))==0);
+ C(FindCmdForGamepadButton(kGamepadBtn_R2,trigger_modifiers(pad))==0);
+ C(FindCmdForSdlKey(SDLK_TAB,0)==kKeys_Turbo);
+ C(FindCmdForGamepadButton(kGamepadBtn_R2,0)==0);
  C(SDL_SetJoystickVirtualAxis(joy,SDL_GAMEPAD_AXIS_LEFT_TRIGGER,SDL_JOYSTICK_AXIS_MIN));
  C(SDL_SetJoystickVirtualAxis(joy,SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,SDL_JOYSTICK_AXIS_MIN));
  SDL_UpdateJoysticks();
@@ -63,7 +70,10 @@ int main(void){
  C(SDL_GetGamepadAxis(pad,SDL_GAMEPAD_AXIS_LEFT_TRIGGER)==16383&&mapped(pad)==kKeys_SaveStateMenu);
  C(SDL_SetJoystickVirtualAxis(joy,SDL_GAMEPAD_AXIS_LEFT_TRIGGER,SDL_JOYSTICK_AXIS_MIN));
  SDL_UpdateJoysticks();C(mapped(pad)==kKeys_Controls+5);
- printf("{\"passed\":true,\"assertions\":%u,\"sdl_version\":%d,\"attach_default_gamepad_triggers\":[%d,%d],\"zero_gamepad_triggers\":[%d,%d],\"released_gamepad_triggers\":[%d,%d],\"zero_start_routes_save_browser\":true,\"released_start_routes_guest_start\":true}\n",
+ char custom_turbo[]="L2+R2";
+ C(HandleIniConfig(5,"Turbo",custom_turbo));
+ C(FindCmdForGamepadButton(kGamepadBtn_R2,1u<<kGamepadBtn_L2)==kKeys_Turbo);
+ printf("{\"passed\":true,\"assertions\":%u,\"sdl_version\":%d,\"attach_default_gamepad_triggers\":[%d,%d],\"zero_gamepad_triggers\":[%d,%d],\"released_gamepad_triggers\":[%d,%d],\"zero_start_routes_save_browser\":true,\"released_start_routes_guest_start\":true,\"default_pad_turbo_unbound\":true,\"tab_and_custom_pad_turbo_preserved\":true}\n",
  checks,SDL_GetVersion(),initial_left,initial_right,zero_left,zero_right,released_left,released_right);
  SDL_CloseGamepad(pad);SDL_CloseJoystick(joy);C(SDL_DetachVirtualJoystick(id));SDL_Quit();return 0;
 }
@@ -90,6 +100,7 @@ def main():
               ROOT / 'snesrecomp/runner/src/desktop/sdl_compat.h',
               ROOT / 'snesrecomp/runner/src/util.c']
     cmd = [args.compiler, '-std=gnu11', '-O1', '-DSNESRECOMP_SDL3=1',
+        '-DSNESRECOMP_NO_DEFAULT_PAD_TURBO=1',
         '-I' + str(args.sdl_include.resolve()), '-I' + str(ROOT / 'snesrecomp/runner/src'),
         '-I' + str(ROOT / 'snesrecomp/runner/src/desktop'), str(source),
         str(ROOT / 'snesrecomp/runner/src/util.c'), *shlex.split(libraries), '-o', str(exe)]

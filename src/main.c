@@ -242,6 +242,15 @@ static void IogEndSimFrame(const uint8_t *field, unsigned number)
     if (field) IogSceneViewEndFrame(&s_scene_view, number);
 }
 
+static void IogDrawWorldHint(uint8_t *dst,size_t pitch,int width,int height,
+                             int y,const char *text)
+{
+    int x=(width-8*snes_ovl_text_len(text))/2;
+    int stride=(int)(pitch/sizeof(uint32_t));
+    snes_ovl_draw_text((uint32_t *)dst,stride,height,x+1,y+1,text,0xff34270du,1);
+    snes_ovl_draw_text((uint32_t *)dst,stride,height,x,y,text,0xfff2dda4u,1);
+}
+
 static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
                            int width, int height, double alpha)
 {
@@ -249,15 +258,17 @@ static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
         IogSceneViewDraw(&s_scene_view,dst,pitch,field,width,height,alpha);
     if(drawn) {
         IogMapHostDrawRadar(dst,pitch,width,height);
-        const char *location=IogWalkableWorldLocation();
-        if(location) {
-            int x=(width-8*snes_ovl_text_len(location))/2;
-            int y=height/2-46;
-            int stride=(int)(pitch/sizeof(uint32_t));
-            /* Will remains the real guest sprite. Put its nearby place
-             * name on the same pixel grid as the surrounding Mode 7 view. */
-            snes_ovl_draw_text((uint32_t *)dst,stride,height,x+1,y+1,location,0xff34270du,1);
-            snes_ovl_draw_text((uint32_t *)dst,stride,height,x,y,location,0xfff2dda4u,1);
+        if(IogWalkableWorldActive()) {
+            const char *location=IogWalkableWorldLocation();
+            char direction[64];
+            if(location) {
+                IogDrawWorldHint(dst,pitch,width,height,height/2-46,location);
+                IogDrawWorldHint(dst,pitch,width,height,height-22,"B (SNES): Enter");
+            } else {
+                if(IogWalkableWorldDirection(direction,sizeof(direction)))
+                    IogDrawWorldHint(dst,pitch,width,height,height/2-46,direction);
+                IogDrawWorldHint(dst,pitch,width,height,height-22,"Up/Down: Walk  Left/Right: Turn");
+            }
         }
     }
     return drawn;

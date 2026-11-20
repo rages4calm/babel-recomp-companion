@@ -26,8 +26,16 @@ Continue with unsupported chapter commands and unverified rooms.
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects `babel-originalv6.exe` and
-starts at the isolated Itory departure checkpoint. Hold Down to leave town.
+`.local/batch-001/visual-fullgame-010`. It selects `babel-originalv7.exe` and
+continues the isolated test profile's save. Hold Down from the initial Itory
+departure checkpoint to leave town. On the map, follow the destination hint
+and press SNES B (the bottom face button by default) at the entrance.
+The test profile selects the existing local MSU-1 pack. An SPC save can keep
+its current song until the next music change. The v7 receipts cover the owner's
+copied map save through South Cape entry and movement at square-pixel 1.5×.
+Gaia's keyboard Tab turbo remains. The controller default is empty in both
+the runner and launcher through two local source deltas to the pinned SDK
+and UI; both still accept an explicitly configured controller binding.
 The earlier [batch 004](docs/VISUAL-FULLGAME-004.md) and batch 003 launchers
 remain available.
 The GaiaLabs compatibility preview is paused. Batch 007 is the last

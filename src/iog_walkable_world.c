@@ -322,6 +322,38 @@ const char *IogWalkableWorldLocation(void)
     const WorldDestination *destination=Nearby(g_snes->ram);
     return destination?destination->name:NULL;
 }
+bool IogWalkableWorldDirection(char *text,size_t capacity)
+{
+    if(!IogWalkableWorldActive() || !MenuChoice(g_snes->ram))return false;
+    const uint8_t *ram=g_snes->ram;
+    unsigned choice=Word(ram,kMapChoice),origin=ram[0x0d6f];
+    int x=(int)Word(ram,kMapX),y=(int)Word(ram,kMapY);
+    int best=INT32_MAX;
+    const WorldDestination *target=NULL;
+    for(unsigned i=0;i<sizeof(destinations)/sizeof(destinations[0]);i++) {
+        if(!(allowed[choice]&(1u<<i)))continue;
+        /* The Itory road is gated separately from the stock menu. */
+        if(choice==4 && i==0 && !EventFlag(ram,0x26))continue;
+        const WorldDestination *destination=&destinations[i];
+        if(world.rom[0x030000u|destination->original_operands]==origin)continue;
+        int dx=(int)destination->x-x,dy=(int)destination->y-y;
+        int distance=abs(dx)+abs(dy);
+        if(distance<best) {
+            best=distance;
+            target=destination;
+        }
+    }
+    if(!target)return false;
+    unsigned angle=Word(ram,kCameraAngle)&511;
+    int vx=Velocity(0x1c595,angle),vy=Velocity(0x1c695,angle);
+    int dx=(int)target->x-x,dy=(int)target->y-y;
+    int forward=vx*dx+vy*dy,left=vy*dx-vx*dy;
+    const char *direction=abs(forward)>=abs(left)
+        ?(forward>=0?"Ahead":"Behind")
+        :(left>=0?"Left":"Right");
+    int written=snprintf(text,capacity,"%s: %s",target->name,direction);
+    return written>=0 && (size_t)written<capacity;
+}
 void IogWalkableWorldTick(void)
 {
     uint8_t *ram=LiveCart()?g_snes->ram:NULL;

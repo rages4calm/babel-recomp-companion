@@ -53,6 +53,11 @@ the SNES B button enters the nearby named destination. The game uses its own
 map art, travel sprite, progression flags and scene loader. The local scenery
 map and radar are separate from this view.
 
+The map gives the direction of an available destination while walking and
+shows the entry button once within range. SNES B is the bottom face button
+on the default controller layout. Turbo defaults to keyboard Tab. The
+L2+R2 controller chord is available for an explicit custom binding.
+
 Build the collision data from a local checkout of the pinned GaiaLabs source.
 
 ```powershell
@@ -73,3 +78,12 @@ and traveled to South Cape in separate routes at square-pixel 1.5×. The South
 Cape test starts from a staged checkpoint with the relevant story flag set.
 An otherwise matching run with the flag clear verified the route stays blocked.
 The translated dialogue and MSU-1 were both active for the successful routes.
+
+For the follow-up, an SDL virtual controller replayed a player's copied map
+save into South Cape and moved inside the town. The direction and entry
+prompts were checked at 1920×1080 and square-pixel 1.5×. Recovery from a
+walking save with missing map data matched the prior build. In paced dummy
+audio runs, the same route with the stock soundtrack and with MSU-1 had no
+output underflows or dropped samples. MSU-1 began the South Cape track on
+entry. Deliberate turbo in the previous build reproduced audible-sample
+drops; this check does not establish behavior across physical audio devices.

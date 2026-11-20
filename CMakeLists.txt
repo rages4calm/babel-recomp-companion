@@ -257,6 +257,8 @@ snesrecomp_target_sdl(IllusionOfGaiaUsaSNESRecomp)
 # sources/notices, but compile no RetroAchievements client or network backend.
 set(SNESRECOMP_DISABLE_RETROACHIEVEMENTS ON)
 snesrecomp_target_desktop_host(IllusionOfGaiaUsaSNESRecomp)
+set_property(SOURCE "${SNESRECOMP_ROOT}/runner/src/desktop/mmx_config.c"
+    APPEND PROPERTY COMPILE_DEFINITIONS SNESRECOMP_NO_DEFAULT_PAD_TURBO=1)
 # rom.cfg (the ROM the wizard set this project up from; git-ignored) is
 # staged beside the executable when none is there yet, so the first launch
 # opens on that dump rather than asking for one.
@@ -276,6 +278,8 @@ if(NOT NINTENDO_3DS AND NOT VITA)
     include(${RECOMP_UI_ROOT}/recomp_ui.cmake)
     recomp_target_launcher_ui(IllusionOfGaiaUsaSNESRecomp CONSOLE snes
         BOXART "${CMAKE_SOURCE_DIR}/launcher_assets/img/boxart.tga")
+    set_property(SOURCE "${RECOMP_UI_ROOT}/src/common/launcher_binds.c"
+        APPEND PROPERTY COMPILE_DEFINITIONS SNESRECOMP_NO_DEFAULT_PAD_TURBO=1)
 endif()
 
 # Generate & rebuild from inside the launcher (desktop only; consoles and
