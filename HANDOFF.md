@@ -51,12 +51,15 @@ Private receipts are in `.local/batch-001/visual-fullgame-017`.
 Batch 018 separates [radar and scenery-map rendering](docs/VISUAL-COVERAGE.md#radar-inventory-and-connected-routes)
 and verifies remaining connected routes and boss returns. Private receipts
 are in `.local/batch-001/visual-fullgame-018`.
+Batch 019 adds [explored exit markers, extended travel verification and boss clears](docs/VISUAL-COVERAGE.md#explored-exits-travel-and-boss-returns).
+The Pyramid puzzle room also keeps its glyph storage out of the expanded
+field. Private receipts are in `.local/batch-001/visual-fullgame-019`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 018's
-`babel-originalv20.exe` and batch 011's dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 019's
+`babel-originalv21final.exe` and batch 011's dialogue pack, and
 continues the isolated test profile's save. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.

@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
 #ifdef _WIN32
 #include <direct.h>
 #else
@@ -257,13 +258,72 @@ void IogMapHostControlSet(int action,int button)
 #endif
     previous_pad=~0u;
 }
+#ifndef IOG_RECEIVED_REFERENCE
+enum { StockDoorwayLimit=32 };
+
+static size_t StockDoorwayMarkers(const uint8_t *ram,const Cart *cart,
+    const IogMapDiscovery *map,IogMapViewMarker markers[StockDoorwayLimit])
+{
+    enum { WarpBank=0x10000, WarpPointers=0x18234, WarpLists=0x18432,
+           WarpLimit=0x1A95E, WarpRecordSize=12 };
+    if(!ram || !cart || !cart->rom || cart->romImageSize!=2097152 || !map)
+        return 0;
+    unsigned scene=Word(ram,0x644);
+    if(scene>=0xFF || Word(ram,0x646)!=scene*2) return 0;
+
+    /* Bind to the game's currently loaded transition list. The following
+     * list contains in-room forced walks and does not describe exits. */
+    const uint8_t *rom=cart->rom;
+    unsigned list=WarpBank+Word(rom,WarpPointers+scene*2);
+    unsigned end=WarpBank+Word(ram,0xD6)-1;
+    if(list!=WarpBank+Word(ram,0xD4) || list<WarpLists || end<list ||
+       end>=WarpLimit || (end-list)%WarpRecordSize ||
+       (end-list)/WarpRecordSize>StockDoorwayLimit || rom[end]!=0xFF)
+        return 0;
+
+    int floor_x=(int)Word(ram,0x6D6)/16, floor_y=(int)Word(ram,0x6D8)/16;
+    size_t count=0;
+    for(unsigned at=list;at<end;at+=WarpRecordSize) {
+        const uint8_t *entry=rom+at;
+        if(entry[0]>=128 || !entry[2] || !entry[3]) return 0;
+        int left=entry[0]-floor_x, top=entry[1]-floor_y;
+        int right=left+entry[2], bottom=top+entry[3];
+        int best=INT_MAX, marker_x=0, marker_y=0;
+        for(int y=top<0?0:top;y<bottom && y<map->height;y++) {
+            for(int x=left<0?0:left;x<right && x<map->width;x++) {
+                if(!IogMapDiscoveryIsRevealed(map,x,y)) continue;
+                int distance=abs(2*x+1-left-right)+abs(2*y+1-top-bottom);
+                if(distance>=best) continue;
+                best=distance;
+                marker_x=x;
+                marker_y=y;
+            }
+        }
+        if(best!=INT_MAX)
+            markers[count++]=(IogMapViewMarker){(int16_t)marker_x,(int16_t)marker_y,
+                2,{105,217,211,255}};
+    }
+    return count;
+}
+#endif
+
 static bool Draw(uint8_t *dst,size_t bytes,size_t pitch,int w,int h)
 {
     IogMapViewSource source;
     bool ready=ui.full?IogMapRuntimeGetViewSource(runtime,&source):
         IogMapRuntimeGetRadarSource(runtime,&source);
     if(!ready)return false;
-    IogMapUiMetadata metadata={true,false,gamepad,0};
+    IogMapUiMetadata metadata={.valid=true,.gamepad=gamepad};
+#ifndef IOG_RECEIVED_REFERENCE
+    IogMapViewMarker markers[StockDoorwayLimit];
+    if(ui.full && g_snes) {
+        source.marker_count=StockDoorwayMarkers(g_snes->ram,g_snes->cart,source.discovery,markers);
+        if(source.marker_count) {
+            source.markers=markers;
+            metadata.show_exit_legend=true;
+        }
+    }
+#endif
     char hint[96],back[24];
     snprintf(hint,sizeof(hint),"SNES: Pad Move  %s/%s Zoom  %s Center  %s Radar %s  Select Controls",
         control_names[controls[IOG_MAP_ZOOM_OUT]],control_names[controls[IOG_MAP_ZOOM_IN]],
