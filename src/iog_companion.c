@@ -31,6 +31,7 @@
 #include "iog_companion.h"
 #include "iog_inventory.h"
 #include "iog_map_host.h"
+#include "companion_achievements/presentation.h"
 int IogCompletionPercent(void);
 #include "iog_i18n.h"
 
@@ -418,7 +419,7 @@ static void DrawStatus(void)
         static char buf[24];
         const int pct = IogCompletionPercent();
         if (pct >= 0) snprintf(buf, sizeof(buf), "%s %d/100", T("Completed"), pct);
-        Hint(pct >= 0 ? buf : NULL, NULL, NULL);
+        Hint(pct >= 0 ? buf : NULL, !g_live ? "A: Achievements" : NULL, NULL);
     }
 }
 
@@ -487,7 +488,7 @@ static void Compose(void)
 }
 
 /* ---- actions ---------------------------------------------------------------- */
-static void Close(void) { IogMapHostClose();g_open = 0; }
+static void Close(void) { IogAchievementUiClose();IogMapHostClose();g_open = 0; }
 
 static void SetPage(int p)
 {
@@ -526,6 +527,9 @@ static void Activate(void)
     case kPageSettings:
         Close();
         snes_settings_menu_open();
+        break;
+    case kPageStatus:
+        if (g_open && !g_live) IogAchievementUiOpen(g_prev_nav);
         break;
     default:
         break;
@@ -583,6 +587,7 @@ void IogCompanionNav(uint32_t in, uint32_t ticks)
     const uint32_t p = in & ~g_prev_nav;
     g_prev_nav = in;
     if (!g_open && !g_live_seen) return;
+    if (IogAchievementUiIsOpen()) { IogAchievementUiNav(in, ticks); return; }
     if(g_open&&g_page==kPageMap&&IogMapHostAvailable()){
         IogMapHostNav(in,ticks);
         if(!IogMapHostIsOpen())SetPage(kPageItems);
@@ -606,6 +611,7 @@ void IogCompanionNav(uint32_t in, uint32_t ticks)
 
 void IogCompanionKey(int key, int repeat)
 {
+    if (IogAchievementUiIsOpen()) { IogAchievementUiKey(key); return; }
     if(repeat&&(key=='m'||key=='i'||key==27))return;
     if(g_open&&g_page==kPageMap&&key!='q'&&key!='e'&&key!='i'){
         IogMapHostKey(key,repeat);
@@ -631,6 +637,7 @@ void IogCompanionKey(int key, int repeat)
 
 void IogCompanionPointer(int px, int py, int down)
 {
+    if (IogAchievementUiIsOpen()) { IogAchievementUiPointer(px, py, down); return; }
     if(g_open&&g_page==kPageMap){
         IogMapHostPointer(px,py,down);
         if(!IogMapHostIsOpen())SetPage(kPageItems);
@@ -671,12 +678,15 @@ void IogCompanionPointer(int px, int py, int down)
         }
     } else if (g_page == kPageSettings && y >= 156 && x >= 90) {
         Activate();
+    } else if (g_page == kPageStatus && y >= 156 && x >= 90) {
+        Activate();
     }
 }
 
 int IogCompanionImage(const uint32_t **px, int *w, int *h)
 {
     if (!g_open) return 0;
+    if (IogAchievementUiImage(px, w, h)) return 1;
     if(g_page==kPageMap&&IogMapHostImage(px,w,h))return 1;
     g_live = 0;
     Compose();
@@ -684,6 +694,11 @@ int IogCompanionImage(const uint32_t **px, int *w, int *h)
     *w = kW * 2;
     *h = kH * 2;
     return 1;
+}
+
+int IogCompanionAchievementQuiet(void)
+{
+    return !g_open && InPlayQuiet();
 }
 
 /* The live picture, at 1x. Before the first capture (or outside play)

@@ -59,12 +59,23 @@ In-game shortcuts remain Babel's: **Esc / LT+R3** settings, **I / LT+L3** compan
 **F11 / LT+Start** states, **Tab / LT+RT** fast forward. LT means the left trigger
 (ZL on Nintendo, L2 on PlayStation). Default SNES keys and full shortcuts remain
 documented in the upstream README. This batch does not reimplement full remapping,
-ROM import, the full mod browser, live achievements or Resume. **Cheats and Mods**
+ROM import, the full mod browser or Resume. **Cheats and Mods**
 provides selected native controls, including 1x–8x room-clear rewards; see
 [controls and limits](../docs/CHEATS-AND-MODS.md). **Soundtrack** in the
 sidebar opens the optional-music window: download in your browser, import a
 ZIP/folder, inspect verified installed packs, then select imported or original
 audio for the next game launch. It uses Babel's native mod selection.
+
+## Achievements
+
+The shared **Achievements** page reads the Gaia catalog bundled with the
+launcher. It reads progress from the selected executable's directory at
+`UserData/Achievements/illusion-of-gaia/stock-companion/unseeded/progress.json`.
+Select a different executable and Apply to browse that installation's progress.
+Missing progress shows locked entries. Malformed progress or a file from another
+game, edition or seed produces an error. Browsing and refreshing never write
+progress or award achievements. Native progress recording remains independently
+opt-in.
 
 ## Optional music
 
@@ -82,8 +93,8 @@ in the engine, including when a selected optional pack has moved or disappeared.
 
 `./companion/build.ps1 -Test` builds the adapter and runs isolated synthetic
 settings tests. They cover native settings/alias precedence, unknown-key and
-binding preservation, stale writes, rollback, invalid configs, invalid ROMs and
-unqualified Resume rejection. An optional read-only owner-ROM check also verifies
+binding preservation, stale writes, rollback, invalid configs, invalid ROMs,
+unqualified Resume rejection and read-only achievement browsing. An optional read-only owner-ROM check also verifies
 header normalization and structured launch plans:
 
 ```powershell

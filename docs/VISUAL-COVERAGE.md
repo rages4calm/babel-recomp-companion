@@ -33,6 +33,15 @@ does not establish that secondary scenery should stop at the floor boundary.
 Per-line HDMA camera derivatives also cannot be inferred from a global actor
 ratio. Deferred raster-camera paths remain explicit review work.
 
+## Opening, diary and Dark Space save framing
+
+v40 presents the original logo, title, diary and two Mode 1 prologue cards
+at square-pixel 1.5×. The Dark Space save-resume frame retains its authored
+scale. The 22,220-frame paired replays checked the cold classroom route,
+the original Mode 7 attract transitions and the Dark Space exit. All 203
+sampled guest and PPU files matched the prior build. Fallback remains for
+unrecognized layouts.
+
 ## Larai Cliff mist and ending framing
 
 The Larai Cliff margins continue the verified 16-line mist wave instead of

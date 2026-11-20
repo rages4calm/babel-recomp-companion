@@ -96,11 +96,14 @@ def package(build: Path, tag: str, root: Path = ROOT, companion: Path | None = N
             # Explicit managed-app allowlist; exclude PDBs, caches and profiles.
             for filename in ("illusion-of-gaia.Companion.exe", "illusion-of-gaia.Companion.dll",
                              "illusion-of-gaia.Companion.deps.json", "illusion-of-gaia.Companion.runtimeconfig.json",
-                             "Companion.Launcher.Core.dll", "Companion.Launcher.Windows.dll"):
+                             "Companion.Launcher.Core.dll", "Companion.Launcher.Windows.dll",
+                             "assets/achievements/catalog.json"):
                 source = companion / filename
-                if source.is_symlink() or not source.is_file():
+                if source.is_symlink() or not source.is_file() or not source.resolve().is_relative_to(companion.resolve()):
                     raise ValueError(f"Missing or linked Companion artifact: {filename}")
-                shutil.copy2(source, dest)
+                target = dest / filename
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
             shutil.copy2(root / "companion/LICENSE-CompanionLauncher.txt", stage)
         notice_roots = [root / "snesrecomp", root / "recomp-ui",
                         build / "_deps/sdl3-src", build / "_deps/sdl2-src"]

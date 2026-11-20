@@ -20,7 +20,7 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
   [Visual coverage and renderer direction](docs/VISUAL-COVERAGE.md)
 - **World travel and local maps** combine GaiaLabs' walkable world map
   with Companion's scenery-based area map, explored terrain, discovered
-  markers and radar. Locally prepared packs also supply 876 retranslated
+  markers and radar. Locally prepared packs also supply 881 retranslated
   chapter entries and verified inventory, room-title and map lettering.
   [GaiaLabs integration](docs/GAIALABS-ORIGINAL-INTEGRATION.md) ·
   [Companion map](docs/MAP-SYSTEM-DIRECTION.md)
@@ -31,8 +31,8 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 - **MSU-1 soundtrack** can be imported from a local ZIP or folder with
   validation. Original SNES audio remains available.
   [Soundtrack setup and credits](docs/MSU1.md)
-- **Companion Achievements** has a tested local progress store. Its browser
-  and notifications are still in development.
+- **Companion Achievements** has a controller-friendly browser under Status.
+  Local progress is available in the opt-in preview.
   [Achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md)
 
 | Companion radar in Freejia | Walkable world map at South Cape |

@@ -113,6 +113,8 @@ set(IOG_SOURCES
     src/iog_companion.c
     src/companion_achievements/audit.c
     src/companion_achievements/observer.c
+    src/companion_achievements/presentation.c
+    src/companion_achievements/toolkit/companion_achievement_presentation.c
     src/iog_text.c
     src/gen_stubs.c
 )
@@ -126,6 +128,9 @@ if(IOG_RECEIVED_REFERENCE)
         add_compile_definitions(IOG_RECEIVED_MAIN_CONTENT=1)
     endif()
 endif()
+
+set_property(SOURCE src/companion_achievements/presentation.c APPEND PROPERTY INCLUDE_DIRECTORIES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/companion_achievements/toolkit")
 if(ANDROID)
     # Android: the game is the "main" library SDL's activity loads.
     add_library(IllusionOfGaiaUsaSNESRecomp SHARED ${IOG_SOURCES})

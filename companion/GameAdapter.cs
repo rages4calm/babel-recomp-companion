@@ -15,6 +15,7 @@ public sealed class GameAdapter : JsonGameAdapterBase
     private static readonly string EngineName = OperatingSystem.IsWindows() ? "babel-recomp.exe" : "babel-recomp";
     private static readonly string DefaultEngine = File.Exists(Path.Combine(AppContext.BaseDirectory, EngineName))
         ? Path.Combine(AppContext.BaseDirectory, EngineName) : Path.Combine(Project, "build", EngineName);
+    private const string AchievementEdition = "stock-companion";
     private static readonly GameDefinition Game = new(
         "illusion-of-gaia", "Illusion of Gaia Companion",
         "Babel Recomp by mr0ta · Companion edition in development",
@@ -29,6 +30,7 @@ public sealed class GameAdapter : JsonGameAdapterBase
                 "Babel tools retain mod management and full remapping. In game: Esc / LT+R3 settings; I / LT+L3 companion screen.",
                 Choices: new[] { new ChoiceItem("game", "Play directly"), new ChoiceItem("babel", "Babel tools and remapping") })
         }.Concat(NativeSettings.Options).ToArray(),
+        HasAchievements: true,
         Branding: new("#101A23", "#1B2B37", "#D7B46A", "#F2EBDD", "#A7B5BD"));
 
     public GameAdapter(string? dataRoot = null) : base(Game,
@@ -41,6 +43,23 @@ public sealed class GameAdapter : JsonGameAdapterBase
         foreach (var option in Definition.Options.Where(x => !NativeSettings.IsNative(x.Id)))
             paths.Values.TryAdd(option.Id, option.DefaultValue.Clone());
         return NativeSettings.Read(paths);
+    }
+
+    public override AchievementSnapshot ReadAchievements(ProfileDescriptor profile)
+    {
+        var preferences = base.ReadSettings(profile);
+        var executable = DefaultEngine;
+        if (preferences.Values.TryGetValue("engine.path", out var configured))
+        {
+            if (configured.ValueKind != JsonValueKind.String || configured.GetString() is not { } path ||
+                !Path.IsPathFullyQualified(path) || Path.GetFileName(path).Length == 0 || Directory.Exists(path))
+                throw new InvalidDataException("Select an absolute Babel executable path to view achievements.");
+            executable = path;
+        }
+        var catalog = Path.Combine(AppContext.BaseDirectory, "assets", "achievements", "catalog.json");
+        var progress = Path.Combine(Path.GetDirectoryName(executable)!, "UserData", "Achievements",
+            Definition.Id, AchievementEdition, "unseeded", "progress.json");
+        return AchievementJsonReader.Read(catalog, progress, Definition.Id, AchievementEdition);
     }
 
     public override IReadOnlyList<string> ValidateCustom(ProfileDescriptor profile, IReadOnlyDictionary<string, JsonElement> values) =>

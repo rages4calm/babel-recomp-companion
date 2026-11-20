@@ -144,6 +144,7 @@ static const SnesDesktopHostGame kGameHost = {
 };
 #else
 #include "companion_achievements/audit.h"
+#include "companion_achievements/presentation.h"
 static IogSceneView s_scene_view;
 static bool s_scene_view_initialized;
 
@@ -259,6 +260,7 @@ static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
         IogSceneViewDraw(&s_scene_view,dst,pitch,field,width,height,alpha);
     if(drawn) {
         IogMapHostDrawRadar(dst,pitch,width,height);
+        IogAchievementUiToast(dst,pitch,width,height);
         if(IogWalkableWorldActive()) {
             const char *location=IogWalkableWorldLocation();
             char direction[64];
@@ -303,8 +305,15 @@ void IogSettingsInstall(void);   /* iog_settings.c */
 static void IogAfterRunFrame(const SnesDesktopHostFrameStats *st)
 {
     IogAchievementAuditFrame(st->frame);
+    IogAchievementUiFrame(st->frame, (uint32_t)SDL_GetTicks(), IogCompanionAchievementQuiet() && !IogWalkableWorldActive());
     IogMapHostFrame(IogWorldStockVerified()&&!IogRandomizerActive(),SNESRECOMP_ROM_EXPECTED_SHA256);
     IogCompanionAfterFrame();
+}
+
+static void IogShutdown(void)
+{
+    IogAchievementUiShutdown();
+    IogMapHostShutdown();
 }
 
 static const SnesDesktopHostGame kGameHost = {
@@ -333,7 +342,7 @@ static const SnesDesktopHostGame kGameHost = {
     .presentation_geometry = IogPresentationGeometry,
     .compute_viewport    = IogViewport,
     .on_reset            = IogResetSceneView,
-    .on_shutdown         = IogMapHostShutdown,
+    .on_shutdown         = IogShutdown,
     .after_config        = IogSettingsInstall,
     .after_run_frame     = IogAfterRunFrame,
     .companion_open      = IogCompanionOpen,

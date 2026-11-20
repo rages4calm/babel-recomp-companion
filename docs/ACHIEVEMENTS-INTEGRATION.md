@@ -3,9 +3,12 @@
 The Original build can audit achievement signals after completed frames.
 Set `IOG_ACHIEVEMENT_AUDIT=1` to log events from the verified USA ROM during
 development. State loads and resets start a new observation generation.
-The audit writes to stderr only. Original v39 has a desktop progress writer
-behind `IOG_ACHIEVEMENT_PROGRESS=1`. Normal launch behavior stays unchanged
-while the browser, notifications and launcher provider are being integrated.
+The audit writes to stderr only. The v40 browser opens from **Companion → Status**
+with SNES A or Enter. The list and detail pane expose progress and mask the
+ending until earned. B or Escape returns to Status with game input still paused.
+The desktop progress writer remains opt-in with `IOG_ACHIEVEMENT_PROGRESS=1`.
+Only committed unlocks queue an in-game toast and optional synthesized chime.
+The Companion Launcher reads the selected executable's profile and catalog.
 Babel's RetroAchievements sources and credits are preserved.
 [Service policy and build boundary](RETROACHIEVEMENTS.md)
 
@@ -67,18 +70,16 @@ cannot use the writer. Standard cheat, alternate game and New Game Plus guards
 also apply. Battery continuation, rewind and profile changes need additional
 end-to-end verification before enabling progress by default.
 
-## Required next wiring
-
-1. Publish only committed snapshots/notices to the UI thread. Add controller and
-   keyboard browser access, held-opener/dismissal guards and small queued toasts
-   through the shared presentation API. Mask the ending entry while locked.
-2. Prepare the shared synthesized chime once at startup, submit through a
-   separate audio voice, and respect master volume, sound setting and device
-   loss. Original SPC audio and optional MSU-1 behavior stay independent.
-3. Give CompanionLauncher a read-only catalog/progress provider. It must never
-   write progress or turn a save's already-set flags into unlocks.
+The chime uses a separate playback stream and the current master volume.
+`IOG_ACHIEVEMENT_CHIME=0` silences it. Physical-controller behavior, a live
+persisted unlock with sound, and full campaign qualification remain open.
 
 ## Verification
+
+The v40 browser was opened by an SDL virtual controller. The replay entered
+from Status, selected another row and page, held Back through the return to
+Status, then closed the Companion and resumed gameplay. The 640×360 logical
+panels matched at 1280×720, 2560×1080 and 1080×2340 window settings.
 
 The Original v37 host emitted one jewel event after a controlled inventory
 write. Loading the earlier state and then the later state emitted no duplicate.

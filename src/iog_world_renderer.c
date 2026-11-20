@@ -147,6 +147,37 @@ static bool StockEndingPlate(const Ppu *p,const uint8_t *ram)
     }
 }
 
+static bool StockOpeningPlate(const Ppu *p,const uint8_t *ram)
+{
+    unsigned scene=Word(ram,0x644);
+    if(p->bgmode!=9 || p->mosaic || p->frameInterlace || PPU_objInterlace(p) ||
+       PPU_forcedBlank(p) || p->bgTileAdr!=0x622 || p->bgXsc[2]!=0x78)
+        return false;
+    const unsigned main=p->screenEnabled[0],sub=p->screenEnabled[1];
+    switch(scene) {
+    case 0xFB:
+        return Word(ram,0x6EE)==0x85 && p->bgXsc[0]==0x19 && p->bgXsc[1]==0x11 &&
+            !p->windowsel && main==0x10 && !sub && p->cgwsel==0x80 && !p->cgadsub;
+    case 0xFC:
+        return Word(ram,0x6EE)==0x80 && p->bgXsc[0]==0x18 && p->bgXsc[1]==0x10 &&
+            !p->windowsel && (main==0x10 || main==0x16) && !sub &&
+            p->cgwsel==0x80 && p->cgadsub==3;
+    case 0xFA:
+        return Word(ram,0x6EE)==5 && p->bgXsc[0]==0x11 && p->bgXsc[1]==0x19 &&
+            p->windowsel==0x228800 && main==1 && sub==4 &&
+            p->cgwsel==0x82 && p->cgadsub==0x41 && g_snesrecomp_last_hdmaen==0x0E;
+    case 0x8E:
+        return Word(ram,0x6EE)==0x1005 && p->bgXsc[0]==0x11 && p->bgXsc[1]==0x19 &&
+            !p->windowsel && main==0x13 && sub==3 &&
+            ((p->cgwsel==0x80 && p->cgadsub==0x81) || (p->cgwsel==0x82 && p->cgadsub==0x10));
+    case 0x8F:
+        return Word(ram,0x6EE)==0x1005 && p->bgXsc[0]==0x11 && p->bgXsc[1]==0x19 &&
+            !p->windowsel && main==0x11 && sub==1 && p->cgwsel==0x82 && p->cgadsub==0x10;
+    default:
+        return false;
+    }
+}
+
 static void RebaseWindow1(Ppu *p,int offset)
 {
     int left=p->window1left+offset,right=p->window1right+offset;
@@ -287,7 +318,14 @@ static bool RestoredActorFieldLayout(const Ppu *p,const uint8_t *ram)
      * Extend the verified terrain only while that first composition agrees. */
     unsigned scene=Word(ram,0x644);
     bool mansion_mosaic=scene==0xE9 && MansionAndSolidArmMosaic(p,ram);
-    if((p->bgmode&7)!=1 || (p->mosaic && !mansion_mosaic) || p->windowsel || PPU_forcedBlank(p) ||
+    bool dark_space=scene==0xE6 && Word(ram,0x6EE)==0x0405 &&
+        Word(ram,0x692)==256 && Word(ram,0x694)==512 &&
+        Word(ram,0x696)==512 && Word(ram,0x698)==512 && p->mosaic==3 &&
+        p->bgXsc[0]==0x11 && p->bgXsc[1]==0x19 &&
+        p->screenEnabled[0]==0x15 && p->screenEnabled[1]==2 &&
+        p->cgwsel==2 && p->cgadsub==0x31 && g_snesrecomp_last_hdmaen==2;
+    if((p->bgmode&7)!=1 || (p->mosaic && !mansion_mosaic && !dark_space) ||
+       p->windowsel || PPU_forcedBlank(p) ||
        !SameActorFieldRoom(ram,s.pending_ram)) return false;
     switch(scene) {
     case 0x01: case 0x0B: case 0x0C: case 0x3E: case 0x43: case 0x4F:
@@ -297,6 +335,8 @@ static bool RestoredActorFieldLayout(const Ppu *p,const uint8_t *ram)
         return true;
     case 0xE9:
         return mansion_mosaic;
+    case 0xE6:
+        return dark_space;
     default: return false;
     }
 }
@@ -522,6 +562,11 @@ void IogWorldBeginRaster(void)
     if(StockEndingPlate(g_ppu,g_snes->ram)) {
         s.fixed_plate=true;
         s.reason="ready_stock_ending_plate";
+        return;
+    }
+    if(StockOpeningPlate(g_ppu,g_snes->ram)) {
+        s.fixed_plate=true;
+        s.reason="ready_stock_opening_plate";
         return;
     }
     int map_lines=WorldMapMode7Lines();
