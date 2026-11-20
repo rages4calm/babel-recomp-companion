@@ -41,9 +41,9 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 
 ## Development status
 
-Original v30 keeps the wider view through the South Cape prison arrival,
-the Dark Vampires victory wave and the fade into Angkor Wat's Mode 7 vision.
-[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#prison-babel-victory-waves-and-angkor-vision)
+Original v31 keeps the wider view through Babel's victory effects, the
+Ship Dream transitions, and the flight into Sky Garden's Mode 7 crash.
+[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#babel-victory-waves-ship-dream-and-sky-garden-flight)
 
 The Original v27 controller replays verify the linked Solid Arm fight and
 return to Babel, the rooftop, both Dark Gaia forms and the ending through

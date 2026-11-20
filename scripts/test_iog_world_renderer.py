@@ -614,9 +614,10 @@ static void babel_starfield(void){
   CHECK(!RenderWorld()&&!strcmp(s.reason,"unsupported_babel_starfield"));
  }
  /* The rematches' normal star producer shares the two-plane victory
-  * table. A nonperiodic raster must retain the captured edge phases. */
+  * table. Its alternate phase can exceed the arrival-wave bound.
+  * A nonperiodic raster must retain the captured edge phases. */
  static Dma victory_dma;
- fixture();word(0x644,0xf4);word(0x6ee,0x0405);
+ fixture();word(0x644,0xf2);word(0x6ee,0x0405);
  word(0x68e,0);word(0x694,512);word(0x698,512);word(0x6d8,0);word(0x6da,512);word(0x6de,256);
  g_ppu->screenEnabled[0]=19;
  g_ppu->vScroll[0]=24;g_ppu->cgwsel=2;g_ppu->cgadsub=0x31;
@@ -626,7 +627,8 @@ static void babel_starfield(void){
  victory_dma.channel[1]=victory_dma.channel[7];
  victory_dma.channel[1].aAdr=0x8a00;
  const uint8_t table[]={0xff,0,0x89,0xe0,0xfe,0x89,0};memcpy(ram+0x8800,table,sizeof table);
- for(unsigned line=0;line<223;line++)word(0x8900+2*line,256+(line%21));
+ for(unsigned line=0;line<223;line++)
+  word(0x8900+2*line,256+(line<128?line%21:160+line%19));
  publication();IogWorldBeginRaster();
  for(unsigned line=0;line<=224;line++){
   uint16_t sample=Word(ram,0x8900+2*(line<223?line:222));
@@ -636,12 +638,42 @@ static void babel_starfield(void){
  cloud_probe=true;IogWorldEndRaster(0,225,0);cloud_probe=false;
  CHECK(s.complete&&!strcmp(s.reason,"ready_stock_transition_wave"));
  CHECK(s.output[s.width-1]==0xff3366eeu);
+ victory_dma.channel[1].aAdr=0x8800;
+ CHECK(RenderWorld()&&!strcmp(s.reason,"ready_stock_transition_wave"));
+ victory_dma.channel[1].aAdr=0x8a00;
  victory_dma.channel[1].bAdr=16;
  CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
  victory_dma.channel[1].bAdr=15;
  s.lines[99].registers[offsetof(Ppu,hScroll)+2]^=1;
  CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ s.lines[99].registers[offsetof(Ppu,hScroll)+2]^=1;
+ s.active_ram[0x644]=s.epochs[0].ram[0x644]=0xf5;
+ const size_t bg2_hofs=offsetof(Ppu,hScroll)+2;
+ memset(s.lines[223].registers+bg2_hofs,0,2);
+ memset(s.lines[224].registers+bg2_hofs,0,2);
+ CHECK(RenderWorld()&&!strcmp(s.reason,"ready_stock_transition_wave"));
+ s.lines[224].registers[bg2_hofs]=1;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
  g_snesrecomp_last_hdmaen=0;g_snes->dma=NULL;
+
+ fixture();word(0x644,0xf6);word(0x6ee,0x0405);
+ word(0x692,512);word(0x694,512);word(0x696,512);word(0x698,512);
+ word(0x6d8,256);word(0x6da,512);word(0x6de,512);
+ word(0x68a,56);word(0x68c,100);word(0x690,406);
+ g_ppu->bgmode=9;g_ppu->mosaic=0x63;g_ppu->mosaicStartLine=1;
+ g_ppu->hScroll[0]=56;g_ppu->hScroll[1]=100;g_ppu->vScroll[1]=406;
+ g_ppu->screenEnabled[0]=21;g_ppu->screenEnabled[1]=2;
+ g_ppu->cgwsel=2;g_ppu->cgadsub=0x31;g_snesrecomp_last_hdmaen=2;
+ publication();IogWorldBeginRaster();CHECK(s.valid);
+ for(int line=0;line<=224;line++){
+  g_ppu->hScroll[1]=(uint16_t)(100+((line+63)%64)/8);
+  IogWorldCaptureLine(line);
+ }
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_babel_starfield"));
+ IogWorldBeginRaster();CHECK(s.valid);IogWorldCaptureLine(0);
+ g_ppu->screenEnabled[1]=0;IogWorldCaptureLine(1);CHECK(!s.valid);
+ g_snesrecomp_last_hdmaen=0;
 }
 static void mansion_fog(void){
  fixture();word(0x644,0xe9);
@@ -1046,6 +1078,23 @@ static void mode7_menu_dismissal(void){
  IogWorldBeginRaster();CHECK(!s.valid&&!s.mode7);
  g_snesrecomp_last_hdmaen=0;
 }
+static void ship_dream_mosaic(void){
+ fixture();word(0x644,0x2A);word(0x692,256);word(0x696,1280);
+ word(0x694,512);word(0x698,512);word(0x6ee,5);
+ g_ppu->bgmode=9;g_ppu->mosaic=0x63;g_ppu->screenEnabled[0]=23;
+ g_ppu->screenEnabled[1]=0;g_ppu->windowsel=0x030033;
+ g_ppu->cgwsel=0x80;g_ppu->cgadsub=0xa3;g_snesrecomp_last_hdmaen=6;
+ CHECK(StockMosaicLayout(g_ppu,ram));
+ g_ppu->cgadsub=0xa2;CHECK(!StockMosaicLayout(g_ppu,ram));
+ word(0x644,0x2D);word(0x692,768);word(0x696,512);word(0x6ee,1);
+ g_ppu->windowsel=0;g_ppu->cgadsub=0x22;g_snesrecomp_last_hdmaen=0x1e;
+ CHECK(StockMosaicLayout(g_ppu,ram));
+ g_ppu->cgadsub=0xa1;CHECK(StockMosaicLayout(g_ppu,ram));
+ g_ppu->cgadsub=0x21;CHECK(!StockMosaicLayout(g_ppu,ram));
+ g_ppu->cgadsub=0x22;
+ g_snesrecomp_last_hdmaen=0x1f;CHECK(!StockMosaicLayout(g_ppu,ram));
+ g_snesrecomp_last_hdmaen=0;
+}
 static void mode7_angkor_neighbor_mosaic(void){
  fixture();word(0x644,0xBF);word(0x692,512);word(0x696,512);
  word(0x68a,128);word(0x68e,64);
@@ -1067,7 +1116,49 @@ static void mode7_angkor_neighbor_mosaic(void){
  g_ppu->mosaic=0x53;IogWorldCaptureLine(1);CHECK(!s.valid);
  word(0x644,0xBE);CHECK(!AngkorVisionMosaic(g_ppu,ram));
 }
+static void story_sky_after_unpaired_upload(void){
+ fixture();
+ word(0x644,0x58);word(0x6ee,0x85);
+ word(0x68a,0);word(0x68e,0);
+ word(0x692,512);word(0x694,512);word(0x696,512);word(0x698,512);
+ word(0x6da,256);word(0x6de,256);
+ g_ppu->bgmode=9;g_ppu->inidisp=15;
+ g_ppu->screenEnabled[0]=21;g_ppu->screenEnabled[1]=17;
+ g_ppu->hScroll[0]=g_ppu->hScroll[1]=0;
+ g_ppu->vScroll[0]=g_ppu->vScroll[1]=0;
+ IogWorldBeginRaster();CHECK(!s.valid&&!s.sky_field);
+ publication();
+ IogWorldBeforeNmi();g_ppu->oamWriteCount++;g_ppu->oam[17]^=1;IogWorldAfterNmi();
+ CHECK(!s.active);
+ IogWorldBeginRaster();CHECK(s.valid&&s.sky_field&&!s.mode7);
+ for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_story_sky_field")&&!visual_builds);
+ CHECK(s.view.native_x==171&&s.view.native_y==40);
+ static uint8_t dst[598*336*4];
+ CHECK(IogWorldDraw(dst,598*4,source_field,598,336,0));
+ for(int y=0;y<224;y++)
+  CHECK(!memcmp(dst+((y+40)*598+171)*4,source_field+y*256*4,256*4));
+ CHECK(!memcmp(dst,s.output,171*4));
+ int hud_source=(11*256+8)*4;
+ int hud_aperture=((11+40)*598+171+8)*4;
+ int hud_display=(17*598+119)*4;
+ s.hud[11*256+8]=0xff000000u|source_field[hud_source]|
+     ((uint32_t)source_field[hud_source+1]<<8)|((uint32_t)source_field[hud_source+2]<<16);
+ s.hud[11*256+9]=s.hud[11*256+8]; /* Different native RGB can be an intervening OBJ. */
+ CHECK(IogWorldDraw(dst,598*4,source_field,598,336,0));
+ CHECK(!memcmp(dst+hud_display,&s.hud[11*256+8],4));
+ CHECK(!memcmp(dst+hud_aperture,(uint8_t *)s.output+hud_aperture,4));
+ CHECK(!memcmp(dst+hud_aperture+4,source_field+hud_source+4,4));
+ IogWorldBeginRaster();CHECK(s.valid);IogWorldCaptureLine(0);
+ g_ppu->windowsel=0x20;IogWorldCaptureLine(1);CHECK(!s.valid);
+ IogWorldBeginRaster();CHECK(!s.valid&&!s.sky_field);
+ g_ppu->windowsel=0;word(0x644,0x59);
+ IogWorldBeginRaster();CHECK(!s.valid&&!s.sky_field);
+}
 static void mode7_lifecycle_and_packet(const char*base){
+ ship_dream_mosaic();
+ story_sky_after_unpaired_upload();
  mode7_angkor_neighbor_mosaic();
  mode7_menu_dismissal();
  mode7_fixture();memcpy(before_ram,ram,sizeof(ram));CpuState cpu=g_cpu;

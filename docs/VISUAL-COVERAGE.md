@@ -544,7 +544,7 @@ the original HDMA producer and each captured row. It continues the wave
 outside the original field only when the captured source repeats. It keeps
 the authentic foreground, stars and room boundaries.
 
-The other rematch wave layouts keep their original fallback. Test builds that
+On v30, the other rematch wave layouts kept their original fallback. Test builds that
 accepted them intermittently alternated between the expanded and original
 field. These layouts need consistent frame-to-frame validation.
 
@@ -570,6 +570,43 @@ Babel entrance route.
 The headless checks used SDL virtual controllers and 598×336 square-pixel
 output. The isolated launcher profile booted with the 757-entry dialogue
 pack and MSU-1 enabled.
+
+## Babel victory waves, Ship Dream and Sky Garden flight
+
+Original v31 keeps the original HDMA victory wave in all four Babel
+rematches that use it (`F2`–`F5`). The alternate stock scroll buffer moves
+some scanlines farther than the prison and Babel arrival effects. The
+renderer now verifies the full rematch raster against the actual table
+without applying the arrival displacement limit. Dark Sand Fanger's
+last two BG2 lines keep their separately verified original values.
+Each linked controller replay kept all 124 wave frames wide and returned
+to the Babel middle floor (`E0`). Each still has a single setup frame before
+the wave that uses the centered fallback. The sampled Castoth setup frame
+is visible and uses a different HDMA table from the victory wave.
+
+The Dark Mummy Queen (`F6`) uses a mosaic fade. Its original grid stays
+aligned through all 56 frames, including the stars, and the replay returns
+to the upper floor (`E3`). The Ship Dream (`2A`) uses the same grid
+alignment with its own verified room and iris settings. Both the 75-frame
+Dream arrival mosaic and the 75-frame return mosaic in the Wrecked Ship
+cabin (`2D`) now stay at 1.5×. The return retains the cabin's per-line
+color effect and exposes its real side scenery.
+
+The approach to the Sky Garden Mode 7 crash (`58` → `59` → `58`) retains the
+current hardware actors when an OAM upload arrives without a paired actor
+composition. The extended area uses the verified cloud layers. The HUD uses
+the same placement and size as the surrounding frames. Four alternating
+fallback frames are restored. The sampled Mode 7 crash and return images
+match v30.
+
+Headless SDL virtual-controller replays checked all five Babel exits, the
+ship-to-Dream-to-cabin route and the flight through the crash and return.
+The flight and ship routes used assisted checkpoints. The sampled 598×336
+square-pixel pictures matched their renderer references. Guest state fields
+matched across the tested checkpoints. The forced interpreter and renderer
+reference also matched the v30 Dark Space return to the Aqueduct. The stock
+Mode 7 map selection replay still reached South Cape with the same picture
+and guest state.
 
 ## Bounded entry survey
 
