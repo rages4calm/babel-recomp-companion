@@ -660,7 +660,7 @@ static bool BoundedRoomScene(unsigned scene)
 {
     switch(scene) {
     case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x31:
-    case 0x49: case 0x85: case 0xDA: return true;
+    case 0x49: case 0x85: case 0xCD: case 0xDA: return true;
     default: return SourcePlateScene(scene);
     }
 }
@@ -716,6 +716,13 @@ static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
     /* 06DE is the uncorrected bottom edge; 06DC additionally contains the
      * original visible-height correction. Neither word is a player edit. */
     if(!AuthoredWindow(e,out)) return false;
+    if(scene==0xCD) {
+        /* The puzzle room stores glyph picker tiles below the fixed playfield. */
+        if(camera_x || camera_y || Word(ram,0x6EE)!=5 ||
+           out->left || out->top || out->right!=256 || out->bottom!=256)
+            return false;
+        out->bottom=224;
+    }
     if(scene==0x49 || scene==0xDA) {
         /* These rooms store map material below the authored field. Each
          * Hieroglyph panel and Neil's cottage use one original-height view. */

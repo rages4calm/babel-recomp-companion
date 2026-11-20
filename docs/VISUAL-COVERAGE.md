@@ -277,6 +277,33 @@ stats and positioning. Sand Fanger's win and return were verified on v18.
 The original Sky Garden Viper also reached its stock reward ceremony and
 returned to the arena from an assisted combat checkpoint.
 
+## Explored exits, travel and boss returns
+
+The full area map now marks exit triggers in explored tiles. It checks the
+loaded list against the verified Original cartridge and clips the search
+to the active floor. The small radar and the town pause behavior keep
+their existing controls. Three reviewed full-map captures show markers.
+An Aqueduct capture with no qualifying exit is byte-identical to v20.
+All four controller map sessions returned to the same guest snapshot.
+
+The walkable world map reached and departed destinations on 11 distinct
+routes on v20, with four routes replayed on exact v21. The route checks use
+assisted story starts and stock controller entry and exit. Two paced MSU-1
+routes on v20 reported no underflow after warmup with a dummy audio driver.
+Speaker playback remains open.
+
+The original Mu twins fell and the bomb and Erik sequence completed.
+Solid Arm returned to Babel, Dark Gaia reached the epilogue after both
+forms, Mummy Queen earned the statue, and Castoth returned control after
+defeat. The test setups use player-only assistance and virtual controller
+input. One Mu fight sample differs on 13 pixels of the bottom stock row.
+The Mu rescue stops in the room after dialogue.
+
+The Pyramid puzzle's original field ends before its glyph storage.
+The renderer now clips those tiles from the lower margin in the witnessed
+layout. Its center still matches the original field on the reward return
+and other layouts retain fallback.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

@@ -62,7 +62,33 @@ static void unique(void){unsigned used=0;for(int a=0;a<IOG_MAP_CONTROL_COUNT;a++
 static unsigned tick=100;
 static void press(uint32_t button){IogMapHostNav(0,tick+=16);IogMapHostNav(button,tick+=16);}
 static void reopen(void){C(IogMapHostOpen());IogMapHostNav(0,tick+=16);C(ui.full&&opened);}
+static void doorway_markers(void){
+ static uint8_t rom[2097152],ram[131072],visibility[16*16];
+ Cart cart={0};cart.rom=rom;cart.romImageSize=sizeof(rom);
+ IogMapDiscoveryIdentity identity={0};
+ IogMapDiscovery map;
+ IogMapViewMarker markers[StockDoorwayLimit];
+ C(IogMapDiscoveryInit(&map,16,16,&identity));
+ ram[0x644]=1;ram[0x646]=2;
+ ram[0xd4]=0x32;ram[0xd5]=0x84;
+ ram[0xd6]=0x4b;ram[0xd7]=0x84;
+ ram[0x6d7]=1;
+ rom[0x18236]=0x32;rom[0x18237]=0x84;
+ rom[0x18432]=17;rom[0x18433]=3;rom[0x18434]=2;rom[0x18435]=1;
+ rom[0x1843e]=2;rom[0x1843f]=3;rom[0x18440]=1;rom[0x18441]=1;
+ rom[0x1844a]=0xff;
+ C(StockDoorwayMarkers(ram,&cart,&map,markers)==0);
+ visibility[3*16+2]=1;
+ C(IogMapDiscoveryReveal(&map,2,3,1,visibility,sizeof(visibility),16,NULL));
+ C(StockDoorwayMarkers(ram,&cart,&map,markers)==1);
+ C(markers[0].cell_x==2&&markers[0].cell_y==3);
+ ram[0xd4]^=1;
+ C(StockDoorwayMarkers(ram,&cart,&map,markers)==0);
+ ram[0xd4]^=1;rom[0x18440]=0;
+ C(StockDoorwayMarkers(ram,&cart,&map,markers)==0);
+}
 int main(void){
+ doorway_markers();
  g_cpu.master_cycles=123456;
  for(int a=0;a<IOG_MAP_CONTROL_COUNT;a++)C(IogMapHostControlGet(a)==control_defaults[a]);
  C(gamepad&&IogMapHostRadarEnabled());unique();

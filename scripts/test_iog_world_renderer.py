@@ -812,8 +812,28 @@ static void bounded_rooftop_and_hieroglyph(void){
  s.epochs[0].ram[0x699]=2;
  CHECK(!RoomPictureBounds(&s.epochs[0],0,0,&bounds));
 }
+static void pyramid_puzzle_storage_tail(void){
+ fixture();word(0x644,0xCD);word(0x692,256);word(0x696,256);
+ word(0x6d6,0);word(0x6d8,0);word(0x6da,256);word(0x6de,256);
+ word(0x68a,0);word(0x68e,0);word(0x6ee,5);
+ g_ppu->hScroll[0]=0;g_ppu->vScroll[0]=0;
+ publication();IogWorldBeginRaster();
+ for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&s.view.native_x==171&&s.view.native_y==56);
+ for(int y=0;y<336;y++)for(int x=0;x<598;x++){
+  bool inside=x>=171&&x<427&&y>=56&&y<280;
+  CHECK(!!s.output[y*598+x]==inside);
+ }
+ PictureBounds bounds;PictureEpoch *e=&s.epochs[0];
+ CHECK(RoomPictureBounds(e,0,0,&bounds)&&bounds.bottom==224);
+ CHECK(!RoomPictureBounds(e,0,8,&bounds));
+ e->ram[0x6ee]=0x85;
+ CHECK(!RoomPictureBounds(e,0,0,&bounds));
+}
 static void generic_authored_window(void){
  bounded_rooftop_and_hieroglyph();
+ pyramid_puzzle_storage_tail();
  fixture();word(0x644,0x0D);word(0x692,1024);word(0x696,1024);
  word(0x694,1024);word(0x698,1024);
  word(0x6D6,256);word(0x6D8,256);word(0x6DA,768);word(0x6DE,512);

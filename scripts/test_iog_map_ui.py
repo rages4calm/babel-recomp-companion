@@ -15,7 +15,7 @@ static IogMapDiscovery map;
 static unsigned char atlas[48*16*64*16*4],walk[48*64];
 static IogMapViewMarker markers[2]={{1,1,2,{255,0,255,255}},{24,32,1,{198,173,107,255}}};
 static IogMapViewSource src;
-static IogMapUiMetadata meta={true,false,false,1};
+static IogMapUiMetadata meta={.valid=true,.floor_number=1};
 static void fixture(void){
  IogMapDiscoveryIdentity id={{1},{2},3};C(IogMapDiscoveryInit(&map,48,64,&id));
  memset(walk,1,sizeof(walk));
