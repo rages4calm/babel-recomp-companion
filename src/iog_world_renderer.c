@@ -146,7 +146,7 @@ static bool Mode7PlaneLayout(const Ppu *p,unsigned scene)
         (!p->screenEnabled[1] || crash_color_math || prologue_color_math) && !ActiveWorldWindow(p) &&
         !(p->windowsel&0xA00000u);
 }
-static int WorldMapModeSplit(void)
+static int WorldMapMode7Lines(void)
 {
     if(Word(g_snes->ram,0x644)!=0xfe || !(g_snesrecomp_last_hdmaen&0x40))
         return 0;
@@ -156,11 +156,13 @@ static int WorldMapModeSplit(void)
        (channel->aAdr!=0x8800 && channel->aAdr!=0x8900))
         return 0;
     const uint8_t *table=g_snes->ram+channel->aAdr;
-    if(table[0]!=127 || table[1]!=7 || table[2]<24 || table[2]>97 ||
+    if(table[0]!=127 || table[1]!=7 || table[2]<24 || table[2]>127 ||
        table[3]!=7 || table[4]!=1 || table[5]!=9 || table[6]!=0)
         return 0;
     const char *enable=getenv("IOG_WORLD_MAP_SPLIT");
-    return enable && !strcmp(enable,"0") ? 0 : 127+table[2];
+    /* HDMA selects Mode 7 at line zero. As the menu closes, the Mode 1
+     * write moves below line 224 while the PPU still starts in Mode 1. */
+    return enable && !strcmp(enable,"0") ? 0 : Clamp(126+table[2],0,224);
 }
 static int ScrollWorld(const uint8_t *ram,unsigned at,unsigned scroll)
 {
@@ -274,8 +276,9 @@ void IogWorldBeginRaster(void)
     PpuBindOverlaySurface(g_ppu,kPpuOverlaySource_Bg3,(uint8_t*)s.hud,256*4);
     PpuSetOverlayCapture(g_ppu,kPpuOverlaySource_Bg3,0,0,256,224,0);
     if(!s.stock || IogRandomizerActive()) return;
-    s.mode7_split=WorldMapModeSplit();
-    if(s.mode7_split || Mode7PlaneLayout(g_ppu,Word(g_snes->ram,0x644))) {
+    int map_lines=WorldMapMode7Lines();
+    if(map_lines && map_lines<224) s.mode7_split=map_lines+1;
+    if(map_lines || Mode7PlaneLayout(g_ppu,Word(g_snes->ram,0x644))) {
         s.base=*g_ppu;s.mode7=s.valid=true;s.reason="awaiting_mode7_plane";
         return;
     }
@@ -1009,13 +1012,14 @@ static bool RenderWorld(void)
     bool flat_horizon_tail=horizon&&HorizonFlatTail(first,p);
     bool raster_anchored=RasterAnchoredBackdrop(scene,first->ram,
         tracked_effect?&effect_camera:NULL);
-    bool wall_approach=authored &&
-        !authored_bounds.left && !authored_bounds.top &&
-        authored_bounds.bottom==256 &&
+    bool wall_approach=authored && !authored_bounds.left &&
         ((scene==0x82 && Word(first->ram,0x692)==2048 &&
-          Word(first->ram,0x696)==1024 && authored_bounds.right==2048) ||
+          Word(first->ram,0x696)==1024 && authored_bounds.right==2048 &&
+          ((!authored_bounds.top && authored_bounds.bottom==256) ||
+           (authored_bounds.top==256 && authored_bounds.bottom==1024))) ||
          (scene==0x88 && Word(first->ram,0x692)==1024 &&
-          Word(first->ram,0x696)==768 && authored_bounds.right==1024));
+          Word(first->ram,0x696)==768 && authored_bounds.right==1024 &&
+          !authored_bounds.top && authored_bounds.bottom==256));
     bool wall_field_phase=wall_bands && (wall_approach || scene==0x8A || scene==0x8B);
     /* The captured backdrop can be from the next camera publication. */
     int wall_source_camera=wall_field_phase?wall_model.source_camera_x:camera_x;
@@ -1099,14 +1103,21 @@ static bool RenderWorld(void)
         bool castle_marker=CastleMapMarker(e);
         /* Objects were decoded from the exact composition/OAM publication
          * pair. Recolor the one visible row with this raster's palette. */
+        const bool stock_bottom_edge = native_y == 223 && (scene == 0x54 || scene == 0x67);
         size_t count=0;
         for(unsigned i=0;i<s.visual.part_count;i++) {
             const IogVisualPart *part=&s.visual.parts[i];
             int py=row-part->y;
             if(py<0 || py>=part->height) continue;
             uint16_t *pixels=s.object_rows[count];
+            /* The stock actor writer culls a metasprite part that starts on
+             * the last displayed row. Keep that row clear in the stock
+             * aperture while continuing to draw the part in the margins. */
+            const bool culled_at_stock_edge = stock_bottom_edge && py == 0 && !part->manual;
             for(int x=0;x<part->width;x++) {
                 unsigned index=part->indices[py*part->width+x];
+                if(culled_at_stock_edge && part->x+x>=left && part->x+x<left+256)
+                    index=0;
                 pixels[x]=index?(uint16_t)(0x8000|e->cgram[index]):0;
             }
             s.objects[count++]=(PpuExtraObject){part->x,0,part->width,1,
@@ -1162,8 +1173,8 @@ static bool RenderWorld(void)
                      * each background world height. The expanded top/bottom
                      * must select their own band, not clamp to a native row. */
                     uint16_t phase;
-                    /* Keep the upper approach, lair and passage aligned with
-                     * their captured field when the expanded view pulls back. */
+                    /* Keep the approach, lair and passage aligned with their
+                     * captured field when the expanded view pulls back. */
                     if(IogRasterParallaxSample(&wall_model,wy+1,
                             wall_field_phase?wall_source_camera:s.view.world_x,&phase))
                         wx=(int)phase+start-(wall_field_phase?left:0);

@@ -78,12 +78,16 @@ are in `.local/batch-001/visual-fullgame-024`.
 Batch 025 [fixes the Great Wall approach and stock destination menu](docs/VISUAL-COVERAGE.md#great-wall-approach-and-mode-7-destination-menu)
 on Original v28. Controller routes, renderer comparisons and the production
 launcher smoke are in `.local/batch-001/visual-fullgame-025`.
+Batch 026 [fixes bottom-edge sprites, the lower Great Wall gallery and the
+destination-menu closing frame](docs/VISUAL-COVERAGE.md#bottom-edges-lower-great-wall-and-map-dismissal)
+on Original v29. Private captures and exact-build receipts are in
+`.local/batch-001/visual-fullgame-026`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 025's
-`babel-originalv28.exe` and batch 020's dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 026's
+`babel-originalv29.exe` and batch 020's dialogue pack, and
 continues the isolated test profile's save. The test executable has the
 required `i18n/structure.txt` alongside it. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
