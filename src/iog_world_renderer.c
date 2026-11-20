@@ -183,6 +183,28 @@ static bool AngkorVisionMosaic(const Ppu *p,const uint8_t *ram)
         Word(ram,0x694)==768 && Word(ram,0x698)==1024;
 }
 
+static bool DaoVillageMosaic(const Ppu *p,const uint8_t *ram)
+{
+    /* The Spirit Guide's trip to Dao combines the village's regular heat
+     * window and color math with the stock two-background reveal. */
+    return DaoWorldWindow(p,ram) && Word(ram,0x6EE)==0x0485 &&
+        p->bgmode==9 && (p->mosaic&15)==3 &&
+        p->screenEnabled[0]==0x17 && p->screenEnabled[1]==0x12 &&
+        p->cgwsel==0x82 && p->cgadsub==0x41 && g_snesrecomp_last_hdmaen==0x06;
+}
+
+static bool SolidArmExitMosaic(const Ppu *p,const uint8_t *ram)
+{
+    /* Defeating Solid Arm mosaics the narrow foreground and moving
+     * subscreen plane together before the return to the outer landing. */
+    return Word(ram,0x644)==0xEA && Word(ram,0x6EE)==0x0485 &&
+        p->bgmode==9 && (p->mosaic&15)==3 && !p->windowsel &&
+        p->screenEnabled[0]==0x15 && p->screenEnabled[1]==0x16 &&
+        p->cgwsel==0x02 && p->cgadsub==0x21 && g_snesrecomp_last_hdmaen==0x02 &&
+        Word(ram,0x692)==256 && Word(ram,0x696)==256 &&
+        Word(ram,0x694)==512 && Word(ram,0x698)==256;
+}
+
 static bool StorySkyLayout(const uint8_t *ram)
 {
     return Word(ram,0x644)==0x58 && (ram[0x6EE]&0x80) &&
@@ -228,7 +250,8 @@ static bool ShipDreamMosaic(const Ppu *p,const uint8_t *ram)
 
 static bool StockMosaicLayout(const Ppu *p,const uint8_t *ram)
 {
-    return AngkorVisionMosaic(p,ram) || BabelQueenMosaic(p,ram) || ShipDreamMosaic(p,ram);
+    return AngkorVisionMosaic(p,ram) || DaoVillageMosaic(p,ram) ||
+        SolidArmExitMosaic(p,ram) || BabelQueenMosaic(p,ram) || ShipDreamMosaic(p,ram);
 }
 
 static int PositiveMod(int value,int divisor)
@@ -616,7 +639,69 @@ static bool BabelStarfieldLayout(const PictureEpoch *e,const Ppu *p)
 
 enum { WaterWavePeriod = 8 };
 enum { VillageHeatPeriod = 32 };
-enum { StockWaveTable = 0x8800, StockWaveRing = 0x8900, StockWavePeriod = 128 };
+enum { StockWaveTable = 0x8800, StockWaveRing = 0x8900, StockWavePeriod = 128,
+       StockWaveLastLine = 222, BabelAlternateTable = 0x8A00 };
+
+static bool HorizontalScrollHdma(const DmaChannel *c,unsigned target)
+{
+    return c->mode==2 && c->indirect && !c->fromB && c->bAdr==target &&
+        c->aBank==0x7E && c->indBank==0x7E;
+}
+
+static unsigned StockHorizontalWaveOrigin(const uint8_t *ram)
+{
+    const uint8_t *table=ram+StockWaveTable;
+    unsigned origin=Word(table,1);
+    enum { RingBytes=2*StockWavePeriod };
+    if(table[0]!=0xFF || table[3]!=0xE0 || table[6] ||
+       origin<StockWaveRing || origin+2*(StockWaveLastLine+1)>StockWaveRing+4*RingBytes ||
+       (origin&1) || Word(table,4)!=origin+254)
+        return 0;
+    return origin;
+}
+
+/* The victory producer replaces the BG2 ring one frame before HDMA enables
+ * the two new channels. Only BG2 can move in that picture. Some camera phases
+ * overwrite the alternate descriptor with a single held scroll value. */
+static bool BabelVictorySetup(const PictureEpoch *e)
+{
+    const uint8_t *ram=e->ram;
+    const unsigned scene=Word(ram,0x644);
+    if(scene>0xF5 || Word(ram,0x6EE)!=0x0405 ||
+       g_snesrecomp_last_hdmaen!=0x02 || !g_snes->dma)
+        return false;
+    const DmaChannel *c=&g_snes->dma->channel[1];
+    if(!HorizontalScrollHdma(c,15))
+        return false;
+    unsigned origin=StockHorizontalWaveOrigin(ram);
+    if(!origin || (c->aAdr!=StockWaveTable && c->aAdr!=BabelAlternateTable))
+        return false;
+
+    /* The paired OAM was authored against the outgoing 64-row table. */
+    const uint8_t *outgoing=s.active_ram+c->aAdr;
+    for(unsigned offset=0;offset<12;offset+=3)
+        if(outgoing[offset]!=0xC0 || Word(outgoing,offset+1)!=c->aAdr+0x100u)
+            return false;
+
+    bool held=c->aAdr==BabelAlternateTable;
+    if(held) {
+        const uint8_t *table=ram+BabelAlternateTable;
+        if(scene!=0xF3 || table[0]!=0x5A || Word(table,1)!=0x5A00 || table[3])
+            return false;
+        origin=Word(table,1);
+    }
+    const size_t h=offsetof(Ppu,hScroll)+2;
+    const uint8_t *base=s.lines[0].registers;
+    for(int line=0;line<=224;line++) {
+        const uint8_t *regs=s.lines[line].registers;
+        const unsigned sample=held?0u:(unsigned)Clamp(line,0,StockWaveLastLine);
+        if((Word(regs,h)&1023)!=(Word(ram,origin+2*sample)&1023) ||
+           memcmp(regs,base,h) ||
+           memcmp(regs+h+2,base+h+2,PPU_SAVESTATE_REGS_SIZE-h-2))
+            return false;
+    }
+    return true;
+}
 
 /* Validate the shared horizontal HDMA producer on both backgrounds and
  * every visible line before using its ring outside the original field. */
@@ -634,29 +719,23 @@ static unsigned StockHorizontalWave(const PictureEpoch *e,const Ppu *p,int camer
         const DmaChannel *c=&g_snes->dma->channel[ch];
         /* The rematches' original BG2 wave uses a double buffer on ch1.
          * The verified ch7 write supplies the final BG2 value each line. */
-        bool table_matches=c->aAdr==StockWaveTable || (ch==1 && c->aAdr==0x8A00);
-        if(c->mode!=2 || !c->indirect || c->fromB || c->bAdr!=(ch==6?13:15) ||
-           c->aBank!=0x7E || !table_matches || c->indBank!=0x7E)
+        bool table_matches=c->aAdr==StockWaveTable || (ch==1 && c->aAdr==BabelAlternateTable);
+        if(!HorizontalScrollHdma(c,ch==6?13:15) || !table_matches)
             return 0;
     }
-    const uint8_t *table=ram+StockWaveTable;
-    unsigned origin=Word(table,1);
-    enum { RingBytes=2*StockWavePeriod, LastWaveLine=222 };
-    if(table[0]!=0xFF || table[3]!=0xE0 || table[6] ||
-       origin<StockWaveRing || origin+2*(LastWaveLine+1)>StockWaveRing+4*RingBytes ||
-       (origin&1) || Word(table,4)!=origin+254)
-        return 0;
+    unsigned origin=StockHorizontalWaveOrigin(ram);
+    if(!origin) return 0;
     bool varied=false,periodic=true;
     const size_t h=offsetof(Ppu,hScroll),v=offsetof(Ppu,vScroll);
     /* The higher channels end together. Sand Fanger's alternating
      * channel-1 source can write zero to BG2 for the final two lines. */
     const bool bg2_zero_tail=hdma_mask==0xC2 && Word(ram,0x644)==0xF5 &&
-        g_snes->dma->channel[1].aAdr==0x8A00 &&
+        g_snes->dma->channel[1].aAdr==BabelAlternateTable &&
         !(Word(s.lines[223].registers,h+2)&1023) &&
         !(Word(s.lines[224].registers,h+2)&1023);
     for(int line=0;line<=224;line++) {
         const uint8_t *regs=s.lines[line].registers;
-        unsigned sample=(unsigned)Clamp(line,0,LastWaveLine);
+        unsigned sample=(unsigned)Clamp(line,0,StockWaveLastLine);
         unsigned shift=Word(ram,origin+2*sample)&1023;
         int distance=(int)((shift-(unsigned)camera_x+512)&1023)-512;
         /* Babel's alternating BG2 source data can carry its camera
@@ -664,7 +743,7 @@ static unsigned StockHorizontalWave(const PictureEpoch *e,const Ppu *p,int camer
          * the actual wave table. */
         if((hdma_mask==0xC0 && (distance < -64 || distance > 64)) ||
            (Word(regs,h)&1023)!=shift ||
-           (Word(regs,h+2)&1023)!=((bg2_zero_tail && line>LastWaveLine)?0u:shift) ||
+           (Word(regs,h+2)&1023)!=((bg2_zero_tail && line>StockWaveLastLine)?0u:shift) ||
            (Word(regs,v)&1023)!=(p->vScroll[0]&1023) ||
            (Word(regs,v+2)&1023)!=(p->vScroll[1]&1023) ||
            regs[offsetof(Ppu,bgXsc)]!=p->bgXsc[0] ||
@@ -1108,6 +1187,7 @@ static bool RenderWorld(void)
     if(babel_starfield_layout && scene<=0xF5 && Word(first->ram,0x6EE)==0x0405)
         transition_wave=StockHorizontalWave(first,p,camera_x,0xC2,&transition_wave_repeats);
     bool babel_victory_wave=transition_wave && babel_starfield_layout;
+    bool babel_victory_setup=babel_starfield_layout && BabelVictorySetup(first);
     bool source_plate=SourcePlateScene(scene);
     if(source_plate) {
         /* These verified compositions expose only their native field. Their
@@ -1158,7 +1238,8 @@ static bool RenderWorld(void)
     bool freejia_wave = tracked_effect && s.epoch_count == 1 &&
         FreejiaRingWave(first,p,&effect_camera);
     bool mansion_fog=tracked_effect && s.epoch_count==1 && MansionFog(first,p,&effect_camera);
-    bool babel_stars=babel_victory_wave || (babel_starfield_layout && UploadedRingWave(p,1,true));
+    bool babel_stars=babel_victory_wave || babel_victory_setup ||
+        (babel_starfield_layout && UploadedRingWave(p,1,true));
     bool water_wave = WaterWave(first,p);
     bool dao_heat=DaoHeatWave(first,p);
     if (scene == 0x32 && !freejia_wave) {
@@ -1359,7 +1440,8 @@ static bool RenderWorld(void)
                             wall_field_phase?wall_source_camera:s.view.world_x,&phase))
                         wx=(int)phase+chunk_x-(wall_field_phase?left:0);
                 }
-                if(logical==1&&(freejia_wave||mansion_fog||(star_plane&&!babel_victory_wave))&&
+                if(logical==1&&(freejia_wave||mansion_fog||
+                   (star_plane&&!babel_victory_wave&&!babel_victory_setup))&&
                    (native_y<0 || native_y>=224)) {
                     int phase=(native_y%RingWavePeriod+RingWavePeriod)%RingWavePeriod+1;
                     unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,hScroll)+physical*2);
@@ -1511,6 +1593,7 @@ static bool RenderWorld(void)
         dao_heat?"ready_dao_heat":
         village_heat?"ready_village_heat":
         transition_wave?"ready_stock_transition_wave":
+        babel_victory_setup?"ready_babel_victory_setup":
         mansion_fog?"ready_mansion_fog":
         babel_stars?"ready_babel_starfield":
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;

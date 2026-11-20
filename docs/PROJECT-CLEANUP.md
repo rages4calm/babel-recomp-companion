@@ -5,6 +5,15 @@ copies after their consumers finish. Keep the current qualification batch, sourc
 receipts, required generation inputs, master builds and owner data. Do not grow a
 new full fixture tree for each small check; reuse one bounded scratch batch.
 
+## Visual batch 029
+
+Removed an abandoned 2,451,643,409-byte partial reference-video download and
+14 superseded v30/v31 candidate and controller executables (381,326,336
+bytes). Each executable matched its retained build receipt before removal.
+The v30 rollback, previous v31 playtest and controller baseline, and the
+current dialogue pack passed hash checks after cleanup. Build receipts,
+settings, source, and prior definitive playtests remain available.
+
 ## Current closeout — batch 025
 
 Completed in place: **45,121 files / 13,564,669,962 logical bytes /
