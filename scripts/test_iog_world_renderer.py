@@ -357,6 +357,14 @@ static void actual_window_enable_gates(void){
  RebaseWindow1(g_ppu,80);CHECK(g_ppu->window1left==255&&g_ppu->window1right==0);
  RebaseWindow1(g_ppu,-255);CHECK(g_ppu->window1left==255&&g_ppu->window1right==0);
  g_ppu->windowsel=10;CHECK(!DaoWorldWindow(g_ppu,ram));
+ fixture();word(0x644,0x2A);word(0x692,256);word(0x696,1280);
+ word(0x694,512);word(0x698,512);
+ g_ppu->windowsel=0x030033;g_ppu->cgwsel=0x80;
+ g_ppu->screenEnabled[1]=0;g_ppu->screenWindowed[0]=23;
+ publication();IogWorldBeginRaster();CHECK(s.valid);
+ IogWorldCaptureLine(0);CHECK(s.valid&&DreamWorldWindow(g_ppu,ram));
+ g_ppu->windowsel|=8;IogWorldCaptureLine(1);
+ CHECK(!s.valid&&!strcmp(s.reason,"unsupported_line_effect"));
 }
 static void real_map_edge_framing(void){
  fixture();word(0x68a,152);word(0x68e,484);word(0x696,768);word(0x698,768);
@@ -696,6 +704,32 @@ static void calibrated_wall_picture(void){
  CHECK(wall_calls==3*336&&!strcmp(s.reason,"ready"));
  CHECK(!memcmp(before_ram,ram,sizeof ram)&&!memcmp(&cpu,&g_cpu,sizeof cpu)&&!memcmp(&before_ppu,g_ppu,sizeof before_ppu));
 }
+static void anchored_wall_passages(void){
+ const unsigned scenes[]={0x8a,0x8b};
+ for(unsigned n=0;n<sizeof scenes/sizeof scenes[0];n++){
+  fixture();word(0x644,scenes[n]);word(0x692,1024);word(0x696,1024);
+  word(0x694,256);word(0x698,n?1024:768);
+  word(0x68a,400);word(0x68e,100);word(0x68c,0);word(0x690,100);
+  word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xEAB4,0,0x0101);
+  g_ppu->hScroll[0]=400;g_ppu->hScroll[1]=200;g_ppu->vScroll[0]=g_ppu->vScroll[1]=100;
+  g_ppu->screenEnabled[0]=19;
+  raster_rom_word(0x1cc00+(n?0x1e:0x1f)*2,0x8000);
+  raster_rom_word(0x18000,0x7800);rom[0x18002]=0x7e;rom[0x18003]=0x0f;rom[0x18004]=8;
+  raster_rom_word(0x18005,65536-2048);raster_rom_word(0x18007,0x720);
+  raster_rom_word(0x18009,0x0108);
+  publication();
+  if(n){ /* BG2 captured a different camera publication from BG1. */
+   word(0x68a,398);g_ppu->hScroll[1]=199;
+  }
+  IogWorldBeginRaster();
+  for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+  /* At native screen x171, keep the captured phase. Check both margins
+   * and chunk seams against that one continuous phase. */
+  expected_background_x=n?28:29;expected_background_y=44;background_probe=true;
+  IogWorldEndRaster(0,225,0);background_probe=false;
+  CHECK(s.complete&&s.view.native_x==171&&s.view.native_y==56&&background_probe_calls==3*336);
+ }
+}
 static void flat_horizon_tail_guards(void){
  fixture();PictureEpoch e;memset(&e,0,sizeof e);
  e.ram[0x694]=0;e.ram[0x695]=2;e.ram[0x698]=0;e.ram[0x699]=1;
@@ -725,7 +759,7 @@ static void flat_horizon_tail_guards(void){
  e.ram[0xc1ff]=0;e.ram[0x695]=1;CHECK(!HorizonFlatTail(&e,g_ppu));
 }
 static void calibrated_finite_horizon(void){
- calibrated_wall_picture();flat_horizon_tail_guards();
+ calibrated_wall_picture();anchored_wall_passages();flat_horizon_tail_guards();
  horizon_picture(0x1a,160,false,1);horizon_picture(0x1c,168,false,1);
  horizon_picture(0x1a,160,false,2);horizon_picture(0x1c,168,false,2);
  horizon_picture(0x1a,160,false,0);horizon_picture(0x1a,168,false,0);
@@ -816,6 +850,11 @@ static void mode7_fixture(void){
  CHECK(Mode7PlaneLayout(g_ppu,0x59)&&!Mode7PlaneLayout(g_ppu,0x58));
  g_ppu->screenWindowed[1]=1;CHECK(!Mode7PlaneLayout(g_ppu,0x59));
  g_ppu->screenWindowed[1]=0;g_ppu->cgadsub=0;CHECK(!Mode7PlaneLayout(g_ppu,0x59));
+ g_ppu->screenEnabled[0]=0x11;g_ppu->cgadsub=0x10;
+ CHECK(Mode7PlaneLayout(g_ppu,0x8C)&&Mode7PlaneLayout(g_ppu,0x8D));
+ CHECK(!Mode7PlaneLayout(g_ppu,0x8E)&&!Mode7PlaneLayout(g_ppu,0x59));
+ g_ppu->windowsel=0x20;CHECK(!Mode7PlaneLayout(g_ppu,0x8C));
+ g_ppu->windowsel=0;g_ppu->screenEnabled[0]=21;g_ppu->cgadsub=0;
  g_ppu->screenEnabled[1]=0;g_ppu->cgwsel=0;
  g_ppu->screenEnabled[1]=0;memset(g_ppu->m7matrix,0,sizeof(g_ppu->m7matrix));
  g_ppu->m7matrix[0]=g_ppu->m7matrix[3]=256;

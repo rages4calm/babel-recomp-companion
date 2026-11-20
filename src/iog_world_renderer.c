@@ -85,6 +85,19 @@ static bool DaoWorldWindow(const Ppu *p,const uint8_t *ram)
         Word(ram,0x694)==512 && Word(ram,0x698)==512 && p->windowsel==2;
 }
 
+static bool DreamWorldWindow(const Ppu *p,const uint8_t *ram)
+{
+    return Word(ram,0x644)==0x2A && Word(ram,0x692)==256 &&
+        Word(ram,0x696)==1280 && Word(ram,0x694)==512 &&
+        Word(ram,0x698)==512 && p->windowsel==0x030033 &&
+        p->cgwsel==0x80 && !p->screenEnabled[1];
+}
+
+static bool KnownWorldWindow(const Ppu *p,const uint8_t *ram)
+{
+    return DaoWorldWindow(p,ram) || DreamWorldWindow(p,ram);
+}
+
 static void RebaseWindow1(Ppu *p,int offset)
 {
     int left=p->window1left+offset,right=p->window1right+offset;
@@ -122,10 +135,15 @@ static bool Mode7PlaneLayout(const Ppu *p,unsigned scene)
      * subscreen. The same texel feeds both inputs of the real color math. */
     bool crash_color_math=scene==0x59 && p->screenEnabled[1]==1 &&
         p->cgwsel==0x82 && p->cgadsub==1 && !p->screenWindowed[1];
+    /* The prologue composes text and figures over its Mode 7 plane.
+     * Extend only the captured BG1 plane under this stock color layout. */
+    bool prologue_color_math=(scene==0x8C || scene==0x8D) &&
+        p->screenEnabled[0]==0x11 && p->screenEnabled[1]==1 &&
+        p->cgwsel==0x82 && p->cgadsub==0x10 && !p->windowsel;
     return (p->bgmode&7)==7 && !PPU_m7extBg(p) && !p->frameInterlace &&
         !PPU_objInterlace(p) && !(p->mosaic>>4) &&
         (p->screenEnabled[0]&1) && !(p->screenEnabled[0]&~21u) &&
-        (!p->screenEnabled[1] || crash_color_math) && !ActiveWorldWindow(p) &&
+        (!p->screenEnabled[1] || crash_color_math || prologue_color_math) && !ActiveWorldWindow(p) &&
         !(p->windowsel&0xA00000u);
 }
 static int WorldMapModeSplit(void)
@@ -267,7 +285,7 @@ void IogWorldBeginRaster(void)
     if(source.gate!=kIogSceneViewReady || source.scene!=Word(s.active_ram,0x644)) return;
     if(PPU_objInterlace(g_ppu) || g_ppu->frameInterlace ||
        (g_ppu->mosaic>>4)!=0 ||
-       (ActiveWorldWindow(g_ppu) && !DaoWorldWindow(g_ppu,g_snes->ram))) return;
+       (ActiveWorldWindow(g_ppu) && !KnownWorldWindow(g_ppu,g_snes->ram))) return;
     s.base=*g_ppu;
     s.absent_secondary=source.absent_secondary;
     s.valid=true; s.reason="awaiting_picture";
@@ -283,7 +301,7 @@ void IogWorldCaptureLine(int line)
     bool mode7_line=s.mode7 && (!s.mode7_split || line<s.mode7_split);
     if((mode7_line?!Mode7PlaneLayout(g_ppu,Word(g_snes->ram,0x644)):(g_ppu->bgmode&7)!=1) ||
        g_ppu->frameInterlace || (g_ppu->mosaic>>4)!=0 ||
-       (ActiveWorldWindow(g_ppu) && !DaoWorldWindow(g_ppu,g_snes->ram))) {
+       (ActiveWorldWindow(g_ppu) && !KnownWorldWindow(g_ppu,g_snes->ram))) {
         s.valid=false; s.reason="unsupported_line_effect"; return;
     }
     PictureEpoch *prior=s.epoch_count?&s.epochs[s.epoch_count-1]:NULL;
@@ -635,7 +653,7 @@ typedef struct PictureBounds { int left,top,right,bottom; } PictureBounds;
 
 static bool SourcePlateScene(unsigned scene)
 {
-    return (scene>=0xE4 && scene<=0xE8) || scene==0xF0;
+    return scene==0x2A || (scene>=0xE4 && scene<=0xE8) || scene==0xF0;
 }
 
 static bool BoundedRoomScene(unsigned scene)
@@ -676,7 +694,7 @@ static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
     if(scene==0xDA) expected_width=1536;
     if(scene==0xE4) {expected_width=512;expected_height=512;}
     if(scene==0x03 || scene==0x04 || scene==0xE6 || scene==0xE8) expected_height=512;
-    if(scene==0x06) expected_height=1280;
+    if(scene==0x06 || scene==0x2A) expected_height=1280;
     if(!BoundedRoomScene(scene) || width!=expected_width || height!=expected_height) return false;
     if(SourcePlateScene(scene)) {
         /* The Babel rooftop's blue vortex is cutscene art in its BG2
@@ -687,6 +705,10 @@ static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
         /* The final school scene has a single composed street view and
          * moving cutscene actors. Its BG3 dialogue can use the host frame. */
         if(scene==0xF0 && (Word(ram,0x694)!=256 || Word(ram,0x698)!=256))
+            return false;
+        /* The dream stores separate rooms in one tall map. Preserve its
+         * original aperture and never expose adjacent floors. */
+        if(scene==0x2A && (Word(ram,0x694)!=512 || Word(ram,0x698)!=512))
             return false;
         *out=(PictureBounds){camera_x,camera_y,camera_x+256,camera_y+224};
         return true;
@@ -962,6 +984,9 @@ static bool RenderWorld(void)
     bool flat_horizon_tail=horizon&&HorizonFlatTail(first,p);
     bool raster_anchored=RasterAnchoredBackdrop(scene,first->ram,
         tracked_effect?&effect_camera:NULL);
+    bool wall_field_phase=wall_bands && (scene==0x8A || scene==0x8B);
+    /* The captured backdrop can be from the next camera publication. */
+    int wall_source_camera=wall_field_phase?wall_model.source_camera_x:camera_x;
     /* On the underside of Sky Garden, the real BG2 ring wraps as the
      * clouds drift. Only that map repeats. The walkable floors stay finite. */
     bool underside_backdrop=(scene==0x4e || scene==0x50 || scene==0x52 || scene==0x54) &&
@@ -1055,7 +1080,8 @@ static bool RenderWorld(void)
             int width=Clamp(s.width-start,0,Chunk);
             unsigned dirty[64],dirty_count=0;
             memcpy(p,line->registers,PPU_SAVESTATE_REGS_SIZE);
-            if(DaoWorldWindow(p,e->ram)) RebaseWindow1(p,left-start);
+            if(KnownWorldWindow(p,e->ram))
+                RebaseWindow1(p,left-start);
             uint16_t source_hscroll[2]={p->hScroll[0],p->hScroll[1]};
             uint16_t source_vscroll[2]={p->vScroll[0],p->vScroll[1]};
             if(s.copy_reference) memcpy(p->vram,e->vram,sizeof(p->vram));
@@ -1100,8 +1126,11 @@ static bool RenderWorld(void)
                      * each background world height. The expanded top/bottom
                      * must select their own band, not clamp to a native row. */
                     uint16_t phase;
-                    if(IogRasterParallaxSample(&wall_model,wy+1,s.view.world_x,&phase))
-                        wx=(int)phase+start;
+                    /* Keep the lair and approach aligned with their captured
+                     * field as the host camera pulls back from a doorway. */
+                    if(IogRasterParallaxSample(&wall_model,wy+1,
+                            wall_field_phase?wall_source_camera:s.view.world_x,&phase))
+                        wx=(int)phase+start-(wall_field_phase?left:0);
                 }
                 if(logical==1&&(freejia_wave||mansion_fog||star_plane)&&(native_y<0 || native_y>=224)) {
                     int phase=(native_y%RingWavePeriod+RingWavePeriod)%RingWavePeriod+1;
@@ -1160,7 +1189,7 @@ static bool RenderWorld(void)
                     int source_x=camx;
                     if(finite_wall) {
                         uint16_t phase;
-                        if(IogRasterParallaxSample(&wall_model,wy+1,camera_x,&phase))source_x=phase;
+                        if(IogRasterParallaxSample(&wall_model,wy+1,wall_source_camera,&phase))source_x=phase;
                     }
                     if(source_y>=0&&source_y<224 && x+8>source_x && x<source_x+256) {
                         unsigned tx=((unsigned)source_hscroll[physical]+(x-source_x))>>3;
