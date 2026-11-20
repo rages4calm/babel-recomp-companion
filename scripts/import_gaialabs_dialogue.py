@@ -23,6 +23,9 @@ GLYPHS = frozenset(" 0123456789.,\":ABCDEFGHIJKLMNOPQRSTUVWXYZ!/*-()"
 TYPOGRAPHY = str.maketrans({"…": "...", "ˮ": '"'})
 COSMETICS = {"TPL": 0x24, "BOR": 0xD, "DLY": 0xFF, "SFX": 0xFF}
 STOCK_SPEAKER_TEMPLATES = frozenset(range(8)) | frozenset(range(0x12, 0x16))
+RETURN_WIDTH = 24
+EXTENDED_SOURCE_WIDTH = 26
+MAX_PAGE_ROWS = 7
 
 
 def read_source(repo, path):
@@ -166,8 +169,8 @@ def convert(source, names):
     return "[FIN]".join(rendered) + "[END]"
 
 
-def convert_return(source, names):
-    """Keep fragment and choice rows intact before checking the stock RET."""
+def convert_return(source, names, *, extended=False):
+    """Keep authored rows intact for stock window and terminal validation."""
     parts = []
     for part in re.split(r"(\[[^\]]*\])", source.translate(TYPOGRAPHY)):
         if not part:
@@ -184,10 +187,20 @@ def convert_return(source, names):
             continue
         if part == "[RET]" and source.endswith(part):
             continue
+        if extended and part == "[END]" and source.endswith(part) and source.count(part) == 1:
+            continue
+        if extended and part == "[WAI]":
+            parts.append(part)
+            continue
         if match := TAG.fullmatch(part):
             command, arg = match.groups()
             value = int(arg, 16) if arg is not None else -1
             if command in COSMETICS and 0 <= value <= COSMETICS[command]:
+                if extended and command == "TPL" and value in STOCK_SPEAKER_TEMPLATES:
+                    parts.append(f"[TPL:{value:02X}]")
+                continue
+            if extended and command == "PAL" and value in range(0, 0x20, 4):
+                parts.append(f"[PAL:{value:02X}]")
                 continue
             if command == "PAL" and value in (0, 4):
                 continue
@@ -195,6 +208,9 @@ def convert_return(source, names):
                 if all(ch in GLYPHS for ch in names[value]):
                     parts.append(names[value])
                     continue
+            if extended and command == "PAU" and 0 < value <= 0xFF:
+                parts.append(f"[PAU:{value:02X}]")
+                continue
         if match := re.fullmatch(r"\[BCD:([1-5]),([0-9A-F]{1,4})\]", part):
             digits, address = match.groups()
             parts.append(f"[BCD:{digits},{int(address, 16):04X}]")
@@ -204,15 +220,24 @@ def convert_return(source, names):
         raise ValueError("Invalid return fragment")
     candidate = "".join(parts)
     pages = candidate.split("[FIN]")
-    if not any(any(ch in GLYPHS - {" "} for ch in p) for p in pages):
+    if extended:
+        if not (re.sub(r"\[[^\]]+\]", "", candidate).strip() or "[BCD:" in candidate):
+            raise ValueError("Empty return fragment")
+    elif not any(any(ch in GLYPHS - {" "} for ch in p) for p in pages):
         raise ValueError("Empty return fragment")
+    width = EXTENDED_SOURCE_WIDTH if extended else RETURN_WIDTH
     for page in pages:
         lines = page.split("[N]")
-        if len(lines) > 7 or any(
-            len(re.sub(r"\[BCD:([1-5]),[0-9A-F]{4}\]", lambda m: "0" * int(m[1]), row)) > 24
-            for row in lines
-        ):
+        visible_lines = (re.sub(
+            r"\[BCD:([1-5]),[0-9A-F]{4}\]", lambda m: "0" * int(m[1]), row
+        ) for row in lines)
+        if extended:
+            visible_lines = (re.sub(r"\[[^\]]+\]", "", row) for row in visible_lines)
+        if len(lines) > MAX_PAGE_ROWS or any(len(row) > width for row in visible_lines):
             raise ValueError("Return fragment exceeds stock bounds")
+    if extended:
+        terminal = "[END]" if source.endswith("[END]") else "[RET]"
+        return "[EXT]" + candidate + terminal
     return candidate + "[RET]"
 
 
@@ -249,8 +274,13 @@ def main():
             try:
                 converted = convert(content, names)
             except ValueError as error:
-                excluded[offset] = str(error)
-                continue
+                # Leave existing rows byte-identical. The runtime checks the
+                # new pool after allocating the established dialogue addresses.
+                try:
+                    converted = convert_return(content, names, extended=True)
+                except ValueError:
+                    excluded[offset] = str(error)
+                    continue
             rows.append((offset, labels[offset], converted))
     if not rows:
         raise ValueError("No supported dialogue rows")

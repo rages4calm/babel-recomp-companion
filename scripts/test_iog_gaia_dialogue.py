@@ -127,6 +127,68 @@ static void CheckReturningFragments(void)
     RejectMalformed("A[BCD:2,AB0]B[RET]");
 }
 
+static void CheckSupplement(const uint8_t *data, size_t size, const char *text,
+                            int accepted, int final, int waits)
+{
+    Rom stock = {.rom = data, .size = size};
+    Toks parsed = {0}, rendered = {0};
+    CHECK(GaiaDialogue(text, &parsed));
+    int actual = GaiaStockWindow(&stock, 0, &rendered, &parsed, kGaiaExtended);
+    if (actual != accepted)
+        fprintf(stderr, "unexpected supplemental result for %s\n", text);
+    CHECK(actual == accepted);
+    if (accepted) {
+        CHECK(rendered.n && rendered.t[rendered.n - 1].code == final);
+        CHECK(CountToken(&rendered, T_CMD, CMD_FIN, 0) == waits);
+    }
+    free(parsed.t);
+    free(rendered.t);
+}
+
+static void CheckExtendedControls(void)
+{
+    const uint8_t timed[] = {0xc9, 0x1e, 0xc2, 9, 0xc2, 1,
+        0x40, 0xd0, 0x41, 0xc9, 0x28, 0x42, 0xc3, 4, CMD_END};
+    const uint8_t number[] = {0xd3, 0x40, 0xc6, 2, 0, 0xb0, 0xa, 0x41, CMD_END};
+    const uint8_t large[] = {0xc1, 2, 4, 0xc7, 14, 2, 0x40, CMD_RET};
+    const uint8_t small[] = {0xc2, 9, 0x40, CMD_RET};
+    CheckSupplement(timed, sizeof(timed),
+        "[EXT][PAU:1E][TPL:01]First[WAI]second[PAU:28]third[PAL:04][END]",
+        1, CMD_END, 0);
+    CheckSupplement(timed, sizeof(timed),
+        "[EXT][PAU:1E][TPL:01]First[WAI]second[PAU:29]third[PAL:04][END]",
+        0, 0, 0);
+    CheckSupplement(timed, sizeof(timed),
+        "[EXT][PAU:1E][TPL:00]First[WAI]second[PAU:28]third[PAL:04][END]",
+        0, 0, 0);
+    CheckSupplement(timed, sizeof(timed),
+        "[EXT][PAU:1E][TPL:01]First second[PAU:28]third[PAL:04][END]",
+        0, 0, 0);
+    CheckSupplement(timed, sizeof(timed),
+        "[EXT][PAU:1E][TPL:01]First[WAI]second[PAU:28]third[PAL:00][END]",
+        0, 0, 0);
+    CheckSupplement(number, sizeof(number), "[EXT]A[BCD:2,0AB0]B[END]", 1, CMD_END, 0);
+    CheckSupplement(number, sizeof(number), "[EXT]A[BCD:2,0AB1]B[END]", 0, 0, 0);
+    CheckSupplement(large, sizeof(large), "[EXT]ABCDEFGHIJKLMNOPQRSTUVWXYZ[RET]", 1, CMD_RET, 0);
+    CheckSupplement(small, sizeof(small), "[EXT]ABCDEFGHIJKLMNOPQRSTUVWXYZ[RET]", 0, 0, 0);
+    RejectMalformed("[EXT]A[PAL:02]B[END]");
+    RejectMalformed("[EXT]A[PAU:00]B[END]");
+    RejectMalformed("[EXT]A[BCD:6,0AB0]B[END]");
+}
+
+static void CheckProse(void)
+{
+    const uint8_t inherited[] = {0x40, 0x41, 0x42, CMD_N, 0x43, 0x44, 0x45, CMD_END};
+    const uint8_t open[] = {0xd3, 0x40, CMD_N, 0x41, CMD_FIN, CMD_RET};
+    const uint8_t choice[] = {0xd3, 0x40, CMD_N, 0xac, 0x41, CMD_N, 0xac, 0x42, CMD_RET};
+    CheckSupplement(inherited, sizeof(inherited), "AB[FIN]CD[END]", 1, CMD_END, 0);
+    CheckSupplement(inherited, sizeof(inherited), "ABCD[FIN]EF[END]", 0, 0, 0);
+    CheckSupplement(open, sizeof(open), "A short sentence fits.[FIN][RET]", 1, CMD_RET, 1);
+    CheckSupplement(open, sizeof(open), "Keep the final wait.[RET]", 0, 0, 0);
+    CheckSupplement(choice, sizeof(choice), "A short prompt?[N] Yes[N] No[RET]", 1, CMD_RET, 0);
+    CheckSupplement(choice, sizeof(choice), "A short prompt?[FIN] Yes[N] No[RET]", 0, 0, 0);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -158,6 +220,8 @@ int main(void)
     CheckStockSound();
     CheckPageControls();
     CheckReturningFragments();
+    CheckExtendedControls();
+    CheckProse();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }

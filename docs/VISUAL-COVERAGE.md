@@ -667,6 +667,30 @@ the prior ending receipt. Separate controls rechecked the Dark Mummy Queen,
 Ship Dream, Sky Garden flight and stock map route into South Cape at 1.5×.
 These runs started from checkpoints.
 
+## Prison letter, Crystal Ring, Diamond Mine and South Cape house
+
+Original v34 keeps four previously centered intervals at square-pixel 1.5×.
+The prison letter scene stays wide for 41 recovered frames, the Crystal Ring
+fanfare for 35, and the Diamond Mine prisoner conversation for 49.
+These scripts upload objects outside the ordinary actor capture. The
+renderer retains the live PPU actors in the original field and extends
+the verified room scenery after checking the current layout and camera
+against the preceding paired picture. South Cape's ground-floor reveal
+keeps its original mosaic and framing for all 75 frames. Other unverified
+actor and raster layouts retain fallback.
+
+The four stock-text A/B replays preserved the original visible field
+outside the scaled HUD and matched 140 checkpoint payloads across the
+pairings. The translated final build also reached South Cape from a fresh
+boot without a checkpoint or game-state edits. Its classroom-to-town
+transition, final 598×336 picture and sampled guest state matched v33.
+Separate linked replays checked Mu, the Dark Space return to the Aqueduct,
+the Spirit Guide's route into Dao, and Neil's Cottage.
+
+Fresh saves produced by the repaired scenes continued through the prison
+gate into the Aqueduct and through the Crystal Ring equip sequence and a
+Babel middle-floor door round trip.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

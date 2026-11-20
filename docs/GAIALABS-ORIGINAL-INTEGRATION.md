@@ -6,22 +6,31 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **793 of 1,138** chapter-dialogue replacements in the
+The import now covers **821 of 1,138** chapter-dialogue replacements in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer produces 966 candidates. Batch 030 adds 36 replacements,
-including the Dark Space save prompt, item-use text, and story choices.
+The importer produces 1,053 candidates. Batch 031 adds 28 replacements,
+including returning dialogue, Adrift day titles, part of the Edward's
+Castle dialogue and the Dao Snake Panic score response. New formatted
+rows can retain verified stock pause, input-wait, palette and live
+number commands with their original operands. Plain prose can be wrapped
+within verified stock window bounds while retaining script controls.
 Returning strings keep the stock choice row count, indentation, and return
-instruction. The game still runs its own choice branches. Inherited dialogue
-boxes are limited to the original text's dimensions, and reflow keeps the
-same page boundaries when retaining stock controls. The 757 previous
-replacements keep their exact encoded bytes and virtual addresses.
+instruction for interactive choices. The game still runs its own choice
+branches. The 793 previous replacements keep their exact encoded bytes
+and virtual addresses. A v33 save made with the translated Dark Space
+prompt open resumed on v34 with the same picture and saved game state.
+Paired controller replays also checked the expanded Dark Space healing
+dialogue and walked back to the Aqueduct. From the same assisted 1 HP
+checkpoint, both language modes healed Will to full and produced the same
+post-exit picture and sampled game state.
 
-The importer excludes 172 declarations. Of those, 21 have no unique
-marker-free stock label and 47 returning fragments exceed stock bounds.
-The other 104 involve unsupported syntax, commands, or glyphs. The runtime
-leaves 173 of the generated candidates in stock form when their layouts or
-commands cannot be preserved. Full menu and sprite lettering, relocated
-pointer tables, and custom-font coverage remain open.
+The importer excludes 85 declarations, including 21 with interior markers
+that require their own pointer treatment and 28 with unresolved pointer or
+script logic. The runtime leaves 232 candidates in stock form. Their
+remaining constraints include page and row limits, speaker boundaries,
+unsupported stock commands and inconsistent timed controls. Full menu and
+sprite lettering, relocated pointer tables, and custom-font coverage remain
+open.
 
 The text uses the Original localization overlay. Start with a local Git
 checkout containing the pinned revision, then generate a pack into the
