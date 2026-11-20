@@ -22,6 +22,7 @@ typedef struct IogSceneViewSource {
     uint16_t scene, form, camera_x, camera_y, world_width, world_height;
     uint32_t layout_signature;
     IogSceneViewGate gate;
+    bool absent_secondary;
 } IogSceneViewSource;
 
 typedef struct IogSceneViewGeometry {
@@ -53,6 +54,8 @@ bool IogSceneViewReadSource(const uint8_t *ram, size_t ram_size,
 bool IogSceneViewReadWorldSource(const uint8_t *ram, size_t ram_size,
                                const struct Ppu *ppu, bool randomizer,
                                IogSceneViewSource *source);
+/* True only while the stock single-background Pyramid layout is intact. */
+bool IogSceneViewAbsentPyramidSecondary(const uint8_t *ram, const struct Ppu *ppu);
 /* False leaves the caller's legacy geometry untouched. An enabled preview
  * contains unsupported rooms/menus in their authentic256-column field. */
 bool IogSceneViewPrepare(IogSceneView *view, const IogSceneViewSource *source,

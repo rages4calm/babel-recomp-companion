@@ -1,6 +1,6 @@
 # Illusion of Gaia Companion — handoff
 
-Updated November 19, 2026. Development version `0.1.0-dev.1`.
+Updated November 20, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
 Owner priority changed November 13: fix presentation across EVERY zone before
@@ -33,12 +33,17 @@ including Sky Garden backdrop alignment, Palace and Mu water effects,
 active Viper and Vampire phases, and Angel Village and Watermia doors.
 Its exact receipts and inspected captures are in
 `.local/batch-001/visual-fullgame-013`.
+Batch 014 adds 52 [Euro through Pyramid visual admissions](docs/VISUAL-COVERAGE.md#euro-through-pyramid)
+and tests Sand Fanger's victory and statue ceremony. It also handles Dao's
+heat window, Native Village's vertical heat effect and the Pyramid's
+one-background layouts. See the visual coverage notes for open issues in
+the tested rooms. Private receipts are in `.local/batch-001/visual-fullgame-014`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 013's
-`babel-originalv14.exe` and batch 011's dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 014's
+`babel-originalv16.exe` and batch 011's dialogue pack, and
 continues the isolated test profile's save. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.
@@ -60,7 +65,8 @@ Both visible classroom exits were verified with controller input at 1.5×.
 - Great Wall rooms 82/83/87/88/8A/8B use calibrated scrolling at widescreen/1.5×.
   The room 82 missing scenery and room 8A band phase are corrected. Neighbor
   exits, both movement axes, GPU views and same-scale transition fallback were
-  checked. Boss phases and later branches still need coverage.
+  checked. Batch 014 covers the Sand Fanger fight and statue ceremony from
+  separate assisted checkpoints. Other phases and branches remain open.
 - GaiaLabs world travel uses a calibrated Mode 7 plane around the exact
   received field. Two GPU views and walking/turning were checked. The local
   scenery map remains ours. Select opens controller bindings in both builds.
