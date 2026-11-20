@@ -11,8 +11,8 @@ typedef struct IogMapUiMetadata {
   bool valid, hidden, gamepad;
   /* A known user-facing floor number, or0 to omit an unknown floor. */
   unsigned floor_number;
-  /* The host supplied exit markers for explored cells. */
-  bool show_exit_legend;
+  /* Nonzero alpha indicates that the corresponding marker is available. */
+  IogMapViewColor exit_legend, chest_legend;
 } IogMapUiMetadata;
 typedef struct IogMapUi {
   uint32_t magic;

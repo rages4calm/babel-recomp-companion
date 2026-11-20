@@ -91,7 +91,20 @@ static void controls_pane(void){
  C(!IogMapUiDrawControls(dst+1,n-1,pitch,w,h,bindings,0,true,true));
  C(!memcmp(old,dst,n));free(old);free(storage);
 }
-int main(int argc,char**argv){C(argc==3);fixture();actions();pointer_actions();controls_pane();dimensions(598,336,true,argv[1]);dimensions(598,336,false,argv[2]);dimensions(344,224,true,NULL);dimensions(784,336,true,NULL);dimensions(256,160,true,NULL);dimensions(2048,512,true,NULL);meta.gamepad=true;dimensions(344,224,true,NULL);fog_independence();printf("%u map UI assertions passed\n",checks);return 0;}
+static void marker_legends(void){
+ unsigned w=598,h=336;size_t bytes=w*h*4;
+ unsigned char *dst=calloc(1,bytes);C(dst!=NULL);
+ IogMapUi u;IogMapUiInit(&u);u.full=true;
+ IogMapUiMetadata both={.valid=true,.exit_legend={105,217,211,255},.chest_legend={255,190,96,255}};
+ C(IogMapUiDraw(&u,dst,bytes,w*4,w,h,&src,&both));
+ C(!memcmp(dst+(31*w+125)*4,(uint8_t[]){211,217,105,255},4));
+ C(!memcmp(dst+(31*w+193)*4,(uint8_t[]){96,190,255,255},4));
+ both.exit_legend.a=0;
+ C(IogMapUiDraw(&u,dst,bytes,w*4,w,h,&src,&both));
+ C(!memcmp(dst+(31*w+125)*4,(uint8_t[]){96,190,255,255},4));
+ free(dst);
+}
+int main(int argc,char**argv){C(argc==3);fixture();actions();pointer_actions();controls_pane();marker_legends();dimensions(598,336,true,argv[1]);dimensions(598,336,false,argv[2]);dimensions(344,224,true,NULL);dimensions(784,336,true,NULL);dimensions(256,160,true,NULL);dimensions(2048,512,true,NULL);meta.gamepad=true;dimensions(344,224,true,NULL);fog_independence();printf("%u map UI assertions passed\n",checks);return 0;}
 '''
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--compiler',default='cc');p.add_argument('--out',type=Path,default=ROOT/'.local/batch-001/visual-fullgame-002/map-ui-tests');a=p.parse_args();out=a.out.resolve();assert out.is_relative_to((ROOT/'.local').resolve());out.mkdir(parents=True,exist_ok=True);c=out/'ui.c';c.write_text(HARNESS);exe=out/'ui.exe'

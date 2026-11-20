@@ -80,10 +80,16 @@ evidence; native UI graphics alone do not establish native game logic.
 The Companion Map page and radar now use actual observed game frames and a
 portable persistent discovery journal. Mouse dragging is manually confirmed in
 the live game; keyboard/gamepad modal input and restart persistence have runtime
-receipts. This first version shows the player, discovered scenery and a clean
-collision radar. Chest/enemy/exit filters and full-game source bindings remain
-unimplemented, so no controls promise those features yet. The wider experience
-above remains the direction rather than a completed checklist.
+receipts. The map shows the player, discovered scenery, exits and unopened
+chests. The compact radar keeps its collision layout and player marker.
+Enemy and Dark Space markers, visibility filters, and broader source bindings
+remain open.
+
+The full map checks the live four-tile chest artwork and the game's opened
+flag before drawing a marker. Any visible marker must occupy a revealed chest
+tile. In the Aqueduct controller test, the marker was absent before discovery,
+appeared near the chest and disappeared after the player opened it and earned
+the item. The Diamond Mine capture exercises a chest on a different map page.
 
 ## Controller and local-map routing — November 19
 

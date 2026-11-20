@@ -87,8 +87,38 @@ static void doorway_markers(void){
  ram[0xd4]^=1;rom[0x18440]=0;
  C(StockDoorwayMarkers(ram,&cart,&map,markers)==0);
 }
+static void chest_markers(void){
+ static uint8_t rom[2097152],ram[131072],visibility[16*16];
+ Cart cart={0};cart.rom=rom;cart.romImageSize=sizeof(rom);
+ IogMapDiscoveryIdentity identity={0};
+ IogMapDiscovery map;
+ IogMapViewMarker markers[StockChestLimit];
+ C(IogMapDiscoveryInit(&map,16,16,&identity));
+ ram[0x644]=0x0E;ram[0x646]=0x1C;
+ ram[0x693]=2;ram[0x697]=2;
+ ram[0x69f]=0xA0;ram[0x6d7]=1;ram[0x6d9]=1;
+ rom[0x1adc4]=0xa7;rom[0x1adc5]=0xaf;
+ rom[0x1afa7]=17;rom[0x1afa8]=20;rom[0x1afa9]=6;rom[0x1afaa]=0x81;
+ rom[0x1afab]=0xff;
+ ram[0xA331]=0xfa;ram[0xA332]=0xfb;
+ ram[0xA341]=0xf8;ram[0xA342]=0xf9;
+ C(StockChestMarkers(ram,&cart,&map,markers)==0);
+ visibility[3*16+2]=1;
+ C(IogMapDiscoveryReveal(&map,2,3,1,visibility,sizeof(visibility),16,NULL));
+ C(StockChestMarkers(ram,&cart,&map,markers)==1);
+ C(markers[0].cell_x==2&&markers[0].cell_y==3&&markers[0].color.r==255);
+ ram[0xA40]=2;
+ C(StockChestMarkers(ram,&cart,&map,markers)==0);
+ ram[0xA40]=0;ram[0xA341]=0xfc;
+ C(StockChestMarkers(ram,&cart,&map,markers)==0);
+ ram[0xA341]=0xf8;rom[0x1afab]=0x80;
+ C(StockChestMarkers(ram,&cart,&map,markers)==0);
+ rom[0x1afab]=0xff;rom[0x1adc5]=0xae;
+ C(StockChestMarkers(ram,&cart,&map,markers)==0);
+}
 int main(void){
  doorway_markers();
+ chest_markers();
  g_cpu.master_cycles=123456;
  for(int a=0;a<IOG_MAP_CONTROL_COUNT;a++)C(IogMapHostControlGet(a)==control_defaults[a]);
  C(gamepad&&IogMapHostRadarEnabled());unique();
