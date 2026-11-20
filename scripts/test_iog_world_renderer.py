@@ -831,9 +831,32 @@ static void pyramid_puzzle_storage_tail(void){
  e->ram[0x6ee]=0x85;
  CHECK(!RoomPictureBounds(e,0,0,&bounds));
 }
+static void angel_entrance_storage_tail(void){
+ const struct {unsigned width,height;bool matching;} layouts[]={
+  {1280,1024,true},{512,512,true},{512,256,true},
+  {1280,512,false},{512,1024,false}
+ };
+ for(unsigned i=0;i<sizeof(layouts)/sizeof(layouts[0]);i++){
+  bool matching=layouts[i].matching;
+  fixture();word(0x644,0x69);word(0x692,768);word(0x696,256);
+  word(0x694,layouts[i].width);word(0x698,layouts[i].height);
+  word(0x6D6,0);word(0x6D8,0);word(0x6DA,768);word(0x6DE,256);
+  word(0x6EE,5);word(0x68A,512);word(0x68E,0);
+  g_ppu->hScroll[0]=512;g_ppu->vScroll[0]=0;
+  publication();IogWorldBeginRaster();
+  for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+  IogWorldEndRaster(0,225,0);
+  CHECK(s.complete&&s.view.native_y==40&&s.view.native_x==342);
+  CHECK(AngelEntranceHasStorageTail(&s.epochs[0])==matching);
+  CHECK(s.output[263*598+s.view.native_x]&&s.output[263*598]);
+  for(int y=264;y<296;y++)for(int x=0;x<598;x++)
+   CHECK(!!s.output[y*598+x]==!matching);
+ }
+}
 static void generic_authored_window(void){
  bounded_rooftop_and_hieroglyph();
  pyramid_puzzle_storage_tail();
+ angel_entrance_storage_tail();
  fixture();word(0x644,0x0D);word(0x692,1024);word(0x696,1024);
  word(0x694,1024);word(0x698,1024);
  word(0x6D6,256);word(0x6D8,256);word(0x6DA,768);word(0x6DE,512);

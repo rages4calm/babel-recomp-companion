@@ -82,9 +82,9 @@ walked the lower chamber and returned through its original door.
 The full 1080p square-pixel 1.5× pictures were inspected with the original
 cave layers, cable, actors and Companion radar. The rescue chamber is a
 finite 256-pixel room and uses black space beyond its authored geometry.
-These checks cover the tested routes and elevator phases. Collecting the
-two keys and completing the Memory Melody rescue sequence remain separate
-quest coverage.
+These checks cover the tested routes and elevator phases. The later
+[connected quest tests](#angel-village-and-linked-story-routes) also cover
+both keys and the Memory Melody.
 
 ## Nazca through Watermia
 
@@ -324,7 +324,8 @@ dialogue and reached the second camp phase through the ordinary story
 conditions. A separate test reached that phase with the dialogue open and
 restored it in a new process. The v23 build loads the configured translation
 before the restored dialogue reads from it. The replay closes the message
-and stays in Seaside Tunnel. The following Angel Village arrival remains open.
+and stays in Seaside Tunnel. The following batch verifies the Angel Village
+arrival through the rest of that conversation.
 The widened combat capture's 13-pixel difference on the last stock row comes
 from the reconstructed actor parts starting at that edge. The widened renderer
 draws those parts into the expanded picture. The stock OAM publication culls
@@ -337,6 +338,35 @@ credits advanced on their original timer. The first segment used the previous
 dialogue pack with this binary, and the later segments used the current pack.
 The replays use an SDL virtual controller. Start-to-credits campaign coverage
 and physical controller testing remain open.
+
+## Angel Village and linked story routes
+
+V25 clips the green storage rows below Angel Village's southern wall for
+three witnessed stock layouts. Before-and-after frames cover entering from
+Seaside Tunnel and the world map, returning from the annex, and walking
+through the village. The original picture, expanded side scenery, HUD and
+radar matched. The neighboring cave frames matched across the full output.
+
+- **Angel Village and Watermia.** The translated Seaside Tunnel checkpoint
+  now proceeds through the actual Angel Village arrival and cave doors.
+  Separate assisted starts verify Ishtar's final answer and Kara's rescue.
+  The linked party reunion and Neil dialogue lead to the original scripted
+  trip, Watermia's opening narration and Luke's house. Controller routes
+  also exercised free walking between the two world-map destinations.
+- **Diamond Mine.** Stock interactions awarded both keys in the Morgue and
+  Nest on v23. Preparations used a staged room arrival, nearby player
+  positions and Freedan. On v25, the foyer script consumed both items,
+  opened the lock and the controller passed into the rescue room. After a
+  staged position near Sam, controller attacks cut his chain, dialogue
+  awarded the Memory Melody and Will walked back into the foyer with it.
+- **Pyramid to Babel.** An earned Mummy Queen win checkpoint carried into
+  the statue ceremony, Kara's dialogue and Dao. The fixture supplied six
+  earlier hieroglyph flags and the earlier Jackal event. A linked controller
+  run took Neil's Mode 7 flight into Babel and reached its lower corridor.
+
+These are bounded, checkpoint-linked replays with a virtual controller and
+a 598×336 square-pixel 1.5× presentation. The stock world map fallback passed
+on the same production build.
 
 ## Bounded entry survey
 
