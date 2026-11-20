@@ -349,12 +349,16 @@ static void CheckInterfaceText(void)
                           {.type = T_GLYPH}, {.type = T_GLYPH}};
     Toks menu = {.t = stock_tokens, .n = 5};
     uint8_t encoded[128];
-    CHECK(GaiaMenuText(&menu, "AB[DBL]a?", encoded) == 6);
+    CHECK(GaiaMenuText(&menu, "AB[DBL]a?", encoded, 0) == 6);
     const uint8_t expected[] = {0x41, 0x42, 0x0d, 0x61, 0x3f, 0};
     CHECK(!memcmp(encoded, expected, sizeof(expected)));
-    CHECK(!GaiaMenuText(&menu, "ABC[DBL]a?", encoded));
-    CHECK(!GaiaMenuText(&menu, "AB[N]a?", encoded));
-    CHECK(!GaiaMenuText(&menu, "AB[DBL][TBL]", encoded));
+    CHECK(!GaiaMenuText(&menu, "ABC[DBL]a?", encoded, 0));
+    CHECK(!GaiaMenuText(&menu, "AB[N]a?", encoded, 0));
+    CHECK(!GaiaMenuText(&menu, "AB[DBL][TBL]", encoded, 0));
+    --menu.n;
+    CHECK(!GaiaMenuText(&menu, "A[DBL]ab", encoded, 0));
+    CHECK(GaiaMenuText(&menu, "A[DBL]ab", encoded, 1) == 5);
+    CHECK(!GaiaMenuText(&menu, "A[DBL]abc", encoded, 1));
 
     const uint8_t rom[] = {0, 1, 8, 0, 2, 10, 0, 0, 0, CMD_RET, 1, CMD_RET};
     const Rom stock = {.rom = rom, .size = sizeof(rom)};
@@ -382,6 +386,29 @@ static void CheckInterfaceText(void)
     CHECK(GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "Long title"));
     CHECK(pack->npatches == 1 && pack->nbanks == 1 && pack->patches[0].len == 7);
     CHECK(pack->patches[0].data[4] == 0xcc && pack->patches[0].data[5] == 7);
+    IogTextFreePack(pack);
+}
+
+static void CheckPairedEntry(void)
+{
+    uint8_t rom[] = {0, 0xd3, 0x40, 0x40, 0x40, 0x40, CMD_FIN,
+                     0xd3, 0x40, 0x40, 0x40, 0x40, CMD_END};
+    const Rom stock = {.rom = rom, .size = sizeof(rom)};
+    Label label = {.off = 1, .marker = 6, .has_marker = 1};
+    const Structure structure = {.l = &label, .nl = 1};
+    IogPack *pack = calloc(1, sizeof(*pack));
+    unsigned used = kIogVirtualBankSize;
+    CHECK(pack != NULL);
+    char paired[] = "[EXT]First page[FIN][RET]|[EXT]Shared second page[END]";
+    char refused[] = "[EXT]First page[FIN][RET]|[EXT]Shared second page[END]";
+    rom[6] = CMD_N;
+    CHECK(!GaiaPairedEntry(&stock, &structure, 0, pack, &used, refused));
+    CHECK(pack->npatches == 0);
+    rom[6] = CMD_FIN;
+    CHECK(GaiaPairedEntry(&stock, &structure, 0, pack, &used, paired));
+    CHECK(pack->npatches == 2 && pack->patches[0].offset == 1 && pack->patches[1].offset == 7);
+    unsigned tail = pack->patches[1].data[1];
+    CHECK(tail > 0 && pack->banks[0][tail - 1] == CMD_FIN && pack->banks[0][tail] == 0xd3);
     IogTextFreePack(pack);
 }
 
@@ -424,6 +451,7 @@ int main(void)
     CheckSharedBoxes();
     CheckInheritedChoices();
     CheckInterfaceText();
+    CheckPairedEntry();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }

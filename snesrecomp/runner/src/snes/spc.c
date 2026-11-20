@@ -667,6 +667,152 @@ static inline void spc_effect_0xfe(Spc *spc) { // dbnzy rel
   spc_doBranch(spc, spc_readOpcode(spc), spc->y != 0);
 }
 
+static inline void spc_effect_0x1c(Spc *spc) { // asla imp
+  spc->c = spc->a & 0x80;
+  spc->a <<= 1;
+  spc_setZN(spc, spc->a);
+}
+
+static inline void spc_effect_0x2d(Spc *spc) { // pusha imp
+  spc_pushByte(spc, spc->a);
+}
+
+static inline void spc_effect_0x3a(Spc *spc) { // incw dp
+  uint16_t low = 0;
+  uint16_t high = spc_adrDpWord(spc, &low);
+  uint16_t value = spc_readWord(spc, low, high) + 1;
+  spc->z = value == 0;
+  spc->n = value & 0x8000;
+  spc_writeWord(spc, low, high, value);
+}
+
+static inline void spc_effect_0x4b(Spc *spc) { // lsr dp
+  spc_lsr(spc, spc_adrDp(spc));
+}
+
+static inline void spc_effect_0x60(Spc *spc) { // clrc imp
+  spc->c = false;
+}
+
+static inline void spc_effect_0x68(Spc *spc) { // cmp imm
+  spc_cmp(spc, spc_adrImm(spc));
+}
+
+static inline void spc_effect_0x7a(Spc *spc) { // addw dp
+  uint16_t low = 0;
+  uint16_t high = spc_adrDpWord(spc, &low);
+  uint16_t value = spc_readWord(spc, low, high);
+  uint16_t ya = spc->a | (spc->y << 8);
+  int result = ya + value;
+  spc->v = (ya & 0x8000) == (value & 0x8000) && (value & 0x8000) != (result & 0x8000);
+  spc->h = ((ya & 0xfff) + (value & 0xfff)) > 0xfff;
+  spc->c = result > 0xffff;
+  spc->z = (result & 0xffff) == 0;
+  spc->n = result & 0x8000;
+  spc->a = result & 0xff;
+  spc->y = result >> 8;
+}
+
+static inline void spc_effect_0x7e(Spc *spc) { // cmpy dp
+  spc_cmpy(spc, spc_adrDp(spc));
+}
+
+static inline void spc_effect_0x84(Spc *spc) { // adc dp
+  spc_adc(spc, spc_adrDp(spc));
+}
+
+static inline void spc_effect_0x90(Spc *spc) { // bcc rel
+  spc_doBranch(spc, spc_readOpcode(spc), !spc->c);
+}
+
+static inline void spc_effect_0x9a(Spc *spc) { // subw dp
+  uint16_t low = 0;
+  uint16_t high = spc_adrDpWord(spc, &low);
+  uint16_t value = spc_readWord(spc, low, high) ^ 0xffff;
+  uint16_t ya = spc->a | (spc->y << 8);
+  int result = ya + value + 1;
+  spc->v = (ya & 0x8000) == (value & 0x8000) && (value & 0x8000) != (result & 0x8000);
+  spc->h = ((ya & 0xfff) + (value & 0xfff) + 1) > 0xfff;
+  spc->c = result > 0xffff;
+  spc->z = (result & 0xffff) == 0;
+  spc->n = result & 0x8000;
+  spc->a = result & 0xff;
+  spc->y = result >> 8;
+}
+
+static inline void spc_effect_0x9b(Spc *spc) { // dec dpx
+  spc_dec(spc, spc_adrDpx(spc));
+}
+
+static inline void spc_effect_0x9e(Spc *spc) { // div imp
+  // Nine shift-and-subtract steps over a 17-bit register, as in anomie's SPC700 document.
+  // The result is one field laid out YYYYYYYY V AAAAAAAA, with V being bit 8 of the quotient.
+  uint16_t value = spc->a | (spc->y << 8);
+  uint32_t work = value;
+  const uint32_t divisor = (uint32_t) spc->x << 9;
+  for(int step = 0; step < 9; step++) {
+    work = ((work << 1) | (work >> 16)) & 0x1ffff;
+    if(work >= divisor) work ^= 1;
+    if(work & 1) work = (work - divisor) & 0x1ffff;
+  }
+  spc->h = (spc->x & 0xf) <= (spc->y & 0xf);
+  spc->v = (work >> 8) & 1;
+  spc->a = work & 0xff;
+  spc->y = (work >> 9) & 0xff;
+  spc_setZN(spc, spc->a);
+}
+
+static inline void spc_effect_0xae(Spc *spc) { // popa imp
+  spc->a = spc_pullByte(spc);
+}
+
+static inline void spc_effect_0xc7(Spc *spc) { // movs idx
+  spc_movs(spc, spc_adrIdx(spc));
+}
+
+static inline void spc_effect_0xc8(Spc *spc) { // cmpx imm
+  spc_cmpx(spc, spc_adrImm(spc));
+}
+
+static inline void spc_effect_0xcd(Spc *spc) { // movx imm
+  spc_movx(spc, spc_adrImm(spc));
+}
+
+static inline void spc_effect_0xcf(Spc *spc) { // mul imp
+  uint16_t result = spc->a * spc->y;
+  spc->a = result & 0xff;
+  spc->y = result >> 8;
+  spc_setZN(spc, spc->y);
+}
+
+static inline void spc_effect_0xd5(Spc *spc) { // movs abx
+  spc_movs(spc, spc_adrAbx(spc));
+}
+
+static inline void spc_effect_0xdd(Spc *spc) { // movay imp
+  spc->a = spc->y;
+  spc_setZN(spc, spc->a);
+}
+
+static inline void spc_effect_0xde(Spc *spc) { // cbne dpx, rel
+  uint8_t val = spc_read(spc, spc_adrDpx(spc)) ^ 0xff;
+  uint8_t result = spc->a + val + 1;
+  spc_doBranch(spc, spc_readOpcode(spc), result != 0);
+}
+
+static inline void spc_effect_0xe7(Spc *spc) { // mov idx
+  spc_mov(spc, spc_adrIdx(spc));
+}
+
+static inline void spc_effect_0xe8(Spc *spc) { // mov imm
+  spc_mov(spc, spc_adrImm(spc));
+}
+
+static inline void spc_effect_0xfc(Spc *spc) { // incy imp
+  spc->y++;
+  spc_setZN(spc, spc->y);
+}
+
 #ifdef IOG_NATIVE_SPC_EFFECTS_HEADER
 static inline void spc_effect_0xe3(Spc *spc) { // bbs dp, rel
   uint8_t val = spc_read(spc, spc_adrDp(spc));
@@ -930,9 +1076,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x1c: { // asla imp
-      spc->c = spc->a & 0x80;
-      spc->a <<= 1;
-      spc_setZN(spc, spc->a);
+      spc_effect_0x1c(spc);
       break;
     }
     case 0x1d: { // decx imp
@@ -994,7 +1138,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x2d: { // pusha imp
-      spc_pushByte(spc, spc->a);
+      spc_effect_0x2d(spc);
       break;
     }
     case 0x2e: { // cbne dp, rel
@@ -1040,12 +1184,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x3a: { // incw dp
-      uint16_t low = 0;
-      uint16_t high = spc_adrDpWord(spc, &low);
-      uint16_t value = spc_readWord(spc, low, high) + 1;
-      spc->z = value == 0;
-      spc->n = value & 0x8000;
-      spc_writeWord(spc, low, high, value);
+      spc_effect_0x3a(spc);
       break;
     }
     case 0x3b: { // rol dpx
@@ -1108,7 +1247,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x4b: { // lsr dp
-      spc_lsr(spc, spc_adrDp(spc));
+      spc_effect_0x4b(spc);
       break;
     }
     case 0x4c: { // lsr abs
@@ -1199,7 +1338,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x60: { // clrc imp
-      spc->c = false;
+      spc_effect_0x60(spc);
       break;
     }
     case 0x64: { // cmp dp
@@ -1219,7 +1358,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x68: { // cmp imm
-      spc_cmp(spc, spc_adrImm(spc));
+      spc_effect_0x68(spc);
       break;
     }
     case 0x69: { // cmpm dp, dp
@@ -1288,18 +1427,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x7a: { // addw dp
-      uint16_t low = 0;
-      uint16_t high = spc_adrDpWord(spc, &low);
-      uint16_t value = spc_readWord(spc, low, high);
-      uint16_t ya = spc->a | (spc->y << 8);
-      int result = ya + value;
-      spc->v = (ya & 0x8000) == (value & 0x8000) && (value & 0x8000) != (result & 0x8000);
-      spc->h = ((ya & 0xfff) + (value & 0xfff)) > 0xfff;
-      spc->c = result > 0xffff;
-      spc->z = (result & 0xffff) == 0;
-      spc->n = result & 0x8000;
-      spc->a = result & 0xff;
-      spc->y = result >> 8;
+      spc_effect_0x7a(spc);
       break;
     }
     case 0x7b: { // ror dpx
@@ -1319,7 +1447,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x7e: { // cmpy dp
-      spc_cmpy(spc, spc_adrDp(spc));
+      spc_effect_0x7e(spc);
       break;
     }
     case 0x7f: { // reti imp
@@ -1332,7 +1460,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x84: { // adc dp
-      spc_adc(spc, spc_adrDp(spc));
+      spc_effect_0x84(spc);
       break;
     }
     case 0x85: { // adc abs
@@ -1384,7 +1512,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x90: { // bcc rel
-      spc_doBranch(spc, spc_readOpcode(spc), !spc->c);
+      spc_effect_0x90(spc);
       break;
     }
     case 0x94: { // adc dpx
@@ -1416,22 +1544,11 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x9a: { // subw dp
-      uint16_t low = 0;
-      uint16_t high = spc_adrDpWord(spc, &low);
-      uint16_t value = spc_readWord(spc, low, high) ^ 0xffff;
-      uint16_t ya = spc->a | (spc->y << 8);
-      int result = ya + value + 1;
-      spc->v = (ya & 0x8000) == (value & 0x8000) && (value & 0x8000) != (result & 0x8000);
-      spc->h = ((ya & 0xfff) + (value & 0xfff) + 1) > 0xfff;
-      spc->c = result > 0xffff;
-      spc->z = (result & 0xffff) == 0;
-      spc->n = result & 0x8000;
-      spc->a = result & 0xff;
-      spc->y = result >> 8;
+      spc_effect_0x9a(spc);
       break;
     }
     case 0x9b: { // dec dpx
-      spc_dec(spc, spc_adrDpx(spc));
+      spc_effect_0x9b(spc);
       break;
     }
     case 0x9c: { // deca imp
@@ -1445,21 +1562,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x9e: { // div imp
-      // Nine shift-and-subtract steps over a 17-bit register, as in anomie's SPC700 document.
-      // The result is one field laid out YYYYYYYY V AAAAAAAA, with V being bit 8 of the quotient.
-      uint16_t value = spc->a | (spc->y << 8);
-      uint32_t work = value;
-      const uint32_t divisor = (uint32_t) spc->x << 9;
-      for(int step = 0; step < 9; step++) {
-        work = ((work << 1) | (work >> 16)) & 0x1ffff;
-        if(work >= divisor) work ^= 1;
-        if(work & 1) work = (work - divisor) & 0x1ffff;
-      }
-      spc->h = (spc->x & 0xf) <= (spc->y & 0xf);
-      spc->v = (work >> 8) & 1;
-      spc->a = work & 0xff;
-      spc->y = (work >> 9) & 0xff;
-      spc_setZN(spc, spc->a);
+      spc_effect_0x9e(spc);
       break;
     }
     case 0x9f: { // xcn imp
@@ -1516,7 +1619,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xae: { // popa imp
-      spc->a = spc_pullByte(spc);
+      spc_effect_0xae(spc);
       break;
     }
     case 0xaf: { // movs ind+
@@ -1613,11 +1716,11 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xc7: { // movs idx
-      spc_movs(spc, spc_adrIdx(spc));
+      spc_effect_0xc7(spc);
       break;
     }
     case 0xc8: { // cmpx imm
-      spc_cmpx(spc, spc_adrImm(spc));
+      spc_effect_0xc8(spc);
       break;
     }
     case 0xc9: { // movsx abs
@@ -1640,7 +1743,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xcd: { // movx imm
-      spc_movx(spc, spc_adrImm(spc));
+      spc_effect_0xcd(spc);
       break;
     }
     case 0xce: { // popx imp
@@ -1648,10 +1751,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xcf: { // mul imp
-      uint16_t result = spc->a * spc->y;
-      spc->a = result & 0xff;
-      spc->y = result >> 8;
-      spc_setZN(spc, spc->y);
+      spc_effect_0xcf(spc);
       break;
     }
     case 0xd0: { // bne rel
@@ -1663,7 +1763,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xd5: { // movs abx
-      spc_movs(spc, spc_adrAbx(spc));
+      spc_effect_0xd5(spc);
       break;
     }
     case 0xd6: { // movs aby
@@ -1696,14 +1796,11 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xdd: { // movay imp
-      spc->a = spc->y;
-      spc_setZN(spc, spc->a);
+      spc_effect_0xdd(spc);
       break;
     }
     case 0xde: { // cbne dpx, rel
-      uint8_t val = spc_read(spc, spc_adrDpx(spc)) ^ 0xff;
-      uint8_t result = spc->a + val + 1;
-      spc_doBranch(spc, spc_readOpcode(spc), result != 0);
+      spc_effect_0xde(spc);
       break;
     }
     case 0xdf: { // daa imp
@@ -1735,11 +1832,11 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xe7: { // mov idx
-      spc_mov(spc, spc_adrIdx(spc));
+      spc_effect_0xe7(spc);
       break;
     }
     case 0xe8: { // mov imm
-      spc_mov(spc, spc_adrImm(spc));
+      spc_effect_0xe8(spc);
       break;
     }
     case 0xe9: { // movx abs
@@ -1813,8 +1910,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xfc: { // incy imp
-      spc->y++;
-      spc_setZN(spc, spc->y);
+      spc_effect_0xfc(spc);
       break;
     }
     case 0xfd: { // movya imp

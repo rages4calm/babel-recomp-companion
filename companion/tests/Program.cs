@@ -22,6 +22,7 @@ int checks = 0;
 void Check(bool yes, string name) { if (!yes) throw new Exception(name); checks++; }
 void Throws<T>(Action action, string name) where T : Exception { try { action(); } catch (T) { checks++; return; } throw new Exception(name); }
 try {
+    checks += AchievementProviderTests.Run(Path.Combine(root, "achievements"));
     var adapter = new GameAdapter(Path.Combine(root, "preferences")); var profile = adapter.Profiles.Single();
     var exeDir = Path.Combine(root, "game with spaces"); Directory.CreateDirectory(exeDir);
     var exe = Path.Combine(exeDir, "babel-recomp.exe"); File.WriteAllText(exe, "synthetic engine; never executed");

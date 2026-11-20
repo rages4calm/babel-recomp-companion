@@ -41,6 +41,7 @@ INTERFACE_FILES = (
     ("menu", "ItemStrings", r"^consolestring_([0-9A-F]{6})!\s+\|([^|]*)\|"),
     ("scene", "MapNames", r"^scene_event_([0-9A-F]{6})_value!\s+`([^`]*)`"),
     ("sprite", "OverworldNameSwitch", r"^spritestring_([0-9A-F]{6})!\s+~([^~]*)~"),
+    ("prologue", "chapter01", r"^spritestring_([0-9A-F]{6})!\s+~([^~]*)~"),
 )
 
 
@@ -87,6 +88,27 @@ def stock_tail_labels(path):
                 raise ValueError(f"Duplicate stock tail label at {offset}")
             labels[offset] = fields[1]
     return labels
+
+
+def stock_pair_labels(path):
+    labels = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        fields = line.split()
+        if (len(fields) == 5 and fields[0] == "S" and fields[2] == "widestring"
+                and int(fields[4], 16) >= 5 and fields[3].upper() not in TAIL_PREFIXES):
+            labels[fields[3].upper()] = fields[1]
+    return labels
+
+
+def convert_pair(source, names):
+    prefix, marker, tail = source.partition("[::]")
+    if not marker or "[::]" in tail:
+        raise ValueError("Expected one stock entry marker")
+    body = convert_return(prefix, names, extended=True, wrap_prose=True)
+    if not body.endswith("[FIN][RET]"):
+        raise ValueError("Marker does not follow a page wait")
+    extra = convert_return(tail, names, extended=True, wrap_prose=True)
+    return "[PAIR]" + body + "|" + extra
 
 
 def convert_tail(offset, source, names):
@@ -377,6 +399,7 @@ def main():
     structure = ROOT / "i18n/structure.txt"
     labels = stock_labels(structure)
     tails = stock_tail_labels(structure)
+    pairs = stock_pair_labels(structure)
     rows, excluded, seen = [], {}, set()
     for chapter in sorted(set(chapters)):
         source = read_source(args.checkout, f"{PATCHES}/chapter{chapter:02d}.patch.asm")
@@ -394,6 +417,12 @@ def main():
                 if offset in tails:
                     try:
                         rows.append((offset, tails[offset], convert_tail(offset, content, names)))
+                    except ValueError as error:
+                        excluded[offset] = str(error)
+                    continue
+                if offset in pairs:
+                    try:
+                        rows.append((offset, pairs[offset], convert_pair(content, names)))
                     except ValueError as error:
                         excluded[offset] = str(error)
                     continue

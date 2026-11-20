@@ -29,7 +29,7 @@ static bool read_only;
 #ifdef IOG_ACHIEVEMENT_STORAGE
 static bool save_progress;
 static IogAchievementStore *store;
-static IogAchievementStatus last_status = kIogAchievementLoading;
+static bool eligible;
 #endif
 
 void IogAchievementAuditStart(int argc, char **argv)
@@ -55,6 +55,26 @@ void IogAchievementAuditStart(int argc, char **argv)
     (void)argc;
     (void)argv;
 #endif
+}
+
+const char *IogAchievementAuditSnapshot(ca_state states[CA_MAX_ACHIEVEMENTS], uint64_t *notices)
+{
+    *notices = 0;
+    memset(states, 0, CA_MAX_ACHIEVEMENTS * sizeof(*states));
+    if (read_only) return "Read-only audit";
+#ifdef IOG_ACHIEVEMENT_STORAGE
+    if (!save_progress) return "Progress disabled in this session";
+    if (!eligible) return "Progress unavailable for this game session";
+    if (!store) return "Progress unavailable";
+    switch (IogAchievementStoreSnapshot(store, states, notices)) {
+    case kIogAchievementLoading: return "Loading local progress";
+    case kIogAchievementReady: return "Local progress";
+    case kIogAchievementInUse: return "Profile open in another game window";
+    case kIogAchievementInvalidProfile: return "Profile could not be read";
+    case kIogAchievementWriteFailure: return "Unable to save progress";
+    }
+#endif
+    return "Progress unavailable";
 }
 
 void IogAchievementAuditShutdown(void)
@@ -87,6 +107,9 @@ static bool Report(void *context, const char *event, uint32_t amount)
 void IogAchievementAuditBind(void)
 {
     verified_rom = NULL;
+#ifdef IOG_ACHIEVEMENT_STORAGE
+    eligible = false;
+#endif
     const Cart *cart = g_snes ? g_snes->cart : NULL;
     bool enabled = read_only;
 #ifdef IOG_ACHIEVEMENT_STORAGE
@@ -140,7 +163,8 @@ void IogAchievementAuditFrame(unsigned frame)
     };
 #ifdef IOG_ACHIEVEMENT_STORAGE
     if (!read_only) {
-        if (!sample.verified_stock_rom || sample.cheats_used || sample.new_game_plus) {
+        eligible = sample.verified_stock_rom && !sample.cheats_used && !sample.new_game_plus;
+        if (!eligible) {
             IogAchievementAuditInvalidate();
             return;
         }
@@ -152,15 +176,6 @@ void IogAchievementAuditFrame(unsigned frame)
                                         directory, sizeof(directory)))
                 store = IogAchievementStoreOpen(directory);
             if (!store) { verified_rom = NULL; return; }
-        }
-        if (frame % 60 == 0) {
-            ca_state states[CA_MAX_ACHIEVEMENTS];
-            uint64_t notices;
-            const IogAchievementStatus status = IogAchievementStoreSnapshot(store, states, &notices);
-            if (status != last_status && status > kIogAchievementReady)
-                fprintf(stderr, "[iog_achievements] profile unavailable (status %d)\n", status);
-            if (notices) fputs("[iog_achievements] progress saved\n", stderr);
-            last_status = status;
         }
         const unsigned scene = ram[0x0644] | (unsigned)ram[0x0645] << 8;
         if (scene == 0xfa) { IogAchievementAuditInvalidate(); return; }

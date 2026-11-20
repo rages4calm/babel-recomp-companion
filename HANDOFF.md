@@ -171,13 +171,24 @@ MSU-1 disabled matched the same executable's interpreter for sampled APU and
 game state. The private receipts and generated inputs are in
 `visual-fullgame-035/native`. Standard builds still select SPC fallback.
 
+Batch 036 uses Original v40. The Companion Status page opens the achievement
+browser with a separate detail pane, focused rows, secret ending text and
+committed unlock notifications. The launcher reads the native profile.
+Controller navigation passed in three window configurations. Progress stays
+opt-in during internal QA. v40 also adds five chapter translations, two menu
+descriptions and ten prologue cards, and fixes the opening and Dark Space
+save presentation. The optional SPC700 pilot covers 886 guarded sites in
+the private `visual-fullgame-036/native` build. Cold, Kress and Aqueduct tests
+matched sampled interpreter state. Standard builds still use SPC fallback.
+
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 035's
-`babel-originalv39kress.exe` and the corresponding private interface pack and
+`.local/batch-001/visual-fullgame-010`. It selects batch 036's
+`babel-originalv40kress.exe` and the corresponding private cards pack and
 continues the isolated test profile's save. The test executable has the
-required `i18n/structure.txt` alongside it. `Play Original v38 Rollback.cmd`
+required `i18n/structure.txt` alongside it. `Play Original v39 Rollback.cmd`
+selects the previous build and interface pack. `Play Original v38 Rollback.cmd`
 selects the prior build and its dialogue-only pack. `Play Original v37 Kress Rollback.cmd`
 selects the previously tested Kress build. `Play Original v37 Pre-Kress
 Rollback.cmd` selects the dialogue and visual build before the Kress changes.

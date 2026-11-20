@@ -421,6 +421,32 @@ static void stock_ending_plate(void){
  g_ppu->bgmode=7;CHECK(!StockEndingPlate(g_ppu,ram));g_ppu->bgmode=9;
  g_ppu->inidisp=0x80;CHECK(!StockEndingPlate(g_ppu,ram));
 }
+static void stock_opening_plate(void){
+ fixture();word(0x644,0xfc);word(0x6ee,0x80);
+ g_ppu->inidisp=15;g_ppu->bgmode=9;g_ppu->bgTileAdr=0x622;
+ g_ppu->bgXsc[0]=0x18;g_ppu->bgXsc[1]=0x10;g_ppu->bgXsc[2]=0x78;
+ g_ppu->screenEnabled[0]=0x16;g_ppu->screenEnabled[1]=0;
+ g_ppu->cgwsel=0x80;g_ppu->cgadsub=3;
+ IogWorldBeginRaster();IogWorldEndRaster(0,225,0);
+ CHECK(s.fixed_plate&&s.complete&&!strcmp(s.reason,"ready_stock_opening_plate"));
+ word(0x644,0xfb);word(0x6ee,0x85);
+ g_ppu->bgXsc[0]=0x19;g_ppu->bgXsc[1]=0x11;g_ppu->screenEnabled[0]=0x10;g_ppu->cgadsub=0;
+ CHECK(StockOpeningPlate(g_ppu,ram));
+ word(0x644,0xfa);word(0x6ee,5);
+ g_ppu->bgXsc[0]=0x11;g_ppu->bgXsc[1]=0x19;g_ppu->windowsel=0x228800;
+ g_ppu->screenEnabled[0]=1;g_ppu->screenEnabled[1]=4;
+ g_ppu->cgwsel=0x82;g_ppu->cgadsub=0x41;g_snesrecomp_last_hdmaen=0x0e;
+ CHECK(StockOpeningPlate(g_ppu,ram));
+ g_ppu->windowsel=0;CHECK(!StockOpeningPlate(g_ppu,ram));
+ g_snesrecomp_last_hdmaen=0;
+ word(0x644,0x8e);word(0x6ee,0x1005);
+ g_ppu->screenEnabled[0]=0x13;g_ppu->screenEnabled[1]=3;
+ g_ppu->cgwsel=0x80;g_ppu->cgadsub=0x81;CHECK(StockOpeningPlate(g_ppu,ram));
+ g_ppu->cgwsel=0x82;g_ppu->cgadsub=0x10;CHECK(StockOpeningPlate(g_ppu,ram));
+ word(0x644,0x8f);g_ppu->screenEnabled[0]=0x11;g_ppu->screenEnabled[1]=1;
+ CHECK(StockOpeningPlate(g_ppu,ram));
+ g_ppu->bgmode=7;CHECK(!StockOpeningPlate(g_ppu,ram));
+}
 static void effect_camera_actor(unsigned at,unsigned entry,unsigned x,unsigned y){
  word(at,entry);ram[at+2]=0x80;word(at+0x12,0x1000);word(at+0x14,x);word(at+0x16,y);
 }
@@ -1403,6 +1429,16 @@ static void restored_actor_field_before_first_upload(void){
  CHECK(RestoredActorFieldLayout(g_ppu,ram));
  g_ppu->mosaic=0x61;CHECK(!RestoredActorFieldLayout(g_ppu,ram));
  g_ppu->mosaic=0x63;g_ppu->cgadsub=0x20;CHECK(!RestoredActorFieldLayout(g_ppu,ram));
+ fixture();word(0x644,0xe6);word(0x6ee,0x0405);
+ word(0x692,256);word(0x694,512);word(0x696,512);word(0x698,512);
+ g_ppu->bgXsc[0]=0x11;g_ppu->bgXsc[1]=0x19;
+ g_ppu->inidisp=15;g_ppu->bgmode=9;g_ppu->mosaic=3;
+ g_ppu->screenEnabled[0]=0x15;g_ppu->screenEnabled[1]=2;
+ g_ppu->cgwsel=2;g_ppu->cgadsub=0x31;g_snesrecomp_last_hdmaen=2;
+ IogWorldReset();IogWorldCaptureAtCompose(&g_cpu,0x83c714);
+ IogWorldCaptureAfterCompose(&g_cpu,0x83c789);
+ CHECK(RestoredActorFieldLayout(g_ppu,ram));
+ g_ppu->mosaic=0x13;CHECK(!RestoredActorFieldLayout(g_ppu,ram));
  g_snesrecomp_last_hdmaen=0;
 }
 static void south_cape_house_mosaic(void){
@@ -1620,7 +1656,7 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 

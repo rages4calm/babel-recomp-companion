@@ -14,6 +14,8 @@
     <Compile Remove="tests/**/*.cs" />
     <EmbeddedResource Include="soundtrack-catalog.json" LogicalName="soundtrack-catalog.json" />
     <EmbeddedResource Include="../res/branding/gaia-launcher.ico" LogicalName="Gaia.Companion.Icon" />
+    <Content Include="../src/companion_achievements/catalog.json" Link="assets/achievements/catalog.json"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Companion.Launcher.Core" Version="[0.2.0]" />
     <PackageReference Include="Companion.Launcher.Windows" Version="[0.2.0]" />
   </ItemGroup>

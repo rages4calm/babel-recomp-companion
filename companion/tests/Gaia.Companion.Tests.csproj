@@ -12,5 +12,7 @@
     <Compile Include="../SoundtrackActivation.cs" Link="SoundtrackActivation.cs" />
     <Compile Include="../SoundtrackService.cs" Link="SoundtrackService.cs" />
     <EmbeddedResource Include="../soundtrack-catalog.json" LogicalName="soundtrack-catalog.json" />
+    <Content Include="../../src/companion_achievements/catalog.json" Link="assets/achievements/catalog.json"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
