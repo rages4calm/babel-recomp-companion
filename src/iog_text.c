@@ -1429,6 +1429,206 @@ static const char *GlyphText(uint8_t code)
     return "#";
 }
 
+static int GaiaDialogue(const char *text, Toks *out)
+{
+    int columns = 0, rows = 1, glyphs = 0;
+    while (*text) {
+        Tok token = {.type = T_CMD, .ref = -1};
+        if (!strncmp(text, "[N]", 3)) {
+            token.code = CMD_N;
+            text += 3;
+            columns = 0;
+            if (++rows > 3)
+                return 0;
+        } else if (!strncmp(text, "[FIN]", 5)) {
+            token.code = CMD_FIN;
+            text += 5;
+            columns = 0;
+            rows = 1;
+        } else if (!strcmp(text, "[END]")) {
+            token.code = CMD_END;
+            Push(out, &token);
+            return glyphs != 0;
+        } else {
+            token.type = T_GLYPH;
+            if ((unsigned char)*text >= 128 || !GlyphFor(&text, &token.code) || ++columns > 24)
+                return 0;
+            glyphs++;
+        }
+        Push(out, &token);
+    }
+    return 0;
+}
+
+static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const Toks *text)
+{
+    static const uint8_t template_rows[] = {1, 2, 3, 4, 1, 2, 3, 4, 4};
+    Toks original = {0};
+    int ok = Decode(stock, offset, &original, 0, 0);
+    int prefix = 1, width = 0, height = 0;
+    for (int i = 0; ok && i < original.n; i++) {
+        const Tok *t = &original.t[i];
+        if (t->type == T_GLYPH || t->code == CMD_N || t->code == CMD_FIN) {
+            prefix = 0;
+        } else if (t->code == CMD_END) {
+            break;
+        } else if (t->code == 0xc3 || t->code == 0xce) {
+            if (prefix)
+                Push(out, t);
+        } else if (prefix && (t->code == 0xc1 || t->code == 0xc2 || t->code == 0xc7 ||
+                              t->code == 0xc8 || t->code == 0xd3 || t->code == 0xd5)) {
+            if (t->code == 0xc2 && t->a[0] >= 8 && t->a[0] <= 0x10) {
+                width = 24;
+                height = template_rows[t->a[0] - 8];
+            } else if (t->code == 0xc2 && t->a[0] == 0x11) {
+                ok = 0;  /* Includes the stock route-choice prompt. */
+            } else if (t->code == 0xc7) {
+                width = (int)t->a[0] * 2 - 2;
+                height = (int)t->a[1];
+            } else if (t->code == 0xd3) {
+                width = 24;
+                height = 4;
+            }
+            Push(out, t);
+        } else {
+            ok = 0;
+        }
+    }
+    ok = ok && !prefix && width > 0 && height > 0 && original.n &&
+        original.t[original.n - 1].code == CMD_END;
+    int columns = 0, rows = 1;
+    for (int i = 0; ok && i + 1 < text->n; i++) {
+        const Tok *token = &text->t[i];
+        if (token->type == T_GLYPH) {
+            ok = ++columns <= width;
+        } else if (token->code == CMD_N) {
+            columns = 0;
+            ok = ++rows <= height;
+        } else if (token->code == CMD_FIN) {
+            columns = 0;
+            rows = 1;
+        }
+    }
+    if (ok) {
+        for (int i = 0; i + 1 < text->n; i++)
+            Push(out, &text->t[i]);
+        /* The original palette reset can affect neighboring dialogue. */
+        if (original.n >= 2) {
+            const Tok *last = &original.t[original.n - 2];
+            if (last->type == T_CMD && last->code == 0xc3)
+                Push(out, last);
+        }
+        Push(out, &text->t[text->n - 1]);
+    }
+    free(original.t);
+    return ok;
+}
+
+IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
+                             const char *structure_path, const char *dialogue_path)
+{
+    Rom stock;
+    if (!RomInit(&stock, usa, usa_size))
+        return NULL;
+    FILE *file = fopen(dialogue_path, "rb");
+    if (!file)
+        return NULL;
+    Structure structure;
+    if (!LoadStructure(&structure, structure_path)) {
+        fclose(file);
+        return NULL;
+    }
+    IogPack *pack = calloc(1, sizeof(*pack));
+    if (!pack) {
+        fclose(file);
+        free(structure.l);
+        free(structure.t);
+        free(structure.ascii);
+        return NULL;
+    }
+    snprintf(pack->code, sizeof(pack->code), "gaia");
+    snprintf(pack->name, sizeof(pack->name), "GaiaLabs Retranslation");
+    unsigned fill = 0;
+    char line[4096];
+    int malformed = 0;
+    uint32_t last = 0;
+    while (fgets(line, sizeof(line), file)) {
+        size_t size = strlen(line);
+        if (!size || line[size - 1] != '\n') {
+            malformed = 1;
+            break;
+        }
+        line[--size] = 0;
+        if (size && line[size - 1] == '\r')
+            line[size - 1] = 0;
+        char *text = strchr(line, '\t');
+        if (!text) {
+            malformed = 1;
+            break;
+        }
+        *text++ = 0;
+        int li = FindLabel(&structure, line);
+        if (li < 0 || strncmp(line, "widestring_", 11) ||
+            structure.l[li].off <= last) {
+            malformed = 1;
+            break;
+        }
+        const Label *label = &structure.l[li];
+        last = label->off;
+        pack->strings_total++;
+        Toks tokens = {0};
+        if (!GaiaDialogue(text, &tokens)) {
+            free(tokens.t);
+            malformed = 1;
+            break;
+        }
+        uint32_t span = StringSpan(&stock, label->off);
+        int safe = !label->unk16 && !label->has_marker && span >= 5;
+        for (int i = 0; safe && i < structure.nl; i++)
+            if (i != li && structure.l[i].off >= label->off &&
+                structure.l[i].off - label->off < 5)
+                safe = 0;
+        Item item = {0};
+        if (safe && GaiaStockWindow(&stock, label->off, &item.toks, &tokens)) {
+            unsigned len = (unsigned)Encode(NULL, &item, NULL);
+            if (!pack->nbanks || fill + len > kIogVirtualBankSize) {
+                if (pack->nbanks == kIogVirtualBanks || len > kIogVirtualBankSize) {
+                    free(item.toks.t);
+                    free(tokens.t);
+                    malformed = 1;
+                    break;
+                }
+                uint8_t *bank_data = calloc(1, kIogVirtualBankSize);
+                if (!bank_data) {
+                    free(item.toks.t);
+                    free(tokens.t);
+                    malformed = 1;
+                    break;
+                }
+                pack->banks[pack->nbanks++] = bank_data;
+                fill = 0;
+            }
+            unsigned bank = (unsigned)pack->nbanks - 1;
+            Encode(NULL, &item, pack->banks[bank] + fill);
+            AddRedirect(pack, label->off, CMD_PRT, ((kVBankFirst + bank) << 16) | (kVBase + fill), CMD_RET);
+            fill += len;
+            pack->strings_translated++;
+        }
+        free(item.toks.t);
+        free(tokens.t);
+    }
+    malformed |= ferror(file);
+    fclose(file);
+    free(structure.l);
+    free(structure.t);
+    free(structure.ascii);
+    if (malformed || !pack->npatches) {
+        IogTextFreePack(pack);
+        return NULL;
+    }
+    return pack;
+}
+
 /* The runs of text of a string, '|'-separated (for the report). */
 static void RunsText(const Toks *v, char *out, size_t cap)
 {

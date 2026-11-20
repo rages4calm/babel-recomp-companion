@@ -3,6 +3,7 @@
 
 /* Runtime localization (language packs, see src/iog_i18n.c). */
 void IogI18nInit(void);
+void IogI18nBindStock(void);
 void IogI18nFrame(void);
 int IogI18nSetLanguage(const char *code);   /* "original" restores the ROM */
 const char *IogI18nLanguage(void);
