@@ -26,8 +26,10 @@ static const IogRasterParallaxBand *Band(const IogRasterParallax *m,unsigned row
 bool IogRasterParallaxSample(const IogRasterParallax *m,int y,int x,uint16_t *out)
 {
     if(!m || !out || !m->valid || !m->band_count ||
-       m->band_count>kIogRasterParallaxBands || m->height!=256 || m->width!=512 ||
-       y<0 || y>255 || x < -2048 || x>4096)return false;
+       m->band_count>kIogRasterParallaxBands ||
+       !((m->height==256 && m->width==512) ||
+         ((m->height==768 || m->height==2048) && m->width==256)) ||
+       y<0 || y>=m->height || x < -2048 || x>4096)return false;
     const IogRasterParallaxBand *b=Band(m,(unsigned)y);
     if(!b)return false;
     unsigned phase=b->fixed_phase;
@@ -119,4 +121,63 @@ bool IogRasterParallaxPrepare(const uint8_t *rom,size_t size,bool verified,
     }
     if(matches!=1)return false;
     *out=chosen;return true;
+}
+
+bool IogRasterParallaxPrepareWall(const uint8_t *rom,size_t size,bool verified,
+    const uint8_t *ram,size_t ram_size,const uint16_t *captured,size_t lines,
+    IogRasterParallax *out)
+{
+    if(!rom || size!=2097152 || !verified || !ram || ram_size<65536 ||
+       !captured || lines!=kIogRasterParallaxLines || !out ||
+       Overlap(out,sizeof(*out),rom,size) || Overlap(out,sizeof(*out),ram,ram_size) ||
+       Overlap(out,sizeof(*out),captured,lines*sizeof(*captured)))return false;
+    unsigned scene=Word(ram,0x644),height=scene==0x85?768:2048;
+    if((scene!=0x85 && scene!=0x86) || (ram[0x6EE]&128) || (ram[0x6EF]&8) ||
+       Word(ram,0x694)!=256 || Word(ram,0x698)!=height ||
+       Word(ram,0x690)>height-224 || Word(ram,0x68A)>2048)return false;
+    unsigned index=scene==0x85?0x21:0x1E;
+    unsigned pointer=Word(rom,0x1CC00+index*2);
+    if(pointer<0x8000 || pointer>0xFFF0)return false;
+    size_t at=0x10000u+pointer;
+    if(Word(rom,at)>0xF800 || rom[at+2]!=0x7E || rom[at+3]!=0x0F ||
+       rom[at+4]!=8)return false;
+    IogRasterParallax base={0};
+    base.scene=(uint16_t)scene;base.source_camera_x=(uint16_t)Word(ram,0x68A);
+    base.width=256;base.height=(uint16_t)height;
+    unsigned rows=0;at+=5;
+    uint16_t speeds[kIogRasterParallaxBands];
+    for(unsigned i=0;i<kIogRasterParallaxBands;i++,at+=8) {
+        if(at+8>0x20000u)return false;
+        unsigned n=Word(rom,at);if(!n || !(n&32768u))return false;
+        n=65536u-n;
+        unsigned accumulator=Word(rom,at+2),factor=Word(rom,at+4);
+        if(!n || n>4096 || rows+n>8192 || accumulator<0x720 ||
+           accumulator>0x75E || (accumulator&1) || !factor || !(factor>>8) ||
+           (factor&255u)*base.source_camera_x>65535u)return false;
+        IogRasterParallaxBand *b=&base.bands[i];
+        b->first_row=(uint16_t)rows;b->end_row=(uint16_t)(rows+n);
+        b->factor=(uint16_t)factor;speeds[i]=(uint16_t)Word(rom,at+6);
+        rows+=n;base.band_count++;
+        if(rows>=height)break;
+    }
+    if(rows<height || !base.band_count)return false;
+    /* Offscreen proportional bands may not have updated accumulator RAM:
+     * derive their deterministic value from the exact descriptor instead.
+     * Calibrate both double-buffer camera phases against every source row.
+     * Identical phases when the camera is still are equivalent, not ambiguity. */
+    for(unsigned previous=0;previous<2;previous++) {
+        IogRasterParallax trial=base;trial.previous_buffer=(uint8_t)previous;trial.valid=1;
+        int x=(int)base.source_camera_x-(previous?Signed(Word(ram,0x6E4)):0);
+        if(x<0 || x>2048)continue;
+        for(unsigned i=0;i<trial.band_count;i++)
+            trial.bands[i].fixed_phase=(uint16_t)(Project(trial.bands[i].factor,x)+speeds[i]);
+        bool ok=true;unsigned y=Word(ram,0x690);
+        for(unsigned line=0;line<lines && ok;line++) {
+            uint16_t h;
+            if(!IogRasterParallaxSample(&trial,(int)(y+line),
+                base.source_camera_x,&h) || h!=(captured[line]&1023u))ok=false;
+        }
+        if(ok){*out=trial;return true;}
+    }
+    return false;
 }

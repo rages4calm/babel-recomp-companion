@@ -41,6 +41,9 @@
 
 #include "host_main.h"
 #include "host_clock.h"
+#ifdef __ANDROID__
+#include "android_host.h"
+#endif
 
 #include "snes/ppu.h"
 #include "hdpack.h"
@@ -2105,7 +2108,11 @@ static uint32 OverlayNavInputs(void) {
   if (TouchPad_TakeMenuTap()) g_settings_menu_hotkey = 1;
   return g_input_state | g_pad_buttons | g_gamepad[0].axis_buttons | TouchPad_Buttons();
 #else
-  return g_input_state | g_pad_buttons | g_gamepad[0].axis_buttons;
+  return g_input_state | g_pad_buttons | g_gamepad[0].axis_buttons
+#ifdef __ANDROID__
+      | snesrecomp_android_buttons()
+#endif
+      ;
 #endif
 }
 
@@ -2361,7 +2368,8 @@ static bool PadGesturePressed(PadGesture *g) {
  * Each panel must close from the pad within 40 pumps or the test says FAIL. */
 static SDL_Joystick *g_selftest_pad;
 static long g_selftest_pad_frame = -2;
-static int g_selftest_pad_phase;      /* 0 idle, 1 browser, 2 rewind */
+static int g_selftest_pad_phase;      /* 0 idle, 1 browser, 2 rewind, 3 companion */
+static bool g_selftest_companion;
 static int g_selftest_pad_failed;
 static int g_selftest_pad_opened;     /* bit 1: browser opened, bit 2: rewind */
 /* While the self-test is armed, only the virtual pad is opened: a real
@@ -2382,9 +2390,9 @@ static void SelftestPadSet(int button, bool down) {
 static void SelftestPadTrigger(bool down) {
   if (!g_selftest_pad) return;
 #if SNESRECOMP_SDL3
-  SDL_SetJoystickVirtualAxis(g_selftest_pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, down ? 32767 : 0);
+  SDL_SetJoystickVirtualAxis(g_selftest_pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, down ? 32767 : -32768);
 #else
-  SDL_JoystickSetVirtualAxis(g_selftest_pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT, down ? 32767 : 0);
+  SDL_JoystickSetVirtualAxis(g_selftest_pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT, down ? 32767 : -32768);
 #endif
 }
 static void SelftestPadReleaseAll(void) {
@@ -2392,7 +2400,9 @@ static void SelftestPadReleaseAll(void) {
   SelftestPadTrigger(false);
 }
 static void OverlaySelftestPadAttach(void) {
-  const char *v = HostGetenv("OVERLAY_SELFTEST_PAD");
+  const char *v = HostGetenv("COMPANION_SELFTEST_PAD");
+  g_selftest_companion = v != NULL;
+  if (!v) v = HostGetenv("OVERLAY_SELFTEST_PAD");
   g_selftest_pad_frame = v ? strtol(v, NULL, 0) : -1;
   if (g_selftest_pad_frame < 0) return;
 #if SNESRECOMP_SDL3
@@ -2412,6 +2422,16 @@ static void OverlaySelftestPadAttach(void) {
   fprintf(stderr, "[overlay_selftest_pad] virtual gamepad %s\n",
           g_selftest_pad ? "attached" : "FAILED to attach");
   if (!g_selftest_pad) g_selftest_pad_failed = 1;
+  else {
+    /* Virtual joystick axes are signed, even though gamepad trigger events
+     * are normalized to 0..32767. Zero here means a half-pressed trigger. */
+    SelftestPadTrigger(false);
+#if SNESRECOMP_SDL3
+    SDL_SetJoystickVirtualAxis(g_selftest_pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, -32768);
+#else
+    SDL_JoystickSetVirtualAxis(g_selftest_pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT, -32768);
+#endif
+  }
 }
 /* Main-loop tick: presses the gestures on their frames, releases otherwise. */
 static void OverlaySelftestPadMainTick(unsigned frame) {
@@ -2421,6 +2441,21 @@ static void OverlaySelftestPadMainTick(unsigned frame) {
    * paces; act once per frame. */
   if (frame == last_frame) return;
   last_frame = frame;
+  if (g_selftest_companion) {
+    if ((long)frame == g_selftest_pad_frame) {
+      g_selftest_pad_phase = 3;
+      SelftestPadSet(SDL_CONTROLLER_BUTTON_START, true);
+      fprintf(stderr,"[companion_selftest_pad] physical Start at frame %u\n",frame);
+    } else {
+      SelftestPadReleaseAll();
+      if ((long)frame == g_selftest_pad_frame + 2) {
+        if (!(g_selftest_pad_opened & 4)) g_selftest_pad_failed = 1;
+        fprintf(stderr,"[companion_selftest_pad] %s\n",g_selftest_pad_failed?
+            "FAIL":"ok: physical Start opened companion; pad closed it; guest resumed");
+      }
+    }
+    return;
+  }
   if ((long)frame == g_selftest_pad_frame) {
     fprintf(stderr, "[overlay_selftest_pad] frame %u: holding Select+R on the pad\n", frame);
     g_selftest_pad_phase = 1;
@@ -2481,6 +2516,34 @@ static void OverlaySelftestPadTick(unsigned pump) {
     break;
   default: break;
   }
+}
+
+/* Actual SDL virtual-device events, separate from logical COMPANION_SCRIPT.
+ * Default SNES mappings: south=B, west=Y, north=X, shoulders=L/R. Keep Start
+ * held through close to exercise title release suppression as well. */
+static void CompanionSelftestPadTick(unsigned pump, bool *running) {
+  if (!g_selftest_pad || !g_selftest_companion || g_selftest_pad_phase != 3) return;
+  if (!pump) g_selftest_pad_opened |= 4;
+  if (pump == 2 || (pump >= 9 && pump % 8 == 1)) {
+    SelftestPadReleaseAll();
+    SelftestPadSet(SDL_CONTROLLER_BUTTON_START, true);
+  }
+  int button = -1;
+  switch (pump) {
+  case 6: button=SDL_CONTROLLER_BUTTON_DPAD_DOWN;break;
+  case 14:button=SDL_CONTROLLER_BUTTON_DPAD_RIGHT;break;
+  case 22:button=SDL_CONTROLLER_BUTTON_DPAD_UP;break;
+  case 30:button=SDL_CONTROLLER_BUTTON_DPAD_LEFT;break;
+  case 38:button=SDL_CONTROLLER_BUTTON_LEFTSHOULDER;break;
+  case 46:button=SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;break;
+  case 54:button=SDL_CONTROLLER_BUTTON_X;break;
+  case 62:case 70:button=SDL_CONTROLLER_BUTTON_Y;break;
+  case 78:case 94:button=SDL_CONTROLLER_BUTTON_A;break;
+  case 140:
+    g_selftest_pad_failed=1;*running=false;
+    fprintf(stderr,"[companion_selftest_pad] FAIL: controller did not close modal\n");break;
+  }
+  if(button>=0)SelftestPadSet(button,true);
 }
 
 /* Present a frozen field with an overlay on top, WITHOUT running guest code.
@@ -2896,7 +2959,9 @@ static void RunCompanionLoop(bool *running) {
   SetAudioPaused(true);
   int win_w = 0, win_h = 0;
   bool pointer_down = false;
+  unsigned controller_test_pump = 0;
   while (g_companion_open && *running && !g_quit_requested) {
+    CompanionSelftestPadTick(controller_test_pump++, running);
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
       if (HandleDeviceEvent(&ev)) continue;
@@ -4416,22 +4481,32 @@ int snesrecomp_desktop_main(const SnesDesktopHostGame *game, int argc, char **ar
     setvbuf(stdout, NULL, _IOLBF, 0);
 #endif
 #ifdef __ANDROID__
-  /* All relative I/O (config.ini, rom.cfg, saves/, last_run_report.json)
-   * lands in the app's external files dir, which is adb-pushable. */
+  /* Match the Java launcher's private storage and host_paths.c. A consumer
+   * can explicitly select a different private root before entering the host. */
   {
+    const char *storage = getenv("SNESRECOMP_DATA_DIR");
+    /* Babel's launcher installs its content in external app storage. Honor
+     * the explicit SDK override first, retaining that existing default. */
+    if (!storage || !storage[0]) {
 #if SNESRECOMP_SDL3
-    const char *storage = SDL_GetAndroidExternalStoragePath();
+      storage = SDL_GetAndroidExternalStoragePath();
 #else
-    const char *storage = SDL_AndroidGetExternalStoragePath();
+      storage = SDL_AndroidGetExternalStoragePath();
 #endif
-    if (storage) {
-      /* Everything the game and the launcher read "beside the executable"
-       * (assets/, i18n/, mods/, languages/, msu1/) lives here too: the app
-       * copies its bundled files in on first launch (BabelActivity). */
+    }
+    if (!storage || !storage[0]) {
+#if SNESRECOMP_SDL3
+      storage = SDL_GetAndroidInternalStoragePath();
+#else
+      storage = SDL_AndroidGetInternalStoragePath();
+#endif
+    }
+    if (storage && storage[0]) {
       static char exe[1024];
       snprintf(exe, sizeof(exe), "%s/babel-recomp", storage);
       snesrecomp_set_exe_path(exe);
-      chdir(storage);
+      setenv("SNESRECOMP_DATA_DIR",storage,1);
+      if(chdir(storage)) { fprintf(stderr,"Android data directory unavailable\n"); return 1; }
     }
   }
 #endif
@@ -5383,6 +5458,10 @@ error_reading:;
       }
     }
 
+#ifdef __ANDROID__
+    if(snesrecomp_android_commands(&running,&g_paused)) GameReset();
+    if(!running) { exit_reason="Android return to launcher"; break; }
+#endif
     ProfileEnd(kProfileEvents, event_profile_start);
     if (g_paused != audiopaused) {
       audiopaused = g_paused;
@@ -5652,6 +5731,14 @@ error_reading:;
 
     uint32 human = OverlayFilterGuestInput(
         snes_savestate_menu_filter_guest_input(OverlayNavInputs()));
+    if (g_game->companion_input && g_game->companion_input(&human) &&
+        g_game->companion_open && g_game->companion_open()) {
+      g_companion_open = true;
+      RunCompanionLoop(&running);
+      GameReset();
+      if (snes_settings_menu_is_open()) { RunSettingsMenuLoop(&running); GameReset(); }
+      continue; /* Guest input was consumed; the modal owns no game frame. */
+    }
     uint32 inputs = human | (g_gamepad[1].axis_buttons << 12);
 
     /* Overlay self-test (SNESRECOMP_OVERLAY_SELFTEST=<frame>, off by default).

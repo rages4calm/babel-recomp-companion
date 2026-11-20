@@ -26,8 +26,18 @@ bool IogRasterParallaxPrepare(const uint8_t *rom,size_t rom_bytes,
     const uint16_t *captured_hscroll,size_t captured_lines,
     IogRasterParallax *output);
 
+/* Original Great Wall rampway/pit (85/86), types21/1E. These proportional
+ * bands follow the secondary plane's actual vertical coordinate. All225
+ * source rows must calibrate before expanded pixels can use the model.
+ * Unlike the finite horizon, the wall texture is256 pixels wide and768 or
+ * 2048 high; only X repeats. Output is unchanged on failure. */
+bool IogRasterParallaxPrepareWall(const uint8_t *rom,size_t rom_bytes,
+    bool original_usa_verified,const uint8_t *epoch_ram,size_t ram_bytes,
+    const uint16_t *captured_hscroll,size_t captured_lines,
+    IogRasterParallax *output);
+
 /* Sample the finite horizon's own row, not foreground native_y. X repeats
- * through the caller's normal background map sampler; Y is limited to0..255.
+ * through the caller's normal background map sampler; Y is finite to height.
  * host_camera_x is the host view origin. Fractional phase remains12.4 until
  * the final divide, including negative-camera continuation. Return the real
  * hardware10-bit scroll phase. Native-camera sampling reproduces calibration.

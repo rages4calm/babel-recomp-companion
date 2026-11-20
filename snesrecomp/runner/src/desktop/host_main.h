@@ -159,6 +159,10 @@ typedef struct SnesDesktopHostGame {
    * handles input. Panel coordinates are the image's. */
   /* Prepare and open; return 0 to refuse (e.g. not in play). */
   int (*companion_open)(void);
+  /* Optional title-owned local-input routing, after shared overlay filters.
+   * May consume logical buttons through *inputs and request Companion open.
+   * Never called for scripted input, speculative frames or netplay replay. */
+  int (*companion_input)(uint32_t *inputs);
   /* Pad (runner input word bits, see snes_overlay_draw.h) and the clock. */
   void (*companion_nav)(uint32_t inputs, uint32_t ticks_ms);
   /* Keyboard (SDL keycode), ignored on repeat by most games. */

@@ -18,6 +18,7 @@
 #include "iog_i18n.h"
 #include "iog_randomizer.h"
 #include "iog_cheat_rates.h"
+#include "iog_map_host.h"
 
 int IogHoldAdvanceGet(void);
 void IogHoldAdvanceSet(int v);
@@ -104,6 +105,11 @@ static void CheatSet(void *ud, int v) { IogCheatSet((int)(intptr_t)ud, v != 0); 
 static const char *const kRewardRates[]={"ORIGINAL (1X)","2X","3X","4X","5X","6X","7X","8X"};
 static int RewardRateGet(void *ud) { (void)ud;return IogRoomRewardMultiplierGet()-1; }
 static void RewardRateSet(void *ud,int value) { (void)ud;IogRoomRewardMultiplierSet(value+1); }
+static const char *const kMapButtons[]={"A","B","X","Y","L","R"};
+static int MapRadarGet(void *ud){(void)ud;return IogMapHostRadarEnabled();}
+static void MapRadarSet(void *ud,int value){(void)ud;IogMapHostRadarSet(value!=0);}
+static int MapControlGet(void *ud){return IogMapHostControlGet((int)(intptr_t)ud);}
+static void MapControlSet(void *ud,int value){IogMapHostControlSet((int)(intptr_t)ud,value);}
 
 /* ---- the in-game menus in the game's language -------------------------------
  * English is the source; Spanish while the game runs in Spanish. */
@@ -204,6 +210,19 @@ void IogSettingsInstall(void)
         it.get = MsuGet;
         it.set = MsuSet;
         it.restart = 1;
+        snes_settings_menu_add(&it);
+    }
+
+    memset(&it,0,sizeof it);it.kind=kSnesSetting_Header;
+    it.label="MAP / RADAR (SNES BUTTONS)";snes_settings_menu_add(&it);
+    memset(&it,0,sizeof it);it.kind=kSnesSetting_Toggle;it.label="RADAR";
+    it.get=MapRadarGet;it.set=MapRadarSet;snes_settings_menu_add(&it);
+    static const char *const map_labels[]={"MAP ZOOM IN","MAP ZOOM OUT","MAP CENTER",
+        "MAP RADAR TOGGLE","MAP BACK"};
+    for(int action=0;action<IOG_MAP_CONTROL_COUNT;action++){
+        memset(&it,0,sizeof it);it.kind=kSnesSetting_Choice;it.label=map_labels[action];
+        it.choices=kMapButtons;it.count=IOG_MAP_BUTTON_COUNT;
+        it.get=MapControlGet;it.set=MapControlSet;it.ud=(void*)(intptr_t)action;
         snes_settings_menu_add(&it);
     }
 

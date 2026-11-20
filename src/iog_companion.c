@@ -52,6 +52,7 @@ static int g_live, g_live_seen;
 static uint8_t g_inv_items[16];   /* the inventory the capture shows */
 static uint32_t g_prev_nav;
 static int g_ptr_down;
+static int g_map_requested,g_map_start_held,g_map_start_consumed;
 
 static uint16_t Rd(uint32_t a) { return g_snes->ram[a] | g_snes->ram[a + 1] << 8; }
 static void Wr(uint32_t a, uint16_t v) { g_snes->ram[a] = (uint8_t)v; g_snes->ram[a + 1] = (uint8_t)(v >> 8); }
@@ -84,6 +85,22 @@ static int CapStop(int frame, void *ud)
 static int InPlayQuiet(void)
 {
     return g_snes && Rd(0x09AA) != 0 && Rd(0x0644) != 0x00FF && !(Rd(0x09EC) & 0x6000);
+}
+int IogCompanionInput(uint32_t *human)
+{
+    if(!human||RtlSpeculativeFrame())return 0;
+    const int held=!!(*human&SNES_PAD_START);
+    if(!held){g_map_start_held=g_map_start_consumed=0;return 0;}
+    const int pressed=!g_map_start_held;g_map_start_held=1;
+    if(g_map_start_consumed){*human&=~SNES_PAD_START;return 0;}
+    const char *original=getenv("IOG_ORIGINAL_AREA_MAP");
+    if(!pressed||(original&&*original=='1')||!InPlayQuiet()||
+        !IogMapHostAvailable()||(Rd(0x09ae)&8))return 0;
+    /* Source GlobalInputHandler: Start opens local radar only with combat-lock
+     * bit3 clear. Its pause-only path and unavailable/world-map scenes retain
+     * their original input. No guest code, flags or map data are patched. */
+    *human&=~SNES_PAD_START;g_map_start_consumed=1;g_map_requested=1;
+    return 1;
 }
 
 /* The menu's own font (BG3 2bpp, 256 characters), taken from VRAM while
@@ -458,7 +475,7 @@ static void Compose(void)
     case kPageSaves: DrawSaves(); break;
     case kPageMap:
         Fill(0,0,kW,kH,0x152131);PageList();
-        Hint("Map unavailable here", "Q/E: Pages", "B: Back");break;
+        Hint("Map unavailable here", "L/R: Pages", "B: Back");break;
     default: DrawSettings(); break;
     }
     for (int y = 0; y < kH; y++)
@@ -544,6 +561,7 @@ static void Move(int dx, int dy)
 /* ---- host hooks ------------------------------------------------------------- */
 int IogCompanionOpen(void)
 {
+    if(g_map_requested){g_page=kPageMap;g_map_requested=0;}
     if (!g_snes || !Rd(0x09AA)) return 0;   /* not in play */
     /* The pictures belong to this moment: re-take them (the game is paused,
      * so the short wait is not a hitch in play). Status on first visit. */
@@ -567,7 +585,7 @@ void IogCompanionNav(uint32_t in, uint32_t ticks)
     if (!g_open && !g_live_seen) return;
     if(g_open&&g_page==kPageMap&&IogMapHostAvailable()){
         IogMapHostNav(in,ticks);
-        if(p&SNES_PAD_B)SetPage(kPageItems);
+        if(!IogMapHostIsOpen())SetPage(kPageItems);
         return;
     }
     g_live = !g_open;   /* beside the running game: the right stick */

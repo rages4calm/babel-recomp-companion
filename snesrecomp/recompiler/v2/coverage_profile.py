@@ -244,9 +244,8 @@ def _promotion_boundary_lookup(declared, mapper):
     return lookup
 
 
-def promotion_reason(row, declared, identity, *, boundary_lookup=None):
+def promotion_reason(row, declared, identity, *, canonical_boundaries=None, boundary_lookup=None):
     """Explain whether a row may seed analysis, never whether it is proven AOT."""
-    import re
     if row.get("record_kind", "transfer") != "transfer":
         return "instruction_cost_only"
     if row.get("bail_hits", 0):
@@ -260,7 +259,11 @@ def promotion_reason(row, declared, identity, *, boundary_lookup=None):
     if not (row.get("observed_hits", 0) or row.get("completed_hits", 0)):
         return "no_execution_evidence"
     target = canonical_pc(row["target_pc24"], identity.get("mapper"))
-    boundaries = (boundary_lookup() if boundary_lookup is not None else
+    # Upstream callers can supply one normalized set; local discovery keeps its
+    # lazy gate and one-shot/custom-iterable consumption semantics. Neither path
+    # rebuilds an explicitly prepared set for each row.
+    boundaries = (canonical_boundaries if canonical_boundaries is not None else
+                  boundary_lookup() if boundary_lookup is not None else
                   {canonical_pc(v, identity.get("mapper")) for v in declared})
     if row.get("site_kind") != "call_gap" and target not in boundaries:
         return "landing_requires_function_boundary"

@@ -33,7 +33,7 @@ static const char *ips_path;
 static SNESModActivationCallback ips_activation;
 static uint8_t source_field[256*224*4];
 static bool background_probe,static_plane_probe,stream_plane_probe,source_row_probe;
-static bool cloud_probe;
+static bool cloud_probe,wall_probe;static unsigned wall_calls;
 static bool horizon_probe,horizon_expected_valid,horizon_flat_expected;
 static unsigned horizon_main_calls,horizon_background_calls;
 static int expected_background_x,expected_background_y;
@@ -123,6 +123,13 @@ void PpuDrawDetachedLine(Ppu*p,int line){
   background_probe_calls++;
  }
  uint32_t*row=(uint32_t*)p->renderBuffer;
+ if(wall_probe){
+  unsigned y=wall_calls/3,start=(wall_calls%3)*224;wall_calls++;
+  int wy=s.view.world_y+(int)y;
+  unsigned sample=(unsigned)(wy+1),rate=(sample<96||(sample>=256&&sample<336)||(sample>=512&&sample<592))?2:1;
+  CHECK(p->hScroll[1]==(((unsigned)s.view.world_x/rate+start)&1023));
+  CHECK(p->vScroll[1]==((unsigned)wy&1023));
+ }
  if(horizon_probe){
   bool foreground=(p->screenEnabled[0]&1)!=0;
   unsigned call=foreground?horizon_main_calls++:horizon_main_calls-1;
@@ -174,7 +181,7 @@ static void fixture(void){
  identity_hashes=interpret_all_calls=0;interpreted=0;ips_path=NULL;
  background_probe=static_plane_probe=stream_plane_probe=false;background_probe_calls=0;
  source_row_probe=false;
- cloud_probe=false;
+ cloud_probe=wall_probe=false;wall_calls=0;
  horizon_probe=false;horizon_expected_valid=false;horizon_flat_expected=false;horizon_main_calls=horizon_background_calls=0;
 }
 static void publication(void){
@@ -517,6 +524,30 @@ static void horizon_picture(unsigned scene,unsigned camera,bool fault,unsigned t
  }
  CHECK(!memcmp(before_ram,ram,sizeof ram)&&!memcmp(&cpu,&g_cpu,sizeof cpu)&&!memcmp(&before_ppu,g_ppu,sizeof before_ppu));
 }
+static void calibrated_wall_picture(void){
+ fixture();word(0x644,0x86);word(0x692,768);word(0x696,1536);word(0x694,256);word(0x698,2048);
+ word(0x68a,400);word(0x68e,100);word(0x68c,0);word(0x690,100);word(0x6e4,0);
+ word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xEAB4,0,0x0101);
+ word(0x6d6,0);word(0x6d8,0);word(0x6da,768);word(0x6de,1536);
+ g_ppu->hScroll[0]=400;g_ppu->hScroll[1]=400;g_ppu->vScroll[0]=g_ppu->vScroll[1]=100;
+ g_ppu->screenEnabled[0]=19;
+ raster_rom_word(0x1cc00+0x1e*2,0x8000);raster_rom_word(0x18000,0x7800);rom[0x18002]=0x7e;rom[0x18003]=0x0f;rom[0x18004]=8;
+ const unsigned heights[]={96,160,80,176,80,2048};
+ for(unsigned i=0;i<6;i++){
+  unsigned at=0x18005+i*8;raster_rom_word(at,65536-heights[i]);raster_rom_word(at+2,0x720+i*2);
+  raster_rom_word(at+4,i%2?0x0110:0x0108);
+ }
+ publication();memcpy(before_ram,ram,sizeof ram);CpuState cpu=g_cpu;
+ IogWorldBeginRaster();
+ for(unsigned line=0;line<=224;line++){
+  unsigned y=100+line;g_ppu->hScroll[1]=(uint16_t)(y<256?400:200);
+  IogWorldCaptureLine((int)line);
+ }
+ before_ppu=*g_ppu;wall_probe=true;IogWorldEndRaster(0,225,0);wall_probe=false;
+ CHECK(s.complete&&s.width==598&&s.height==336&&s.view.world_x==170&&s.view.world_y==44);
+ CHECK(wall_calls==3*336&&!strcmp(s.reason,"ready"));
+ CHECK(!memcmp(before_ram,ram,sizeof ram)&&!memcmp(&cpu,&g_cpu,sizeof cpu)&&!memcmp(&before_ppu,g_ppu,sizeof before_ppu));
+}
 static void flat_horizon_tail_guards(void){
  fixture();PictureEpoch e;memset(&e,0,sizeof e);
  e.ram[0x694]=0;e.ram[0x695]=2;e.ram[0x698]=0;e.ram[0x699]=1;
@@ -546,7 +577,7 @@ static void flat_horizon_tail_guards(void){
  e.ram[0xc1ff]=0;e.ram[0x695]=1;CHECK(!HorizonFlatTail(&e,g_ppu));
 }
 static void calibrated_finite_horizon(void){
- flat_horizon_tail_guards();
+ calibrated_wall_picture();flat_horizon_tail_guards();
  horizon_picture(0x1a,160,false,1);horizon_picture(0x1c,168,false,1);
  horizon_picture(0x1a,160,false,2);horizon_picture(0x1c,168,false,2);
  horizon_picture(0x1a,160,false,0);horizon_picture(0x1a,168,false,0);
@@ -861,6 +892,19 @@ def main():
     row_run=subprocess.run([str(row_exe),str(out/'row-causal-packet')],env=env,capture_output=True,text=True)
     (out/'row-causal-run.log').write_text(row_run.stdout+row_run.stderr)
     assert row_run.returncode!=0 and 'p->vram[address]==0x600e' in row_run.stderr
+    wall_needle='wall_bands=IogRasterParallaxPrepareWall'
+    assert renderer_text.count(wall_needle)==1
+    wall_mutant=out/'world_without_wall_bands.c'
+    wall_mutant.write_text(renderer_text.replace(wall_needle,'wall_bands=false&&IogRasterParallaxPrepareWall'),encoding='utf-8')
+    wall_source=out/'wall_bands_causal.c'
+    wall_source.write_text(HARNESS.replace('#include "iog_world_renderer.c"','#include "'+wall_mutant.as_posix()+'"'),encoding='utf-8')
+    wall_exe=out/'wall_bands_causal.exe';wall_command=command.copy()
+    wall_command[wall_command.index(str(source))]=str(wall_source);wall_command[-1]=str(wall_exe)
+    wall_build=subprocess.run(wall_command,capture_output=True,text=True)
+    (out/'wall-causal-build.log').write_text(wall_build.stdout+wall_build.stderr);wall_build.check_returncode()
+    wall_run=subprocess.run([str(wall_exe),str(out/'wall-causal-packet')],env=env,capture_output=True,text=True)
+    (out/'wall-causal-run.log').write_text(wall_run.stdout+wall_run.stderr)
+    assert wall_run.returncode!=0 and 'p->hScroll[1]' in wall_run.stderr
     inputs = [ROOT/'src/iog_raster_parallax.c',ROOT/'src/iog_raster_parallax.h',ROOT/'src/iog_mode7_perspective.h',ROOT/'src/iog_mode7_plane.h',ROOT/'src/iog_world_renderer.c',ROOT/'src/iog_world_renderer.h',ROOT/'src/iog_visual_objects.h',ROOT/'src/iog_world_view.c',ROOT/'src/iog_world_view.h',ROOT/'src/iog_world_pixels.c',ROOT/'src/iog_world_pixels.h',ips,ROOT/'snesrecomp/runner/src/sha256.c',ROOT/'snesrecomp/runner/src/sha256.h']
     result = dict(passed=run.returncode==0,command=command,
         scope='Actual world module/SDKheaders; stubbed scene/visual/detachedpixels, no real game/APU/PPU parity or GPU',
@@ -881,6 +925,8 @@ def main():
         finite_horizon_does_not_repeat_vertical_sky_or_unmask_foreground_OBJ=True,
         finite_horizon_flat_tail_opaque_uniform_palette_flip_and_full_extent_guards_passed=True,
         corrupted_horizon_capture_retains_legacy_raster_policy=True,
+        calibrated_wall_bands_select_expanded_world_rows_and_fractional_horizontal_rates=True,
+        removed_wall_bands_causal_mutant_rejected=True,wall_bands_causal_exit_code=wall_run.returncode,
         fallback_world_pixel_scale_preserved_at_all_three_extents=True,
         great_wall_three_authored_courses_do_not_expose_spare_pages=True,
         foreground_source_row_causal_mutant_rejected=True,

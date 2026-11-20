@@ -4,9 +4,11 @@ Owner-approved November 13, 2026. This is a product contract, not a claim that
 the features below are implemented or that the received dev build enables every
 GaiaLabs module.
 
-The main game includes GaiaLabs' map foundation, alongside its Retranslation
-and approved expanded room maps. Preserve all GaiaLabs and collaborator credits.
-The enhanced map is built-in content, not a separate edition or patch selector.
+The main-content plan preserves GaiaLabs' world travel map and Retranslation,
+alongside approved expanded room maps and all collaborator credits. The local
+area map/radar uses our scenery and explored-area design. The owner clarified
+this distinction November 19: avoid two competing local maps. These features
+belong in one game, without an edition or patch selector.
 
 ## Approved experience
 
@@ -82,3 +84,12 @@ receipts. This first version shows the player, discovered scenery and a clean
 collision radar. Chest/enemy/exit filters and full-game source bindings remain
 unimplemented, so no controls promise those features yet. The wider experience
 above remains the direction rather than a completed checklist.
+
+## Controller and local-map routing — November 19
+
+Controller operation is required, with shared physical button mapping and
+configurable local Map actions. See [current integration](VISUAL-FULLGAME-003.md).
+Original Start now opens our enhanced local map only in verified contexts where
+the original input handler would open radar. Its pause contexts and world travel
+retain their original input. The received experimental reference still has its
+own guest minimap; no undocumented received input patch is used to hide it.

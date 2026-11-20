@@ -26,6 +26,11 @@ void IogMapUiInit(IogMapUi *ui) {
   ui->center_pending = true;
   ui->zoom_index = -1;
 }
+void IogMapUiControllerHints(IogMapUi *ui,const char *hint,const char *back) {
+  if(!ui||ui->magic!=Magic)return;
+  snprintf(ui->controller_hint,sizeof(ui->controller_hint),"%s",hint?hint:"");
+  snprintf(ui->controller_back,sizeof(ui->controller_back),"%s",back?back:"");
+}
 void IogMapUiHandleInput(IogMapUi *ui, const IogMapUiInput *in) {
   if (!ui || !in || ui->magic != Magic)
     return;
@@ -306,9 +311,10 @@ bool IogMapUiDraw(IogMapUi *ui, uint8_t *dst, size_t bytes, size_t pitch,
       Text(p, stride, (int)h, px + 105, py + 9, floor, Gold,
            layout.center - (px + 105) - 10);
     }
-    const char *back = meta->gamepad ? "B Back" : "Esc Back";
+    const char *back = meta->gamepad ?
+        (ui->controller_back[0]?ui->controller_back:"B Back") : "Esc Back";
     int bx = layout.back;
-    Text(p, stride, (int)h, bx, py + 9, back, Gold, 64);
+    Text(p, stride, (int)h, bx, py + 9, back, Gold, pw-bx+px-7);
     snes_ovl_stroke_rect(p, stride, (int)h, layout.minus, py + 5, 20, 16, Gold);
     snes_ovl_stroke_rect(p, stride, (int)h, layout.plus, py + 5, 20, 16, Gold);
     Text(p, stride, (int)h, layout.minus + 6, py + 9, "-", Ivory, 8);
@@ -318,11 +324,12 @@ bool IogMapUiDraw(IogMapUi *ui, uint8_t *dst, size_t bytes, size_t pitch,
                            0xff344251u);
       Text(p, stride, (int)h, layout.center + 4, py + 9, "Center", Ivory, 48);
     }
-    const char *hint = meta->gamepad ? "Pad Move  L/R Zoom  Y Center"
+    const char *hint = meta->gamepad ? "SNES: L/R Zoom Y Center X Radar"
                                      : "Arrows Move  +/- Zoom  Home Center";
     if (pw < 360)
-      hint = meta->gamepad ? "Pad Move L/R Zoom Y Center"
+      hint = meta->gamepad ? "SNES: L/R Zoom Y Center X Radar"
                            : "Arrows Move +/- Zoom Home Center";
+    if(meta->gamepad&&ui->controller_hint[0])hint=ui->controller_hint;
     Text(p, stride, (int)h, px + 9, py + ph - 13, hint, Ivory, pw - 18);
   } else {
     Text(p, stride, (int)h, px + 7, py + 6, "Area", Ivory, pw - 14);

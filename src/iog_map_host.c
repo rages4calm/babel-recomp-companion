@@ -10,6 +10,7 @@
 #include "snes/snes.h"
 #include "snes/cart.h"
 #include "snes_overlay_draw.h"
+#include "mod_runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,12 +24,44 @@ extern Snes *g_snes;
 
 static IogMapRuntime *runtime;
 static IogMapUi ui;
-static bool initialized,opened,gamepad;
+static bool initialized,opened,gamepad=true;
 static unsigned suspended;
 static uint32_t previous_pad,last_ticks;
 static uint32_t canvas[598*336];
 static unsigned frame_number;
 static FILE *audit;
+static const char *const control_names[IOG_MAP_BUTTON_COUNT]={"A","B","X","Y","L","R"};
+static const uint32_t control_bits[IOG_MAP_BUTTON_COUNT]={SNES_PAD_A,SNES_PAD_B,
+    SNES_PAD_X,SNES_PAD_Y,SNES_PAD_L,SNES_PAD_R};
+#if SNESRECOMP_ENABLE_MODS
+static const char *const control_options[IOG_MAP_CONTROL_COUNT]={
+    "zoom_in","zoom_out","center","radar_button","back"};
+#endif
+static const int control_defaults[IOG_MAP_CONTROL_COUNT]={5,4,3,2,1};
+static int controls[IOG_MAP_CONTROL_COUNT];
+static void LoadControls(void)
+{
+    memcpy(controls,control_defaults,sizeof(controls));
+#if SNESRECOMP_ENABLE_MODS
+    if(snes_mod_runtime_feature_enabled_c("iog.enhancements","map_controls")<=0)return;
+    unsigned used=0;
+    for(int a=0;a<IOG_MAP_CONTROL_COUNT;a++){
+        char value[16]={0};int button=control_defaults[a];
+        if(snes_mod_runtime_feature_option_value_c("iog.enhancements","map_controls",
+            control_options[a],value,sizeof(value))>0)
+            for(int b=0;b<IOG_MAP_BUTTON_COUNT;b++)
+                if(!strcmp(value,control_names[b]))button=b;
+        if(used&(1u<<button)){
+            button=control_defaults[a];
+            if(used&(1u<<button))for(button=0;used&(1u<<button);button++){}
+        }
+        controls[a]=button;used|=1u<<button;
+    }
+    char value[16]={0};
+    if(snes_mod_runtime_feature_option_value_c("iog.enhancements","map_controls",
+        "radar",value,sizeof(value))>0&&!strcmp(value,"off"))ui.radar=false;
+#endif
+}
 
 static unsigned Word(const uint8_t *r,unsigned n)
 {return r[n]|(unsigned)r[n+1]<<8;}
@@ -44,7 +77,7 @@ static void AuditEvent(const char *event)
 static void Initialize(void)
 {
     if(initialized)return;
-    initialized=true;IogMapUiInit(&ui);
+    initialized=true;IogMapUiInit(&ui);LoadControls();
     /* Match this title's SRAM directory on a fresh portable installation.
      * Runtime creates only its own guarded maps child. */
 #ifdef _WIN32
@@ -122,7 +155,7 @@ void IogMapHostFrame(bool verified,const char *content)
             Word(r,0x69a)==(w>>8)*(h>>8)*256&&
             0xa000u+Word(r,0x69a)<=65536&&
             !PPU_bigTiles(g_ppu,physical)&&!PPU_bgTilemapHigher(g_ppu,physical)&&
-            PPU_bgTilemapAdr(g_ppu,physical)==Word(r,0x6ba);
+            (unsigned)PPU_bgTilemapAdr(g_ppu,physical)==Word(r,0x6ba);
         f.ram=r;f.ram_bytes=131072;f.ppu=g_ppu;f.scene=(uint16_t)Word(r,0x644);
         f.authored=(IogMapRuntimeRect){x,y,right-x,bottom-y};
         f.camera_x=(int16_t)Word(r,0x68a);f.camera_y=(int16_t)Word(r,0x68e);
@@ -166,14 +199,52 @@ bool IogMapHostAvailable(void)
 }
 void IogMapHostRadarToggle(void)
 {
-    Initialize();IogMapUiInput input={0};input.toggle_radar=true;
-    IogMapUiHandleInput(&ui,&input);
+    Initialize();IogMapHostRadarSet(!ui.radar);
+}
+bool IogMapHostRadarEnabled(void){Initialize();return ui.radar;}
+void IogMapHostRadarSet(bool enabled)
+{
+    Initialize();if(ui.radar==enabled)return;
+    ui.radar=enabled;
+#if SNESRECOMP_ENABLE_MODS
+    snes_mod_runtime_persist_feature_c("iog.enhancements","map_controls",1,"radar",
+        enabled?"on":"off");
+#endif
+}
+const char *IogMapHostControlName(int button)
+{return button>=0&&button<IOG_MAP_BUTTON_COUNT?control_names[button]:"?";}
+int IogMapHostControlGet(int action)
+{Initialize();return action>=0&&action<IOG_MAP_CONTROL_COUNT?controls[action]:-1;}
+void IogMapHostControlSet(int action,int button)
+{
+    Initialize();
+    if(action<0||action>=IOG_MAP_CONTROL_COUNT||button<0||button>=IOG_MAP_BUTTON_COUNT||
+        controls[action]==button)return;
+    int old=controls[action];
+    for(int a=0;a<IOG_MAP_CONTROL_COUNT;a++)
+        if(a!=action&&controls[a]==button)controls[a]=old;
+    controls[action]=button;
+    /* Persist the complete conflict-free assignment; a swapped Back binding
+     * must survive restart along with the action the player changed. */
+#if SNESRECOMP_ENABLE_MODS
+    for(int a=0;a<IOG_MAP_CONTROL_COUNT;a++)
+        snes_mod_runtime_persist_feature_c("iog.enhancements","map_controls",1,
+            control_options[a],control_names[controls[a]]);
+#endif
+    previous_pad=~0u;
 }
 static bool Draw(uint8_t *dst,size_t bytes,size_t pitch,int w,int h)
 {
     IogMapViewSource source;
     if(!runtime||!IogMapRuntimeGetViewSource(runtime,&source))return false;
     IogMapUiMetadata metadata={true,false,gamepad,0};
+    char hint[96],back[24];
+    snprintf(hint,sizeof(hint),"Pad Move  SNES: %s/%s Zoom  %s Center  %s Radar %s",
+        control_names[controls[IOG_MAP_ZOOM_OUT]],control_names[controls[IOG_MAP_ZOOM_IN]],
+        control_names[controls[IOG_MAP_CENTER]],control_names[controls[IOG_MAP_RADAR]],
+        ui.radar?"ON":"OFF");
+    snprintf(back,sizeof(back),"%s Back",control_names[controls[IOG_MAP_BACK]]);
+    IogMapUiControllerHints(&ui,hint,back);
     return IogMapUiDraw(&ui,dst,bytes,pitch,(unsigned)w,(unsigned)h,&source,&metadata);
 }
 void IogMapHostDrawRadar(uint8_t *dst,size_t pitch,int w,int h)
@@ -208,8 +279,11 @@ void IogMapHostNav(uint32_t pad,uint32_t ticks)
     IogMapUiInput in={0};in.dt_ms=delta;
     in.pan_x=(!!(pad&SNES_PAD_RIGHT))-(!!(pad&SNES_PAD_LEFT));
     in.pan_y=(!!(pad&SNES_PAD_DOWN))-(!!(pad&SNES_PAD_UP));
-    in.zoom_out=!!(pressed&SNES_PAD_L);in.zoom_in=!!(pressed&SNES_PAD_R);
-    in.recenter=!!(pressed&SNES_PAD_Y);in.close=!!(pressed&SNES_PAD_B);
+    in.zoom_out=!!(pressed&control_bits[controls[IOG_MAP_ZOOM_OUT]]);
+    in.zoom_in=!!(pressed&control_bits[controls[IOG_MAP_ZOOM_IN]]);
+    in.recenter=!!(pressed&control_bits[controls[IOG_MAP_CENTER]]);
+    in.close=!!(pressed&control_bits[controls[IOG_MAP_BACK]]);
+    if(pressed&control_bits[controls[IOG_MAP_RADAR]])IogMapHostRadarToggle();
     if(pad)gamepad=true;
     if(pad)AuditEvent("map_pad");
     IogMapUiHandleInput(&ui,&in);if(in.close)opened=false;
