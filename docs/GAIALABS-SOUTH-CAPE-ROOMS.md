@@ -33,3 +33,29 @@ The guest CPU still uses the interpreter. Private test receipts are in
 `.local/batch-001/visual-fullgame-006`. The preview executable is
 `babel-mainv2.exe` with SHA-256
 `e0cefeda704eb165033909e7e8553879e89fd874a5131a3b03655be4a42b8b2e`.
+
+## Classroom exit follow-up
+
+The GaiaLabs preview now checks the west doorway and the east stair where
+each is drawn. Each uses its existing destination and the game's normal scene
+loader. The correction applies to the verified received image and classroom
+tables. Set `IOG_RECEIVED_CLASSROOM_DOORS=0` to use the original triggers.
+The strict reference and the previous preview remain available.
+
+The classroom returns can use wider town camera bounds than world-map
+arrival. The town renderer now accepts those verified bounds at the same
+1.5× scale, with the existing layout and raster guards.
+
+Two SDL virtual gamepad routes started from the same existing classroom
+checkpoint. Will walked through the west doorway to the roof and across the
+hall through the east stairs to South Cape. Each route then entered again
+from town and walked back out. After loading the checkpoint, the routes used
+gamepad inputs without position or flag writes. Both initial exit sequences
+stayed in the classroom with the correction disabled. Private 1920×1080
+OpenGL captures for both exits confirm the 598×336 view before and after
+the transition. The earlier world-map and town route still matches all 75
+sampled guest files.
+
+Private verification is in `.local/batch-001/visual-fullgame-007`. The
+selected preview is `babel-mainv3.exe` with SHA-256
+`1cc7e39487ef24c54ad853ef7d161e24cd119aca1c84cb0c16541d771142f4b0`.
