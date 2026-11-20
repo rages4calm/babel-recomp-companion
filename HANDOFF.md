@@ -9,17 +9,30 @@ floor/room bounds, menus and transitions; integrate approved GaiaLabs maps with
 Retranslation as built-in main content. Stock USA is the internal reference.
 Keep performance checks focused on visible smoothness, not repeated benchmarks.
 
-## ACTIVE: full-game presentation and GaiaLabs maps
+## ACTIVE: Original-based Companion and selected GaiaLabs features
 
-Continue from [batch 004](docs/VISUAL-FULLGAME-004.md) and the private receipts in
-`.local/batch-001/visual-fullgame-004`. The Original test launcher selects
-`babel-originalv3.exe`, with the batch 003 launcher available as fallback.
-The private GaiaLabs preview now selects `babel-mainv3.exe` from
-`.local/batch-001/visual-fullgame-007` and starts at the staged world map.
+The Original-based Companion is the game build. Integrate the approved
+Retranslation, world map and individually selected QoL features into it.
+The private received build is a compatibility fixture for testing GaiaLabs
+behavior and extracting requirements feature by feature. Its experimental
+town maps and warp coordinates are specific to that preview.
+
+[Original integration status](docs/GAIALABS-ORIGINAL-INTEGRATION.md) records
+the first dialogue import, the wider stock Mode 7 destination menu and the
+Freejia scrolling fix. Private exact-build receipts are in
+`.local/batch-001/visual-fullgame-009`. Continue with unsupported chapter
+commands, the isolated walkable-world-map integration, and unverified rooms.
+
+The current Original test launcher is `Play Original 1.5x Test.cmd` in
+`.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
+The earlier [batch 004](docs/VISUAL-FULLGAME-004.md) and batch 003 launchers
+remain available.
+The GaiaLabs compatibility preview is paused. Batch 007 is the last
+published preview. Batch 008 harbor findings and controller receipts are
+available for reference in `.local/batch-001/visual-fullgame-008`.
 [The South Cape room pass](docs/GAIALABS-SOUTH-CAPE-ROOMS.md) continues
 [the town renderer](docs/GAIALABS-SOUTH-CAPE.md) through nearby doors.
-Both visible classroom exits now work with controller input at 1.5×.
-The batch 006, batch 005 and batch 004 preview launchers remain available.
+Both visible classroom exits were verified with controller input at 1.5×.
 
 - Great Wall rooms 82/83/87/88/8A/8B use calibrated scrolling at widescreen/1.5×.
   The room 82 missing scenery and room 8A band phase are corrected. Neighbor
