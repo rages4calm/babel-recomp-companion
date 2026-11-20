@@ -20,6 +20,7 @@ OBSERVER_PHASE_HARNESS = r'''
 static Snes machine;static Ppu picture;static uint8_t fixture_ram[131072];
 Snes *g_snes=&machine;Ppu *g_ppu=&picture;CpuState g_cpu;
 static unsigned registered;
+bool IogReceivedWorldEnabled(void) { return false; }
 bool interp_bridge_add_pre_opcode_hook(uint32_t pc,InterpPreOpcodeHook hook)
 {(void)pc;(void)hook;registered++;return true;}
 int main(void){
