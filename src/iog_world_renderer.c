@@ -448,18 +448,19 @@ static int ProjectEffect(unsigned ratio,int position)
 
 enum { RingWavePeriod = 64 };
 
-static bool UploadedRingWave(const Ppu *p,bool stable_color)
+static bool UploadedRingWave(const Ppu *p,unsigned layer,bool stable_color)
 {
-    unsigned vscroll = Word(s.lines[1].registers,offsetof(Ppu,vScroll)) & 1023;
+    size_t h=offsetof(Ppu,hScroll)+layer*2,v=offsetof(Ppu,vScroll)+layer*2;
+    unsigned vscroll = Word(s.lines[1].registers,v) & 1023;
     bool varied = false;
-    unsigned first = Word(s.lines[1].registers,offsetof(Ppu,hScroll)) & 1023;
+    unsigned first = Word(s.lines[1].registers,h) & 1023;
     for (unsigned line = 1; line <= 224; line++) {
         const uint8_t *regs = s.lines[line].registers;
-        unsigned hscroll = Word(regs,offsetof(Ppu,hScroll)) & 1023;
+        unsigned hscroll = Word(regs,h) & 1023;
         unsigned phase = (line - 1) % RingWavePeriod + 1;
-        if ((Word(regs,offsetof(Ppu,vScroll)) & 1023) != vscroll ||
-            hscroll != (Word(s.lines[phase].registers,offsetof(Ppu,hScroll)) & 1023) ||
-            regs[offsetof(Ppu,bgXsc)] != p->bgXsc[0] ||
+        if ((Word(regs,v) & 1023) != vscroll ||
+            hscroll != (Word(s.lines[phase].registers,h) & 1023) ||
+            regs[offsetof(Ppu,bgXsc)+layer] != p->bgXsc[layer] ||
             Word(regs,offsetof(Ppu,bgTileAdr)) != p->bgTileAdr ||
             (stable_color && (regs[offsetof(Ppu,cgwsel)]!=p->cgwsel ||
              regs[offsetof(Ppu,cgadsub)]!=p->cgadsub)))
@@ -482,7 +483,7 @@ static bool FreejiaRingWave(const PictureEpoch *e, const Ppu *p,
         camera->ratio[1] != 0x0101 ||
         PPU_bigTiles(p,0) || PPU_bgTilemapWider(p,0) || PPU_bgTilemapHigher(p,0))
         return false;
-    return UploadedRingWave(p,false);
+    return UploadedRingWave(p,0,false);
 }
 
 /* The Mansion uses a two-page uploaded BG1 fog ring in display mode $22.
@@ -497,7 +498,23 @@ static bool MansionFog(const PictureEpoch *e,const Ppu *p,
         Word(ram,0x694)==512 && Word(ram,0x698)==256 &&
         camera->uploaded_ring && camera->ratio[0]==0x0101 && camera->ratio[1]==0x0101 &&
         !PPU_bigTiles(p,0) && PPU_bgTilemapWider(p,0) && !PPU_bgTilemapHigher(p,0) &&
-        p->cgwsel==0x02 && p->cgadsub==0x21 && UploadedRingWave(p,true);
+        p->cgwsel==0x02 && p->cgadsub==0x21 && UploadedRingWave(p,0,true);
+}
+
+/* All five rematches retain their stars in an uploaded BG2 ring under the
+ * ending wave. The stars may be on either screen. Leave both enables and
+ * backdrop math in the captured state rather than moving BG2 to main. */
+static bool BabelStarfield(const PictureEpoch *e,const Ppu *p)
+{
+    const uint8_t *ram=e->ram;
+    unsigned scene=Word(ram,0x644);
+    if(scene<0xF2 || scene>0xF6 || (Word(ram,0x6EE)&0x0480)!=0x0400 ||
+       Word(ram,0x694)!=512 || Word(ram,0x698)!=512 ||
+       PPU_bigTiles(p,1) || !PPU_bgTilemapWider(p,1) || PPU_bgTilemapHigher(p,1) ||
+       ((p->screenEnabled[0]|p->screenEnabled[1])&2)==0 ||
+       p->cgwsel!=0x02 || p->cgadsub!=0x31)
+        return false;
+    return UploadedRingWave(p,1,true);
 }
 
 enum { WaterWavePeriod = 8 };
@@ -616,13 +633,17 @@ static bool OriginalClassroomPixel(const PictureEpoch *e,int x,int y)
 
 typedef struct PictureBounds { int left,top,right,bottom; } PictureBounds;
 
+static bool SourcePlateScene(unsigned scene)
+{
+    return (scene>=0xE4 && scene<=0xE8) || scene==0xF0;
+}
+
 static bool BoundedRoomScene(unsigned scene)
 {
     switch(scene) {
     case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x31:
-    case 0x49: case 0x85: case 0xDA: case 0xE4: case 0xE5:
-    case 0xE6: case 0xE7: case 0xE8: return true;
-    default: return false;
+    case 0x49: case 0x85: case 0xDA: return true;
+    default: return SourcePlateScene(scene);
     }
 }
 
@@ -657,11 +678,15 @@ static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
     if(scene==0x03 || scene==0x04 || scene==0xE6 || scene==0xE8) expected_height=512;
     if(scene==0x06) expected_height=1280;
     if(!BoundedRoomScene(scene) || width!=expected_width || height!=expected_height) return false;
-    if(scene>=0xE4 && scene<=0xE8) {
+    if(SourcePlateScene(scene)) {
         /* The Babel rooftop's blue vortex is cutscene art in its BG2
          * allocation. Showing the unused side tiles creates a water strip
          * suspended over the void. Keep the composed cutscene field. */
         if(scene==0xE4 && (Word(ram,0x694)!=512 || Word(ram,0x698)!=512))
+            return false;
+        /* The final school scene has a single composed street view and
+         * moving cutscene actors. Its BG3 dialogue can use the host frame. */
+        if(scene==0xF0 && (Word(ram,0x694)!=256 || Word(ram,0x698)!=256))
             return false;
         *out=(PictureBounds){camera_x,camera_y,camera_x+256,camera_y+224};
         return true;
@@ -856,7 +881,7 @@ static bool RenderWorld(void)
     int camera_x=(int16_t)Word(s.active_ram,0x68A);
     int camera_y=(int16_t)Word(s.active_ram,0x68E);
     bool village_heat=scene==0xAC && VillageHeat(first,p);
-    bool source_plate=scene>=0xE4 && scene<=0xE8;
+    bool source_plate=SourcePlateScene(scene);
     if(source_plate) {
         /* These verified compositions expose only their native field. Their
          * BG scroll can animate independently of the actor camera (E7 flight),
@@ -906,6 +931,7 @@ static bool RenderWorld(void)
     bool freejia_wave = tracked_effect && s.epoch_count == 1 &&
         FreejiaRingWave(first,p,&effect_camera);
     bool mansion_fog=tracked_effect && s.epoch_count==1 && MansionFog(first,p,&effect_camera);
+    bool babel_stars=s.epoch_count==1 && BabelStarfield(first,p);
     bool water_wave = WaterWave(first,p);
     bool dao_heat=DaoHeatWave(first,p);
     if (scene == 0x32 && !freejia_wave) {
@@ -915,8 +941,11 @@ static bool RenderWorld(void)
     if(scene==0xE9 && !mansion_fog) {
         s.reason="unsupported_mansion_fog";return false;
     }
+    if(scene>=0xF2 && scene<=0xF6 && (!babel_stars || !AuthoredWindow(first,&authored_bounds))) {
+        s.reason="unsupported_babel_starfield";return false;
+    }
     bool deferred_raster_effect=false;
-    if(tracked_effect && !horizon && !wall_bands && !freejia_wave && !mansion_fog) {
+    if(tracked_effect && !horizon && !wall_bands && !freejia_wave && !mansion_fog && !babel_stars) {
         /* A camera actor does not describe per-band HDMA derivatives.
          * Keep those on their prior sampling policy until their actual
          * raster producer is bound; a global ratio would be misleading. */
@@ -946,6 +975,15 @@ static bool RenderWorld(void)
         Word(first->ram,0x6DA)==256 && Word(first->ram,0x6DE)==256;
     if(scene==0x58 && !story_sky) {
         s.reason="unsupported_story_sky";return false;
+    }
+    /* The raft uses a finite 256-pixel field over a separate ocean map.
+     * The lower rows of the first page repeat open water. The page below
+     * that stores other authored material, including another horizon. */
+    bool adrift_ocean=scene==0x2F && !physical && s.epoch_count==1 &&
+        Word(first->ram,0x692)==256 && Word(first->ram,0x694)==512 &&
+        Word(first->ram,0x696)==256 && Word(first->ram,0x698)==512;
+    if(scene==0x2F && !adrift_ocean) {
+        s.reason="unsupported_adrift_ocean";return false;
     }
     bool authored_window_pan=false;
     if(bounded) {
@@ -1028,9 +1066,10 @@ static bool RenderWorld(void)
                 int camx=ScrollWorld(e->ram,0x68A+logical*2,p->hScroll[physical]);
                 int camy=ScrollWorld(e->ram,0x68E + logical*2,p->vScroll[physical]);
                 int wx=camx-left+start,wy=camy+native_y;
+                bool star_plane=logical==1 && babel_stars;
                 bool effect=logical==1 && (!bounded || scene==0x85) && !classroom &&
                     (tracked_effect || horizon || EffectPlaneScene(scene));
-                if(effect && !raster_anchored) {
+                if(effect && !raster_anchored && !star_plane) {
                     /* Reframe at this plane's rate. Subtracting the whole
                      * foreground offset makes a quarter-speed/fixed backdrop
                      * slide as the player moves inside a clamped host view.
@@ -1064,9 +1103,9 @@ static bool RenderWorld(void)
                     if(IogRasterParallaxSample(&wall_model,wy+1,s.view.world_x,&phase))
                         wx=(int)phase+start;
                 }
-                if(logical==1&&(freejia_wave||mansion_fog)&&(native_y<0 || native_y>=224)) {
+                if(logical==1&&(freejia_wave||mansion_fog||star_plane)&&(native_y<0 || native_y>=224)) {
                     int phase=(native_y%RingWavePeriod+RingWavePeriod)%RingWavePeriod+1;
-                    unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,hScroll));
+                    unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,hScroll)+physical*2);
                     int wave_x=ScrollWorld(e->ram,0x68C,scroll);
                     wx+=wave_x-camx;
                 }
@@ -1088,14 +1127,19 @@ static bool RenderWorld(void)
                     unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,vScroll)+physical*2);
                     wy+=ScrollWorld(e->ram,0x68E + logical*2,scroll)-camy;
                 }
+                if(logical==1 && adrift_ocean && native_y<0 && wy<0) wy=0;
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)wy&1023;
+                if(star_plane) continue;
                 /* Layer-1 position bypass deliberately performs no map
                  * streaming. Solid Arm's animated backdrop lives in the
                  * uploaded VRAM ring; rebuilding it from allocation data
                  * replaces the animation with unrelated map cells. */
                 if(effect && ((tracked_effect && effect_camera.uploaded_ring) ||
                    (scene==0xEA && (e->ram[0x6EF]&4)))) continue;
+                int sample_y=wy+1;
+                if(logical==1 && adrift_ocean && sample_y>=256)
+                    sample_y=160+((sample_y-160)%32);
                 for(int x=wx&~7;x<wx+width;x+=8) {
                     /* BG sampling uses hardware line1 while OBJ evaluation
                      * uses line0 for the same first output row. */
@@ -1106,9 +1150,9 @@ static bool RenderWorld(void)
                         int repeat_width=finite_wall?wall_model.width:512;
                         sample_x%=repeat_width;if(sample_x<0)sample_x+=repeat_width;
                     }
-                    bool repeat=story_sky || ((effect || (logical==1 && underside_backdrop)) &&
+                    bool repeat=(adrift_ocean && logical==1) || story_sky || ((effect || (logical==1 && underside_backdrop)) &&
                         !finite_horizon && !finite_wall && (!bounded || scene==0x85) && !classroom);
-                    unsigned tile=MapTile(e,logical,sample_x,wy+1,repeat);
+                    unsigned tile=MapTile(e,logical,sample_x,sample_y,repeat);
                     if(tile==0xFFFFFFFFu) tile=(unsigned)blank[logical];
                     /* Overlapping authentic cells use the actual uploaded
                      * VRAM entry, including partially updated scroll strips. */
@@ -1141,10 +1185,11 @@ static bool RenderWorld(void)
             IogWorldPixelsDrawLine(p,0);IogWorldPixelsDrawLine(p,1);
             uint32_t composite[Chunk];
             bool cloud_sky=((scene==0x55 && !bounded && !authored &&
-                Word(e->ram,0x694)==512 && Word(e->ram,0x698)==512)||horizon) &&
+                Word(e->ram,0x694)==512 && Word(e->ram,0x698)==512)||horizon||adrift_ocean) &&
                 (p->screenEnabled[0]&(1u<<(1^((e->ram[0x6EE]>>7)&1))));
-            if(cloud_sky) {
-                /* Viper's source meta declares a separate cloud plane. Draw
+            bool backdrop_only=cloud_sky || babel_stars;
+            if(backdrop_only) {
+                /* These scenes have a separate cloud or star plane. Draw
                  * only that plane outside terrain bounds; unmasking the full
                  * composite would expose spare floor pages and off-map actors.
                  * Preserve the ordinary composite everywhere inside the room
@@ -1180,8 +1225,8 @@ static bool RenderWorld(void)
                    worldy>=0&&worldy<(int)Word(e->ram,0x696)));
                 if(castle_marker && !native_pixel && worldx>=480 && worldy>=735)
                     inside=false;
-                if(inside || cloud_sky || story_sky)
-                    s.output[row*s.width+start+x]=cloud_sky&&inside?composite[x]:s.row[x];
+                if(inside || backdrop_only || story_sky)
+                    s.output[row*s.width+start+x]=backdrop_only&&inside?composite[x]:s.row[x];
             }
         }
     }
@@ -1198,6 +1243,7 @@ static bool RenderWorld(void)
         dao_heat?"ready_dao_heat":
         village_heat?"ready_village_heat":
         mansion_fog?"ready_mansion_fog":
+        babel_stars?"ready_babel_starfield":
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;
 }
 
