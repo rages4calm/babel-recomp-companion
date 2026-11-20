@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import subprocess
 
-from import_gaialabs_dialogue import convert
+from import_gaialabs_dialogue import convert, convert_return
 
 ROOT = Path(__file__).resolve().parents[1]
 HARNESS = r"""
@@ -189,6 +189,73 @@ static void CheckProse(void)
     CheckSupplement(choice, sizeof(choice), "A short prompt?[FIN] Yes[N] No[RET]", 0, 0, 0);
 }
 
+static void CheckAnchored(const uint8_t *data, size_t size, const char *text,
+                          int accepted, int calls, int waits)
+{
+    Rom stock = {.rom = data, .size = size};
+    Toks parsed = {0}, rendered = {0};
+    CHECK(GaiaDialogue(text, &parsed));
+    const int actual = GaiaStockWindow(&stock, 0, &rendered, &parsed, kGaiaStockAnchors);
+    if (actual != accepted)
+        fprintf(stderr, "unexpected stock-anchor result for %s\n", text);
+    CHECK(actual == accepted);
+    if (accepted) {
+        CHECK(CountToken(&rendered, T_CMD, CMD_PRT, 0x88de96) == calls);
+        CHECK(CountToken(&rendered, T_CMD, CMD_FIN, 0) == waits);
+    }
+    free(parsed.t);
+    free(rendered.t);
+}
+
+static void CheckStockAnchors(void)
+{
+    const uint8_t advice[] = {CMD_PRT, 0x96, 0xde, 0x88, 0x40, CMD_N, 0x41,
+                              CMD_FIN, CMD_RET};
+    const uint8_t speakers[] = {0xc2, 9, 0xc2, 0, 0x40, CMD_FIN,
+                                 0xc2, 9, 0xc2, 1, 0x41, CMD_END};
+    CheckAnchored(advice, sizeof(advice),
+                  "[EXT][PRT:08DE96]First page here.[FIN][RET]", 1, 1, 1);
+    CheckAnchored(advice, sizeof(advice),
+                  "[EXT][PRT:069705]First page here.[FIN][RET]", 0, 0, 0);
+    CheckAnchored(advice, sizeof(advice),
+                  "[EXT][PRT:08DE96]First long page[FIN]Twenty one more words[N]"
+                  "all have to fit in one[N]four row advice window[N]"
+                  "without removing waits.[FIN][RET]", 0, 0, 0);
+    CheckAnchored(advice, sizeof(advice),
+                  "[EXT]Extra.[PRT:08DE96]First page.[FIN]Next page.[FIN][RET]", 0, 0, 0);
+    RejectMalformed("[EXT][PRT:08DE97]A[END]");
+    RejectMalformed("[EXT][PRT:8DE96]A[END]");
+    CheckAnchored(speakers, sizeof(speakers),
+                  "[TPL:00]A[N]short line.[FIN][TPL:01]Reply.[END]", 1, 0, 1);
+    CheckAnchored(speakers, sizeof(speakers),
+                  "[TPL:00]A[N]short line.[FIN][TPL:03]Reply.[END]", 0, 0, 0);
+    CheckAnchored(speakers, sizeof(speakers),
+                  "[TPL:00]A[N]short line.[FIN]Reply.[END]", 0, 0, 0);
+}
+
+static void CheckMarkerTails(void)
+{
+    const uint32_t base = 0x049b82;
+    const uint8_t data[] = {0xc9, 0x40, 0xc2, 9, 0x40, CMD_FIN, 0x41, CMD_END};
+    uint8_t *bytes = calloc(base + sizeof(data), 1);
+    CHECK(bytes);
+    memcpy(bytes + base, data, sizeof(data));
+    Rom stock = {.rom = bytes, .size = base + sizeof(data)};
+    Label label = {.off = base, .marker = 2, .has_marker = 1};
+    CHECK(GaiaMarkerTailOffset(&stock, &label) == base + 2);
+    label.marker = 1;
+    CHECK(!GaiaMarkerTailOffset(&stock, &label));
+    label.marker = 2;
+    bytes[base + 1] = 0x41;
+    CHECK(!GaiaMarkerTailOffset(&stock, &label));
+    Toks parsed = {0}, rendered = {0};
+    CHECK(GaiaDialogue("[EXT]A short line.[FIN]B short line.[END]", &parsed));
+    CHECK(GaiaStockMarkerTail(&stock, base + 2, &rendered, &parsed) == 0);
+    free(parsed.t);
+    free(rendered.t);
+    free(bytes);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -222,6 +289,8 @@ int main(void)
     CheckReturningFragments();
     CheckExtendedControls();
     CheckProse();
+    CheckStockAnchors();
+    CheckMarkerTails();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }
@@ -249,6 +318,16 @@ def main():
     assert convert("Kept [BCD:2,AB0][N]pieces.[RET]", []) == (
         "Kept [BCD:2,0AB0][N]pieces.[RET]"
     )
+    assert convert_return("[PRT:@dialogstring_08DE96]Example[FIN]", (), extended=True) == (
+        "[EXT][PRT:08DE96]Example[FIN][RET]"
+    )
+    for invalid_call in ("[PRT:@dialogstring_08DE97]", "[PRT:@dialogstring_08DE96+M]"):
+        try:
+            convert_return(invalid_call + "Example[FIN]", (), extended=True)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Unexpected Gaia print target was accepted")
     for invalid in (
         "[SIZ:D,3]A[END]", "[DLG:3,11]A[END]", "[DLG:1F,11][SIZ:D,3]A[END]",
         "A[PAU:1E]B[END]", "A[PAL:0]B[END]", "A[PAL:0][FIN]B[END]",

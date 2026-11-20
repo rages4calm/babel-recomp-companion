@@ -41,6 +41,7 @@ static struct {
     bool initialized, enabled, stock, pending, composed, active, complete, valid;
     bool copy_reference;
     bool source_packet,mode7,mode7_perspective,absent_secondary,sky_field,stock_actor_field;
+    bool awaiting_restore,restored_actor_field;
     int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
     int width, height, extent_quarters, epoch_count;
@@ -224,17 +225,36 @@ static bool StorySkyFieldLayout(const Ppu *p,const uint8_t *ram)
         !p->windowsel && !p->cgwsel && !p->cgadsub;
 }
 
+static bool SameActorFieldRoom(const uint8_t *ram,const uint8_t *compose)
+{
+    return !Word(ram,0x642) && Word(ram,0x644)==Word(compose,0x644) &&
+        !memcmp(ram+0x68A,compose+0x68A,0x6C0-0x68A) &&
+        !memcmp(ram+0x6D6,compose+0x6D6,0x6F0-0x6D6);
+}
+
+static bool RestoredActorFieldLayout(const Ppu *p,const uint8_t *ram)
+{
+    /* A loaded frame has the original actors already in live OAM. The next
+     * composition has started, but its OAM upload will arrive one frame later.
+     * Extend the verified terrain only while that first composition agrees. */
+    if((p->bgmode&7)!=1 || p->mosaic || p->windowsel || PPU_forcedBlank(p) ||
+       !SameActorFieldRoom(ram,s.pending_ram)) return false;
+    switch(Word(ram,0x644)) {
+    case 0x01: case 0x0B: case 0x3E: case 0x5D: case 0x8A: case 0x8B:
+        return true;
+    default: return false;
+    }
+}
+
 static bool StockActorFieldLayout(const Ppu *p,const uint8_t *ram)
 {
     /* These dialogue and reward scripts can publish OAM outside the observed
      * composer. Keep their live actors in the native field and extend only
      * the verified room scenery. */
     unsigned scene=Word(ram,0x644);
-    if(Word(ram,0x642) || p->bgmode!=9 || p->mosaic || p->windowsel ||
+    if(p->bgmode!=9 || p->mosaic || p->windowsel ||
        p->screenEnabled[0]!=(scene==0x46?0x15:0x17) || p->screenEnabled[1] ||
-       p->cgwsel!=0x80 || scene!=Word(s.active_ram,0x644) ||
-       memcmp(ram+0x68A,s.active_ram+0x68A,0x6C0-0x68A) ||
-       memcmp(ram+0x6D6,s.active_ram+0x6D6,0x6F0-0x6D6))
+       p->cgwsel!=0x80 || !SameActorFieldRoom(ram,s.active_ram))
         return false;
     switch(scene) {
     case 0x0B:
@@ -368,6 +388,8 @@ void IogWorldInitialize(void)
 void IogWorldReset(void)
 {
     s.pending=s.composed=s.active=s.complete=s.valid=false;
+    s.awaiting_restore=true;
+    s.publish_sequence=0;
     s.reason="reset_or_unpaired_upload";
     s.epoch_count=0;
     memset(&s.view,0,sizeof(s.view));
@@ -421,10 +443,12 @@ void IogWorldAfterNmi(void)
 void IogWorldBeginRaster(void)
 {
     if(!s.enabled || !g_ppu || !g_snes) return;
+    bool awaiting_restore=s.awaiting_restore;
+    s.awaiting_restore=false;
     s.complete=false; s.valid=false; s.epoch_count=0;
     s.mode7=s.mode7_perspective=false;
     s.absent_secondary=false;
-    s.sky_field=s.stock_actor_field=false;
+    s.sky_field=s.stock_actor_field=s.restored_actor_field=false;
     s.mode7_split=0;
     memset(&s.view,0,sizeof(s.view));
     s.reason="unsupported_scene_or_layout";
@@ -445,16 +469,21 @@ void IogWorldBeginRaster(void)
     bool sky_field=!s.active && s.publish_sequence && StorySkyLayout(s.active_ram) &&
         StorySkyFieldLayout(g_ppu,g_snes->ram);
     bool actor_field=!s.active && s.publish_sequence && StockActorFieldLayout(g_ppu,g_snes->ram);
-    if(!s.active && !sky_field && !actor_field) return;
+    bool restored_field=awaiting_restore && !s.publish_sequence && s.composed &&
+        RestoredActorFieldLayout(g_ppu,g_snes->ram);
+    if(!s.active && !sky_field && !actor_field && !restored_field) return;
     IogSceneViewSource source;
     IogSceneViewReadWorldSource(g_snes->ram,131072,g_ppu,false,&source);
-    if(source.gate!=kIogSceneViewReady || source.scene!=Word(s.active_ram,0x644)) return;
+    if(source.gate!=kIogSceneViewReady ||
+       source.scene!=Word(restored_field?s.pending_ram:s.active_ram,0x644)) return;
     if(PPU_objInterlace(g_ppu) || g_ppu->frameInterlace ||
        ((g_ppu->mosaic>>4)!=0 && !StockMosaicLayout(g_ppu,g_snes->ram)) ||
        (ActiveWorldWindow(g_ppu) && !KnownWorldWindow(g_ppu,g_snes->ram))) return;
     s.base=*g_ppu;
     s.sky_field=sky_field;
-    s.stock_actor_field=actor_field;
+    s.stock_actor_field=actor_field || restored_field;
+    s.restored_actor_field=restored_field;
+    if(restored_field) memcpy(s.active_ram,s.pending_ram,sizeof(s.active_ram));
     s.absent_secondary=source.absent_secondary;
     s.valid=true; s.reason="awaiting_picture";
 }
@@ -465,7 +494,8 @@ void IogWorldCaptureLine(int line)
     if(s.sky_field && !StorySkyFieldLayout(g_ppu,g_snes->ram)) {
         s.valid=false; s.reason="unsupported_story_sky"; return;
     }
-    if(s.stock_actor_field && !StockActorFieldLayout(g_ppu,g_snes->ram)) {
+    if(s.stock_actor_field && !(s.restored_actor_field?
+       RestoredActorFieldLayout(g_ppu,g_snes->ram):StockActorFieldLayout(g_ppu,g_snes->ram))) {
         s.valid=false; s.reason="unsupported_stock_actor_field"; return;
     }
     if(s.absent_secondary && (Word(g_snes->ram,0x644)!=Word(s.active_ram,0x644) ||
@@ -1659,7 +1689,10 @@ static bool RenderWorld(void)
         }
     }
     if(s.sky_field) {s.reason="ready_story_sky_field";return true;}
-    if(s.stock_actor_field) {s.reason="ready_stock_actor_field";return true;}
+    if(s.stock_actor_field) {
+        s.reason=s.restored_actor_field?"ready_restored_actor_field":"ready_stock_actor_field";
+        return true;
+    }
     /* Keep HUD physical size while the world camera shows a larger extent.
      * It is an independently extracted original UI plane, not world terrain. */
     CompositeHud((uint8_t *)s.output,s.width*4);

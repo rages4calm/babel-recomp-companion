@@ -6,9 +6,9 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **821 of 1,138** chapter-dialogue replacements in the
+The import now covers **833 of 1,138** chapter-dialogue replacements in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer produces 1,053 candidates. Batch 031 adds 28 replacements,
+The importer produces 1,067 candidates. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
 Castle dialogue and the Dao Snake Panic score response. New formatted
 rows can retain verified stock pause, input-wait, palette and live
@@ -24,13 +24,25 @@ dialogue and walked back to the Aqueduct. From the same assisted 1 HP
 checkpoint, both language modes healed Will to full and produced the same
 post-exit picture and sampled game state.
 
-The importer excludes 85 declarations, including 21 with interior markers
-that require their own pointer treatment and 28 with unresolved pointer or
-script logic. The runtime leaves 232 candidates in stock form. Their
-remaining constraints include page and row limits, speaker boundaries,
-unsupported stock commands and inconsistent timed controls. Full menu and
-sprite lettering, relocated pointer tables, and custom-font coverage remain
-open.
+Batch 032 adds 12 replacements, including Dark Space advice, Mu dialogue,
+and the Aqueduct countdown. The importer transports known shared print
+calls and marker tails separately. The runtime preserves the verified
+original call and window setup. It validates stock bytes up to the
+marker before relocating a suffix and retains the stock entry points.
+All 821 prior payloads retain their bytes and virtual addresses.
+An assisted Aqueduct countdown replay showed the new text within the
+stock window. A v34 save made during healing dialogue resumed with an
+identical picture and game state once back in the Aqueduct.
+An assisted source-room setup also exercised the shared print call for
+Psycho Dash advice. Both language modes advanced through the same save
+prompt and returned to the Aqueduct with matching scene timing and
+post-exit pictures.
+
+The importer excludes 71 declarations. The runtime leaves 234 candidates
+in stock form, for 305 stock chapter entries in total. The remaining
+constraints include marker prefixes with printable text, unverified
+script targets, window bounds, and timed controls. Full menu and sprite
+lettering and custom-font coverage remain open.
 
 The text uses the Original localization overlay. Start with a local Git
 checkout containing the pinned revision, then generate a pack into the
