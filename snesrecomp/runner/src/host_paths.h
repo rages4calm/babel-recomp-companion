@@ -19,7 +19,8 @@ int snesrecomp_abspath(const char *path, char *out, size_t max_len);
 void snesrecomp_set_exe_path(const char *path);
 
 /*
- * Build an absolute path for `leaf` inside the executable's directory,
+ * Build an absolute path for `leaf` inside the executable's directory
+ * (Android: SNESRECOMP_DATA_DIR, set by the activity's native entry point),
  * independent of the current working directory. Returns 0 when the executable
  * directory cannot be determined.
  */

@@ -1,6 +1,6 @@
 # Illusion of Gaia Companion — handoff
 
-Updated November 13, 2026. Development version `0.1.0-dev.1`.
+Updated November 19, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
 Owner priority changed November 13: fix presentation across EVERY zone before
@@ -11,53 +11,58 @@ Keep performance checks focused on visible smoothness, not repeated benchmarks.
 
 ## ACTIVE: full-game presentation and GaiaLabs maps
 
-Continue this priority before native gaps. Read [current batch](docs/VISUAL-FULLGAME-002.md),
-[prior batch](docs/VISUAL-FULLGAME-001.md), [coverage](docs/VISUAL-COVERAGE.md)
-and [map direction](docs/MAP-SYSTEM-DIRECTION.md). Whole-game visual approval
-is still outstanding. Active scratch is `.local/batch-001/visual-fullgame-002`.
+Read [current batch](docs/VISUAL-FULLGAME-003.md),
+[prior maps](docs/VISUAL-FULLGAME-002.md), [coverage](docs/VISUAL-COVERAGE.md)
+and [map direction](docs/MAP-SYSTEM-DIRECTION.md). Active scratch:
+`.local/batch-001/visual-fullgame-003`. Continue neighboring rooms/transitions
+before native gaps. No whole-game visual approval is claimed.
 
-- Latest Original: `babel-maps-v9.exe` in that batch, SHA
-  `5b290e854742cb216f08c808e8693547b846cc7d6ccd99b31542dcae386b3f44`.
-  Both owner test launchers now select it; previous build and original-view
-  fallbacks remain. Original graph016/effects025/WRAM021 retained, no new native
-  CPU coverage or performance claim in this presentation batch.
-- Actual map/radar UI is connected. Open Companion with I, then M or its Map
-  page. Arrows pan, +/- zoom, Home/C center; mouse toolbar/drag work. Ctrl+M
-  toggles radar (Ctrl+R belongs to the SDK reset). Gamepad Map shoulders zoom,
-  Y centers, B returns. Player journal lives in guarded `saves/maps`, bound to
-  content/scene/layout/floor identity. Discovery persists across reload/rewind.
-- Current v9 persistence test observes97→107 discovered cells, retains107
-  after rewind and fresh process. Six modal input events leave guest cycles
-  and full WRAM hash unchanged. User manually confirmed live mouse dragging;
-  automated live drag was interrupted by concurrent input, not counted as pass.
-- Runtime uses actual primary artwork and conservative static-collision flood
-  discovery bounded by camera and radius. Qualified classroom08 merges aligned
-  secondary artwork. Not optical LOS or fully classified material walkability.
-  Other layered scenery, marker bindings and full-zone discovery need work.
-  Radar hides during dialogue/menu/fade and unsupported source geometry.
-- v8 passes56 retained-reference pairs /10,080 candidate frame boundaries.
-  v9 adds conservative occupancy acceptance and Companion key-repeat guard;
-  current town smoke and Itory1A/1C comparisons pass. These preserve prior
-  native/guest snapshots, not fresh campaign qualification.
-- Itory15/1A/1C now use source/ROM-calibrated per-row horizon producers,
-  finite vertical artwork and verified flat terminal-color continuation.
-  v6 actual NVIDIA1080p/1.5x captures reviewed;2600 compared CPU boundaries
-  match. Later map-only edits do not replace that linked visual evidence.
-  66 structural scene admissions do not mean66 approved zones.
-- Received GaiaLabs map reference v5 SHA
-  `672a1d1955858edbc4cc983487639ac2a9c8e2117658e6522cff91195bc88ddc`.
-  Separate interpreter-only build, no stock native hooks/plugins. Radar/full
-  400f each,399 ready,77 explored, traces match retained v11 and modal is frozen.
-  Classroom floor/art checked. Not an all-room or native GaiaLabs profile.
-- GreatWall85→86 course, later86, other per-band effects, world-map natural
-  entry/return and every room/transition remain unfinished. Earlier broad scene
-  surveys with bad incoming camera22 remain diagnostics. Use authentic source-
-  and ROM-verified inbound entries, never turn those surveys into approvals.
-- Official SNESRecomp main checked live:80a41241e39bfffd384506fbe7ca65b386e03050,
-  matches pin. Confirmed Windows FORCEINLINE/header conflict reported as
-  [upstream287](https://github.com/RetroPortingToolKit/snesrecomp/issues/287),
-  locally guarded without vendor-tree replacement. Public issue6 stays open.
-  Private ROM/ZIP/BSO, states, audio and captures stay untracked.
+- Current Original: `babel-originalv5.exe` in active batch, SHA
+  `bf693e1b9a583e512ddc6ceaed836c04689c50b351a7bfda33373ea1e3d59378`.
+  Test launchers select it; previous v9 and original-area-map/interpreter fallback
+  remain. Owner uses controller: shared physical mapping plus configurable Map
+  actions, saved preferences, SNES logical prompts. Default L2+L3 Companion,
+  L2+R3 Settings; physical combinations are remappable in shared controls.
+- Original Start replaces the old local radar only where actual source proves
+  that command (quiet, Map available,09AE bit3 clear). It consumes the held
+  button until release. Town/pause contexts, unsupported scenes and world
+  travel keep original input. `IOG_ORIGINAL_AREA_MAP=1` restores that fallback.
+- Owner clarified: GaiaLabs WORLD MAP and Retranslation stay main-content goals;
+  our enhanced local scenery map/radar replaces competing area maps. Received
+  reference still has its guest minimap: no unsupported guest patch is claimed.
+- Official SDK now22c01ef12cc94767451d0b218e4fc341bc19043e,19 commits/32 paths
+  beyond80a41241. Inventory covers1365 old tracked vendor files; Babel/local
+  deltas preserved by file merge, not tree replacement. Profile lazy/raw-alias
+  behavior retained with new canonical-boundary API compatibility. Windows
+  workaround removed after fixed namespaced SDK header regression passes.
+- SDK gate1014 pass/2 skip, zero warnings. Raw broad-freeze receipt stays false
+  because only host_main.c changed during test; supplemental qualification proves
+  793 core/test files unchanged and links fresh final host-reader test. Bridge
+  and SPC strict Clang harnesses separately pass. New shared IRQ callback is
+  default-off and Gaia does not arm it: importing SDK is not a new IRQ/native
+  qualification. Original graph016/effects025/WRAM021 unchanged/reused.
+- Current Original56 retained-reference pairs/10080 boundaries pass. Actual SDL
+  virtual-device Start/pan/zoom/center/radar/Back/resume test passes,78 modal events
+  retain guest cycles+WRAM, seven guest snapshot fields match. Physical Xbox360
+  controller enumerated; no new manual button-press qualification. Local virtual
+  trigger release bug (0 means half pressed) corrected; not official SDK defect.
+- Exploration97→107 retains107 after rewind and process restart. Map identity,
+  conservative static discovery and geometry safeguards remain. Other layered
+  scenery and marker binding remain unfinished; no optical LOS/campaign claim.
+- GreatWall85/86 now calibrates actual multi-band raster producers. Authentic
+  1050f course/axis route and natural86→85→86 retain guest snapshots,598x336 across
+  transitions. Actual NVIDIA1080p smooth-xBR1.5 course/lower views show expanded
+  green missing-floor patch fixed. v1 GPU proof linked to final v5 world hashes;
+  136 host-overlap decorative pixels deliberately change under corrected parallax.
+  Later86 branches/boss phases are not approved.66 admissions unchanged.
+- Current received reference `babel-referencev2.exe`, SHA
+  `182e0ac7d5b1a770dad17b2b566b386806c2af3325653181c3d23e25dc811ee3`.
+  Separate interpreted CPU, no stock native/plugins; controls use defaults when
+  mods are excluded. Received runtime/guard qualification is in current receipt.
+- GreatWall later branches, additional HDMA/layers, all remaining room/phase
+  transitions, world-map natural access and marker state remain work. Old bad
+  incoming-camera22 surveys remain diagnostics. No native speedup/campaign claim.
+  Private ROM/ZIP/BSO/audio/states/captures remain untracked; preserve all credits.
 
 ## Manual-save renderer follow-up — November 13
 

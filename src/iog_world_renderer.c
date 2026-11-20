@@ -618,19 +618,26 @@ static bool RenderWorld(void)
     EffectCamera effect_camera;
     bool tracked_effect=ReadEffectCamera(s.active_ram,&effect_camera);
     IogRasterParallax horizon_model={0};
-    bool horizon=false;
-    if(tracked_effect && effect_camera.ratio[1]==0 && s.epoch_count==1) {
+    IogRasterParallax wall_model={0};
+    bool horizon=false,wall_bands=false;
+    if(tracked_effect && s.epoch_count==1) {
         uint16_t hscroll[225];Ppu probe=s.base;
         for(unsigned i=0;i<225;i++) {
             memcpy(&probe,s.lines[i].registers,PPU_SAVESTATE_REGS_SIZE);
             hscroll[i]=probe.hScroll[1];
         }
         const Cart *cart=g_snes?g_snes->cart:NULL;
-        if(cart)horizon=IogRasterParallaxPrepare(cart->rom,cart->romImageSize,s.stock,
-            first->ram,sizeof(first->ram),hscroll,225,&horizon_model);
+        if(cart) {
+            if(effect_camera.ratio[1]==0)
+                horizon=IogRasterParallaxPrepare(cart->rom,cart->romImageSize,s.stock,
+                    first->ram,sizeof(first->ram),hscroll,225,&horizon_model);
+            if(effect_camera.ratio[0]==0 && effect_camera.ratio[1]==0x0101)
+                wall_bands=IogRasterParallaxPrepareWall(cart->rom,cart->romImageSize,s.stock,
+                    first->ram,sizeof(first->ram),hscroll,225,&wall_model);
+        }
     }
     bool deferred_raster_effect=false;
-    if(tracked_effect && !horizon) {
+    if(tracked_effect && !horizon && !wall_bands) {
         /* A camera actor does not describe per-band HDMA derivatives.
          * Keep those on their prior sampling policy until their actual
          * raster producer is bound; a global ratio would be misleading. */
@@ -745,6 +752,14 @@ static bool RenderWorld(void)
                     if(IogRasterParallaxSample(&horizon_model,wy+1,s.view.world_x,&phase))
                         wx=(int)phase+start;
                 }
+                if(logical==1&&wall_bands) {
+                    /* Great Wall's sky/wall bands have different X rates at
+                     * each background world height. The expanded top/bottom
+                     * must select their own band, not clamp to a native row. */
+                    uint16_t phase;
+                    if(IogRasterParallaxSample(&wall_model,wy+1,s.view.world_x,&phase))
+                        wx=(int)phase+start;
+                }
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)wy&1023;
                 /* Layer-1 position bypass deliberately performs no map
@@ -758,15 +773,24 @@ static bool RenderWorld(void)
                      * uses line0 for the same first output row. */
                     int sample_x=x;
                     bool finite_horizon=logical==1&&horizon;
-                    if(finite_horizon){sample_x%=512;if(sample_x<0)sample_x+=512;}
+                    bool finite_wall=logical==1&&wall_bands;
+                    if(finite_horizon||finite_wall) {
+                        int repeat_width=finite_wall?wall_model.width:512;
+                        sample_x%=repeat_width;if(sample_x<0)sample_x+=repeat_width;
+                    }
                     unsigned tile=MapTile(e,logical,sample_x,wy+1,
-                        !finite_horizon&&effect && (!bounded || scene==0x85) && !classroom);
+                        !finite_horizon&&!finite_wall&&effect && (!bounded || scene==0x85) && !classroom);
                     if(tile==0xFFFFFFFFu) tile=(unsigned)blank[logical];
                     /* Overlapping authentic cells use the actual uploaded
                      * VRAM entry, including partially updated scroll strips. */
                     int source_y=wy-camy;
-                    if(source_y>=0&&source_y<224 && x+8>camx && x<camx+256) {
-                        unsigned tx=((unsigned)source_hscroll[physical]+(x-camx))>>3;
+                    int source_x=camx;
+                    if(finite_wall) {
+                        uint16_t phase;
+                        if(IogRasterParallaxSample(&wall_model,wy+1,camera_x,&phase))source_x=phase;
+                    }
+                    if(source_y>=0&&source_y<224 && x+8>source_x && x<source_x+256) {
+                        unsigned tx=((unsigned)source_hscroll[physical]+(x-source_x))>>3;
                         unsigned ty=((unsigned)source_vscroll[physical]+source_y+1)>>3;
                         unsigned address=PPU_bgTilemapAdr(p,physical)+((ty&31)<<5)+(tx&31);
                         if(PPU_bgTilemapWider(p,physical)&&(tx&32)) address+=0x400;

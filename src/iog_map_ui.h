@@ -18,11 +18,14 @@ typedef struct IogMapUi {
   bool pointer_down, dragging;
   int pointer_x, pointer_y;
   unsigned draw_width, draw_height;
+  char controller_hint[96], controller_back[24];
   int zoom_index;
   int32_t center_x_q8, center_y_q8;
   IogMapDiscoveryIdentity identity;
 } IogMapUi;
 void IogMapUiInit(IogMapUi *ui);
+/* Host supplies current remappable logical button labels. NULL resets defaults. */
+void IogMapUiControllerHints(IogMapUi *ui,const char *hint,const char *back);
 /* Edges are supplied by the host. Full-map activation belongs to its paused
  * Companion page, never an unpaused guest hotkey. No guest input or time is
  * consumed here; the host owns modal capture and speculative-frame guards. */

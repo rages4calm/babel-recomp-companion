@@ -295,6 +295,7 @@ static const SnesDesktopHostGame kGameHost = {
     .after_config        = IogSettingsInstall,
     .after_run_frame     = IogAfterRunFrame,
     .companion_open      = IogCompanionOpen,
+    .companion_input     = IogCompanionInput,
     .companion_nav       = IogCompanionNav,
     .companion_key       = IogCompanionKey,
     .companion_pointer   = IogCompanionPointer,

@@ -460,6 +460,8 @@ def discover_profile_roots(manifest_paths: Iterable[pathlib.Path],
     # checks. Only their analysis seeds and conservative exclusions survive;
     # costs/outcomes are never combined across different executable builds.
     roots = set()
+    if historical_paths:
+        declared_entry_pcs = tuple(declared_entry_pcs)
     for path in historical_paths:
         roots.update(discover_profile_roots(
             [path], declared_entry_pcs, force_lle_out,

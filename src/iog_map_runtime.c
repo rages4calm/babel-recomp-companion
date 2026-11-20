@@ -8,10 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #ifdef _WIN32
-#pragma push_macro("FORCEINLINE")
-#undef FORCEINLINE
 #include <windows.h>
-#pragma pop_macro("FORCEINLINE")
 #else
 #include <sys/stat.h>
 #include <fcntl.h>

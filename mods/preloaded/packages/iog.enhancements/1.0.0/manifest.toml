@@ -158,3 +158,182 @@ label = "Fast"
 [[plugin]]
 feature = "hold_advance"
 id = "iog.hold_advance"
+
+# Title-owned presentation controls. Physical controller remapping remains in
+# the shared launcher's Controller page; these names are SNES logical buttons.
+[[feature]]
+id = "map_controls"
+name = "Custom map/radar controls"
+description = "Customize the built-in scenery map controls and radar preference. Off restores defaults on launch. Buttons use your SNES logical mapping; conflicting in-game assignments swap automatically."
+group = "Presentation"
+default_enabled = true
+
+[[option]]
+feature = "map_controls"
+id = "radar"
+label = "Radar"
+type = "choice"
+default = "on"
+
+[[option.choice]]
+value = "on"
+label = "On"
+
+[[option.choice]]
+value = "off"
+label = "Off"
+
+[[option]]
+feature = "map_controls"
+id = "zoom_in"
+label = "Map zoom in"
+type = "choice"
+default = "R"
+
+[[option.choice]]
+value = "A"
+label = "A"
+
+[[option.choice]]
+value = "B"
+label = "B"
+
+[[option.choice]]
+value = "X"
+label = "X"
+
+[[option.choice]]
+value = "Y"
+label = "Y"
+
+[[option.choice]]
+value = "L"
+label = "L"
+
+[[option.choice]]
+value = "R"
+label = "R"
+
+[[option]]
+feature = "map_controls"
+id = "zoom_out"
+label = "Map zoom out"
+type = "choice"
+default = "L"
+
+[[option.choice]]
+value = "A"
+label = "A"
+
+[[option.choice]]
+value = "B"
+label = "B"
+
+[[option.choice]]
+value = "X"
+label = "X"
+
+[[option.choice]]
+value = "Y"
+label = "Y"
+
+[[option.choice]]
+value = "L"
+label = "L"
+
+[[option.choice]]
+value = "R"
+label = "R"
+
+[[option]]
+feature = "map_controls"
+id = "center"
+label = "Map center"
+type = "choice"
+default = "Y"
+
+[[option.choice]]
+value = "A"
+label = "A"
+
+[[option.choice]]
+value = "B"
+label = "B"
+
+[[option.choice]]
+value = "X"
+label = "X"
+
+[[option.choice]]
+value = "Y"
+label = "Y"
+
+[[option.choice]]
+value = "L"
+label = "L"
+
+[[option.choice]]
+value = "R"
+label = "R"
+
+[[option]]
+feature = "map_controls"
+id = "radar_button"
+label = "Map radar toggle"
+type = "choice"
+default = "X"
+
+[[option.choice]]
+value = "A"
+label = "A"
+
+[[option.choice]]
+value = "B"
+label = "B"
+
+[[option.choice]]
+value = "X"
+label = "X"
+
+[[option.choice]]
+value = "Y"
+label = "Y"
+
+[[option.choice]]
+value = "L"
+label = "L"
+
+[[option.choice]]
+value = "R"
+label = "R"
+
+[[option]]
+feature = "map_controls"
+id = "back"
+label = "Map back"
+type = "choice"
+default = "B"
+
+[[option.choice]]
+value = "A"
+label = "A"
+
+[[option.choice]]
+value = "B"
+label = "B"
+
+[[option.choice]]
+value = "X"
+label = "X"
+
+[[option.choice]]
+value = "Y"
+label = "Y"
+
+[[option.choice]]
+value = "L"
+label = "L"
+
+[[option.choice]]
+value = "R"
+label = "R"

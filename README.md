@@ -7,12 +7,14 @@ The original author's credit, support link and full acknowledgments remain below
 
 ## Companion development status
 
-**Current priority: full-game visuals and built-in GaiaLabs maps.** The in-game
-Companion now includes a scenery map, a clean radar and persistent explored-area
-tracking. Pan with mouse or gamepad, zoom and recenter; unknown areas stay hidden.
-The new visual batch also fixes Itory's layered horizon at widescreen/1.5x.
-These are bounded, tested improvements, not complete room-by-room visual coverage
-or a native GaiaLabs release. [Controls, tests and remaining gaps](docs/VISUAL-FULLGAME-002.md).
+**Current priority: full-game visuals and built-in GaiaLabs world map/Retranslation.**
+The current batch updates SNESRecomp while preserving title changes and fallback,
+fixes Great Wall85/86 scrolling at widescreen/1.5x, and adds configurable controller
+Map actions. Our scenery map and radar share persistent exploration; Original's
+old local-radar command now opens the enhanced map where verified. GaiaLabs'
+world travel map is a separate feature from the local map. Full-game visuals and
+main-content integration are still in progress.
+[Controls, verification and remaining work](docs/VISUAL-FULLGAME-003.md).
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. Qualified private
