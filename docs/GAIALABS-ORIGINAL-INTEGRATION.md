@@ -45,8 +45,31 @@ Controller input selected South Cape and completed the Original Mode 7
 journey. Freejia movement was checked along both axes. The controller also
 opened and closed the Companion local map with the dialogue pack active.
 
-GaiaLabs' walkable world map is still pending. Building that module alone
-relocates game sections, so its output is a reference for integration.
-All fifteen stock travel menu destinations matched the module's target
-parameters. Its four additional destinations and progression rules still
-need verification through the Original game's scene loader.
+### Walkable travel
+
+The Original build uses the GaiaLabs collision data and pace for walking.
+Left and Right turn the camera. Up walks forward, Down walks backward, and
+the SNES B button enters the nearby named destination. The game uses its own
+map art, travel sprite, progression flags and scene loader. The local scenery
+map and radar are separate from this view.
+
+Build the collision data from a local checkout of the pinned GaiaLabs source.
+
+```powershell
+python scripts/import_gaialabs_world_map.py <local-retranslation-checkout> .local/gaialabs-world-map.bin
+$env:IOG_WALKABLE_MAP_DATA = (Resolve-Path .local/gaialabs-world-map.bin).Path
+```
+
+`IOG_WALKABLE_MAP=0` restores the Original destination menu. Missing or
+invalid collision data also falls back. The integration uses the fifteen
+stock menu destinations and the locations available at each story stage.
+A save made while walking returns through the stock menu's Quit destination
+if loaded with the feature disabled or the collision data unavailable.
+GaiaLabs' four additional entrances and airplane travel are outside this
+first pass. The Original scripted journeys retain their existing behavior.
+
+Controller replays used the Original Itory exit, then walked back into Itory
+and traveled to South Cape in separate routes at square-pixel 1.5×. The South
+Cape test starts from a staged checkpoint with the relevant story flag set.
+An otherwise matching run with the flag clear verified the route stays blocked.
+The translated dialogue and MSU-1 were both active for the successful routes.

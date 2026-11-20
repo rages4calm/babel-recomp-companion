@@ -18,13 +18,16 @@ behavior and extracting requirements feature by feature. Its experimental
 town maps and warp coordinates are specific to that preview.
 
 [Original integration status](docs/GAIALABS-ORIGINAL-INTEGRATION.md) records
-the first dialogue import, the wider stock Mode 7 destination menu and the
-Freejia scrolling fix. Private exact-build receipts are in
-`.local/batch-001/visual-fullgame-009`. Continue with unsupported chapter
-commands, the isolated walkable-world-map integration, and unverified rooms.
+the first dialogue import, walkable world travel, the wider stock Mode 7
+destination menu and the Freejia scrolling fix. Private exact-build receipts
+are in `.local/batch-001/visual-fullgame-009` and `visual-fullgame-010`.
+Continue with unsupported chapter commands and unverified rooms.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
+The new world travel launcher is `Play Original Walkable World Map.cmd` in
+`.local/batch-001/visual-fullgame-010`. It selects `babel-originalv6.exe` and
+starts at the isolated Itory departure checkpoint. Hold Down to leave town.
 The earlier [batch 004](docs/VISUAL-FULLGAME-004.md) and batch 003 launchers
 remain available.
 The GaiaLabs compatibility preview is paused. Batch 007 is the last

@@ -9,9 +9,9 @@ The original author's credit, support link and full acknowledgments remain below
 
 **Current priority: full-game visuals for the Original-based Companion, with
 approved Retranslation and GaiaLabs world map support.**
-The Original build has a [stock-compatible dialogue import and wider world-map
-menu](docs/GAIALABS-ORIGINAL-INTEGRATION.md). The walkable world map is in
-development.
+The Original build has a [stock-compatible dialogue import and walkable
+world map](docs/GAIALABS-ORIGINAL-INTEGRATION.md) using locally prepared
+GaiaLabs data. The stock destination menu remains available.
 Six more Great Wall rooms have corrected scrolling at widescreen/1.5×, and
 Select opens controller settings from our local scenery map. The private
 GaiaLabs compatibility preview uses a separate development build to verify
