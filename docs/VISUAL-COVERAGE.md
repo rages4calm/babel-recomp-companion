@@ -33,6 +33,24 @@ does not establish that secondary scenery should stop at the floor boundary.
 Per-line HDMA camera derivatives also cannot be inferred from a global actor
 ratio. Deferred raster-camera paths remain explicit review work.
 
+## Save-resume framing across the campaign
+
+Original v41 keeps the first visible frame at square-pixel 1.5× when
+restoring tested stock Mode 1 rooms. The live layers, room geometry and
+camera must agree. The Itory departure accepts its verified outgoing
+camera offset for the restored frame. The Dao and Dark Gaia profiles
+also check their stock layer geometry. Unrecognized layouts retain fallback.
+
+The paired save-load sweep covered 34 checkpoints. A separate 17-route
+SDL virtual-controller comparison covered 20,635 frames through neighboring
+rooms, the Mode 7 world map, Viper's victory and the Babel ending transitions.
+Only the intended first restored frames changed. All 280 sampled guest and
+PPU payloads matched the renderer-only control. A separate 38,000-frame
+replay on the combined build reached the credits and final classroom at
+the same scene boundaries as the prior ending replay and displayed END.
+These checks cover the sampled routes. Other story states and a continuous
+playthrough remain to be verified.
+
 ## Opening, diary and Dark Space save framing
 
 v40 presents the original logo, title, diary and two Mode 1 prologue cards

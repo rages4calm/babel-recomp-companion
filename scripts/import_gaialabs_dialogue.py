@@ -106,7 +106,11 @@ def convert_pair(source, names):
         raise ValueError("Expected one stock entry marker")
     body = convert_return(prefix, names, extended=True, wrap_prose=True)
     if not body.endswith("[FIN][RET]"):
-        raise ValueError("Marker does not follow a page wait")
+        # The runtime must retain the USA boundary. This source can include
+        # a new visual pause after the manual wait, before the interior entry.
+        body = re.sub(r"\[FIN\](?:\[PAU:[0-9A-F]{2}\])+\[RET\]$", "[FIN][RET]", body)
+        if not body.endswith("[FIN][RET]"):
+            raise ValueError("Marker does not follow a page wait")
     extra = convert_return(tail, names, extended=True, wrap_prose=True)
     return "[PAIR]" + body + "|" + extra
 

@@ -359,6 +359,10 @@ static void CheckInterfaceText(void)
     CHECK(!GaiaMenuText(&menu, "A[DBL]ab", encoded, 0));
     CHECK(GaiaMenuText(&menu, "A[DBL]ab", encoded, 1) == 5);
     CHECK(!GaiaMenuText(&menu, "A[DBL]abc", encoded, 1));
+    CHECK(GaiaMenuExtendedText(NULL, "[DBL]By [TBL:@item_name_table_lola,B24].[DBL]END", encoded, 10, 2, 0x0d) == 14);
+    CHECK(!GaiaMenuExtendedText(NULL, "[DBL]By [TBL:@item_name_table_lola,B25]", encoded, 10, 2, 0x0d));
+    CHECK(!GaiaMenuExtendedText(NULL, "[DBL]A[DBL]B[DBL]C", encoded, 10, 2, 0x0d));
+    CHECK(!GaiaMenuExtendedText(NULL, "A[DBL]B", encoded, 10, 2, 0x0d));
 
     const uint8_t rom[] = {0, 1, 8, 0, 2, 10, 0, 0, 0, CMD_RET, 1, CMD_RET};
     const Rom stock = {.rom = rom, .size = sizeof(rom)};
@@ -380,12 +384,12 @@ static void CheckInterfaceText(void)
     unsigned occupied = kIogVirtualBankSize;
     pack = calloc(1, sizeof(*pack));
     CHECK(pack != NULL);
-    CHECK(!GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "[END]"));
-    CHECK(!GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "This title is too wide"));
-    CHECK(!GaiaTitle(&scene, &scene_layout, pack, &occupied, 3, "Incorrect source"));
-    CHECK(GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "Long title"));
+    CHECK(!GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "[END]", 18));
+    CHECK(!GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "This title is too wide", 18));
+    CHECK(!GaiaTitle(&scene, &scene_layout, pack, &occupied, 3, "Incorrect source", 26));
+    CHECK(GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "This title is too wide", 26));
     CHECK(pack->npatches == 1 && pack->nbanks == 1 && pack->patches[0].len == 7);
-    CHECK(pack->patches[0].data[4] == 0xcc && pack->patches[0].data[5] == 7);
+    CHECK(pack->patches[0].data[4] == 0xcc && pack->patches[0].data[5] == 11);
     IogTextFreePack(pack);
 }
 
@@ -402,14 +406,83 @@ static void CheckPairedEntry(void)
     char paired[] = "[EXT]First page[FIN][RET]|[EXT]Shared second page[END]";
     char refused[] = "[EXT]First page[FIN][RET]|[EXT]Shared second page[END]";
     rom[6] = CMD_N;
-    CHECK(!GaiaPairedEntry(&stock, &structure, 0, pack, &used, refused));
+    CHECK(!GaiaPairedEntry(&stock, &structure, 0, pack, &used, refused, 0));
     CHECK(pack->npatches == 0);
     rom[6] = CMD_FIN;
-    CHECK(GaiaPairedEntry(&stock, &structure, 0, pack, &used, paired));
+    CHECK(GaiaPairedEntry(&stock, &structure, 0, pack, &used, paired, 0));
     CHECK(pack->npatches == 2 && pack->patches[0].offset == 1 && pack->patches[1].offset == 7);
     unsigned tail = pack->patches[1].data[1];
     CHECK(tail > 0 && pack->banks[0][tail - 1] == CMD_FIN && pack->banks[0][tail] == 0xd3);
     IogTextFreePack(pack);
+}
+
+static void CheckStockReflow(void)
+{
+    const uint8_t stock_prose[] = {0xd3, 0x40, CMD_FIN, 0xce, 0x41, CMD_END};
+    const Rom stock = {.rom = stock_prose, .size = sizeof(stock_prose)};
+    Toks text = {0}, out = {0};
+    CHECK(GaiaDialogue("[EXT]One longer message has[N]two different sentences.[END]", &text));
+    CHECK(GaiaTryStockReflow(&stock, 0, &out, &text, 0));
+    CHECK(CountToken(&out, T_CMD, 0xd3, 0) == 1);
+    CHECK(CountToken(&out, T_CMD, CMD_FIN, 0) == 1);
+    CHECK(CountToken(&out, T_CMD, 0xce, 0) == 1);
+    text.n = out.n = 0;
+    CHECK(GaiaDialogue("[EXT]A timed[PAU:22] line[END]", &text));
+    CHECK(!GaiaTryStockReflow(&stock, 0, &out, &text, 0));
+
+    const uint8_t stock_options[] = {0xd3, 0x40, CMD_N, 0xac, 0x41, CMD_N,
+                                    0xac, 0x42, CMD_RET};
+    const Rom prompt = {.rom = stock_options, .size = sizeof(stock_options)};
+    text.n = out.n = 0;
+    CHECK(GaiaDialogue("[EXT]Continue?[N]Yes[N]No[RET]", &text));
+    CHECK(GaiaTryStockReflow(&prompt, 0, &out, &text, 0));
+    CHECK(CountToken(&out, T_GLYPH, 0xac, 0) == 2);
+    CHECK(CountToken(&out, T_CMD, CMD_N, 0) == 2);
+    CHECK(CountToken(&out, T_CMD, CMD_RET, 0) == 1);
+    const uint8_t stock_hold[] = {0xd3, 0x40, 0xc9, 0x30, 0xc8, CMD_RET};
+    const Rom timed = {.rom = stock_hold, .size = sizeof(stock_hold)};
+    text.n = out.n = 0;
+    CHECK(GaiaDialogue("[EXT]A revised timed card[PAU:2A][RET]", &text));
+    CHECK(GaiaTryStockReflow(&timed, 0, &out, &text, 1));
+    CHECK(CountToken(&out, T_CMD, 0xc9, 0x30) == 1);
+    CHECK(CountToken(&out, T_CMD, 0xc8, 0) == 1);
+    CHECK(CountToken(&out, T_CMD, CMD_FIN, 0) == 0);
+    text.n = out.n = 0;
+    CHECK(GaiaDialogue("[EXT]A pause[PAU:2A] in the middle[RET]", &text));
+    CHECK(!GaiaTryStockReflow(&timed, 0, &out, &text, 1));
+    free(text.t);
+    free(out.t);
+}
+
+static void CheckTimedBeats(void)
+{
+    const uint8_t cards[] = {0xd3, 0x40, 0xc9, 0x10, 0xce, 0x41,
+                             0xc9, 0x20, 0xc8, CMD_RET};
+    const Rom two_cards = {.rom = cards, .size = sizeof(cards)};
+    Toks source = {0}, output = {0};
+    CHECK(GaiaDialogue("[EXT]First card[PAU:30][CLR]Second card[PAU:40][CLD][RET]",
+                       &source));
+    CHECK(GaiaTryStockReflow(&two_cards, 0, &output, &source, 2));
+    CHECK(CountToken(&output, T_CMD, 0xc9, 0x10) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc9, 0x20) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xce, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc8, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, CMD_FIN, 0) == 0);
+    source.n = output.n = 0;
+    CHECK(GaiaDialogue("[EXT]First[PAU:20]Second[PAU:20]Third[RET]", &source));
+    CHECK(!GaiaTryStockReflow(&two_cards, 0, &output, &source, 2));
+
+    const uint8_t continuation[] = {0xc1, 3, 3, 0xc7, 3, 1, 0x40, 0xc9, 0x10,
+                                    0x41, 0xc9, 0x20, 0xc8, CMD_RET};
+    const Rom one_line = {.rom = continuation, .size = sizeof(continuation)};
+    source.n = output.n = 0;
+    CHECK(GaiaDialogue("[EXT]Word[PAU:10]dog[PAU:20][RET]", &source));
+    CHECK(!GaiaTryStockReflow(&one_line, 0, &output, &source, 2));
+    source.n = output.n = 0;
+    CHECK(GaiaDialogue("[EXT]Word[PAU:10]up[PAU:20][RET]", &source));
+    CHECK(GaiaTryStockReflow(&one_line, 0, &output, &source, 2));
+    free(source.t);
+    free(output.t);
 }
 
 int main(void)
@@ -452,6 +525,8 @@ int main(void)
     CheckInheritedChoices();
     CheckInterfaceText();
     CheckPairedEntry();
+    CheckStockReflow();
+    CheckTimedBeats();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }

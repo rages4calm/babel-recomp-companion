@@ -315,30 +315,27 @@ static bool RestoredActorFieldLayout(const Ppu *p,const uint8_t *ram)
 {
     /* A loaded frame has the original actors already in live OAM. The next
      * composition has started, but its OAM upload will arrive one frame later.
-     * Extend the verified terrain only while that first composition agrees. */
+     * The regular scene/layout gate still validates terrain before capture.
+     * Only trust the first live field while its room and camera agree with
+     * the incoming composition and its display is supported. */
     unsigned scene=Word(ram,0x644);
-    bool mansion_mosaic=scene==0xE9 && MansionAndSolidArmMosaic(p,ram);
-    bool dark_space=scene==0xE6 && Word(ram,0x6EE)==0x0405 &&
+    bool dark_gaia_window=scene==0xE8 && p->bgmode==9 && p->windowsel==0x300000 &&
+        Word(ram,0x6EE)==5 && Word(ram,0x692)==256 && Word(ram,0x694)==256 &&
+        Word(ram,0x696)==512 && Word(ram,0x698)==256 &&
+        p->bgXsc[0]==0x10 && p->bgXsc[1]==0x18 && p->screenEnabled[0]==0x17 &&
+        !p->screenEnabled[1] && p->cgwsel==0x22 && p->cgadsub==3 &&
+        g_snesrecomp_last_hdmaen==0x0E;
+    if((p->bgmode&7)!=1 || (p->windowsel && !DaoWorldWindow(p,ram) && !dark_gaia_window) || PPU_forcedBlank(p) ||
+       p->frameInterlace || PPU_objInterlace(p) || !SameActorFieldRoom(ram,s.pending_ram))
+        return false;
+    if(!p->mosaic) return true;
+    if(scene==0xE9) return MansionAndSolidArmMosaic(p,ram);
+    return scene==0xE6 && Word(ram,0x6EE)==0x0405 &&
         Word(ram,0x692)==256 && Word(ram,0x694)==512 &&
         Word(ram,0x696)==512 && Word(ram,0x698)==512 && p->mosaic==3 &&
         p->bgXsc[0]==0x11 && p->bgXsc[1]==0x19 &&
         p->screenEnabled[0]==0x15 && p->screenEnabled[1]==2 &&
         p->cgwsel==2 && p->cgadsub==0x31 && g_snesrecomp_last_hdmaen==2;
-    if((p->bgmode&7)!=1 || (p->mosaic && !mansion_mosaic && !dark_space) ||
-       p->windowsel || PPU_forcedBlank(p) ||
-       !SameActorFieldRoom(ram,s.pending_ram)) return false;
-    switch(scene) {
-    case 0x01: case 0x0B: case 0x0C: case 0x3E: case 0x43: case 0x4F:
-    case 0x5D: case 0x69: case 0x78: case 0x85: case 0x8A: case 0x8B:
-    case 0xE0: case 0xE3: case 0xEA:
-    case 0x47: case 0x6B: case 0x74: case 0x79: case 0xC8: case 0xE1:
-        return true;
-    case 0xE9:
-        return mansion_mosaic;
-    case 0xE6:
-        return dark_space;
-    default: return false;
-    }
 }
 
 static bool StockActorFieldLayout(const Ppu *p,const uint8_t *ram)
@@ -367,6 +364,28 @@ static bool StockActorFieldLayout(const Ppu *p,const uint8_t *ram)
     default:
         return false;
     }
+}
+
+static bool ItoryRestoredCamera(const Ppu *p,const uint8_t *ram,int camera_x,int camera_y)
+{
+    /* A stock Itory departure checkpoint can retain the prior tile-column
+     * camera in the live raster while the next composition advances it.
+     * Frame the live field at that observed camera for this one restore. */
+    if(!s.restored_actor_field || s.epoch_count!=1 || Word(ram,0x644)!=0x15 ||
+       Word(ram,0x6EE)!=5 || Word(ram,0x692)!=1280 || Word(ram,0x694)!=512 ||
+       Word(ram,0x696)!=1024 || Word(ram,0x698)!=256 || p->bgmode!=9 || p->mosaic ||
+       p->bgXsc[0]!=0x11 || p->bgXsc[1]!=0x19 || p->screenEnabled[0]!=0x17 ||
+       p->screenEnabled[1]!=3 || p->cgwsel!=0x82 || p->cgadsub || g_snesrecomp_last_hdmaen!=2 ||
+       ScrollWorld(ram,0x68A,p->hScroll[0])!=camera_x-16 ||
+       ScrollWorld(ram,0x68E,p->vScroll[0])!=camera_y)
+        return false;
+    for(unsigned line=0;line<=224;line++) {
+        const uint8_t *registers=s.lines[line].registers;
+        if((Word(registers,offsetof(Ppu,hScroll))&1023)!=(p->hScroll[0]&1023) ||
+           (Word(registers,offsetof(Ppu,vScroll))&1023)!=(p->vScroll[0]&1023))
+            return false;
+    }
+    return true;
 }
 
 static bool SouthCapeHouseMosaic(const Ppu *p,const uint8_t *ram)
@@ -1434,7 +1453,10 @@ static bool RenderWorld(void)
     } else if(!village_heat && !transition_wave &&
               (ScrollWorld(picture_ram,0x68A,p->hScroll[physical])!=camera_x ||
                ScrollWorld(picture_ram,0x68E,p->vScroll[physical])!=camera_y)) {
-        s.reason="camera_publication_mismatch";return false;
+        if(!ItoryRestoredCamera(p,picture_ram,camera_x,camera_y)) {
+            s.reason="camera_publication_mismatch";return false;
+        }
+        camera_x=ScrollWorld(picture_ram,0x68A,p->hScroll[physical]);
     }
     if(!IogWorldViewCompute(camera_x,camera_y,Word(first->ram,0x692),
             Word(first->ram,0x696),(uint16_t)s.width,(uint16_t)s.height,&s.view)) {
