@@ -342,12 +342,18 @@ bool IogMapUiDraw(IogMapUi *ui, uint8_t *dst, size_t bytes, size_t pitch,
            layout.center - (px + 105) - 10);
     }
     int legend_x = px + (meta->floor_number ? 180 : 105);
-    if (meta->show_exit_legend && source->marker_count && layout.center - legend_x >= 68) {
-      IogMapViewColor color = source->markers[0].color;
+    const IogMapViewColor colors[] = {meta->exit_legend, meta->chest_legend};
+    const char *const labels[] = {"Exit", "Chest"};
+    const int legend_right = layout.center >= 0 ? layout.center : layout.minus;
+    for (unsigned i = 0; i < sizeof(colors) / sizeof(colors[0]); i++) {
+      IogMapViewColor color = colors[i];
+      if (!color.a || legend_right - legend_x < 68)
+        continue;
       uint32_t dot = 0xff000000u | (uint32_t)color.r << 16 |
                      (uint32_t)color.g << 8 | color.b;
       snes_ovl_fill_rect(p, stride, (int)h, legend_x, py + 11, 5, 5, dot);
-      Text(p, stride, (int)h, legend_x + 10, py + 9, "Exit", Ivory, 48);
+      Text(p, stride, (int)h, legend_x + 10, py + 9, labels[i], Ivory, 48);
+      legend_x += 68;
     }
     const char *back = meta->gamepad ?
         (ui->controller_back[0]?ui->controller_back:"B Back") : "Esc Back";

@@ -62,12 +62,15 @@ Batch 021 [extends the connected routes](docs/VISUAL-COVERAGE.md#angel-village-a
 through Angel Village, Watermia, Diamond Mine and the Pyramid-to-Babel story.
 The Angel Village entrance clips the green strip below the visible floor.
 Private receipts are in `.local/batch-001/visual-fullgame-021`.
+Batch 022 adds [discovered chest markers](docs/MAP-SYSTEM-DIRECTION.md#implemented-first-runtime)
+to the full local map. Private receipts are in
+`.local/batch-001/visual-fullgame-022`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 021's
-`babel-originalv25.exe` and batch 020's dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 022's
+`babel-originalv26.exe` and batch 020's dialogue pack, and
 continues the isolated test profile's save. The test executable has the
 required `i18n/structure.txt` alongside it. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint

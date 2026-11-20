@@ -259,7 +259,9 @@ void IogMapHostControlSet(int action,int button)
     previous_pad=~0u;
 }
 #ifndef IOG_RECEIVED_REFERENCE
-enum { StockDoorwayLimit=32 };
+enum { StockDoorwayLimit=32, StockChestLimit=8 };
+static const IogMapViewColor ExitMarkerColor={105,217,211,255};
+static const IogMapViewColor ChestMarkerColor={255,190,96,255};
 
 static size_t StockDoorwayMarkers(const uint8_t *ram,const Cart *cart,
     const IogMapDiscovery *map,IogMapViewMarker markers[StockDoorwayLimit])
@@ -301,9 +303,62 @@ static size_t StockDoorwayMarkers(const uint8_t *ram,const Cart *cart,
         }
         if(best!=INT_MAX)
             markers[count++]=(IogMapViewMarker){(int16_t)marker_x,(int16_t)marker_y,
-                2,{105,217,211,255}};
+                2,ExitMarkerColor};
     }
     return count;
+}
+
+static bool StockClosedChest(const uint8_t *ram, unsigned x, unsigned y)
+{
+    unsigned columns=Word(ram,0x692),rows=Word(ram,0x696);
+    if(columns<256 || rows<256 || ((columns|rows)&255) ||
+       columns>4096 || rows>4096 || !y || x+1>=columns/16 || y>=rows/16)
+        return false;
+    /* Check the live metatiles as well as the opened flag. A script can
+     * remove or replace a chest while the source record still exists. */
+    const uint8_t expected[2][2]={{0xFA,0xFB},{0xF8,0xF9}};
+    for(unsigned row=0;row<2;row++) {
+        unsigned cell_y=y+row-1;
+        for(unsigned col=0;col<2;col++) {
+            unsigned cell_x=x+col;
+            unsigned offset=((cell_y/16)*(columns/256)+cell_x/16)*256+
+                (cell_y%16)*16+cell_x%16;
+            if(offset>=0x6000 || ram[0xA000+offset]!=expected[row][col])
+                return false;
+        }
+    }
+    return true;
+}
+
+static size_t StockChestMarkers(const uint8_t *ram,const Cart *cart,
+    const IogMapDiscovery *map,IogMapViewMarker markers[StockChestLimit])
+{
+    enum { Bank=0x10000, Pointers=0x1ADA8, Lists=0x1AFA6, End=0x1B086, RecordSize=4 };
+    if(!ram || !cart || !cart->rom || cart->romImageSize!=2097152 || !map ||
+       Word(ram,0x69E)!=0xA000)
+        return 0;
+    unsigned scene=Word(ram,0x644);
+    if(scene>=0xFF || Word(ram,0x646)!=scene*2) return 0;
+    const uint8_t *rom=cart->rom;
+    unsigned at=Bank+Word(rom,Pointers+scene*2);
+    if(at<Lists || at>=End) return 0;
+    int floor_x=(int)Word(ram,0x6D6)/16,floor_y=(int)Word(ram,0x6D8)/16;
+    size_t count=0;
+    for(unsigned n=0;n<=StockChestLimit && at<End;n++,at+=RecordSize) {
+        if(rom[at]==0xFF) return count;
+        if(n==StockChestLimit || at+RecordSize>End || (rom[at]&0x80)) return 0;
+        unsigned x=rom[at],y=rom[at+1],flag=rom[at+3]&0x7Fu;
+        if((ram[0xA40+flag/8]&(1u<<(flag%8))) || !StockClosedChest(ram,x,y))
+            continue;
+        int left=(int)x-floor_x,bottom=(int)y-floor_y;
+        for(unsigned cell=0;cell<4;cell++) {
+            int mx=left+(int)(cell%2),my=bottom-(int)(cell/2);
+            if(!IogMapDiscoveryIsRevealed(map,mx,my)) continue;
+            markers[count++]=(IogMapViewMarker){(int16_t)mx,(int16_t)my,2,ChestMarkerColor};
+            break;
+        }
+    }
+    return 0;
 }
 #endif
 
@@ -315,12 +370,15 @@ static bool Draw(uint8_t *dst,size_t bytes,size_t pitch,int w,int h)
     if(!ready)return false;
     IogMapUiMetadata metadata={.valid=true,.gamepad=gamepad};
 #ifndef IOG_RECEIVED_REFERENCE
-    IogMapViewMarker markers[StockDoorwayLimit];
+    IogMapViewMarker markers[StockDoorwayLimit+StockChestLimit];
     if(ui.full && g_snes) {
-        source.marker_count=StockDoorwayMarkers(g_snes->ram,g_snes->cart,source.discovery,markers);
-        if(source.marker_count) {
+        size_t exits=StockDoorwayMarkers(g_snes->ram,g_snes->cart,source.discovery,markers);
+        size_t chests=StockChestMarkers(g_snes->ram,g_snes->cart,source.discovery,markers+exits);
+        source.marker_count=exits+chests;
+        if(exits+chests) {
             source.markers=markers;
-            metadata.show_exit_legend=true;
+            if(exits) metadata.exit_legend=ExitMarkerColor;
+            if(chests) metadata.chest_legend=ChestMarkerColor;
         }
     }
 #endif
