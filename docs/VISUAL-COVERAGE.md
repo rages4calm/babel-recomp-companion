@@ -318,17 +318,21 @@ The virtual controller stays on the map with the gate closed and enters
 South Cape after the story flag has opened the road.
 
 From assisted starts, ordered virtual-controller input defeated the Mu twins,
-defused the bomb, rescued Erik, walked out and reached the reunion camp.
+defused the bomb, rescued Erik, walked out and reached the reunion camp in
+Seaside Tunnel. The replay then walked around camp and opened the mushroom
+dialogue. Progression beyond that conversation remains open.
 The widened combat capture's 13-pixel difference on the last stock row comes
 from the reconstructed actor parts starting at that edge. The widened renderer
 draws those parts into the expanded picture. The stock OAM publication culls
 them at the edge of its own field.
 
 The ending replay defeated both Dark Gaia forms, advanced into the epilogue and
-reached the Changed World sequence. Reloading that earned checkpoint on the
-current dialogue pack and advancing the stock cutscene returned to the epilogue.
-The replays use an SDL virtual controller and keep their starting assistance
-separate from ordinary movement, combat and dialogue after that setup.
+reached the Changed World sequence. Earned checkpoints then linked the return
+to the epilogue, the following cutscene, credits and final school scene. The
+credits advanced on their original timer. The first segment used the previous
+dialogue pack with this binary, and the later segments used the current pack.
+The replays use an SDL virtual controller. Start-to-credits campaign coverage
+and physical controller testing remain open.
 
 ## Bounded entry survey
 

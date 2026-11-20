@@ -7,21 +7,19 @@ The original author's credit, support link and full acknowledgments remain below
 
 ## Companion development status
 
-**Current priority: full-game visuals for the Original-based Companion, with
-approved Retranslation and GaiaLabs world map support.**
-The Original build has a [stock-compatible dialogue import and walkable
-world map](docs/GAIALABS-ORIGINAL-INTEGRATION.md) using locally prepared
-GaiaLabs data. The stock destination menu remains available.
-Six more Great Wall rooms have corrected scrolling at widescreen/1.5×, and
-Select opens controller settings from our local scenery map. The private
-GaiaLabs compatibility preview uses a separate development build to verify
-features. It supports widescreen world travel,
-[South Cape at 1.5×](docs/GAIALABS-SOUTH-CAPE.md), and
-[widescreen scenery in nearby rooms](docs/GAIALABS-SOUTH-CAPE-ROOMS.md).
-The corrected town arrival and normal road back to the world map work in the
-tested route. Full-game visuals and main-content integration
-are still in progress.
-[Controls, verification and remaining work](docs/VISUAL-FULLGAME-004.md).
+**Current priority: finish full-game visuals and verify connected gameplay.**
+The main Original-based build integrates the approved GaiaLabs walkable world
+map and 757 retranslated dialogue entries through locally prepared packs. The
+Companion has its own local scenery map with explored-area reveal and a radar.
+The stock world map and dialogue remain available.
+[GaiaLabs integration and controls](docs/GAIALABS-ORIGINAL-INTEGRATION.md).
+
+The current Windows test build fixes the MSU-1 music restart after Erik's
+clubhouse scene and checks the South Cape story gate at the town entrance.
+Fifteen controller replays cover travel through nine destinations at square-pixel
+1.5×. Checkpoint-linked replays cover the Mu rescue through Seaside Tunnel
+and both Dark Gaia forms through the credits and final school scene.
+[Visual coverage and route limits](docs/VISUAL-COVERAGE.md).
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. Qualified private
@@ -109,7 +107,7 @@ stays ignored.
   The preview remains experimental. It is not a new GPU world renderer,
   interpolation or full 32:9 support. Private same-pose square-pixel captures
   verify the existing SharpPixels and optional xBR looks; higher resolution
-  alone does not reveal more scenery. A scenery map and journal remain planned.
+  alone does not reveal more scenery.
   The newer `IOG_WORLD_RENDERER=1` path separates visuals from gameplay culling:
   110 historical reference/span pairs pass for 61 selected stock scenes, including
   both original classroom doors and the repaired flight framing. One malformed
@@ -127,8 +125,10 @@ stays ignored.
   [Controls and limits](docs/CHEATS-AND-MODS.md).
 - **Windows icons:** coordinated flute/world/comet artwork for the game and a
   play-badge launcher variant, embedded at nine sizes. [Artwork and provenance](res/branding/README.md).
-- **Framework:** integrated SNESRecomp `80a41241`, official main checked
-  November 13, 2026, with Babel-specific changes preserved. The targeted merge
+- **Framework:** SNESRecomp `22c01ef1` matches official main as checked
+  November 20, 2026, with Babel-specific changes preserved.
+  [Current source pin and deltas](docs/VISUAL-FULLGAME-003.md).
+  The earlier `80a41241` targeted merge
   includes long/Unicode mod paths, PPU macro and screenshot-response fixes;
   the paired-call bank-wrap correction was already locally equivalent.
   [Current integration and delta](docs/FRAMEWORK-NOV12.md) distinguish compiled
