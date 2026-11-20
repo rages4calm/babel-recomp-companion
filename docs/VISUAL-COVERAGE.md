@@ -608,6 +608,33 @@ reference also matched the v30 Dark Space return to the Aqueduct. The stock
 Mode 7 map selection replay still reached South Cape with the same picture
 and guest state.
 
+## Babel victory setup, Dao and Solid Arm
+
+Original v32 keeps the opening frame of the Babel victory effect wide in
+all four rematches (`F2`–`F5`). The renderer verifies the outgoing scroll
+table, then preserves the incoming BG2 raster and stationary foreground.
+Dark Viper uses its separately verified held scroll value. Each linked
+controller replay stayed wide through the setup and all 124 wave frames,
+then returned to the middle Babel floor (`E0`) through the stock fade.
+The expanded stars and actors were inspected at 598×336. The four setup
+captures matched the original PPU field outside the scaled HUD.
+
+Two more Mode 1 mosaics keep the same scale as their neighboring rooms.
+The Spirit Guide's arrival in Dao (`E3` → `C3`) preserves the heat window
+through all 75 reveal frames. Solid Arm's defeat (`EA` → `E3`) preserves
+the purple color math and narrow arena through all 70 exit mosaic frames.
+Both controller runs used linked checkpoints. Sampled guest state and
+interpreter pictures agreed, and the shipping path matched the original
+PPU field outside the scaled HUD. The optional scalar pixel sampler still
+differs by a few pixels at Dao's active window edge.
+
+The Mode 7 controller checks covered map-to-Mountain Temple, map-to-Dao
+and back, and the stock destination selection into South Cape. The sampled
+598×336 pictures and guest state matched v31. The stock split fallback
+still reaches South Cape, and unsupported intervals such as fully black
+loading between rooms can still use fallback. Six earlier frames in the
+Dark Castoth fight still use the visual-object fallback.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

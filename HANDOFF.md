@@ -90,14 +90,22 @@ Batch 028 [stabilizes the Babel rematches, Ship Dream and Sky Garden
 flight](docs/VISUAL-COVERAGE.md#babel-victory-waves-ship-dream-and-sky-garden-flight)
 on Original v31. Private controller comparisons and exact-build receipts are in
 `.local/batch-001/visual-fullgame-028`.
+Batch 029 fixes the [Babel victory setup and the Dao and Solid Arm
+mosaics](docs/VISUAL-COVERAGE.md#babel-victory-setup-dao-and-solid-arm)
+on Original v32. It also verifies Mode 7 departures to the Mountain Temple,
+Dao and South Cape. Private evidence is in
+`.local/batch-001/visual-fullgame-029`.
+The interrupted video download and superseded test executables were
+removed in [visual batch 029 cleanup](docs/PROJECT-CLEANUP.md#visual-batch-029).
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
-The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 028's
-`babel-originalv31final.exe` and batch 020's dialogue pack, and
+The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
+`.local/batch-001/visual-fullgame-010`. It selects batch 029's
+`babel-originalv32setup.exe` and batch 020's dialogue pack, and
 continues the isolated test profile's save. The test executable has the
-required `i18n/structure.txt` alongside it. Hold Down from the initial Itory
+required `i18n/structure.txt` alongside it. `Play Original v31 Rollback.cmd`
+selects the previous build. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.
 The test profile selects the existing local MSU-1 pack. An SPC save can keep

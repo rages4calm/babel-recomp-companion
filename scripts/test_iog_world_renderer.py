@@ -656,6 +656,47 @@ static void babel_starfield(void){
  CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
  g_snesrecomp_last_hdmaen=0;g_snes->dma=NULL;
 
+ /* The channel-1 handover keeps BG1 fixed. F3 can instead hold its
+  * first BG2 value after the other wave data overwrites its table. */
+ for(unsigned held=0;held<2;held++){
+  fixture();word(0x644,held?0xf3:0xf2);word(0x6ee,0x0405);
+  word(0x68e,0);word(0x694,512);word(0x698,512);
+  word(0x6d8,0);word(0x6da,512);word(0x6de,256);
+  g_ppu->screenEnabled[0]=19;g_ppu->vScroll[0]=0;
+  g_ppu->cgwsel=2;g_ppu->cgadsub=0x31;
+  g_snes->dma=&victory_dma;g_snesrecomp_last_hdmaen=2;
+  const unsigned table_base=held?0x8a00:0x8800;
+  victory_dma.channel[1].aAdr=(uint16_t)table_base;
+  for(unsigned offset=0;offset<12;offset+=3){
+   ram[table_base+offset]=0xc0;
+   word(table_base+offset+1,table_base+0x100);
+  }
+  publication();
+  memcpy(ram+0x8800,table,sizeof table);
+  for(unsigned line=0;line<223;line++)
+   word(0x8900+2*line,256+(line<64?line%21:0));
+  if(held){
+   ram[table_base]=0x5a;word(table_base+1,0x5a00);ram[table_base+3]=0;
+   word(0x5a00,0x2050);
+  }
+  IogWorldBeginRaster();
+  for(unsigned line=0;line<=224;line++){
+   g_ppu->hScroll[1]=held?80:Word(ram,0x8900+2*(line<223?line:222));
+   IogWorldCaptureLine((int)line);
+  }
+  IogWorldEndRaster(0,225,0);
+  CHECK(s.complete&&!strcmp(s.reason,"ready_babel_victory_setup"));
+  s.epochs[0].ram[held?0x5a00:0x8900]^=1;
+  CHECK(!RenderWorld()&&!strcmp(s.reason,"unsupported_babel_starfield"));
+  s.epochs[0].ram[held?0x5a00:0x8900]^=1;
+  s.active_ram[table_base]^=1;
+  CHECK(!RenderWorld()&&!strcmp(s.reason,"unsupported_babel_starfield"));
+  s.active_ram[table_base]^=1;
+  s.lines[99].registers[offsetof(Ppu,hScroll)]^=1;
+  CHECK(!RenderWorld()&&!strcmp(s.reason,"unsupported_babel_starfield"));
+  g_snesrecomp_last_hdmaen=0;g_snes->dma=NULL;
+ }
+
  fixture();word(0x644,0xf6);word(0x6ee,0x0405);
  word(0x692,512);word(0x694,512);word(0x696,512);word(0x698,512);
  word(0x6d8,256);word(0x6da,512);word(0x6de,512);
@@ -1116,6 +1157,31 @@ static void mode7_angkor_neighbor_mosaic(void){
  g_ppu->mosaic=0x53;IogWorldCaptureLine(1);CHECK(!s.valid);
  word(0x644,0xBE);CHECK(!AngkorVisionMosaic(g_ppu,ram));
 }
+static void dao_and_solid_arm_mosaic(void){
+ fixture();word(0x644,0xC3);word(0x6EE,0x0485);
+ word(0x692,768);word(0x694,512);word(0x696,512);word(0x698,512);
+ g_ppu->bgmode=9;g_ppu->mosaic=0x83;g_ppu->mosaicStartLine=1;
+ g_ppu->windowsel=2;g_ppu->screenWindowed[0]=0x17;
+ g_ppu->screenEnabled[0]=0x17;g_ppu->screenEnabled[1]=0x12;
+ g_ppu->cgwsel=0x82;g_ppu->cgadsub=0x41;g_snesrecomp_last_hdmaen=6;
+ publication();IogWorldBeginRaster();CHECK(s.valid&&!s.mode7);
+ IogWorldCaptureLine(0);IogWorldCaptureLine(1);CHECK(s.valid);
+ g_ppu->cgadsub=0x43;IogWorldCaptureLine(2);CHECK(!s.valid);
+ g_ppu->cgadsub=0x41;g_snesrecomp_last_hdmaen=2;
+ IogWorldBeginRaster();CHECK(!s.valid);
+
+ fixture();word(0x644,0xEA);word(0x6EE,0x0485);
+ word(0x692,256);word(0x694,512);word(0x696,256);word(0x698,256);
+ g_ppu->bgmode=9;g_ppu->mosaic=0x93;g_ppu->mosaicStartLine=1;
+ g_ppu->screenEnabled[0]=0x15;g_ppu->screenEnabled[1]=0x16;
+ g_ppu->cgwsel=0x02;g_ppu->cgadsub=0x21;g_snesrecomp_last_hdmaen=2;
+ publication();IogWorldBeginRaster();CHECK(s.valid&&!s.mode7);
+ IogWorldCaptureLine(0);IogWorldCaptureLine(1);CHECK(s.valid);
+ g_ppu->mosaic=0x91;IogWorldCaptureLine(2);CHECK(!s.valid);
+ g_ppu->mosaic=0x93;word(0x696,512);
+ IogWorldBeginRaster();CHECK(!s.valid);
+ g_snesrecomp_last_hdmaen=0;
+}
 static void story_sky_after_unpaired_upload(void){
  fixture();
  word(0x644,0x58);word(0x6ee,0x85);
@@ -1158,6 +1224,7 @@ static void story_sky_after_unpaired_upload(void){
 }
 static void mode7_lifecycle_and_packet(const char*base){
  ship_dream_mosaic();
+ dao_and_solid_arm_mosaic();
  story_sky_after_unpaired_upload();
  mode7_angkor_neighbor_mosaic();
  mode7_menu_dismissal();
