@@ -97,14 +97,20 @@ Dao and South Cape. Private evidence is in
 `.local/batch-001/visual-fullgame-029`.
 The interrupted video download and superseded test executables were
 removed in [visual batch 029 cleanup](docs/PROJECT-CLEANUP.md#visual-batch-029).
+Batch 030 repairs [Dark Castoth's defeat, Dao's mosaic window and nearby
+transitions](docs/VISUAL-COVERAGE.md#dark-castoth-defeat-and-neighboring-mosaics)
+on Original v33. The [GaiaLabs dialogue import](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue)
+now installs 793 replacements, including returning prompts and fragments.
+Private build and replay receipts are in
+`.local/batch-001/visual-fullgame-030`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 029's
-`babel-originalv32setup.exe` and batch 020's dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 030's
+`babel-originalv33final.exe` and its private dialogue pack, and
 continues the isolated test profile's save. The test executable has the
-required `i18n/structure.txt` alongside it. `Play Original v31 Rollback.cmd`
+required `i18n/structure.txt` alongside it. `Play Original v32 Rollback.cmd`
 selects the previous build. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.

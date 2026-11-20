@@ -179,6 +179,29 @@ static void refusals_and_capacity(void){
     wr(0x58,0x1f90);CHECK(run(v)==kIogVisualCapacity); /*588visibleparts, noacceptedpartial*/
     fixture();wr(0x56,0);wr(0x58,0);CHECK(run(v)==kIogVisualReady&&!frame.actor_count&&!frame.part_count);
 }
+static void castoth_defeat_tail(void){
+    fixture();
+    IogVisualViewport v={0,0,598,336};
+    actor(0x1030,0x1000,0,128,144,0x0141,0x5955);
+    wr(0x1006,0x1030);wr(0x58,0x1030);
+    wr(0x1014,120);wr(0x1016,170); /* Another visible effect survives. */
+    wr(0x644,0xf2);wr(0x9ae,0x20);
+    wr(0x1030,0xdbdd);ram[0x1032]=0x80;ram[0x11038]=0x8e;
+    wr(0x103e,0x3000);wr(0x1048,64);wr(0x104a,88);
+    ppu.oam[252]=ppu.oam[254]=0x3740;
+    ppu.oam[253]=ppu.oam[255]=0x3000;
+    ppu.vram[0x400f]=0x0080;
+    CHECK(run(v)==kIogVisualReady&&frame.part_count==2&&frame.parts[0].actor==0x1000);
+    CHECK(frame.parts[1].actor==0x1030&&frame.parts[1].x==64&&frame.parts[1].y==55);
+    CHECK(frame.parts[1].indices[56]==132&&frame.parts[1].indices[57]==0);
+    ppu.oam[253]=0x3001;CHECK(run(v)==kIogVisualMalformedSource);
+    ppu.oam[253]=0x3000;ppu.highOam[31]=0x80;CHECK(run(v)==kIogVisualMalformedSource);
+    ppu.highOam[31]=0;wr(0x9ae,0);CHECK(run(v)==kIogVisualMalformedSource);
+    wr(0x9ae,0x20);wr(0x644,0x29);CHECK(run(v)==kIogVisualMalformedSource);
+    wr(0x644,0xf2);wr(0x1010,1);wr(0x56,0x1030);wr(0x58,0x1000);
+    wr(0x1004,0x1030);wr(0x1006,0);wr(0x1034,0);wr(0x1036,0x1000);
+    CHECK(run(v)==kIogVisualMalformedSource); /* OAM may have cut off the next actor. */
+}
 static void exact_room_selection(void){
     for(unsigned room=0;room<65536;room++){
         bool expected=false;
@@ -203,7 +226,7 @@ static void exact_room_selection(void){
         CHECK(IogVisualObjectsSupportsScene((uint16_t)room)==expected);
     }
 }
-int main(void){geometry_and_pixels();orders_and_manual();all_planar_colors();player_rom_pixels();refusals_and_capacity();exact_room_selection();printf("%u visual-object assertions passed\n",checks);return 0;}
+int main(void){geometry_and_pixels();orders_and_manual();all_planar_colors();player_rom_pixels();refusals_and_capacity();castoth_defeat_tail();exact_room_selection();printf("%u visual-object assertions passed\n",checks);return 0;}
 '''
 
 

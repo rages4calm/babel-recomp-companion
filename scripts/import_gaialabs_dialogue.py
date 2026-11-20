@@ -58,7 +58,7 @@ def stock_labels(path):
 
 def convert(source, names):
     if not source.endswith("[END]"):
-        raise ValueError("No explicit terminal END")
+        return convert_return(source, names)
     pages, lines, line, speaker = [], [], "", None
     opening_pause = closing_pause = None
     palette_reset = False
@@ -164,6 +164,56 @@ def convert(source, names):
                     suffix += "[PAL:00]"
             rendered.append(marker + "[N]".join(group) + suffix)
     return "[FIN]".join(rendered) + "[END]"
+
+
+def convert_return(source, names):
+    """Keep fragment and choice rows intact before checking the stock RET."""
+    parts = []
+    for part in re.split(r"(\[[^\]]*\])", source.translate(TYPOGRAPHY)):
+        if not part:
+            continue
+        if not part.startswith("["):
+            if any(ch not in GLYPHS for ch in part):
+                raise ValueError("Unsupported stock glyph")
+            parts.append(part)
+            continue
+        if part in ("[N]", "[FIN]"):
+            parts.append(part)
+            continue
+        if part in ("[CLD]", "[CLR]", "[DEF]") or BOX_TAG.fullmatch(part):
+            continue
+        if part == "[RET]" and source.endswith(part):
+            continue
+        if match := TAG.fullmatch(part):
+            command, arg = match.groups()
+            value = int(arg, 16) if arg is not None else -1
+            if command in COSMETICS and 0 <= value <= COSMETICS[command]:
+                continue
+            if command == "PAL" and value in (0, 4):
+                continue
+            if command == "NAM" and 0 <= value < len(names):
+                if all(ch in GLYPHS for ch in names[value]):
+                    parts.append(names[value])
+                    continue
+        if match := re.fullmatch(r"\[BCD:([1-5]),([0-9A-F]{1,4})\]", part):
+            digits, address = match.groups()
+            parts.append(f"[BCD:{digits},{int(address, 16):04X}]")
+            continue
+        raise ValueError("Unverified return-fragment command")
+    if source.count("[RET]") > 1 or not parts:
+        raise ValueError("Invalid return fragment")
+    candidate = "".join(parts)
+    pages = candidate.split("[FIN]")
+    if not any(any(ch in GLYPHS - {" "} for ch in p) for p in pages):
+        raise ValueError("Empty return fragment")
+    for page in pages:
+        lines = page.split("[N]")
+        if len(lines) > 7 or any(
+            len(re.sub(r"\[BCD:([1-5]),[0-9A-F]{4}\]", lambda m: "0" * int(m[1]), row)) > 24
+            for row in lines
+        ):
+            raise ValueError("Return fragment exceeds stock bounds")
+    return candidate + "[RET]"
 
 
 def main():

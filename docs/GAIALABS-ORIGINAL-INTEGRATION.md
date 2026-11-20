@@ -6,13 +6,22 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **757 of 1,138** chapter-dialogue replacements in the
+The import now covers **793 of 1,138** chapter-dialogue replacements in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer produces 926 candidates. This pass adds 29 replacements with
-stock dialogue boxes, page-boundary controls, timed pauses or a terminal
-palette reset. All 728 previous encoded replacements are byte-identical.
-Entries requiring choice tables, relocated pointers, a new font or unverified
-commands still use the original text. Menu and sprite lettering are pending.
+The importer produces 966 candidates. Batch 030 adds 36 replacements,
+including the Dark Space save prompt, item-use text, and story choices.
+Returning strings keep the stock choice row count, indentation, and return
+instruction. The game still runs its own choice branches. Inherited dialogue
+boxes are limited to the original text's dimensions, and reflow keeps the
+same page boundaries when retaining stock controls. The 757 previous
+replacements keep their exact encoded bytes and virtual addresses.
+
+The importer excludes 172 declarations. Of those, 21 have no unique
+marker-free stock label and 47 returning fragments exceed stock bounds.
+The other 104 involve unsupported syntax, commands, or glyphs. The runtime
+leaves 173 of the generated candidates in stock form when their layouts or
+commands cannot be preserved. Full menu and sprite lettering, relocated
+pointer tables, and custom-font coverage remain open.
 
 The text uses the Original localization overlay. Start with a local Git
 checkout containing the pinned revision, then generate a pack into the
@@ -45,6 +54,10 @@ and reaches Luke's house in both variants. The stock sound cue remains.
 The current build shows both newly translated Neil's Cottage dialogue pages,
 with the original pauses and speaker changes. The same virtual-controller
 replay with `IOG_LANG=original` shows both original pages.
+The v33 Dark Space replay checks both save-prompt options with the
+retranslation enabled and with stock text selected. The 1.5× screenshots
+show the choices at their original positions. The option to record writes
+the same save bytes as stock, and skipping leaves those bytes untouched.
 
 ## World map and widescreen
 

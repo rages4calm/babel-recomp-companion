@@ -242,6 +242,31 @@ static IogVisualStatus Add(const IogVisualSource *s, IogVisualFrame *out,
     return kIogVisualReady;
 }
 
+static bool CastothDefeatTail(const IogVisualSource *s, unsigned actor,
+    uint8_t bank, uint16_t frame)
+{
+    const uint8_t *ram = s->ram;
+    const Ppu *ppu = s->ppu;
+    /* The stock Babel defeat changes the sprite bank before the old WRAM
+     * frame pointer is retired. The final actor fills the rest of the
+     * published OAM with copies of a single, overlapping character.
+     * The tile is live VRAM and can contain visible pixels. */
+    if (Word(ram, 0x644) != 0xf2 || !(Word(ram, 0x9ae) & 0x20) ||
+        bank != 0x8e || frame != 0x5955 || Word(ram, actor) != 0xdbdd ||
+        ram[actor + 2] != 0x80 || Word(ram, actor + 0x10) != 0x0141)
+        return false;
+    int x = (int16_t)(Word(ram, actor + 0x14) - Word(ram, 0x68a)) -
+        (int16_t)Word(ram, actor + 0x18);
+    int y = (int16_t)(Word(ram, actor + 0x16) - Word(ram, 0x68e)) -
+        (int16_t)Word(ram, actor + 0x1a) - 1;
+    if (x < 0 || x >= 256 || y < 0 || y >= 223 || (ppu->highOam[31] & 0xf0))
+        return false;
+    unsigned xy = (unsigned)y * 256 + (unsigned)x;
+    unsigned attr = Word(ram, actor + 0xe);
+    return attr == 0x3000 && ppu->oam[252] == xy && ppu->oam[254] == xy &&
+        ppu->oam[253] == attr && ppu->oam[255] == attr;
+}
+
 static IogVisualStatus BuildLayout(const IogVisualSource *s,
     const IogVisualViewport *view, IogVisualFrame *out, bool received, uint32_t prefix)
 {
@@ -283,13 +308,23 @@ static IogVisualStatus BuildLayout(const IogVisualSource *s,
         unsigned actor = actors[n].actor, ext = 0x10000 + actor;
         uint8_t bank = s->ram[ext + 8], count;
         uint16_t ptr = Word(s->ram, ext + 0xc);
-        if (!Byte(s, bank, (uint16_t)(ptr + 8), &count) || !count) { status = kIogVisualMalformedSource; goto done; }
-        uint16_t mask = Word(s->ram, actor + 0xe), flags = Word(s->ram, actor + 0x10);
-        unsigned blink = (flags & 0x80) && !(flags & 0x10) && (Word(s->ram, ext + 0x28) & 1) ? 0xe00 : 0;
         int32_t ax = WorldPosition(Word(s->ram, actor + 0x14), Word(s->ram, 0x68a));
         int32_t ay = WorldPosition(Word(s->ram, actor + 0x16), Word(s->ram, 0x68e));
         int32_t x0 = ax - (int16_t)Word(s->ram, actor + 0x18);
         int32_t y0 = ay - (int16_t)Word(s->ram, actor + 0x1a) - 1;
+        if (!Byte(s, bank, (uint16_t)(ptr + 8), &count) || !count) {
+            bool last = n + 1 == kIogVisualMaxActors || !actors[n + 1].actor;
+            if (!received && last && CastothDefeatTail(s, actor, bank, ptr)) {
+                status = Add(s, out, actor, Word(s->ram, actor + 0x28), 0,
+                    Word(s->ram, actor + 0xe), x0, y0, 8, false, false, 0, 0, &order);
+                if (status != kIogVisualReady) goto done;
+                continue;
+            }
+            status = kIogVisualMalformedSource;
+            goto done;
+        }
+        uint16_t mask = Word(s->ram, actor + 0xe), flags = Word(s->ram, actor + 0x10);
+        unsigned blink = (flags & 0x80) && !(flags & 0x10) && (Word(s->ram, ext + 0x28) & 1) ? 0xe00 : 0;
         bool player = (flags & 0x8000) != 0;
         uint8_t graphics_bank = 0; uint16_t graphics_base = 0;
         if (player && !PlayerGraphics(s, actor, &graphics_bank, &graphics_base, received ? 0xf179 : 0xd974)) { status = kIogVisualUnsupportedFormat; goto done; }

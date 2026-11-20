@@ -28,7 +28,10 @@ static void CheckWindow(const uint8_t *data, size_t size, const char *text,
     Rom stock = {.rom = data, .size = size};
     Toks parsed = {0}, rendered = {0};
     CHECK(GaiaDialogue(text, &parsed));
-    CHECK(GaiaStockWindow(&stock, 0, &rendered, &parsed) == accepted);
+    const int actual = GaiaStockWindow(&stock, 0, &rendered, &parsed, 1);
+    if (actual != accepted)
+        fprintf(stderr, "unexpected result for %s\n", text);
+    CHECK(actual == accepted);
     if (accepted) {
         CHECK(CountToken(&rendered, T_CMD, CMD_FIN, 0) == pages - 1);
         CHECK(CountToken(&rendered, T_CMD, 0xc2, 0) == will);
@@ -54,7 +57,7 @@ static void CheckStockSound(void)
     Rom stock = {.rom = leading, .size = sizeof(leading)};
     Toks parsed = {0}, rendered = {0};
     CHECK(GaiaDialogue("A[END]", &parsed));
-    CHECK(GaiaStockWindow(&stock, 0, &rendered, &parsed));
+    CHECK(GaiaStockWindow(&stock, 0, &rendered, &parsed, 1));
     CHECK(rendered.n == 4 && rendered.t[1].code == CMD_SFX && rendered.t[1].a[0] == 0x10);
     free(parsed.t);
     free(rendered.t);
@@ -63,7 +66,7 @@ static void CheckStockSound(void)
     parsed = (Toks){0};
     rendered = (Toks){0};
     CHECK(GaiaDialogue("A[FIN]B[END]", &parsed));
-    CHECK(GaiaStockWindow(&stock, 0, &rendered, &parsed));
+    CHECK(GaiaStockWindow(&stock, 0, &rendered, &parsed, 1));
     CHECK(rendered.n == 6 && rendered.t[2].code == CMD_FIN);
     CHECK(rendered.t[3].code == CMD_SFX && rendered.t[3].a[0] == 0x10);
     free(parsed.t);
@@ -82,7 +85,7 @@ static void CheckPageControls(void)
     Toks parsed = {0}, rendered = {0};
     const char *verified = "[PAU:1E]A[FIN]B[PAU:28][PAL:00][END]";
     CHECK(GaiaDialogue(verified, &parsed));
-    CHECK(GaiaStockWindow(&stock, 0, &rendered, &parsed));
+    CHECK(GaiaStockWindow(&stock, 0, &rendered, &parsed, 1));
     Item item = {.toks = rendered};
     uint8_t encoded[sizeof(pauses)] = {0};
     CHECK(Encode(NULL, &item, NULL) == sizeof(pauses));
@@ -98,6 +101,30 @@ static void CheckPageControls(void)
     RejectMalformed("A[PAU:1E]B[END]");
     RejectMalformed("A[PAU:00][END]");
     RejectMalformed("A[PAL:04][END]");
+}
+
+static void CheckReturningFragments(void)
+{
+    const uint8_t choice[] = {0xd3, 0xce, 0x40, CMD_N, 0xc3, 0,
+        0xac, 0x41, CMD_N, 0xac, 0x42, CMD_RET};
+    const uint8_t number[] = {0xd3, 0x40, 0xc6, 2, 0xb0, 0xa, 0x41, CMD_RET};
+    Rom stock = {.rom = choice, .size = sizeof(choice)};
+    Toks parsed = {0}, rendered = {0};
+    CHECK(GaiaDialogue("Go?[N] Yes[N] No[RET]", &parsed));
+    CHECK(!GaiaStockWindow(&stock, 0, &rendered, &parsed, 0));
+    CHECK(GaiaStockWindow(&stock, 0, &rendered, &parsed, 1));
+    CHECK(CountToken(&rendered, T_CMD, CMD_N, 0) == 2);
+    CHECK(CountToken(&rendered, T_CMD, 0xc3, 0) == 1);
+    CHECK(rendered.t[rendered.n - 1].code == CMD_RET);
+    free(parsed.t);
+    free(rendered.t);
+
+    CheckWindow(choice, sizeof(choice), "Go?[N]Yes[N] No[RET]", 0, 0, 0, 0);
+    CheckWindow(choice, sizeof(choice), "Go?[N] Yes[RET]", 0, 0, 0, 0);
+    CheckWindow(choice, sizeof(choice), "Go?[N] Yes[N] No[END]", 0, 0, 0, 0);
+    CheckWindow(number, sizeof(number), "A[BCD:2,0AB1]B[RET]", 0, 0, 0, 0);
+    RejectMalformed("A[BCD:0,0AB0]B[RET]");
+    RejectMalformed("A[BCD:2,AB0]B[RET]");
 }
 
 int main(void)
@@ -117,16 +144,20 @@ int main(void)
     CheckWindow(changed, sizeof(changed), "[TPL:00]A[FIN][TPL:02]B[END]", 0, 0, 0, 0);
     CheckWindow(changed, sizeof(changed), "A[FIN]B[END]", 0, 0, 0, 0);
     CheckWindow(moving_box, sizeof(moving_box), "A[FIN]B[END]", 1, 2, 0, 0);
-    CheckWindow(moving_box, sizeof(moving_box), "A[FIN]B[N]C[END]", 0, 0, 0, 0);
+    CheckWindow(moving_box, sizeof(moving_box), "A[FIN]B[N]C[END]", 1, 2, 0, 0);
+    CheckWindow(moving_box, sizeof(moving_box),
+                "A[FIN]This line uses its limit[N]Another full line[END]", 0, 0, 0, 0);
     CheckWindow(mid_speaker, sizeof(mid_speaker), "A[FIN][TPL:01]B[END]", 0, 0, 0, 0);
     CheckWindow(extra_clear, sizeof(extra_clear), "A[N]B[N]C[END]", 0, 0, 0, 0);
-    CheckWindow(inherited, sizeof(inherited), "A[END]", 0, 0, 0, 0);
+    CheckWindow(inherited, sizeof(inherited), "A[END]", 1, 1, 0, 0);
+    CheckWindow(inherited, sizeof(inherited), "AB[END]", 0, 0, 0, 0);
     RejectMalformed("[TPL:11]A[END]");
     RejectMalformed("A[TPL:01]B[END]");
     RejectMalformed("[TPL:+1]A[END]");
     RejectMalformed("[TPL:01][TPL:01]A[END]");
     CheckStockSound();
     CheckPageControls();
+    CheckReturningFragments();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }
@@ -147,6 +178,12 @@ def main():
     )
     assert convert("[PAU:1E][DLG:3,11][SIZ:D,3]A[FIN]B[PAU:28][PAL:0][END]", []) == (
         "[PAU:1E]A[FIN]B[PAU:28][PAL:00][END]"
+    )
+    assert convert("[DEF]Pick one?[N][PAL:0] Yes[N] No", []) == (
+        "Pick one?[N] Yes[N] No[RET]"
+    )
+    assert convert("Kept [BCD:2,AB0][N]pieces.[RET]", []) == (
+        "Kept [BCD:2,0AB0][N]pieces.[RET]"
     )
     for invalid in (
         "[SIZ:D,3]A[END]", "[DLG:3,11]A[END]", "[DLG:1F,11][SIZ:D,3]A[END]",

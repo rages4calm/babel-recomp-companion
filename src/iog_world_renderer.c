@@ -193,15 +193,17 @@ static bool DaoVillageMosaic(const Ppu *p,const uint8_t *ram)
         p->cgwsel==0x82 && p->cgadsub==0x41 && g_snesrecomp_last_hdmaen==0x06;
 }
 
-static bool SolidArmExitMosaic(const Ppu *p,const uint8_t *ram)
+static bool MansionAndSolidArmMosaic(const Ppu *p,const uint8_t *ram)
 {
-    /* Defeating Solid Arm mosaics the narrow foreground and moving
-     * subscreen plane together before the return to the outer landing. */
-    return Word(ram,0x644)==0xEA && Word(ram,0x6EE)==0x0485 &&
+    /* The Mansion reveal and Solid Arm exit share the same two-plane
+     * effect but have different authored foreground widths. */
+    unsigned scene=Word(ram,0x644);
+    unsigned width=scene==0xE9?1024:256;
+    return (scene==0xE9 || scene==0xEA) && Word(ram,0x6EE)==0x0485 &&
         p->bgmode==9 && (p->mosaic&15)==3 && !p->windowsel &&
         p->screenEnabled[0]==0x15 && p->screenEnabled[1]==0x16 &&
         p->cgwsel==0x02 && p->cgadsub==0x21 && g_snesrecomp_last_hdmaen==0x02 &&
-        Word(ram,0x692)==256 && Word(ram,0x696)==256 &&
+        Word(ram,0x692)==width && Word(ram,0x696)==width &&
         Word(ram,0x694)==512 && Word(ram,0x698)==256;
 }
 
@@ -234,16 +236,36 @@ static bool BabelQueenMosaic(const Ppu *p,const uint8_t *ram)
         Word(ram,0x694)==512 && Word(ram,0x698)==512;
 }
 
+static bool BabelLandingMosaic(const Ppu *p,const uint8_t *ram)
+{
+    /* Solid Arm's exit hands off to the landing with a different color
+     * math configuration and a foreground bounded to the upper floor. */
+    return Word(ram,0x644)==0xE3 && Word(ram,0x6EE)==1 &&
+        p->bgmode==9 && (p->mosaic&15)==3 && !p->windowsel &&
+        p->screenEnabled[0]==0x17 && !p->screenEnabled[1] &&
+        p->cgwsel==0x80 && p->cgadsub==0xA3 && g_snesrecomp_last_hdmaen==6 &&
+        Word(ram,0x692)==1024 && Word(ram,0x696)==1024 &&
+        Word(ram,0x694)==256 && Word(ram,0x698)==1024;
+}
+
 static bool ShipDreamMosaic(const Ppu *p,const uint8_t *ram)
 {
-    if(p->bgmode!=9 || (p->mosaic&15)!=3 || p->screenEnabled[0]!=23 ||
+    if(p->bgmode!=9 || (p->mosaic&15)!=3 ||
        p->screenEnabled[1] || p->cgwsel!=0x80 ||
        Word(ram,0x694)!=512 || Word(ram,0x698)!=512)
         return false;
-    if(DreamWorldWindow(p,ram))
-        return p->cgadsub==0xA3 && g_snesrecomp_last_hdmaen==6 && Word(ram,0x6EE)==5;
+    if(p->cgadsub==0xA3 && g_snesrecomp_last_hdmaen==6) {
+        if(DreamWorldWindow(p,ram))
+            return p->screenEnabled[0]==23 && Word(ram,0x6EE)==5;
+        /* The lower deck starts the dream with the same color math
+         * but a fixed main screen and its own camera plane. */
+        if(Word(ram,0x644)==0x2E)
+            return p->screenEnabled[0]==21 && !p->windowsel && Word(ram,0x6EE)==1 &&
+                Word(ram,0x692)==768 && Word(ram,0x696)==512;
+    }
     /* The cabin's existing HDMA swaps the sunset color math below the sky. */
-    return Word(ram,0x644)==0x2D && Word(ram,0x692)==768 && Word(ram,0x696)==512 &&
+    return Word(ram,0x644)==0x2D && p->screenEnabled[0]==23 &&
+        Word(ram,0x692)==768 && Word(ram,0x696)==512 &&
         Word(ram,0x6EE)==1 && !p->windowsel && (p->cgadsub==0xA1 || p->cgadsub==0x22) &&
         g_snesrecomp_last_hdmaen==0x1E;
 }
@@ -251,7 +273,8 @@ static bool ShipDreamMosaic(const Ppu *p,const uint8_t *ram)
 static bool StockMosaicLayout(const Ppu *p,const uint8_t *ram)
 {
     return AngkorVisionMosaic(p,ram) || DaoVillageMosaic(p,ram) ||
-        SolidArmExitMosaic(p,ram) || BabelQueenMosaic(p,ram) || ShipDreamMosaic(p,ram);
+        MansionAndSolidArmMosaic(p,ram) || BabelQueenMosaic(p,ram) ||
+        BabelLandingMosaic(p,ram) || ShipDreamMosaic(p,ram);
 }
 
 static int PositiveMod(int value,int divisor)
