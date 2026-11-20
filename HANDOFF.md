@@ -11,58 +11,31 @@ Keep performance checks focused on visible smoothness, not repeated benchmarks.
 
 ## ACTIVE: full-game presentation and GaiaLabs maps
 
-Read [current batch](docs/VISUAL-FULLGAME-003.md),
-[prior maps](docs/VISUAL-FULLGAME-002.md), [coverage](docs/VISUAL-COVERAGE.md)
-and [map direction](docs/MAP-SYSTEM-DIRECTION.md). Active scratch:
-`.local/batch-001/visual-fullgame-003`. Continue neighboring rooms/transitions
-before native gaps. No whole-game visual approval is claimed.
+Continue from [batch 004](docs/VISUAL-FULLGAME-004.md) and the private receipts in
+`.local/batch-001/visual-fullgame-004`. The Original test launcher selects
+`babel-originalv3.exe`, with the batch 003 launcher available as fallback.
+The separate private GaiaLabs preview selects `babel-mainv3.exe` and starts at
+the staged world map for South Cape testing. The strict received reference is
+`babel-referencev4.exe`.
 
-- Current Original: `babel-originalv5.exe` in active batch, SHA
-  `bf693e1b9a583e512ddc6ceaed836c04689c50b351a7bfda33373ea1e3d59378`.
-  Test launchers select it; previous v9 and original-area-map/interpreter fallback
-  remain. Owner uses controller: shared physical mapping plus configurable Map
-  actions, saved preferences, SNES logical prompts. Default L2+L3 Companion,
-  L2+R3 Settings; physical combinations are remappable in shared controls.
-- Original Start replaces the old local radar only where actual source proves
-  that command (quiet, Map available,09AE bit3 clear). It consumes the held
-  button until release. Town/pause contexts, unsupported scenes and world
-  travel keep original input. `IOG_ORIGINAL_AREA_MAP=1` restores that fallback.
-- Owner clarified: GaiaLabs WORLD MAP and Retranslation stay main-content goals;
-  our enhanced local scenery map/radar replaces competing area maps. Received
-  reference still has its guest minimap: no unsupported guest patch is claimed.
-- Official SDK now22c01ef12cc94767451d0b218e4fc341bc19043e,19 commits/32 paths
-  beyond80a41241. Inventory covers1365 old tracked vendor files; Babel/local
-  deltas preserved by file merge, not tree replacement. Profile lazy/raw-alias
-  behavior retained with new canonical-boundary API compatibility. Windows
-  workaround removed after fixed namespaced SDK header regression passes.
-- SDK gate1014 pass/2 skip, zero warnings. Raw broad-freeze receipt stays false
-  because only host_main.c changed during test; supplemental qualification proves
-  793 core/test files unchanged and links fresh final host-reader test. Bridge
-  and SPC strict Clang harnesses separately pass. New shared IRQ callback is
-  default-off and Gaia does not arm it: importing SDK is not a new IRQ/native
-  qualification. Original graph016/effects025/WRAM021 unchanged/reused.
-- Current Original56 retained-reference pairs/10080 boundaries pass. Actual SDL
-  virtual-device Start/pan/zoom/center/radar/Back/resume test passes,78 modal events
-  retain guest cycles+WRAM, seven guest snapshot fields match. Physical Xbox360
-  controller enumerated; no new manual button-press qualification. Local virtual
-  trigger release bug (0 means half pressed) corrected; not official SDK defect.
-- Exploration97→107 retains107 after rewind and process restart. Map identity,
-  conservative static discovery and geometry safeguards remain. Other layered
-  scenery and marker binding remain unfinished; no optical LOS/campaign claim.
-- GreatWall85/86 now calibrates actual multi-band raster producers. Authentic
-  1050f course/axis route and natural86→85→86 retain guest snapshots,598x336 across
-  transitions. Actual NVIDIA1080p smooth-xBR1.5 course/lower views show expanded
-  green missing-floor patch fixed. v1 GPU proof linked to final v5 world hashes;
-  136 host-overlap decorative pixels deliberately change under corrected parallax.
-  Later86 branches/boss phases are not approved.66 admissions unchanged.
-- Current received reference `babel-referencev2.exe`, SHA
-  `182e0ac7d5b1a770dad17b2b566b386806c2af3325653181c3d23e25dc811ee3`.
-  Separate interpreted CPU, no stock native/plugins; controls use defaults when
-  mods are excluded. Received runtime/guard qualification is in current receipt.
-- GreatWall later branches, additional HDMA/layers, all remaining room/phase
-  transitions, world-map natural access and marker state remain work. Old bad
-  incoming-camera22 surveys remain diagnostics. No native speedup/campaign claim.
-  Private ROM/ZIP/BSO/audio/states/captures remain untracked; preserve all credits.
+- Great Wall rooms 82/83/87/88/8A/8B use calibrated scrolling at widescreen/1.5×.
+  The room 82 missing scenery and room 8A band phase are corrected. Neighbor
+  exits, both movement axes, GPU views and same-scale transition fallback were
+  checked. Boss phases and later branches still need coverage.
+- GaiaLabs world travel uses a calibrated Mode 7 plane around the exact
+  received field. Two GPU views and walking/turning were checked. The local
+  scenery map remains ours. Select opens controller bindings in both builds.
+  The received settings survive restart through a guarded CRC preference file.
+- Companion's private integration preview fixes IOGRetranslation issue 37.
+  The verified South Cape destination is corrected before the original loader
+  stores it. An 850-frame route reached the widened north road and returned to
+  the world map by normal movement. The strict reference retains original
+  behavior. Earlier failed receipts remain archived. Keep the private received
+  image and integration data local.
+- Continue coherent Retranslation/content integration, remaining rooms and
+  transitions before returning to native gaps. SDK pin 22c01ef1 and the
+  existing Original native inputs remain in use. The integration preview's
+  guest CPU is interpreted. Original and received saves stay isolated.
 
 ## Manual-save renderer follow-up — November 13
 

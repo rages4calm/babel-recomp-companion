@@ -127,9 +127,11 @@ def main():
               "-DSNESRECOMP_ENABLE_MODS=0", "-DSNESRECOMP_INTERPRETER_ONLY=1"]
     checks = {}
     outputs = {}
-    for profile in ("reference", "original"):
+    for profile in ("reference", "original", "main-content"):
         flags = ["-DIOG_RECEIVED_REFERENCE=1", '-DIOG_RECEIVED_REFERENCE_SHA256="' + "a"*64 + '"',
-                 '-DIOG_RECEIVED_REFERENCE_ROM_FILE="synthetic.smc"'] if profile == "reference" else []
+                 '-DIOG_RECEIVED_REFERENCE_ROM_FILE="synthetic.smc"'] if profile != "original" else []
+        if profile == "main-content":
+            flags.append("-DIOG_RECEIVED_MAIN_CONTENT=1")
         for file in ("main", "game_rtl"):
             result = subprocess.run([*common, *flags, str(ROOT / f"src/{file}.c")], capture_output=True, text=True)
             (out / f"{profile}-{file}.log").write_text(result.stderr)
@@ -141,7 +143,7 @@ def main():
     assert ".native_widescreen = 1" in host
     # Map host callbacks are title-neutral host UI/data observers. They do not
     # admit stock Companion/inventory/i18n or generated guest dispatch.
-    for callback, function in (("companion_open", "IogMapHostOpen"),
+    for callback, function in (("companion_open", "IogMapHostOpen"), ("companion_input", "IogMapHostInput"),
         ("companion_nav", "IogMapHostNav"), ("companion_key", "IogMapHostKey"),
         ("companion_image", "IogMapHostImage"), ("companion_pointer", "IogMapHostPointer")):
         assert re.search(r"\." + callback + r"\s*=\s*" + function + r"\b", host)
@@ -157,6 +159,13 @@ def main():
     assert "interp_bridge_set_interpret_all(1)" in init
     assert "interp_bridge_clear_native_instructions()" in init
     assert "add_pre_opcode_hook" not in init and "IogNative" not in init
+    for profile in ("reference", "original"):
+        assert "IogReceivedContentInitialize" not in outputs[profile, "game_rtl"]
+    content_init = body(outputs["main-content", "game_rtl"], "static void GameInitialize(void)")
+    assert "IogReceivedContentInitialize()" in content_init
+    assert "interp_bridge_set_interpret_all(1)" in content_init
+    assert "gaialabs-main-preview.srm" in outputs["main-content", "main"]
+    assert "received-reference.srm" in outputs["reference", "main"]
     draw = body(outputs["reference", "game_rtl"], "void GameDrawPpuFrame(void)")
     observed_draw=re.sub(r"IogReceivedWorld(?:BeginRaster|CaptureLine|EndRaster)\([^;]*\);", "", draw)
     assert "Iog" not in observed_draw and "ppu_runLine" in draw and "SimpleHdma_DoLine" in draw
@@ -169,10 +178,10 @@ def main():
         assert definition in cache
     title_objects = re.findall(r"(?m)^build .*?/src/(iog_[^ :]+)\.obj:", ninja)
     allowed_reference_objects = [
-        "iog_received_observer.c", "iog_received_world.c", "iog_visual_objects.c",
+        "iog_received_observer.c", "iog_received_world.c", "iog_received_mode7.c", "iog_visual_objects.c",
         "iog_world_pixels.c", "iog_world_view.c", "iog_map_discovery.c",
         "iog_map_view.c", "iog_map_scenery.c", "iog_map_runtime.c",
-        "iog_map_ui.c", "iog_map_host.c",
+        "iog_map_ui.c", "iog_map_host.c", "iog_map_preferences.c",
     ]
     assert sorted(title_objects) == sorted(allowed_reference_objects), title_objects
     assert not re.search(r"(?m)^build .*src/gen/", ninja)
@@ -192,7 +201,10 @@ def main():
     checks["actual_observer_rejects_wrong_phase_and_last_high_table_mismatch_readonly"] = True
     failures = [(["-DSNESRECOMP_INTERPRETER_ONLY=OFF"], "interpreter-only"),
                 (["-DIOG_NATIVE_EFFECTS_SOURCE=forbidden.c"], "refuses generated/native"),
-                (["-DIOG_RECEIVED_REFERENCE_SHA256=bad"], "exact lowercase ROM SHA-256")]
+                (["-DIOG_RECEIVED_REFERENCE_SHA256=bad"], "exact lowercase ROM SHA-256"),
+                (["-DIOG_RECEIVED_MAIN_CONTENT=ON"], "qualified expanded-content identity"),
+                (["-DIOG_RECEIVED_MAIN_CONTENT=ON", "-DIOG_RECEIVED_REFERENCE=OFF"],
+                 "requires the isolated received profile")]
     for i, (flags, expected) in enumerate(failures):
         cmd = [a.cmake, "-S", str(ROOT), "-B", str(out / f"refused{i}"), "-G", "Ninja",
                "-DCMAKE_C_COMPILER="+a.compiler, "-DCMAKE_CXX_COMPILER="+a.compiler,

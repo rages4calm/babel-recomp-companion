@@ -609,7 +609,7 @@ void IogCompanionKey(int key, int repeat)
     if(repeat&&(key=='m'||key=='i'||key==27))return;
     if(g_open&&g_page==kPageMap&&key!='q'&&key!='e'&&key!='i'){
         IogMapHostKey(key,repeat);
-        if(key==27||key=='m')SetPage(kPageItems);
+        if((key==27||key=='m')&&!IogMapHostIsOpen())SetPage(kPageItems);
         return;
     }
     (void)repeat;

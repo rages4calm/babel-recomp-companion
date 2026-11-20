@@ -3,6 +3,7 @@
 #include "iog_map_host.h"
 #include "iog_map_runtime.h"
 #include "iog_map_ui.h"
+#include "iog_map_preferences.h"
 #include "common_rtl.h"
 #include "common_cpu_infra.h"
 #include "cpu_state.h"
@@ -25,6 +26,8 @@ extern Snes *g_snes;
 static IogMapRuntime *runtime;
 static IogMapUi ui;
 static bool initialized,opened,gamepad=true;
+static bool controls_open,preferences_saved=true,input_held,input_consumed;
+static unsigned controls_row;
 static unsigned suspended;
 static uint32_t previous_pad,last_ticks;
 static uint32_t canvas[598*336];
@@ -86,6 +89,13 @@ static void Initialize(void)
     (void)mkdir("saves",0700);
 #endif
     runtime=IogMapRuntimeCreate("saves");
+#if !SNESRECOMP_ENABLE_MODS
+    IogMapPreferences preferences;
+    if(runtime&&IogMapPreferencesLoad(&preferences)){
+        ui.radar=preferences.radar;
+        for(unsigned n=0;n<IOG_MAP_CONTROL_COUNT;n++)controls[n]=preferences.bindings[n];
+    }
+#endif
     const char *path=getenv("IOG_MAP_AUDIT");
     if(path&&*path)audit=fopen(path,"wb");
 }
@@ -102,7 +112,8 @@ void IogMapHostShutdown(void)
     if(runtime)IogMapRuntimeDestroy(runtime);
     runtime=NULL;
     if(audit)fclose(audit);
-    audit=NULL;initialized=false;opened=false;
+    audit=NULL;initialized=false;opened=false;controls_open=false;
+    input_held=input_consumed=false;preferences_saved=true;
 }
 static bool Digest(const char *hex,uint8_t out[32])
 {
@@ -202,13 +213,23 @@ void IogMapHostRadarToggle(void)
     Initialize();IogMapHostRadarSet(!ui.radar);
 }
 bool IogMapHostRadarEnabled(void){Initialize();return ui.radar;}
+#if !SNESRECOMP_ENABLE_MODS
+static void SaveNativePreferences(void)
+{
+    IogMapPreferences p;p.radar=ui.radar;
+    for(unsigned n=0;n<IOG_MAP_CONTROL_COUNT;n++)p.bindings[n]=(uint8_t)controls[n];
+    preferences_saved=runtime&&IogMapPreferencesSave(&p);
+}
+#endif
 void IogMapHostRadarSet(bool enabled)
 {
     Initialize();if(ui.radar==enabled)return;
     ui.radar=enabled;
 #if SNESRECOMP_ENABLE_MODS
-    snes_mod_runtime_persist_feature_c("iog.enhancements","map_controls",1,"radar",
-        enabled?"on":"off");
+    preferences_saved=snes_mod_runtime_persist_feature_c("iog.enhancements","map_controls",1,"radar",
+        enabled?"on":"off")!=0;
+#else
+    SaveNativePreferences();
 #endif
 }
 const char *IogMapHostControlName(int button)
@@ -227,9 +248,12 @@ void IogMapHostControlSet(int action,int button)
     /* Persist the complete conflict-free assignment; a swapped Back binding
      * must survive restart along with the action the player changed. */
 #if SNESRECOMP_ENABLE_MODS
+    preferences_saved=true;
     for(int a=0;a<IOG_MAP_CONTROL_COUNT;a++)
-        snes_mod_runtime_persist_feature_c("iog.enhancements","map_controls",1,
-            control_options[a],control_names[controls[a]]);
+        if(!snes_mod_runtime_persist_feature_c("iog.enhancements","map_controls",1,
+            control_options[a],control_names[controls[a]]))preferences_saved=false;
+#else
+    SaveNativePreferences();
 #endif
     previous_pad=~0u;
 }
@@ -239,7 +263,7 @@ static bool Draw(uint8_t *dst,size_t bytes,size_t pitch,int w,int h)
     if(!runtime||!IogMapRuntimeGetViewSource(runtime,&source))return false;
     IogMapUiMetadata metadata={true,false,gamepad,0};
     char hint[96],back[24];
-    snprintf(hint,sizeof(hint),"Pad Move  SNES: %s/%s Zoom  %s Center  %s Radar %s",
+    snprintf(hint,sizeof(hint),"SNES: Pad Move  %s/%s Zoom  %s Center  %s Radar %s  Select Controls",
         control_names[controls[IOG_MAP_ZOOM_OUT]],control_names[controls[IOG_MAP_ZOOM_IN]],
         control_names[controls[IOG_MAP_CENTER]],control_names[controls[IOG_MAP_RADAR]],
         ui.radar?"ON":"OFF");
@@ -256,17 +280,49 @@ int IogMapHostOpen(void)
 {
     if(!IogMapHostAvailable())return 0;
     if(!ui.full){IogMapUiInput in={0};in.toggle_full=true;IogMapUiHandleInput(&ui,&in);}
-    opened=true;previous_pad=~0u;last_ticks=0;AuditEvent("map_open");return 1;
+    opened=true;controls_open=false;previous_pad=~0u;last_ticks=0;AuditEvent("map_open");return 1;
+}
+int IogMapHostInput(uint32_t *human)
+{
+#ifdef IOG_RECEIVED_REFERENCE
+    if(!human||RtlSpeculativeFrame())return 0;
+    bool held=!!(*human&SNES_PAD_START);
+    if(!held){input_held=input_consumed=false;return 0;}
+    bool pressed=!input_held;input_held=true;
+    if(input_consumed){*human&=~SNES_PAD_START;return 0;}
+    const char *fallback=getenv("IOG_ORIGINAL_AREA_MAP");
+    const uint8_t *ram=g_snes?g_snes->ram:NULL;
+    if(!pressed||(fallback&&*fallback=='1')||!IogMapHostAvailable()||!ram||
+        !Word(ram,0x9aa)||Word(ram,0x642)||Word(ram,0x644)==0xfe||
+        (Word(ram,0x9ec)&0x6080)||(Word(ram,0x9ae)&0x0208)||Word(ram,0x6fa))return 0;
+    const Cart *cart=g_snes->cart;uint8_t digest[32],expected[32];
+    /* Exact received GlobalInputHandler Start dispatch and IsMusicPlaying
+     * helper. Hashes bind the source-derived RAM meanings, without embedding
+     * extracted instructions or applying a guest patch. The observer already
+     * verifies the full received content identity before a map can be ready. */
+    if(!cart||cart->type!=CART_HIROM||!cart->rom||cart->romImageSize!=3276800||cart->romSize<3276800)return 0;
+    sha256_compute(cart->rom+0x3ec66,0x81,digest);
+    if(!Digest("7694aa045fdb90c4eb3174b4cbb9673ce9fb4bfb578158a13fc020a9e018c6e3",expected)||
+        memcmp(digest,expected,32))return 0;
+    sha256_compute(cart->rom+0x2f8f7,17,digest);
+    if(!Digest("a8a84ace3e866f05caee8fb43824c829e72aeb664bcc768e2fc9ab12a7bf0150",expected)||
+        memcmp(digest,expected,32))return 0;
+    *human&=~SNES_PAD_START;input_consumed=true;gamepad=true;
+    AuditEvent("map_request");return 1;
+#else
+    (void)human;return 0;
+#endif
 }
 void IogMapHostClose(void)
 {
     if(opened)AuditEvent("map_close");
-    IogMapUiInput in={0};in.close=true;IogMapUiHandleInput(&ui,&in);opened=false;
+    IogMapUiInput in={0};in.close=true;IogMapUiHandleInput(&ui,&in);opened=false;controls_open=false;
 }
 bool IogMapHostIsOpen(void){return opened;}
 void IogMapHostPointer(int x,int y,int down)
 {
     if(!opened)return;
+    if(controls_open)return;
     gamepad=false;IogMapUiPointer(&ui,x,y,down!=0,598,336);
     AuditEvent("map_pointer");
     if(!ui.full)opened=false;
@@ -276,6 +332,21 @@ void IogMapHostNav(uint32_t pad,uint32_t ticks)
     if(!opened)return;
     uint32_t pressed=pad&~previous_pad;previous_pad=pad;
     unsigned delta=last_ticks?ticks-last_ticks:16;last_ticks=ticks;
+    if(pad)gamepad=true;
+    if(pad)AuditEvent("map_pad");
+    if(pressed&SNES_PAD_SELECT){controls_open=!controls_open;return;}
+    if(controls_open){
+        if(pressed&SNES_PAD_B){controls_open=false;return;}
+        if(pressed&SNES_PAD_UP)controls_row=(controls_row+5)%6;
+        if(pressed&SNES_PAD_DOWN)controls_row=(controls_row+1)%6;
+        int direction=(!!(pressed&(SNES_PAD_RIGHT|SNES_PAD_A)))-!!(pressed&SNES_PAD_LEFT);
+        if(direction){
+            if(!controls_row)IogMapHostRadarToggle();
+            else IogMapHostControlSet((int)controls_row-1,
+                (controls[controls_row-1]+IOG_MAP_BUTTON_COUNT+direction)%IOG_MAP_BUTTON_COUNT);
+        }
+        return;
+    }
     IogMapUiInput in={0};in.dt_ms=delta;
     in.pan_x=(!!(pad&SNES_PAD_RIGHT))-(!!(pad&SNES_PAD_LEFT));
     in.pan_y=(!!(pad&SNES_PAD_DOWN))-(!!(pad&SNES_PAD_UP));
@@ -284,8 +355,6 @@ void IogMapHostNav(uint32_t pad,uint32_t ticks)
     in.recenter=!!(pressed&control_bits[controls[IOG_MAP_CENTER]]);
     in.close=!!(pressed&control_bits[controls[IOG_MAP_BACK]]);
     if(pressed&control_bits[controls[IOG_MAP_RADAR]])IogMapHostRadarToggle();
-    if(pad)gamepad=true;
-    if(pad)AuditEvent("map_pad");
     IogMapUiHandleInput(&ui,&in);if(in.close)opened=false;
 }
 void IogMapHostKey(int key,int repeat)
@@ -293,6 +362,14 @@ void IogMapHostKey(int key,int repeat)
     if(!opened)return;
     AuditEvent("map_key");
     gamepad=false;IogMapUiInput in={0};in.dt_ms=100;
+    if(key==9&&!repeat){controls_open=!controls_open;return;}
+    if(controls_open){
+        if((key==27||key=='m')&&!repeat){controls_open=false;return;}
+        uint32_t pad=key==0x40000052?SNES_PAD_UP:key==0x40000051?SNES_PAD_DOWN:
+            key==0x40000050?SNES_PAD_LEFT:key==0x4000004f||key=='\r'?SNES_PAD_RIGHT:0;
+        if(pad){previous_pad=0;IogMapHostNav(pad,last_ticks+16);gamepad=false;}
+        return;
+    }
     switch(key){
     case 27:case 'm':if(!repeat)in.close=true;break;
     case '+':case '=':in.zoom_in=true;break;
@@ -310,12 +387,19 @@ int IogMapHostImage(const uint32_t **pixels,int *w,int *h)
 {
     if(!opened||!pixels||!w||!h)return 0;
     memset(canvas,0,sizeof(canvas));
-    if(!Draw((uint8_t*)canvas,sizeof(canvas),598*4,598,336))return 0;
+    bool drawn;
+    if(controls_open){
+        uint8_t bindings[5];for(unsigned n=0;n<5;n++)bindings[n]=(uint8_t)controls[n];
+        drawn=IogMapUiDrawControls((uint8_t*)canvas,sizeof(canvas),598*4,598,336,
+            bindings,controls_row,ui.radar,preferences_saved);
+    }else drawn=Draw((uint8_t*)canvas,sizeof(canvas),598*4,598,336);
+    if(!drawn)return 0;
     *pixels=canvas;*w=598;*h=336;
     /* One diagnostic picture of the real paused map, never a separate fake UI. */
-    static bool written;
-    const char *output=getenv("IOG_MAP_OUTPUT");
-    if(!written&&output&&*output){
+    static bool written,written_controls;
+    bool *done=controls_open?&written_controls:&written;
+    const char *output=getenv(controls_open?"IOG_MAP_CONTROLS_OUTPUT":"IOG_MAP_OUTPUT");
+    if(!*done&&output&&*output){
         FILE *file=fopen(output,"wb");
         if(file){
             bool ok=fprintf(file,"P6\n598 336\n255\n")>0;
@@ -323,7 +407,7 @@ int IogMapHostImage(const uint32_t **pixels,int *w,int *h)
                 uint32_t p=canvas[n];uint8_t rgb[3]={(uint8_t)(p>>16),(uint8_t)(p>>8),(uint8_t)p};
                 ok=fwrite(rgb,1,3,file)==3;
             }
-            if(fclose(file))ok=false;written=ok;
+            if(fclose(file))ok=false;*done=ok;
         }
     }
     return 1;

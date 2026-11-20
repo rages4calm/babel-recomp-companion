@@ -149,6 +149,36 @@ static void Text(uint32_t *pixels, int stride, int height, int x, int y,
   clipped[n] = 0;
   snes_ovl_draw_text(pixels, stride, height, x, y, clipped, color, 1);
 }
+bool IogMapUiDrawControls(uint8_t *dst,size_t bytes,size_t pitch,unsigned w,
+    unsigned h,const uint8_t bindings[5],unsigned selected,bool radar,bool persistent)
+{
+    if(!dst||((uintptr_t)dst&3)||!bindings||selected>5||w<256||w>2048||h<256||h>2048||
+        pitch<(size_t)w*4||(pitch&3)||pitch>SIZE_MAX/h||bytes<pitch*h||
+        Overlap(dst,pitch*h,bindings,5))return false;
+    unsigned used=0;
+    for(unsigned n=0;n<5;n++){
+        if(bindings[n]>=6||(used&(1u<<bindings[n])))return false;
+        used|=1u<<bindings[n];
+    }
+    static const char *const names[]={"A","B","X","Y","L","R"};
+    static const char *const labels[]={"Radar","Zoom in","Zoom out","Center","Radar button","Back button"};
+    uint32_t *pixels=(uint32_t*)dst;int stride=(int)(pitch/4),height=(int)h;
+    snes_ovl_fill_rect(pixels,stride,height,0,0,(int)w,(int)h,Stone);
+    snes_ovl_stroke_rect(pixels,stride,height,12,12,(int)w-24,(int)h-24,Gold);
+    Text(pixels,stride,height,24,23,"Map controls",Ivory,(int)w-48);
+    Text(pixels,stride,height,24,40,"SNES buttons / Controller physical mapping",Gold,(int)w-48);
+    int top=64,step=((int)h-142)/6;if(step<11)step=11;if(step>27)step=27;
+    for(unsigned n=0;n<6;n++){
+        int y=top+(int)n*step;
+        if(n==selected)snes_ovl_fill_rect(pixels,stride,height,22,y-3,(int)w-44,15,0xff344251u);
+        Text(pixels,stride,height,30,y,labels[n],n==selected?Gold:Ivory,(int)w-110);
+        Text(pixels,stride,height,(int)w-70,y,n?names[bindings[n-1]]:(radar?"ON":"OFF"),Gold,46);
+    }
+    Text(pixels,stride,height,24,(int)h-59,"Pad Choose  Left/Right Change  B Back",Ivory,(int)w-48);
+    Text(pixels,stride,height,24,(int)h-43,"Assigned buttons swap; Back stays available.",Ivory,(int)w-48);
+    Text(pixels,stride,height,24,(int)h-27,persistent?"Saved on this PC":"Session only: settings could not be saved",Gold,(int)w-48);
+    return true;
+}
 static bool SourceAliases(const IogMapViewSource *s, const void *out,
                           size_t n) {
   return Overlap(out, n, s, sizeof(*s)) ||

@@ -100,6 +100,17 @@ int main(void){
  IogMapHostShutdown();custom_enabled=false;
  for(int a=0;a<IOG_MAP_CONTROL_COUNT;a++)C(IogMapHostControlGet(a)==control_defaults[a]);
  C(IogMapHostRadarEnabled());custom_enabled=true;
+ /* Controls pane is fully navigable without a pointer. Its fixed B returns
+  * to the map; only the configured map Back then closes that map. */
+ reopen();press(SNES_PAD_SELECT);C(controls_open&&opened);
+ press(SNES_PAD_RIGHT);C(!ui.radar&&controls_open);
+ press(SNES_PAD_DOWN);C(controls_row==1);
+ press(SNES_PAD_RIGHT);C(controls[IOG_MAP_ZOOM_IN]==0);unique();
+ IogMapHostNav(SNES_PAD_RIGHT,tick+=16);C(controls[IOG_MAP_ZOOM_IN]==0);
+ const uint32_t *image=NULL;int width=0,height=0;
+ C(IogMapHostImage(&image,&width,&height)&&image&&width==598&&height==336);
+ press(SNES_PAD_B);C(!controls_open&&opened);
+ press(control_bits[controls[IOG_MAP_BACK]]);C(!opened);
  /* Source-backed Start interception: safe radar mode only, held consumption,
   * no global Start replacement in towns, fades, world map or speculative work. */
  static Snes machine;static uint8_t ram[131072];machine.ram=ram;g_snes=&machine;

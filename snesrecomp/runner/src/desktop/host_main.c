@@ -2442,16 +2442,24 @@ static void OverlaySelftestPadMainTick(unsigned frame) {
   if (frame == last_frame) return;
   last_frame = frame;
   if (g_selftest_companion) {
+    bool gesture=HostGetenv("COMPANION_SELFTEST_GESTURE")!=NULL;
+    if (gesture && (long)frame >= g_selftest_pad_frame-2 &&
+        (long)frame < g_selftest_pad_frame) {
+      SelftestPadTrigger(true);return;
+    }
     if ((long)frame == g_selftest_pad_frame) {
       g_selftest_pad_phase = 3;
-      SelftestPadSet(SDL_CONTROLLER_BUTTON_START, true);
-      fprintf(stderr,"[companion_selftest_pad] physical Start at frame %u\n",frame);
+      if (gesture) {
+        SelftestPadTrigger(true);SelftestPadSet(SDL_CONTROLLER_BUTTON_LEFTSTICK,true);
+      } else SelftestPadSet(SDL_CONTROLLER_BUTTON_START, true);
+      fprintf(stderr,"[companion_selftest_pad] physical %s at frame %u\n",
+          gesture?"L2+L3":"Start",frame);
     } else {
       SelftestPadReleaseAll();
       if ((long)frame == g_selftest_pad_frame + 2) {
         if (!(g_selftest_pad_opened & 4)) g_selftest_pad_failed = 1;
         fprintf(stderr,"[companion_selftest_pad] %s\n",g_selftest_pad_failed?
-            "FAIL":"ok: physical Start opened companion; pad closed it; guest resumed");
+            "FAIL":"ok: physical controller opened companion; pad closed it; guest resumed");
       }
     }
     return;
@@ -2526,10 +2534,25 @@ static void CompanionSelftestPadTick(unsigned pump, bool *running) {
   if (!pump) g_selftest_pad_opened |= 4;
   if (pump == 2 || (pump >= 9 && pump % 8 == 1)) {
     SelftestPadReleaseAll();
-    SelftestPadSet(SDL_CONTROLLER_BUTTON_START, true);
+    if (!HostGetenv("COMPANION_SELFTEST_GESTURE"))
+      SelftestPadSet(SDL_CONTROLLER_BUTTON_START, true);
   }
   int button = -1;
-  switch (pump) {
+  if (HostGetenv("COMPANION_SELFTEST_CONTROLS")) {
+    switch(pump) {
+    case 6:button=SDL_CONTROLLER_BUTTON_BACK;break; /* Select: controls */
+    case 14:button=SDL_CONTROLLER_BUTTON_DPAD_DOWN;break;
+    case 22:button=SDL_CONTROLLER_BUTTON_DPAD_RIGHT;break;
+    case 30:button=SDL_CONTROLLER_BUTTON_A;break; /* B: map again */
+    case 38:button=SDL_CONTROLLER_BUTTON_LEFTSHOULDER;break;
+    case 46:button=SDL_CONTROLLER_BUTTON_B;break; /* remapped zoom */
+    case 54:button=SDL_CONTROLLER_BUTTON_X;break;
+    case 62:case 70:button=SDL_CONTROLLER_BUTTON_Y;break;
+    case 78:case 94:button=SDL_CONTROLLER_BUTTON_A;break;
+    case 140:g_selftest_pad_failed=1;*running=false;
+      fprintf(stderr,"[companion_selftest_pad] FAIL: controller did not close modal\n");break;
+    }
+  } else switch (pump) {
   case 6: button=SDL_CONTROLLER_BUTTON_DPAD_DOWN;break;
   case 14:button=SDL_CONTROLLER_BUTTON_DPAD_RIGHT;break;
   case 22:button=SDL_CONTROLLER_BUTTON_DPAD_UP;break;
