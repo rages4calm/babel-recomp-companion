@@ -271,7 +271,8 @@ void IogReceivedWorldBeginRaster(void) {
   int l = Word(s.ram, 0x6d6), r = Word(s.ram, 0x6da), t = Word(s.ram, 0x6d8),
       b = Word(s.ram, 0x6de);
   if (!s.interior &&
-      (l != 0 || (s.town ? r != 768 : (r != 512 && r != 768)) ||
+      (l != 0 || (s.town ? (r != 768 && r != (int)map_width) :
+                           (r != 512 && r != 768)) ||
        t != 0 || b != (s.town ? 1024 : 256))) {
     s.reason = "authored_window";
     return;
@@ -281,8 +282,8 @@ void IogReceivedWorldBeginRaster(void) {
   s.top = t;
   s.bottom = b;
   if (s.town) {
-    /* The widened town allocates five authored pages across each plane.
-     * The legacy window right bound is not the end of the widened map. */
+    /* World-map arrival and the classroom return use different camera
+     * bounds over the same five authored pages. */
     if (physical || Word(s.ram, 0x69a) != 0x1400 || Word(s.ram, 0x69c) != 0x1400 ||
         Word(s.ram, 0x6dc) != 0x420 ||
         g_ppu->windowsel || !PPU_bgTilemapWider(g_ppu, 0) ||
