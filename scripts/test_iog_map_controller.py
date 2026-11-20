@@ -47,6 +47,7 @@ bool IogMapRuntimeFlush(IogMapRuntime *r){return r!=NULL;}
 bool IogMapRuntimeUpdate(IogMapRuntime *r,const IogMapRuntimeFrame *f){(void)r;(void)f;return false;}
 void IogMapRuntimeGetStatus(const IogMapRuntime *r,IogMapRuntimeStatus *s){C(r!=NULL);memset(s,0,sizeof(*s));s->frame_valid=ready;}
 bool IogMapRuntimeGetViewSource(IogMapRuntime *r,IogMapViewSource *s){(void)r;(void)s;return false;}
+bool IogMapRuntimeGetRadarSource(IogMapRuntime *r,IogMapViewSource *s){(void)r;(void)s;return false;}
 int snes_mod_runtime_feature_option_value_c(const char*p,const char*f,const char*o,char*out,uint32_t cap){
  C(!strcmp(p,"iog.enhancements")&&!strcmp(f,"map_controls"));int n=IOG_MAP_CONTROL_COUNT;
  for(int i=0;i<IOG_MAP_CONTROL_COUNT;i++)if(!strcmp(o,control_options[i]))n=i;

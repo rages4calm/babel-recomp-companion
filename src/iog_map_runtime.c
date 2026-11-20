@@ -367,10 +367,22 @@ void IogMapRuntimeGetStatus(const IogMapRuntime*r,IogMapRuntimeStatus*out)
     out->cell_world_pixels=16;out->atlas_cell_pixels=8;out->explored_cells=room->count;
     memcpy(out->layout_sha256,room->map.identity.layout_sha256,32);out->floor_id=room->map.identity.floor_id;
 }
-bool IogMapRuntimeGetViewSource(IogMapRuntime*r,IogMapViewSource*out)
+bool IogMapRuntimeGetRadarSource(IogMapRuntime*r,IogMapViewSource*out)
 {
     if(!out)return false;memset(out,0,sizeof(*out));if(!r||!r->visible||r->current<0)return false;
-    MapRoom*room=&r->rooms[r->current];size_t width=r->rect.width/2,height=r->rect.height/2,bytes=width*height*4;
+    MapRoom*room=&r->rooms[r->current];
+    *out=(IogMapViewSource){.discovery=&room->map,.walkable=r->walkable,
+        .walkable_bytes=(size_t)room->map.width*room->map.height,.walkable_stride=room->map.width,
+        .player_present=true,.player_x=(int16_t)r->player_x,.player_y=(int16_t)r->player_y};
+    return true;
+}
+bool IogMapRuntimeGetViewSource(IogMapRuntime*r,IogMapViewSource*out)
+{
+    IogMapViewSource source;
+    if(!out)return false;
+    memset(out,0,sizeof(*out));
+    if(!IogMapRuntimeGetRadarSource(r,&source))return false;
+    size_t width=r->rect.width/2,height=r->rect.height/2,bytes=width*height*4;
     if(!r->atlas||r->atlas_capacity<bytes){
         uint8_t*next=realloc(r->atlas,bytes);if(!next){r->reason="atlas_allocation_failed";return false;}
         r->atlas=next;r->atlas_capacity=bytes;r->last_atlas=0;
@@ -397,10 +409,18 @@ bool IogMapRuntimeGetViewSource(IogMapRuntime*r,IogMapViewSource*out)
         }
         r->last_atlas=r->clock;r->atlas_dirty=false;
     }
-    *out=(IogMapViewSource){.discovery=&room->map,.scenery_rgba=r->atlas,.scenery_bytes=bytes,.scenery_stride=width*4,
-        .scenery_cell_pixels=8,.walkable=r->walkable,.walkable_bytes=(size_t)room->map.width*room->map.height,
-        .walkable_stride=room->map.width,.player_present=true,.player_x=(int16_t)r->player_x,.player_y=(int16_t)r->player_y};
+    source.scenery_rgba=r->atlas;
+    source.scenery_bytes=bytes;
+    source.scenery_stride=width*4;
+    source.scenery_cell_pixels=8;
+    *out=source;
     return true;
 }
 bool IogMapRuntimeDraw(IogMapRuntime*r,uint8_t*dst,size_t bytes,size_t stride,unsigned w,unsigned h,const IogMapViewSettings*v)
-{IogMapViewSource source;return IogMapRuntimeGetViewSource(r,&source)&&IogMapViewRender(dst,bytes,stride,w,h,&source,v);}
+{
+    if(!v)return false;
+    IogMapViewSource source;
+    bool ready=v->mode==kIogMapViewRadar?IogMapRuntimeGetRadarSource(r,&source):
+        IogMapRuntimeGetViewSource(r,&source);
+    return ready&&IogMapViewRender(dst,bytes,stride,w,h,&source,v);
+}

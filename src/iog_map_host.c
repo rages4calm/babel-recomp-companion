@@ -260,7 +260,9 @@ void IogMapHostControlSet(int action,int button)
 static bool Draw(uint8_t *dst,size_t bytes,size_t pitch,int w,int h)
 {
     IogMapViewSource source;
-    if(!runtime||!IogMapRuntimeGetViewSource(runtime,&source))return false;
+    bool ready=ui.full?IogMapRuntimeGetViewSource(runtime,&source):
+        IogMapRuntimeGetRadarSource(runtime,&source);
+    if(!ready)return false;
     IogMapUiMetadata metadata={true,false,gamepad,0};
     char hint[96],back[24];
     snprintf(hint,sizeof(hint),"SNES: Pad Move  %s/%s Zoom  %s Center  %s Radar %s  Select Controls",
@@ -273,7 +275,7 @@ static bool Draw(uint8_t *dst,size_t bytes,size_t pitch,int w,int h)
 }
 void IogMapHostDrawRadar(uint8_t *dst,size_t pitch,int w,int h)
 {
-    if(opened||ui.full||w<256||h<160||pitch>SIZE_MAX/(size_t)h)return;
+    if(opened||ui.full||!ui.radar||w<256||h<160||pitch>SIZE_MAX/(size_t)h)return;
     (void)Draw(dst,pitch*(size_t)h,pitch,w,h);
 }
 int IogMapHostOpen(void)
