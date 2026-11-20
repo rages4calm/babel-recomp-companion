@@ -44,6 +44,10 @@ static void set_loaded_song(void){
   ram[0x687]=(uint8_t)ptr;ram[0x688]=(uint8_t)(ptr>>8);ram[0x689]=(uint8_t)(ptr>>16);
   ram[0x3e]=ram[0x687];ram[0x3f]=ram[0x688];ram[0x40]=ram[0x689];ram[0x6f2]=1;
 }
+static void start_upload(void){
+  ApuWrite(0x2140,0xff);ApuWrite(0x2140,0xcc);
+  callback();callback();ApuWrite(0x2140,0x01);
+}
 int main(int argc,char**argv){
   CHECK(argc==2);prepare();
   if(!strcmp(argv[1],"missing-pack")||!strcmp(argv[1],"missing-tracks")){
@@ -62,6 +66,20 @@ int main(int argc,char**argv){
       ApuWrite(0x2140,1);CHECK(g_track==6&&writes==4);
     }else if(!strcmp(argv[1],"later-load")){
       callback();CHECK(!g_track&&!writes);generation++;callback();CHECK(g_track==6&&writes==4);
+    }else if(!strcmp(argv[1],"scripted-restore")){
+      start_upload();CHECK(g_track==6&&writes==4);
+      ram[0x06fa]=ram[0x06fb]=0xff;
+      ram[0x687]=0;ram[0x688]=0x90;ram[0x689]=0x80; /* real silent song */
+      ApuWrite(0x2140,0xf0);CHECK(!g_track&&writes==5);
+      start_upload();CHECK(!g_track&&writes==5); /* stale scene copy cannot restart */
+      set_loaded_song();
+      ram[0x3e]=0xde;ram[0x3f]=0xe4;ram[0x40]=0x83; /* unrelated stale source */
+      start_upload();CHECK(g_track==6&&writes==9);
+      ram[0x06fa]=ram[0x06fb]=0;
+      ram[0x687]=0;ram[0x688]=0x90;ram[0x689]=0x80;
+      start_upload();CHECK(g_track==6&&writes==9); /* unrelated upload */
+      ram[0x06fa]=ram[0x06fb]=0xff;
+      start_upload();CHECK(!g_track&&writes==10); /* real SPC song stops MSU */
     }else CHECK(false);
   }
   printf("PASS %u actual MSU callback assertions: %s\n",assertions,argv[1]);return 0;
@@ -81,7 +99,7 @@ def main():
     source=out/'test.c';source.write_text(HARNESS.replace('@SOURCE@',(ROOT/'src/iog_msu.c').as_posix()))
     exe=out/'test.exe';command=[args.compiler,'-std=c11','-O2','-Wall','-Wextra','-Werror','-I',str(include),'-I',str(ROOT/'src'),str(source),'-o',str(exe)]
     subprocess.run(command,check=True);rows=[]
-    for name in ('first-load','later-load','cold-upload','missing-pack','missing-tracks'):
+    for name in ('first-load','later-load','cold-upload','scripted-restore','missing-pack','missing-tracks'):
         result=subprocess.run([str(exe),name],capture_output=True,text=True,check=True);print(result.stdout.strip());rows.append(dict(case=name,passed=True,output=result.stdout.strip()))
     report=dict(passed=True,rom_free=True,synthetic_metadata=True,actual_source=True,framework_msu_services_stubbed=True,cases=rows,source_sha256={str(f.relative_to(ROOT)):hashlib.sha256(f.read_bytes()).hexdigest()for f in (ROOT/'src/iog_msu.c',Path(__file__).resolve())})
     (out/'receipt.json').write_text(json.dumps(report,indent=2)+'\n')

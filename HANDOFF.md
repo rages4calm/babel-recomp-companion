@@ -54,13 +54,18 @@ are in `.local/batch-001/visual-fullgame-018`.
 Batch 019 adds [explored exit markers, extended travel verification and boss clears](docs/VISUAL-COVERAGE.md#explored-exits-travel-and-boss-returns).
 The Pyramid puzzle room also keeps its glyph storage out of the expanded
 field. Private receipts are in `.local/batch-001/visual-fullgame-019`.
+Batch 020 [verifies 15 travel replays](docs/VISUAL-COVERAGE.md#world-travel-and-connected-story),
+fixes the Itory gate and the [clubhouse music restart](docs/MSU1.md#native-selection-and-fallback),
+and brings the [GaiaLabs import](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue)
+to 757 replacements. Private receipts are in `.local/batch-001/visual-fullgame-020`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
 `.local/batch-001/visual-fullgame-010`. It selects batch 019's
-`babel-originalv21final.exe` and batch 011's dialogue pack, and
-continues the isolated test profile's save. Hold Down from the initial Itory
+`babel-originalv22.exe` and batch 020's dialogue pack, and
+continues the isolated test profile's save. The test executable has the
+required `i18n/structure.txt` alongside it. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.
 The test profile selects the existing local MSU-1 pack. An SPC save can keep
@@ -1722,14 +1727,15 @@ No game code or owner data changed during the November 6 reference collection.
 The November 8 work is recorded above. Older checkpoint details below retain
 their original dates and are not claims about the newer candidate.
 
-## Deferred owner report — clubhouse music
+## Clubhouse music report
 
 November 3, 2026: music stopped in the clubhouse when Erik entered with the
 message about the missing princess. Leaving the clubhouse did not restore
 music. Loading the clubhouse save with F1 restarted it. Owner explicitly asked
 to record this only and defer investigation/fixing because weekly usage is
-nearly exhausted. User-reported; not independently reproduced or diagnosed.
-No game code, save, or settings changes were made for this report.
+nearly exhausted. Batch 020 later reproduced and corrected the scripted
+MSU-1 restart. The original report and the assisted retest both involve
+Erik's dialogue and leaving the clubhouse.
 
 Installed local build (unchanged): [widescreen/mod batch 005](docs/WIDESCREEN-MODS-005.md),
 SHA-256 `00429989aabf5cf2d0d0ee9846fa7a2fd490185237863c5aa587c078b280e8bd`.

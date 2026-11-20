@@ -304,6 +304,32 @@ The renderer now clips those tiles from the lower margin in the witnessed
 layout. Its center still matches the original field on the reward return
 and other layouts retain fallback.
 
+## World travel and connected story
+
+The batch 020 test build replays 15 staged world-map entries and returns using
+virtual controller input with the current retranslation and MSU-1 active.
+The tested routes cover Angel Village, Watermia, Great Wall, Euro, Mt. Temple,
+Native Village, Angkor Wat, Dao and the Pyramid. The samples use the full
+square-pixel 1.5× field. Stock world-map recovery and the separate Companion
+local map each matched seven saved guest fields against their controls.
+
+A save already near South Cape can no longer bypass the Itory road gate.
+The virtual controller stays on the map with the gate closed and enters
+South Cape after the story flag has opened the road.
+
+From assisted starts, ordered virtual-controller input defeated the Mu twins,
+defused the bomb, rescued Erik, walked out and reached the reunion camp.
+The widened combat capture's 13-pixel difference on the last stock row comes
+from the reconstructed actor parts starting at that edge. The widened renderer
+draws those parts into the expanded picture. The stock OAM publication culls
+them at the edge of its own field.
+
+The ending replay defeated both Dark Gaia forms, advanced into the epilogue and
+reached the Changed World sequence. Reloading that earned checkpoint on the
+current dialogue pack and advancing the stock cutscene returned to the epilogue.
+The replays use an SDL virtual controller and keep their starting assistance
+separate from ordinary movement, combat and dialogue after that setup.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

@@ -17,6 +17,7 @@ PATCHES = "modules/base/patches"
 # an explicit halt command. The converter verifies its terminal END itself.
 LABEL = re.compile(r"dialogstring_([0-9A-F]{6})!\s+`([^`]*)`?!?\s*(?:;.*)?")
 TAG = re.compile(r"\[([A-Z][A-Z0-9]*)(?::([0-9A-F]+))?\]")
+BOX_TAG = re.compile(r"\[(DLG|SIZ):([0-9A-F]{1,2}),([0-9A-F]{1,2})\]")
 GLYPHS = frozenset(" 0123456789.,\":ABCDEFGHIJKLMNOPQRSTUVWXYZ!/*-()"
                    "abcdefghijklmnopqrstuvwxyz;?'")
 TYPOGRAPHY = str.maketrans({"…": "...", "ˮ": '"'})
@@ -59,9 +60,36 @@ def convert(source, names):
     if not source.endswith("[END]"):
         raise ValueError("No explicit terminal END")
     pages, lines, line, speaker = [], [], "", None
+    opening_pause = closing_pause = None
+    palette_reset = False
+    position = None
+    has_box = False
     for part in re.split(r"(\[[^\]]*\])", source.translate(TYPOGRAPHY)):
         if not part:
             continue
+        at_start = not (lines or line.strip())
+        if box := BOX_TAG.fullmatch(part):
+            kind, first, second = box.groups()
+            x, y = int(first, 16), int(second, 16)
+            if kind == "DLG" and at_start and position is None and not has_box:
+                position = (x, y)
+                continue
+            if kind == "SIZ" and position is not None:
+                left, top = position
+                # Stock uses two tiles per column and two tile rows per line.
+                if not (x >= 2 and y >= 1 and left > 0 and top > 0
+                        and left + 2 * x <= 33 and top + 2 * y <= 31):
+                    raise ValueError("Invalid dialogue box bounds")
+                position = None
+                has_box = True
+                continue
+            raise ValueError("Unpaired or inline dialogue box")
+        if position is not None:
+            raise ValueError("Unpaired or inline dialogue box")
+        if palette_reset and part != "[END]":
+            raise ValueError("Inline palette reset")
+        if closing_pause is not None and part not in ("[PAL:0]", "[FIN]", "[END]"):
+            raise ValueError("Inline pause")
         if not part.startswith("["):
             if any(ch not in GLYPHS for ch in part):
                 raise ValueError("Unsupported stock glyph")
@@ -89,12 +117,23 @@ def convert(source, names):
         elif command == "N" and raw_arg is None:
             lines.append(line)
             line = ""
+        elif command == "PAU" and raw_arg is not None and 0 < int(raw_arg, 16) <= 0xFF:
+            if at_start and opening_pause is None:
+                opening_pause = int(raw_arg, 16)
+            elif not at_start:
+                closing_pause = int(raw_arg, 16)
+            else:
+                raise ValueError("Repeated opening pause")
+        elif command == "PAL" and raw_arg == "0" and not at_start:
+            palette_reset = True
         elif command in ("FIN", "END") and raw_arg is None:
             lines.append(line)
             if not any(row.strip() for row in lines):
                 raise ValueError("Empty dialogue page")
-            pages.append((speaker, lines))
+            pages.append((speaker, lines, opening_pause, closing_pause, palette_reset))
             lines, line, speaker = [], "", None
+            opening_pause = closing_pause = None
+            palette_reset = has_box = False
         elif command in ("CLD", "CLR", "DEF") and raw_arg is None and not (lines or line.strip()):
             continue
         else:
@@ -103,7 +142,7 @@ def convert(source, names):
         raise ValueError("Unexpected terminal command structure")
 
     rendered = []
-    for speaker, page in pages:
+    for speaker, page, opening_pause, closing_pause, palette_reset in pages:
         rows = []
         for text in page:
             layout = textwrap.wrap(text.strip(), 24, break_long_words=False, break_on_hyphens=False)
@@ -115,7 +154,15 @@ def convert(source, names):
             if not any(group):
                 raise ValueError("Empty dialogue page after repagination")
             marker = f"[TPL:{speaker:02X}]" if speaker is not None and start == 0 else ""
-            rendered.append(marker + "[N]".join(group))
+            if opening_pause is not None and start == 0:
+                marker += f"[PAU:{opening_pause:02X}]"
+            suffix = ""
+            if start + 3 >= len(rows):
+                if closing_pause is not None:
+                    suffix += f"[PAU:{closing_pause:02X}]"
+                if palette_reset:
+                    suffix += "[PAL:00]"
+            rendered.append(marker + "[N]".join(group) + suffix)
     return "[FIN]".join(rendered) + "[END]"
 
 

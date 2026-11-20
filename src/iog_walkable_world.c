@@ -264,6 +264,13 @@ static void Move(uint8_t *ram,unsigned angle,int direction)
         Put(ram,kMapY,(unsigned)next_y);
     }
 }
+static bool DestinationAllowed(const uint8_t *ram, unsigned choice, unsigned index)
+{
+    if (!(allowed[choice] & (1u << index))) return false;
+    /* From Itory, the event opens both the road and South Cape's entrance.
+     * Saved positions can already be inside the entrance's radius. */
+    return choice != 4 || index != 0 || EventFlag(ram, 0x26);
+}
 static const WorldDestination *Nearby(const uint8_t *ram)
 {
     unsigned choice=Word(ram,kMapChoice);
@@ -271,7 +278,7 @@ static const WorldDestination *Nearby(const uint8_t *ram)
     if(!MenuChoice(ram))return NULL;
     const WorldDestination *selected=NULL;
     for(unsigned i=0;i<sizeof(destinations)/sizeof(destinations[0]);i++) {
-        if(!(allowed[choice]&(1u<<i)))continue;
+        if(!DestinationAllowed(ram,choice,i))continue;
         const WorldDestination *destination=&destinations[i];
         int dx=abs((int)destination->x-x),dy=abs((int)destination->y-y);
         if(dx<24 && dy<24 && dx+dy<best) {
@@ -331,9 +338,7 @@ bool IogWalkableWorldDirection(char *text,size_t capacity)
     int best=INT32_MAX;
     const WorldDestination *target=NULL;
     for(unsigned i=0;i<sizeof(destinations)/sizeof(destinations[0]);i++) {
-        if(!(allowed[choice]&(1u<<i)))continue;
-        /* The Itory road is gated separately from the stock menu. */
-        if(choice==4 && i==0 && !EventFlag(ram,0x26))continue;
+        if(!DestinationAllowed(ram,choice,i))continue;
         const WorldDestination *destination=&destinations[i];
         if(world.rom[0x030000u|destination->original_operands]==origin)continue;
         int dx=(int)destination->x-x,dy=(int)destination->y-y;

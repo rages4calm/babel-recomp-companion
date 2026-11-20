@@ -1441,10 +1441,30 @@ static int GaiaDialogue(const char *text, Toks *out)
     int columns = 0, rows = 1, glyphs = 0, page_start = 1;
     while (*text) {
         Tok token = {.type = T_CMD, .ref = -1};
-        if (!strncmp(text, "[TPL:", 5)) {
+        if (!strncmp(text, "[PAU:", 5)) {
+            unsigned frames;
+            int length = 0;
+            if (sscanf(text, "[PAU:%2X]%n", &frames, &length) != 1 ||
+                length != 8 || strspn(text + 5, "0123456789ABCDEF") != 2 || !frames)
+                return 0;
+            token.type = T_MARK;
+            token.code = 0xc9;
+            token.a[0] = frames;
+            text += length;
+            if (!page_start && strncmp(text, "[FIN]", 5) && strcmp(text, "[END]") &&
+                strcmp(text, "[PAL:00][END]"))
+                return 0;
+        } else if (!strcmp(text, "[PAL:00][END]")) {
+            if (page_start)
+                return 0;
+            token.type = T_MARK;
+            token.code = 0xc3;
+            text += 8;
+        } else if (!strncmp(text, "[TPL:", 5)) {
             unsigned id;
             int length = 0;
-            if (!page_start || sscanf(text, "[TPL:%2X]%n", &id, &length) != 1 ||
+            if (!page_start || (out->n && out->t[out->n - 1].type == T_MARK) ||
+                sscanf(text, "[TPL:%2X]%n", &id, &length) != 1 ||
                 length != 8 || strspn(text + 5, "0123456789ABCDEF") != 2 ||
                 !GaiaSpeakerTemplate(id))
                 return 0;
@@ -1473,7 +1493,9 @@ static int GaiaDialogue(const char *text, Toks *out)
             glyphs++;
         }
         Push(out, &token);
-        page_start = token.type == T_CMD && token.code == CMD_FIN;
+        /* A speaker tag may be followed by a pause before the first glyph. */
+        page_start = (token.type == T_CMD && token.code == CMD_FIN) ||
+                     (token.type == T_MARK && !token.code);
     }
     return 0;
 }
@@ -1565,11 +1587,138 @@ static int GaiaFitPage(const Tok *start, const Tok *end, Toks *out,
     return 1;
 }
 
+static int GaiaPageText(const Tok *token)
+{
+    return token->type == T_GLYPH || (token->type == T_CMD && token->code == CMD_N);
+}
+
+static const uint8_t kGaiaTemplateRows[] = {1, 2, 3, 4, 1, 2, 3, 4, 4};
+
+/* Keep the original window and control bytes on their exact page boundary.
+ * Branching strings, unknown inherited windows, and controls embedded in a
+ * sentence must keep their stock text. */
+static int GaiaStockPageControls(const Toks *original, Toks *out, const Toks *text)
+{
+    if (!original->n || original->t[original->n - 1].type != T_CMD ||
+        original->t[original->n - 1].code != CMD_END)
+        return 0;
+    int width = 0, height = 0, speaker = -1;
+    int src = 0, dst = 0;
+    while (src < original->n && dst < text->n) {
+        int stop = src, end = dst;
+        while (stop < original->n && (original->t[stop].type != T_CMD ||
+               (original->t[stop].code != CMD_FIN && original->t[stop].code != CMD_END)))
+            stop++;
+        while (end < text->n && (text->t[end].type != T_CMD ||
+               (text->t[end].code != CMD_FIN && text->t[end].code != CMD_END)))
+            end++;
+        if (stop == original->n || end == text->n || original->t[stop].code != text->t[end].code)
+            return 0;
+
+        int speaker_tag = -1, prefix_pause = 0, suffix_pause = 0, palette_tag = 0;
+        if (dst < end && text->t[dst].type == T_MARK && !text->t[dst].code)
+            speaker_tag = (int)text->t[dst++].a[0];
+        if (dst < end && text->t[dst].type == T_MARK && text->t[dst].code == 0xc9)
+            prefix_pause = (int)text->t[dst++].a[0];
+        int text_end = end;
+        if (text_end > dst && text->t[text_end - 1].type == T_MARK &&
+            text->t[text_end - 1].code == 0xc3) {
+            palette_tag = 1;
+            text_end--;
+        }
+        if (text_end > dst && text->t[text_end - 1].type == T_MARK &&
+            text->t[text_end - 1].code == 0xc9)
+            suffix_pause = (int)text->t[--text_end].a[0];
+        if (dst == text_end)
+            return 0;
+        for (int i = dst; i < text_end; i++)
+            if (!GaiaPageText(&text->t[i]))
+                return 0;
+
+        int new_speaker = 0, position = 0;
+        while (src < stop && !GaiaPageText(&original->t[src])) {
+            const Tok *t = &original->t[src++];
+            switch (t->code) {
+            case 0xc1:
+                if (position)
+                    return 0;
+                position = 1;
+                break;
+            case 0xc2:
+                if (t->a[0] >= 8 && t->a[0] <= 0x10) {
+                    width = 24;
+                    height = kGaiaTemplateRows[t->a[0] - 8];
+                } else if (!new_speaker && GaiaSpeakerTemplate(t->a[0])) {
+                    speaker = (int)t->a[0];
+                    new_speaker = 1;
+                } else {
+                    return 0;
+                }
+                break;
+            case 0xc7:
+                width = (int)t->a[0] * 2 - 2;
+                height = (int)t->a[1];
+                position = 0;
+                break;
+            case 0xd3:
+                width = 24;
+                height = 4;
+                break;
+            case 0xc9:
+                if (!prefix_pause || (int)t->a[0] != prefix_pause)
+                    return 0;
+                prefix_pause = 0;
+                break;
+            case 0xc3: case 0xc8: case 0xce: case CMD_SFX: case 0xd5:
+                break;
+            default:
+                return 0;
+            }
+            Push(out, t);
+        }
+        if (src == stop || prefix_pause || position || width <= 0 || height <= 0 ||
+            ((new_speaker || speaker_tag >= 0) && speaker_tag != speaker))
+            return 0;
+        if (!GaiaFitPage(text->t + dst, text->t + text_end, out, width, height, 0))
+            return 0;
+
+        while (src < stop && GaiaPageText(&original->t[src]))
+            src++;
+        for (; src < stop; src++) {
+            const Tok *t = &original->t[src];
+            if (t->type != T_CMD)
+                return 0;
+            if (t->code == 0xc9 && suffix_pause && (int)t->a[0] == suffix_pause)
+                suffix_pause = 0;
+            else if (t->code == 0xc3 && !t->a[0])
+                palette_tag = 0;
+            else
+                return 0;
+            Push(out, t);
+        }
+        if (suffix_pause || palette_tag)
+            return 0;
+        Push(out, &original->t[stop]);
+        src = stop + 1;
+        dst = end + 1;
+    }
+    return src == original->n && dst == text->n;
+}
+
 static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const Toks *text)
 {
-    static const uint8_t template_rows[] = {1, 2, 3, 4, 1, 2, 3, 4, 4};
     Toks original = {0};
     int ok = Decode(stock, offset, &original, 0, 0);
+    if (!ok) {
+        free(original.t);
+        return 0;
+    }
+    for (int i = 0; i < text->n; i++)
+        if (text->t[i].type == T_MARK && text->t[i].code) {
+            ok = GaiaStockPageControls(&original, out, text);
+            free(original.t);
+            return ok;
+        }
     int prefix = 1, width = 0, height = 0, initial_speakers = 0;
     int changes_speaker = 0, other_controls = 0;
     for (int i = 0; ok && i < original.n; i++) {
@@ -1592,7 +1741,7 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
                               t->code == 0xd3 || t->code == 0xd5)) {
             if (t->code == 0xc2 && t->a[0] >= 8 && t->a[0] <= 0x10) {
                 width = 24;
-                height = template_rows[t->a[0] - 8];
+                height = kGaiaTemplateRows[t->a[0] - 8];
             } else if (t->code == 0xc2 && !GaiaSpeakerTemplate(t->a[0])) {
                 ok = 0;  /* Includes the stock route-choice prompt. */
             } else if (t->code == 0xc2) {
@@ -1642,6 +1791,10 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
                 Push(out, last);
         }
         Push(out, &text->t[text->n - 1]);
+    }
+    if (!ok) {
+        out->n = 0;
+        ok = GaiaStockPageControls(&original, out, text);
     }
     free(original.t);
     return ok;
