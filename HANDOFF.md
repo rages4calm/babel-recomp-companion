@@ -38,12 +38,16 @@ and tests Sand Fanger's victory and statue ceremony. It also handles Dao's
 heat window, Native Village's vertical heat effect and the Pyramid's
 one-background layouts. See the visual coverage notes for open issues in
 the tested rooms. Private receipts are in `.local/batch-001/visual-fullgame-014`.
+Batch 015 adds 40 [widescreen scene admissions](docs/VISUAL-COVERAGE.md#early-rooms-pyramid-and-late-story),
+plus the Sky Garden crash's Mode 7 color effect. It also fixes the reported
+blue strips beside Babel's rooftop and the fog seam in the Jeweler's Mansion.
+Private receipts are in `.local/batch-001/visual-fullgame-015`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 014's
-`babel-originalv16.exe` and batch 011's dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 015's
+`babel-originalv17.exe` and batch 011's dialogue pack, and
 continues the isolated test profile's save. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.

@@ -19,10 +19,16 @@ bool IogSceneViewAbsentPyramidSecondary(const uint8_t *ram, const Ppu *ppu)
     unsigned width, height;
     switch (Word(ram, 0x0644)) {
     case 0xCC: width = 1024; height = 1024; break;
-    case 0xD0: width = 1536; height = 1280; break;
+    case 0xCE:
+    case 0xCF:
     case 0xD2: width = 1536; height = 1024; break;
+    case 0xD0: width = 1536; height = 1280; break;
+    case 0xD1: width = 1280; height = 1536; break;
+    case 0xD3: width = 2048; height = 768; break;
     case 0xD4:
+    case 0xD5:
     case 0xD8: width = 1280; height = 1280; break;
+    case 0xDA: width = 1536; height = 256; break;
     default: return false;
     }
     return !(ram[0x06EE] & 0x80) &&

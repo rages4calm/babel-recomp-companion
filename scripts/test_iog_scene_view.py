@@ -107,11 +107,13 @@ static void gates(void) {
     }
 }
 static void pyramid_single_background(void) {
-    const unsigned rooms[][3]={{0xcc,1024,1024},{0xd0,1536,1280},{0xd2,1536,1024},
-        {0xd4,1280,1280},{0xd8,1280,1280}};
+    const unsigned rooms[][3]={{0xcc,1024,1024},{0xce,1536,1024},{0xcf,1536,1024},
+        {0xd0,1536,1280},{0xd1,1280,1536},{0xd2,1536,1024},{0xd3,2048,768},
+        {0xd4,1280,1280},{0xd5,1280,1280},{0xd8,1280,1280},{0xda,1536,256}};
     for(unsigned i=0;i<sizeof(rooms)/sizeof(rooms[0]);i++) {
         IogSceneViewSource s;
         fixture();word(0x644,rooms[i][0]);
+        word(0x68e,0);
         word(0x692,rooms[i][1]);word(0x696,rooms[i][2]);
         word(0x69a,rooms[i][1]*rooms[i][2]/256);
         word(0x694,0);word(0x698,0);word(0x69c,0);
