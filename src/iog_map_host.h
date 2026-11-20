@@ -24,6 +24,9 @@ void IogMapHostControlSet(int action,int button);
 const char *IogMapHostControlName(int button);
 void IogMapHostDrawRadar(uint8_t *dst,size_t pitch,int width,int height);
 int IogMapHostOpen(void);
+/* Received-profile local-human input adapter. Source/hash guarded; never
+ * intercepts world travel, original pause/debug modes or unknown profiles. */
+int IogMapHostInput(uint32_t *human);
 void IogMapHostNav(uint32_t inputs,uint32_t ticks);
 void IogMapHostKey(int key,int repeat);
 void IogMapHostPointer(int x,int y,int down);

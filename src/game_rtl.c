@@ -126,6 +126,9 @@ static void GameInitialize(void)
 #else
 #include "iog_received_observer.h"
 #include "iog_received_world.h"
+#ifdef IOG_RECEIVED_MAIN_CONTENT
+#include "iog_received_content.h"
+#endif
 static void GameInitialize(void)
 {
     /* SnesInit calls this before reset/guest execution. No stock-address
@@ -135,6 +138,10 @@ static void GameInitialize(void)
     interp_bridge_clear_native_rdnmi_polls();
     snes_set_rdnmi_beam_enabled(false);
     IogReceivedObserverInitialize();
+#ifdef IOG_RECEIVED_MAIN_CONTENT
+    if (!IogReceivedContentInitialize())
+        Die("GaiaLabs content correction refused its source identity");
+#endif
 }
 #endif
 

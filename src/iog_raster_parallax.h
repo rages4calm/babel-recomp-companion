@@ -26,11 +26,11 @@ bool IogRasterParallaxPrepare(const uint8_t *rom,size_t rom_bytes,
     const uint16_t *captured_hscroll,size_t captured_lines,
     IogRasterParallax *output);
 
-/* Original Great Wall rampway/pit (85/86), types21/1E. These proportional
+/* Original Great Wall82/83/85--88/8A/8B, types1E/1F/21. These proportional
  * bands follow the secondary plane's actual vertical coordinate. All225
  * source rows must calibrate before expanded pixels can use the model.
  * Unlike the finite horizon, the wall texture is256 pixels wide and768 or
- * 2048 high; only X repeats. Output is unchanged on failure. */
+ * 1024 or2048 high; only X repeats. Output is unchanged on failure. */
 bool IogRasterParallaxPrepareWall(const uint8_t *rom,size_t rom_bytes,
     bool original_usa_verified,const uint8_t *epoch_ram,size_t ram_bytes,
     const uint16_t *captured_hscroll,size_t captured_lines,

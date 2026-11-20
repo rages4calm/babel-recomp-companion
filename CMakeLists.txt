@@ -33,6 +33,10 @@ endif()
 # with a peer that has them, and the framework says so at every lobby init.
 # Must precede the include: runner.cmake reads it to add the loader sources.
 option(IOG_RECEIVED_REFERENCE "Private interpreted GaiaLabs received-content reference host" OFF)
+option(IOG_RECEIVED_MAIN_CONTENT "Private GaiaLabs integration preview with qualified native content corrections" OFF)
+if(IOG_RECEIVED_MAIN_CONTENT AND NOT IOG_RECEIVED_REFERENCE)
+    message(FATAL_ERROR "Received main content requires the isolated received profile")
+endif()
 set(IOG_RECEIVED_REFERENCE_SHA256 "" CACHE STRING "Exact private received bare-ROM SHA-256")
 set(IOG_RECEIVED_REFERENCE_ROM_FILE "" CACHE STRING "Private received ROM basename")
 if(IOG_RECEIVED_REFERENCE)
@@ -61,6 +65,9 @@ if(IOG_RECEIVED_REFERENCE)
     if(NOT IOG_RECEIVED_REFERENCE_ROM_FILE MATCHES "^[A-Za-z0-9 ._-]+\\.(smc|sfc)$")
         message(FATAL_ERROR "Received reference requires a plain ROM basename")
     endif()
+    if(IOG_RECEIVED_MAIN_CONTENT AND NOT IOG_RECEIVED_REFERENCE_SHA256 STREQUAL "dded02334752a7122d4db8da4df4aa56d6997c078065e69183865dc23202973f")
+        message(FATAL_ERROR "Received main content requires the qualified expanded-content identity")
+    endif()
 endif()
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 
@@ -77,7 +84,7 @@ endif()
 
 set(IOG_MAP_SOURCES
     src/iog_map_discovery.c src/iog_map_view.c src/iog_map_scenery.c
-    src/iog_map_runtime.c src/iog_map_ui.c src/iog_map_host.c)
+    src/iog_map_runtime.c src/iog_map_ui.c src/iog_map_host.c src/iog_map_preferences.c)
 set(IOG_SOURCES
     ${IOG_MAP_SOURCES}
     ${SNESRECOMP_RUNNER_SOURCES}
@@ -109,8 +116,12 @@ set(IOG_SOURCES
 if(IOG_RECEIVED_REFERENCE)
     # No title plugins, stock-address observers, asset patches or generated code.
     set(IOG_SOURCES ${SNESRECOMP_RUNNER_SOURCES} src/main.c src/host_contract.c src/game_rtl.c
-        src/iog_received_observer.c src/iog_received_world.c src/iog_visual_objects.c
+        src/iog_received_observer.c src/iog_received_world.c src/iog_received_mode7.c src/iog_visual_objects.c
         src/iog_world_pixels.c src/iog_world_view.c ${IOG_MAP_SOURCES})
+    if(IOG_RECEIVED_MAIN_CONTENT)
+        list(APPEND IOG_SOURCES src/iog_received_content.c)
+        add_compile_definitions(IOG_RECEIVED_MAIN_CONTENT=1)
+    endif()
 endif()
 if(ANDROID)
     # Android: the game is the "main" library SDL's activity loads.

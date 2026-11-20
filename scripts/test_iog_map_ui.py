@@ -76,7 +76,22 @@ static void pointer_actions(void){
  C(IogMapUiPointer(&u,520,30,true,w,h));C(!u.full&&!u.visible&&!u.dragging);C(!IogMapUiPointer(&u,100,100,true,w,h));
  free(dst);
 }
-int main(int argc,char**argv){C(argc==3);fixture();actions();pointer_actions();dimensions(598,336,true,argv[1]);dimensions(598,336,false,argv[2]);dimensions(344,224,true,NULL);dimensions(784,336,true,NULL);dimensions(256,160,true,NULL);dimensions(2048,512,true,NULL);meta.gamepad=true;dimensions(344,224,true,NULL);fog_independence();printf("%u map UI assertions passed\n",checks);return 0;}
+static void controls_pane(void){
+ unsigned w=598,h=336;size_t pitch=(w+7)*4,n=pitch*h;
+ unsigned char *storage=malloc(n+64),*old=malloc(n),*dst=storage+32;C(storage&&old);memset(storage,0xa5,n+64);
+ uint8_t bindings[5]={5,4,3,2,1};
+ for(unsigned row=0;row<6;row++)C(IogMapUiDrawControls(dst,n,pitch,w,h,bindings,row,row&1,true));
+ for(unsigned k=0;k<32;k++)C(storage[k]==0xa5&&storage[n+32+k]==0xa5);
+ for(unsigned y=0;y<h;y++)for(unsigned x=w*4;x<pitch;x++)C(dst[y*pitch+x]==0xa5);
+ memcpy(old,dst,n);bindings[0]=bindings[1];C(!IogMapUiDrawControls(dst,n,pitch,w,h,bindings,0,true,true)&&!memcmp(old,dst,n));
+ bindings[0]=6;C(!IogMapUiDrawControls(dst,n,pitch,w,h,bindings,0,true,true));bindings[0]=5;
+ C(!IogMapUiDrawControls(dst,n,pitch,w,160,bindings,0,true,true));
+ C(!IogMapUiDrawControls(dst,n,pitch,w,h,bindings,6,true,true));
+ C(!IogMapUiDrawControls(dst,n,pitch,w,h,dst,0,true,true));
+ C(!IogMapUiDrawControls(dst+1,n-1,pitch,w,h,bindings,0,true,true));
+ C(!memcmp(old,dst,n));free(old);free(storage);
+}
+int main(int argc,char**argv){C(argc==3);fixture();actions();pointer_actions();controls_pane();dimensions(598,336,true,argv[1]);dimensions(598,336,false,argv[2]);dimensions(344,224,true,NULL);dimensions(784,336,true,NULL);dimensions(256,160,true,NULL);dimensions(2048,512,true,NULL);meta.gamepad=true;dimensions(344,224,true,NULL);fog_independence();printf("%u map UI assertions passed\n",checks);return 0;}
 '''
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--compiler',default='cc');p.add_argument('--out',type=Path,default=ROOT/'.local/batch-001/visual-fullgame-002/map-ui-tests');a=p.parse_args();out=a.out.resolve();assert out.is_relative_to((ROOT/'.local').resolve());out.mkdir(parents=True,exist_ok=True);c=out/'ui.c';c.write_text(HARNESS);exe=out/'ui.exe'

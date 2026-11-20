@@ -8,13 +8,13 @@ The original author's credit, support link and full acknowledgments remain below
 ## Companion development status
 
 **Current priority: full-game visuals and built-in GaiaLabs world map/Retranslation.**
-The current batch updates SNESRecomp while preserving title changes and fallback,
-fixes Great Wall85/86 scrolling at widescreen/1.5x, and adds configurable controller
-Map actions. Our scenery map and radar share persistent exploration; Original's
-old local-radar command now opens the enhanced map where verified. GaiaLabs'
-world travel map is a separate feature from the local map. Full-game visuals and
-main-content integration are still in progress.
-[Controls, verification and remaining work](docs/VISUAL-FULLGAME-003.md).
+Six more Great Wall rooms have corrected scrolling at widescreen/1.5×, and
+Select opens controller settings from our local scenery map. The private
+GaiaLabs integration preview supports widescreen world travel and corrects
+South Cape's arrival for the widened town. The normal road back to the world
+map works in the tested route. Full-game visuals and main-content integration
+are still in progress.
+[Controls, verification and remaining work](docs/VISUAL-FULLGAME-004.md).
 
 This is an early development fork, with no Companion release yet. The default
 source build interprets the game's 65816 instructions. Qualified private

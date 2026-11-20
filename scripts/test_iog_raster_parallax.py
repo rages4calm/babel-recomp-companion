@@ -87,28 +87,30 @@ static void fixed_wrap(void){
 }
 static void wall_fixture(unsigned scene,unsigned y,unsigned previous){
  memset(rom,0,sizeof rom);memset(ram,0,sizeof ram);
- unsigned index=scene==0x85?0x21:0x1e;
+ unsigned index=scene==0x85?0x21:scene==0x8a?0x1f:0x1e;
  word(rom,0x1cc00+index*2,0x8000);word(rom,0x18000,0x7800);rom[0x18002]=0x7e;rom[0x18003]=0x0f;rom[0x18004]=8;
- word(ram,0x644,scene);word(ram,0x694,256);word(ram,0x698,scene==0x85?768:2048);
+ word(ram,0x644,scene);word(ram,0x694,256);word(ram,0x698,scene==0x85||scene==0x8a?768:scene==0x82||scene==0x87||scene==0x8b?1024:2048);
  word(ram,0x68a,168);word(ram,0x690,y);word(ram,0x6e4,8);
- const unsigned heights[]={96,160,80,176,80,2048};
- for(unsigned i=0;i<6;i++){
+ const unsigned heights[]={96,scene==0x8a?1024:160,80,176,80,2048};
+ unsigned bands=scene==0x8a?2:6;
+ for(unsigned i=0;i<bands;i++){
   unsigned at=0x18005+i*8;word(rom,at,65536-heights[i]);word(rom,at+2,0x720+i*2);word(rom,at+4,i%2?0x0110:0x0108);
  }
  for(unsigned line=0;line<225;line++){
-  unsigned row=y+line,i=0,end=heights[0];while(row>=end && i<5)end+=heights[++i];
+  unsigned row=y+line,i=0,end=heights[0];while(row>=end && i<bands-1)end+=heights[++i];
   captured[line]=(uint16_t)((168-previous*8)/(i%2?1:2));
  }
  snapshot();
 }
 static void wall_bands(void){
  const unsigned ys[]={0,32,95,100,255,256,335,511,512,591,768,1536};
- for(unsigned scene=0x85;scene<=0x86;scene++)for(unsigned previous=0;previous<2;previous++)
+ const unsigned scenes[]={0x82,0x83,0x85,0x86,0x87,0x88,0x8a,0x8b};
+ for(unsigned sn=0;sn<sizeof scenes/sizeof scenes[0];sn++)for(unsigned previous=0;previous<2;previous++)
  for(unsigned j=0;j<sizeof ys/sizeof ys[0];j++){
-  unsigned height=scene==0x85?768:2048;if(ys[j]>height-224)continue;
+  unsigned scene=scenes[sn];unsigned height=scene==0x85||scene==0x8a?768:scene==0x82||scene==0x87||scene==0x8b?1024:2048;if(ys[j]>height-224)continue;
   wall_fixture(scene,ys[j],previous);IogRasterParallax model;
   CHECK(IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&model));
-  CHECK(model.previous_buffer==previous&&model.width==256&&model.height==height&&model.band_count==6);
+  CHECK(model.previous_buffer==previous&&model.width==256&&model.height==height&&model.band_count==(scene==0x8a?2:6));
   for(unsigned row=0;row<225;row++){
    uint16_t h=777;CHECK(IogRasterParallaxSample(&model,(int)(ys[j]+row),168,&h));CHECK(h==captured[row]);
   }
@@ -116,7 +118,7 @@ static void wall_bands(void){
   CHECK(IogRasterParallaxSample(&model,95,170,&h)&&h==(previous?81:85));
   CHECK(IogRasterParallaxSample(&model,96,170,&h)&&h==(previous?162:170));
   CHECK(IogRasterParallaxSample(&model,255,170,&h)&&h==(previous?162:170));
-  CHECK(IogRasterParallaxSample(&model,256,170,&h)&&h==(previous?81:85));
+  CHECK(IogRasterParallaxSample(&model,256,170,&h)&&h==(scene==0x8a?(previous?162:170):(previous?81:85)));
   CHECK(IogRasterParallaxSample(&model,(int)height-1,168,&h));
   h=777;CHECK(!IogRasterParallaxSample(&model,(int)height,168,&h)&&h==777);
   immutable();
@@ -127,7 +129,7 @@ static void wall_bands(void){
  CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));CHECK(!memcmp(&out,&before,sizeof out));immutable();
  wall_fixture(0x86,32,0);rom[0x18004]=4;snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
  wall_fixture(0x86,32,0);word(rom,0x18005+4,0);snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
- wall_fixture(0x86,32,0);word(ram,0x644,0x83);snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
+ wall_fixture(0x86,32,0);word(ram,0x644,0x84);snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
  wall_fixture(0x86,32,0);word(ram,0x698,1024);snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
  CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,false,ram,sizeof ram,captured,225,&out));
  CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,224,&out));
@@ -138,7 +140,7 @@ int main(int argc,char**argv){
  if(argc==5){
   load(argv[1],rom,sizeof rom);load(argv[2],ram,sizeof ram);load(argv[3],captured,sizeof captured);snapshot();
   IogRasterParallax model;unsigned scene=ram[0x644]|((unsigned)ram[0x645]<<8);
-  bool ok=(scene==0x85||scene==0x86)?IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&model):IogRasterParallaxPrepare(rom,sizeof rom,true,ram,sizeof ram,captured,225,&model);
+  bool ok=(scene>=0x82&&scene<=0x8b)?IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&model):IogRasterParallaxPrepare(rom,sizeof rom,true,ram,sizeof ram,captured,225,&model);
   FILE*f=fopen(argv[4],"wb");CHECK(f);fprintf(f,"{\"passed\":%s",ok?"true":"false");
   if(ok)fprintf(f,",\"scene\":%u,\"source_camera_x\":%u,\"bands\":%u,\"previous_buffer\":%u",model.scene,model.source_camera_x,model.band_count,model.previous_buffer);
   fprintf(f,"}\n");CHECK(!fclose(f));immutable();return ok?0:3;
@@ -172,6 +174,14 @@ def main():
     fault_build=subprocess.run(mutant_cmd,capture_output=True,text=True,timeout=60);(out/'fraction-fault-build.log').write_text(fault_build.stdout+fault_build.stderr);fault_build.check_returncode()
     fault=subprocess.run([str(mutant_exe)],env=env,capture_output=True,text=True,timeout=60);(out/'fraction-fault-run.log').write_text(fault.stdout+fault.stderr)
     assert fault.returncode!=0 and 'previous?418:420' in fault.stderr
+    # Isolate the new cluster binding: removing only scene83 must fail its
+    # source-driven phase/finite-allocation contract while85/86 remain intact.
+    profile_mutant=out/'without-cluster-profile.c';profile_text=files[0].read_text();profile_needle='case 0x83: case 0x86: case 0x88:';assert profile_text.count(profile_needle)==1
+    profile_mutant.write_text(profile_text.replace(profile_needle,'case 0x86: case 0x88:'))
+    profile_exe=out/'without-cluster-profile.exe';profile_cmd=cmd.copy();profile_cmd[profile_cmd.index(str(files[0]))]=str(profile_mutant);profile_cmd[-1]=str(profile_exe)
+    profile_build=subprocess.run(profile_cmd,capture_output=True,text=True,timeout=60);(out/'profile-fault-build.log').write_text(profile_build.stdout+profile_build.stderr);profile_build.check_returncode()
+    profile_fault=subprocess.run([str(profile_exe)],env=env,capture_output=True,text=True,timeout=60);(out/'profile-fault-run.log').write_text(profile_fault.stdout+profile_fault.stderr)
+    assert profile_fault.returncode!=0 and 'IogRasterParallaxPrepareWall' in profile_fault.stderr
     packet_results=[]
     if a.packet:
         if not a.rom or sha(a.rom)!='32adc048fd89228a4310c03df243e83de7d436cdb2460b4cc83ade20d359b2bd':p.error('Verified bare Original-USA ROM required for captured calibration')
@@ -184,7 +194,7 @@ def main():
         (out/f'packet{n}.log').write_text(actual.stdout+actual.stderr);result=json.loads(jp.read_text());result.update(packet=str(prefix),exit_code=actual.returncode,source_sha256=sha(Path(str(prefix)+'.source.json')));packet_results.append(result)
     assert before=={str(f.relative_to(ROOT)):sha(f)for f in files}
     packets_passed=all(row['passed']for row in packet_results)
-    receipt={'passed':packets_passed,'synthetic_tests_passed':True,'fraction_discard_fault_rejected':True,'command':cmd,'stdout':run.stdout,'sources':before,'packet_calibrations':packet_results,'all_requested_packet_calibrations_passed':packets_passed,'scope':'Pure ROM-driven producer calibration and synthetic fraction/phase/guards/read-only tests. Optional captured rows are readonly bounded calibration, not game motion, GPU or full-zone approval.'}
+    receipt={'passed':packets_passed,'synthetic_tests_passed':True,'fraction_discard_fault_rejected':True,'cluster_profile_removal_fault_rejected':True,'command':cmd,'stdout':run.stdout,'sources':before,'packet_calibrations':packet_results,'all_requested_packet_calibrations_passed':packets_passed,'scope':'Pure ROM-driven producer calibration and synthetic fraction/phase/guards/read-only tests. Optional captured rows are readonly bounded calibration, not game motion, GPU or full-zone approval.'}
     (out/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print(run.stdout.strip());print(json.dumps(packet_results,indent=2))
     if not packets_passed:raise SystemExit(1)
 

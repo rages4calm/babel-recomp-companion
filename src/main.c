@@ -99,17 +99,31 @@ static void IogReceivedViewport(int fw,int fh,int dw,int dh,SnesDisplayViewport 
     *out=SnesDisplayAspect_FitViewport((double)fw*num/((double)fh*den),dw,dh);
 }
 static const SnesDesktopHostGame kGameHost = {
+#ifdef IOG_RECEIVED_MAIN_CONTENT
+    .display_name = "GaiaLabs main-content integration preview (interpreted guest CPU)",
+    .window_title = "Illusion of Gaia - GaiaLabs integration preview",
+#else
     .display_name = "GaiaLabs received-content reference (interpreted)",
     .window_title = "GaiaLabs reference - not native qualification",
+#endif
     .region = SNESRECOMP_ROM_REGION,
     .rom_file = IOG_RECEIVED_REFERENCE_ROM_FILE,
     .expected_sha256_hex = IOG_RECEIVED_REFERENCE_SHA256,
     .expected_crc32_hex = NULL,
+#ifdef IOG_RECEIVED_MAIN_CONTENT
+    .game_id = "iog-gaialabs-main-preview-" IOG_RECEIVED_REFERENCE_SHA256,
+    .build_version = "main-content-preview-dev",
+#else
     .game_id = "iog-gaialabs-reference-" IOG_RECEIVED_REFERENCE_SHA256,
     .build_version = "received-reference-dev",
+#endif
     .game_info = &kGameInfo,
     .num_players = 1,
+#ifdef IOG_RECEIVED_MAIN_CONTENT
+    .sram_path = "saves/gaialabs-main-preview.srm",
+#else
     .sram_path = "saves/received-reference.srm",
+#endif
     .native_widescreen = 1,
     .prepare_frame = IogReferenceFrame,
     .presentation_geometry = IogReceivedWorldGeometry,
@@ -120,6 +134,7 @@ static const SnesDesktopHostGame kGameHost = {
     .on_reset = IogMapHostReset,
     .on_shutdown = IogMapHostShutdown,
     .companion_open = IogMapHostOpen,
+    .companion_input = IogMapHostInput,
     .companion_nav = IogMapHostNav,
     .companion_key = IogMapHostKey,
     .companion_image = IogMapHostImage,

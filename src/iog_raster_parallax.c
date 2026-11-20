@@ -28,7 +28,7 @@ bool IogRasterParallaxSample(const IogRasterParallax *m,int y,int x,uint16_t *ou
     if(!m || !out || !m->valid || !m->band_count ||
        m->band_count>kIogRasterParallaxBands ||
        !((m->height==256 && m->width==512) ||
-         ((m->height==768 || m->height==2048) && m->width==256)) ||
+         ((m->height==768 || m->height==1024 || m->height==2048) && m->width==256)) ||
        y<0 || y>=m->height || x < -2048 || x>4096)return false;
     const IogRasterParallaxBand *b=Band(m,(unsigned)y);
     if(!b)return false;
@@ -131,11 +131,20 @@ bool IogRasterParallaxPrepareWall(const uint8_t *rom,size_t size,bool verified,
        !captured || lines!=kIogRasterParallaxLines || !out ||
        Overlap(out,sizeof(*out),rom,size) || Overlap(out,sizeof(*out),ram,ram_size) ||
        Overlap(out,sizeof(*out),captured,lines*sizeof(*captured)))return false;
-    unsigned scene=Word(ram,0x644),height=scene==0x85?768:2048;
-    if((scene!=0x85 && scene!=0x86) || (ram[0x6EE]&128) || (ram[0x6EF]&8) ||
+    unsigned scene=Word(ram,0x644),height,index=0x1E;
+    /* These Original rooms bind the same actual proportional wall producer.
+     * Keep their distinct finite allocations: the tall pit's spare rows are
+     * not grounds to repeat or expose another room's scenery. */
+    switch(scene) {
+    case 0x82: case 0x87: case 0x8B:height=1024;break;
+    case 0x83: case 0x86: case 0x88:height=2048;break;
+    case 0x85:height=768;index=0x21;break;
+    case 0x8A:height=768;index=0x1F;break;
+    default:return false;
+    }
+    if((ram[0x6EE]&128) || (ram[0x6EF]&8) ||
        Word(ram,0x694)!=256 || Word(ram,0x698)!=height ||
        Word(ram,0x690)>height-224 || Word(ram,0x68A)>2048)return false;
-    unsigned index=scene==0x85?0x21:0x1E;
     unsigned pointer=Word(rom,0x1CC00+index*2);
     if(pointer<0x8000 || pointer>0xFFF0)return false;
     size_t at=0x10000u+pointer;

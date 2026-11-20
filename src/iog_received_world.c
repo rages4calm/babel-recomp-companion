@@ -3,6 +3,7 @@
  * embedded; this host decoder never changes guest CPU, RAM, ROM or hardware
  * registers. Overlay capture bindings are host presentation state only. */
 #include "iog_received_world.h"
+#include "iog_received_mode7.h"
 #include "common_cpu_infra.h"
 #include "iog_received_observer.h"
 #include "iog_visual_objects.h"
@@ -20,7 +21,7 @@ extern Snes *g_snes;
 extern Ppu *g_ppu;
 enum { Width = 598, Height = 336, Chunk = 224 };
 static struct {
-  bool initialized, enabled, valid, complete;
+  bool initialized, enabled, valid, complete, mode7;
   int width, height, frame;
   const char *reason;
   FILE *audit;
@@ -47,7 +48,12 @@ bool IogReceivedWorldEnabled(void) {
   if (!s.initialized) {
     s.initialized = true;
     const char *t = getenv("IOG_RECEIVED_WORLD_RENDERER");
+#ifdef IOG_RECEIVED_MAIN_CONTENT
+    (void)t;
+    s.enabled = true;
+#else
     s.enabled = t && !strcmp(t, "1");
+#endif
     const char *a = getenv("IOG_RECEIVED_WORLD_AUDIT");
     if (s.enabled && a && *a)
       s.audit = fopen(a, "wb");
@@ -148,6 +154,13 @@ void IogReceivedWorldBeginRaster(void) {
   s.valid = s.complete = false;
   s.reason = "unpaired_or_unqualified";
   memset(s.ui, 0, sizeof(s.ui));
+  s.mode7 = g_ppu && (g_ppu->bgmode & 7) == 7;
+  if (s.mode7) {
+    const Cart *cart=g_snes?g_snes->cart:NULL;
+    s.valid=cart && IogReceivedMode7Begin(g_ppu,g_snes->ram,cart->rom,
+        cart->romImageSize,s.width,s.height);
+    s.reason=IogReceivedMode7Reason();return;
+  }
   if (!IogReceivedObserverPicture(&s.source))
     return;
   if (memcmp(g_ppu->oam, s.source.published, 512) ||
@@ -217,6 +230,9 @@ void IogReceivedWorldBeginRaster(void) {
   s.reason = "awaiting_raster";
 }
 void IogReceivedWorldCaptureLine(int line) {
+  if (s.enabled && s.mode7) {
+    IogReceivedMode7Capture(g_ppu,g_snes?g_snes->ram:NULL,line);return;
+  }
   if (!s.enabled || !s.valid || line < 0 || line > 224)
     return;
   if ((g_ppu->bgmode & 7) != 1 || g_ppu->vramWriteCount != s.vram_writes ||
@@ -358,7 +374,9 @@ static bool Render(void) {
 void IogReceivedWorldEndRaster(void) {
   if (!s.enabled)
     return;
-  if (s.valid) {
+  if (s.mode7) {
+    s.complete=s.valid && IogReceivedMode7End();s.reason=IogReceivedMode7Reason();
+  } else if (s.valid) {
     s.complete = Render();
     if (s.complete)
       s.reason = "received_classroom_ready";
@@ -377,6 +395,18 @@ static uint32_t Rgb(unsigned color) {
   return 0xff000000u | ((r << 3 | r >> 2) << 16) | ((g << 3 | g >> 2) << 8) |
          (b << 3 | b >> 2);
 }
+static void ExportPicture(const uint8_t *dst,size_t pitch,int w,int h) {
+  static bool written;
+  const char *path=getenv("IOG_RECEIVED_WORLD_OUTPUT"),*at=getenv("IOG_RECEIVED_WORLD_OUTPUT_FRAME");
+  if(written||!path||!*path||!at||atoi(at)!=s.frame)return;
+  FILE *f=fopen(path,"wb");if(!f)return;
+  bool ok=fprintf(f,"P6\n%d %d\n255\n",w,h)>0;
+  for(int y=0;y<h&&ok;y++)for(int x=0;x<w;x++){
+    const uint8_t *p=dst+y*pitch+x*4;uint8_t rgb[3]={p[2],p[1],p[0]};
+    if(fwrite(rgb,1,3,f)!=3){ok=false;break;}
+  }
+  if(fclose(f))ok=false;written=ok;
+}
 int IogReceivedWorldDraw(uint8_t *dst, size_t pitch, const uint8_t *field,
                          int w, int h, double alpha) {
   (void)alpha;
@@ -388,7 +418,11 @@ int IogReceivedWorldDraw(uint8_t *dst, size_t pitch, const uint8_t *field,
     int l = (w - 384) / 2, t = (h - 224) / 2;
     for (int y = 0; y < 224; y++)
       memcpy(dst + (y + t) * pitch + l * 4, field + y * 384 * 4, 384 * 4);
-    return 1;
+    ExportPicture(dst,pitch,w,h);return 1;
+  }
+  if (s.mode7) {
+    int drawn=IogReceivedMode7Draw(dst,pitch,field,w,h);
+    if(drawn)ExportPicture(dst,pitch,w,h);return drawn;
   }
   for (int y = 0; y < h; y++)
     memcpy(dst + y * pitch, s.output + y * w, w * 4);
@@ -418,5 +452,6 @@ int IogReceivedWorldDraw(uint8_t *dst, size_t pitch, const uint8_t *field,
       if ((color >> 24) && x + ux >= 0 && x + ux < w)
         ((uint32_t *)(dst + y * pitch))[x + ux] = color;
     }
+  ExportPicture(dst,pitch,w,h);
   return 1;
 }
