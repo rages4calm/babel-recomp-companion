@@ -45,12 +45,15 @@ Private receipts are in `.local/batch-001/visual-fullgame-015`.
 Batch 016 covers the [Babel rematches, Great Wall ceremony and ending](docs/VISUAL-COVERAGE.md#babel-rematches-great-wall-ceremony-and-ending).
 It fixes the Great Wall post-ceremony alignment and widens the sea around
 the Adrift raft. Private receipts are in `.local/batch-001/visual-fullgame-016`.
+Batch 017 extends the [opening and dream presentation](docs/VISUAL-COVERAGE.md#opening-dream-and-great-wall).
+It also fixes the original-field parallax mismatch in the upper Great Wall.
+Private receipts are in `.local/batch-001/visual-fullgame-017`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 016's
-`babel-originalv18.exe` and batch 011's dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 017's
+`babel-originalv19.exe` and batch 011's dialogue pack, and
 continues the isolated test profile's save. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.

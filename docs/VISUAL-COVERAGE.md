@@ -219,10 +219,32 @@ where movement or combat is required.
 | Adrift `2F` | Seven scripted raft phases, including dialogue, preserve the original horizon and moving sea. Only the background repeats past the raft. Controller dialogue from an assisted start also reaches Diamond Coast. |
 | Credits `F7` and final school scene `F0` | The stock credits ran through their authored handoff into the school scene. The field stays centered with the original scenery and motion, and the dialogue uses the host frame. |
 
-The Sand Fanger rematch return fade can still use fallback. The upper
-Great Wall sky before the fight retains its existing parallax reframe.
-The title prologue, a dream scene and other unqualified cutscene phases
-remain open.
+The Sand Fanger rematch return fade can still use fallback. Batch 017
+addresses the next two prologue compositions, the dream and the upper
+Great Wall sky.
+
+## Opening, dream and Great Wall
+
+v19 uses the original Mode 7 subscreen and color math for the opening
+ocean and legend cards. The ocean extends into the sides and the original
+ships, figures and text stay in their authored positions. The idle title
+sequence and controller Start were checked from original cold-entry
+checkpoints. The tower, spotlight and two ending scenes preserve their
+centered original presentation.
+
+The ship dream adds scene `2A` to the Mode 1 renderer. It translates the
+original window coordinates for each drawn segment and keeps the dream's
+rooms and iris within the authored field. The HUD and dialogue use the
+same presentation scale as nearby rooms. Unknown window configurations
+retain fallback. From an assisted ship setup, virtual controller input
+reached the dream through the sleeping scene, walked the stair, completed
+Shira's dialogue, and returned to the ship.
+
+The upper Great Wall arena and adjoining room now extend from the
+captured background phase. This preserves the original field during
+movement even when the background and foreground publish different
+camera positions. Checked the `8B → 8A → 8B` round trip and the v18
+post-ceremony fade. Controller routes use SDL virtual input.
 
 ## Bounded entry survey
 
