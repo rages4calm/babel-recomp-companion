@@ -96,6 +96,7 @@ set(IOG_SOURCES
     src/iog_widescreen.c
     src/iog_scene_view.c
     src/iog_world_renderer.c
+    src/iog_walkable_world.c
     src/iog_raster_parallax.c
     src/iog_world_view.c
     src/iog_world_pixels.c

@@ -45,6 +45,9 @@
 #include "iog_native_continuations.h"
 #include "iog_world_renderer.h"
 #include "iog_i18n.h"
+#ifndef IOG_RECEIVED_REFERENCE
+#include "iog_walkable_world.h"
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -106,6 +109,7 @@ static void GameInitialize(void)
     IogNativeContinuationsInitialize();
     IogWorldInitialize();
     IogI18nBindStock();
+    IogWalkableWorldInitialize();
     g_world_observers_ready = false;
     bool observers_ok = true;
     static const uint32_t banks[] = {0x030000, 0x430000, 0x830000, 0xc30000};
@@ -190,6 +194,7 @@ void GameRunOneFrame(void)
 {
 #ifndef IOG_RECEIVED_REFERENCE
     IogWorldSimulationTick();
+    IogWalkableWorldTick();
 #else
     IogReceivedObserverFrame();
 #endif

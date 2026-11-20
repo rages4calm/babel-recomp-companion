@@ -35,7 +35,9 @@
 #include "iog_inventory.h"
 #include "iog_i18n.h"
 #include "iog_build_info.h"
+#include "iog_walkable_world.h"
 #include "snes_osd.h"
+#include "snes_overlay_draw.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include "common_rtl.h"
@@ -245,7 +247,19 @@ static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
 {
     int drawn=IogWorldEnabled()?IogWorldDraw(dst,pitch,field,width,height,alpha):
         IogSceneViewDraw(&s_scene_view,dst,pitch,field,width,height,alpha);
-    if(drawn)IogMapHostDrawRadar(dst,pitch,width,height);
+    if(drawn) {
+        IogMapHostDrawRadar(dst,pitch,width,height);
+        const char *location=IogWalkableWorldLocation();
+        if(location) {
+            int x=(width-8*snes_ovl_text_len(location))/2;
+            int y=height/2-46;
+            int stride=(int)(pitch/sizeof(uint32_t));
+            /* Will remains the real guest sprite. Put its nearby place
+             * name on the same pixel grid as the surrounding Mode 7 view. */
+            snes_ovl_draw_text((uint32_t *)dst,stride,height,x+1,y+1,location,0xff34270du,1);
+            snes_ovl_draw_text((uint32_t *)dst,stride,height,x,y,location,0xfff2dda4u,1);
+        }
+    }
     return drawn;
 }
 
