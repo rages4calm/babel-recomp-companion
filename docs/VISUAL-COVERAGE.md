@@ -625,15 +625,47 @@ through all 75 reveal frames. Solid Arm's defeat (`EA` → `E3`) preserves
 the purple color math and narrow arena through all 70 exit mosaic frames.
 Both controller runs used linked checkpoints. Sampled guest state and
 interpreter pictures agreed, and the shipping path matched the original
-PPU field outside the scaled HUD. The optional scalar pixel sampler still
-differs by a few pixels at Dao's active window edge.
+PPU field outside the scaled HUD except at Dao's active window edge, where
+the v32 optimized and scalar pixel samplers differed.
 
 The Mode 7 controller checks covered map-to-Mountain Temple, map-to-Dao
 and back, and the stock destination selection into South Cape. The sampled
 598×336 pictures and guest state matched v31. The stock split fallback
 still reaches South Cape, and unsupported intervals such as fully black
 loading between rooms can still use fallback. Six earlier frames in the
-Dark Castoth fight still use the visual-object fallback.
+v32 Dark Castoth fight used the visual-object fallback.
+
+## Dark Castoth defeat and neighboring mosaics
+
+Dark Castoth's six defeat frames keep their starfield, actors and square-pixel
+1.5× framing. The stock OAM writer fills the end of the sprite table with
+overlapping copies of one tile during the defeat animation. The renderer
+checks the exact Castoth actor state and published OAM before drawing one
+copy of that tile. Unverified actor layouts still use fallback. The linked
+controller replay covers the defeat, the complete victory wave, and the
+return to the Babel landing. The six recovered frames match the stock PPU
+field outside the scaled HUD. The three other wave rematches were replayed
+with their existing coverage intact.
+
+Three more Mode 1 mosaics stay wide. The Jeweler's Mansion reveal retains
+its original fog for all 75 frames. The ship lower deck retains its color
+math for all 70 frames before the Dream. The return from Solid Arm to the
+upper Babel landing keeps the side hall visible through all 75 reveal frames.
+Linked controller replays covered both sides of the transitions. The
+black loading phases can still use fallback.
+
+Dao's window edge now samples the original leftmost pixel of a mosaic block
+even when the window clips that pixel. Both optimized tile depths involved
+in Mode 1 received the correction. The default and scalar Dao captures match
+byte for byte after the fix. The local SNESRecomp delta leaves the SDK pin at
+`22c01ef1` and is tracked in [SNESRecomp #292](https://github.com/RetroPortingToolKit/snesrecomp/issues/292).
+
+An exact v33 replay with the expanded GaiaLabs pack followed the linked
+New Babel checkpoint through the credits and visible END screen. The
+38,000-frame controller replay reached the same scene boundaries as
+the prior ending receipt. Separate controls rechecked the Dark Mummy Queen,
+Ship Dream, Sky Garden flight and stock map route into South Cape at 1.5×.
+These runs started from checkpoints.
 
 ## Bounded entry survey
 

@@ -1438,10 +1438,27 @@ static int GaiaSpeakerTemplate(unsigned id)
 
 static int GaiaDialogue(const char *text, Toks *out)
 {
+    const size_t size = strlen(text);
+    const int returns = size >= 5 && !strcmp(text + size - 5, "[RET]");
     int columns = 0, rows = 1, glyphs = 0, page_start = 1;
     while (*text) {
         Tok token = {.type = T_CMD, .ref = -1};
-        if (!strncmp(text, "[PAU:", 5)) {
+        if (returns && !strncmp(text, "[BCD:", 5)) {
+            unsigned digits, address;
+            int length = 0;
+            if (sscanf(text, "[BCD:%1u,%4X]%n", &digits, &address, &length) != 2 ||
+                length != 12 || strspn(text + 7, "0123456789ABCDEF") != 4 ||
+                digits < 1 || digits > 5 || (columns += (int)digits) > 24)
+                return 0;
+            token.code = 0xc6;
+            token.a[0] = digits;
+            token.a[1] = address;
+            text += length;
+            glyphs++;
+        } else if (returns && (!strncmp(text, "[PAU:", 5) ||
+                              !strncmp(text, "[PAL:", 5) || !strncmp(text, "[TPL:", 5))) {
+            return 0;
+        } else if (!strncmp(text, "[PAU:", 5)) {
             unsigned frames;
             int length = 0;
             if (sscanf(text, "[PAU:%2X]%n", &frames, &length) != 1 ||
@@ -1475,15 +1492,16 @@ static int GaiaDialogue(const char *text, Toks *out)
             token.code = CMD_N;
             text += 3;
             columns = 0;
-            if (++rows > 3)
+            if (++rows > (returns ? 7 : 3))
                 return 0;
         } else if (!strncmp(text, "[FIN]", 5)) {
             token.code = CMD_FIN;
             text += 5;
             columns = 0;
             rows = 1;
-        } else if (!strcmp(text, "[END]")) {
-            token.code = CMD_END;
+        } else if ((!returns && !strcmp(text, "[END]")) ||
+                   (returns && !strcmp(text, "[RET]"))) {
+            token.code = returns ? CMD_RET : CMD_END;
             Push(out, &token);
             return glyphs != 0;
         } else {
@@ -1529,7 +1547,8 @@ static int GaiaSoftBreak(const Tok *token)
 /* Reflow only pages that exceed their stock box height. Treat the source
  * line breaks as spaces so, for example, the last word of a sentence does
  * not become a page by itself when it can fit in the current box. */
-static int GaiaWrapPage(const Tok *start, const Tok *end, Toks *out, int width, int height)
+static int GaiaWrapPage(const Tok *start, const Tok *end, Toks *out, int width,
+                        int height, int allow_extra_pages)
 {
     int columns = 0, rows = 1;
     while (start < end) {
@@ -1548,8 +1567,11 @@ static int GaiaWrapPage(const Tok *start, const Tok *end, Toks *out, int width, 
             if (columns + 1 + length > width) {
                 gap.type = T_CMD;
                 gap.code = ++rows > height ? CMD_FIN : CMD_N;
-                if (gap.code == CMD_FIN)
+                if (gap.code == CMD_FIN) {
+                    if (!allow_extra_pages)
+                        return 0;
                     rows = 1;
+                }
                 columns = 0;
             } else {
                 columns++;
@@ -1579,7 +1601,7 @@ static int GaiaFitPage(const Tok *start, const Tok *end, Toks *out,
         }
     }
     if (rows > height)
-        return reflow_allowed && GaiaWrapPage(start, end, out, width, height);
+        return reflow_allowed && GaiaWrapPage(start, end, out, width, height, 1);
     if (!has_glyph)
         return 0;
     while (start < end)
@@ -1592,12 +1614,141 @@ static int GaiaPageText(const Tok *token)
     return token->type == T_GLYPH || (token->type == T_CMD && token->code == CMD_N);
 }
 
+/* An inherited box has no explicit dimensions in this string. Its original
+ * text is a conservative bound: keep the same page boundaries and never
+ * extend a translated page past the authored rows or longest line. */
+static void GaiaInheritedPageBounds(const Tok *start, const Tok *end,
+                                    int *width, int *height)
+{
+    int columns = 0;
+    *width = 0;
+    *height = 1;
+    for (; start < end; start++) {
+        if (start->type == T_GLYPH) {
+            if (++columns > *width)
+                *width = columns;
+        } else {
+            columns = 0;
+            ++*height;
+        }
+    }
+}
+
 static const uint8_t kGaiaTemplateRows[] = {1, 2, 3, 4, 1, 2, 3, 4, 4};
 
+static int GaiaFragmentText(const Tok *token)
+{
+    return token->type == T_GLYPH || (token->type == T_CMD && token->code == 0xc6);
+}
+
+static int GaiaFragmentColumns(const Tok *start, const Tok *end)
+{
+    int columns = 0;
+    for (; start < end; start++)
+        columns += start->type == T_GLYPH ? 1 : (int)start->a[0];
+    return columns;
+}
+
+/* A returning fragment can be an interactive prompt. Keep the exact
+ * number of rows/pages, indentation, stock layout and command sequence.
+ * Never turn its RET into END or relocate any control-flow target. */
+static int GaiaStockReturn(const Toks *stock, Toks *out, const Toks *text)
+{
+    int src = 0, dst = 0, width = 0, height = 0, row = 1;
+    while (src < stock->n && dst < text->n) {
+        while (src < stock->n && !GaiaFragmentText(&stock->t[src])) {
+            const Tok *t = &stock->t[src];
+            if (t->type != T_CMD)
+                return 0;
+            if (t->code == CMD_N || t->code == CMD_FIN || t->code == CMD_RET)
+                break;
+            switch (t->code) {
+            case 0xc2:
+                if (t->a[0] >= 8 && t->a[0] <= 0x10) {
+                    width = 24;
+                    height = kGaiaTemplateRows[t->a[0] - 8];
+                } else if (!GaiaSpeakerTemplate(t->a[0])) {
+                    return 0;
+                }
+                break;
+            case 0xc7:
+                width = (int)t->a[0] * 2 - 2;
+                height = (int)t->a[1];
+                break;
+            case 0xd3:
+                width = 24;
+                height = 4;
+                break;
+            case 0xc1: case 0xc3: case 0xc8: case 0xc9:
+            case 0xce: case 0xd0: case CMD_SFX: case 0xd5:
+                break;
+            default:
+                return 0;
+            }
+            Push(out, t);
+            src++;
+        }
+        const int sstart = src, dstart = dst;
+        while (src < stock->n && GaiaFragmentText(&stock->t[src]))
+            src++;
+        while (dst < text->n && GaiaFragmentText(&text->t[dst]))
+            dst++;
+        if ((src == sstart) != (dst == dstart) || (height && row > height))
+            return 0;
+        const int original_width = GaiaFragmentColumns(stock->t + sstart, stock->t + src);
+        const int translated_width = GaiaFragmentColumns(text->t + dstart, text->t + dst);
+        if (translated_width > (width ? width : original_width))
+            return 0;
+        int si = sstart, di = dstart;
+        while (si < src && stock->t[si].code == 0xac)
+            si++;
+        while (di < dst && text->t[di].code == 0xac)
+            di++;
+        if (si - sstart != di - dstart)
+            return 0;
+        for (;;) {
+            while (si < src && stock->t[si].type == T_GLYPH)
+                si++;
+            while (di < dst && text->t[di].type == T_GLYPH)
+                di++;
+            if (si == src || di == dst) {
+                if (si != src || di != dst)
+                    return 0;
+                break;
+            }
+            if (stock->t[si].a[0] != text->t[di].a[0] ||
+                stock->t[si].a[1] != text->t[di].a[1])
+                return 0;
+            si++;
+            di++;
+        }
+        for (int i = dstart; i < dst; i++)
+            Push(out, &text->t[i]);
+        if (src == stock->n || dst == text->n)
+            return 0;
+        while (src < stock->n && stock->t[src].type == T_CMD &&
+               (stock->t[src].code == 0xc3 || stock->t[src].code == 0xc8 ||
+                stock->t[src].code == 0xc9 || stock->t[src].code == 0xd0))
+            Push(out, &stock->t[src++]);
+        if (src == stock->n || stock->t[src].type != T_CMD ||
+            text->t[dst].type != T_CMD || stock->t[src].code != text->t[dst].code)
+            return 0;
+        const uint8_t delimiter = stock->t[src].code;
+        if (delimiter != CMD_N && delimiter != CMD_FIN && delimiter != CMD_RET)
+            return 0;
+        row = delimiter == CMD_N ? row + 1 : 1;
+        Push(out, &stock->t[src++]);
+        dst++;
+    }
+    return src == stock->n && dst == text->n &&
+           stock->t[src - 1].code == CMD_RET;
+}
+
 /* Keep the original window and control bytes on their exact page boundary.
- * Branching strings, unknown inherited windows, and controls embedded in a
- * sentence must keep their stock text. */
-static int GaiaStockPageControls(const Toks *original, Toks *out, const Toks *text)
+ * Branching strings and controls embedded in a sentence must keep their
+ * stock text. */
+static int GaiaStockPageControls(const Toks *original, Toks *out, const Toks *text,
+                                 int supplement)
 {
     if (!original->n || original->t[original->n - 1].type != T_CMD ||
         original->t[original->n - 1].code != CMD_END)
@@ -1676,14 +1827,25 @@ static int GaiaStockPageControls(const Toks *original, Toks *out, const Toks *te
             }
             Push(out, t);
         }
-        if (src == stop || prefix_pause || position || width <= 0 || height <= 0 ||
-            ((new_speaker || speaker_tag >= 0) && speaker_tag != speaker))
+        const int speaker_conflict = speaker_tag >= 0 && speaker >= 0 &&
+                                     speaker_tag != speaker;
+        const int unmatched_speaker = (new_speaker || !supplement) &&
+            (new_speaker || speaker_tag >= 0) && speaker_tag != speaker;
+        if (src == stop || prefix_pause || position || speaker_conflict || unmatched_speaker)
             return 0;
-        if (!GaiaFitPage(text->t + dst, text->t + text_end, out, width, height, 0))
-            return 0;
-
+        const int original_text_start = src;
         while (src < stop && GaiaPageText(&original->t[src]))
             src++;
+        int page_width = width, page_height = height;
+        if (!width && !height && supplement)
+            GaiaInheritedPageBounds(original->t + original_text_start,
+                                    original->t + src, &page_width, &page_height);
+        if (page_width <= 0 || page_height <= 0)
+            return 0;
+        if (!GaiaFitPage(text->t + dst, text->t + text_end, out, page_width, page_height, 0) &&
+            (!supplement || text->t[dst].code == 0xac ||
+             !GaiaWrapPage(text->t + dst, text->t + text_end, out, page_width, page_height, 0)))
+            return 0;
         for (; src < stop; src++) {
             const Tok *t = &original->t[src];
             if (t->type != T_CMD)
@@ -1705,7 +1867,8 @@ static int GaiaStockPageControls(const Toks *original, Toks *out, const Toks *te
     return src == original->n && dst == text->n;
 }
 
-static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const Toks *text)
+static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const Toks *text,
+                           int supplement)
 {
     Toks original = {0};
     int ok = Decode(stock, offset, &original, 0, 0);
@@ -1713,9 +1876,14 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
         free(original.t);
         return 0;
     }
+    if (text->n && text->t[text->n - 1].code == CMD_RET) {
+        ok = supplement && GaiaStockReturn(&original, out, text);
+        free(original.t);
+        return ok;
+    }
     for (int i = 0; i < text->n; i++)
         if (text->t[i].type == T_MARK && text->t[i].code) {
-            ok = GaiaStockPageControls(&original, out, text);
+            ok = GaiaStockPageControls(&original, out, text, supplement);
             free(original.t);
             return ok;
         }
@@ -1794,7 +1962,7 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
     }
     if (!ok) {
         out->n = 0;
-        ok = GaiaStockPageControls(&original, out, text);
+        ok = GaiaStockPageControls(&original, out, text, supplement);
     }
     free(original.t);
     return ok;
@@ -1827,73 +1995,84 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
     unsigned fill = 0;
     char line[4096];
     int malformed = 0;
-    uint32_t last = 0;
-    while (fgets(line, sizeof(line), file)) {
-        size_t size = strlen(line);
-        if (!size || line[size - 1] != '\n') {
-            malformed = 1;
-            break;
-        }
-        line[--size] = 0;
-        if (size && line[size - 1] == '\r')
-            line[size - 1] = 0;
-        char *text = strchr(line, '\t');
-        if (!text) {
-            malformed = 1;
-            break;
-        }
-        *text++ = 0;
-        int li = FindLabel(&structure, line);
-        if (li < 0 || strncmp(line, "widestring_", 11) ||
-            structure.l[li].off <= last) {
-            malformed = 1;
-            break;
-        }
-        const Label *label = &structure.l[li];
-        last = label->off;
-        pack->strings_total++;
-        Toks tokens = {0};
-        if (!GaiaDialogue(text, &tokens)) {
-            free(tokens.t);
-            malformed = 1;
-            break;
-        }
-        uint32_t span = StringSpan(&stock, label->off);
-        int safe = !label->unk16 && !label->has_marker && span >= 5;
-        for (int i = 0; safe && i < structure.nl; i++)
-            if (i != li && structure.l[i].off >= label->off &&
-                structure.l[i].off - label->off < 5)
-                safe = 0;
-        Item item = {0};
-        if (safe && GaiaStockWindow(&stock, label->off, &item.toks, &tokens)) {
-            unsigned len = (unsigned)Encode(NULL, &item, NULL);
-            if (!pack->nbanks || fill + len > kIogVirtualBankSize) {
-                if (pack->nbanks == kIogVirtualBanks || len > kIogVirtualBankSize) {
-                    free(item.toks.t);
-                    free(tokens.t);
-                    malformed = 1;
-                    break;
-                }
-                uint8_t *bank_data = calloc(1, kIogVirtualBankSize);
-                if (!bank_data) {
-                    free(item.toks.t);
-                    free(tokens.t);
-                    malformed = 1;
-                    break;
-                }
-                pack->banks[pack->nbanks++] = bank_data;
-                fill = 0;
+    /* Append supplemental entries only after the original overlay layout.
+     * Save states can hold an active dialogue pointer into those banks. */
+    for (int supplement = 0; supplement < 2 && !malformed; supplement++) {
+        uint32_t last = 0;
+        while (fgets(line, sizeof(line), file)) {
+            size_t size = strlen(line);
+            if (!size || line[size - 1] != '\n') {
+                malformed = 1;
+                break;
             }
-            unsigned bank = (unsigned)pack->nbanks - 1;
-            Encode(NULL, &item, pack->banks[bank] + fill);
-            AddRedirect(pack, label->off, CMD_PRT, ((kVBankFirst + bank) << 16) | (kVBase + fill), CMD_RET);
-            fill += len;
-            pack->strings_translated++;
+            line[--size] = 0;
+            if (size && line[size - 1] == '\r')
+                line[size - 1] = 0;
+            char *text = strchr(line, '\t');
+            if (!text) {
+                malformed = 1;
+                break;
+            }
+            *text++ = 0;
+            int li = FindLabel(&structure, line);
+            if (li < 0 || strncmp(line, "widestring_", 11) ||
+                structure.l[li].off <= last) {
+                malformed = 1;
+                break;
+            }
+            const Label *label = &structure.l[li];
+            last = label->off;
+            pack->strings_total += !supplement;
+            Toks tokens = {0};
+            if (!GaiaDialogue(text, &tokens)) {
+                free(tokens.t);
+                malformed = 1;
+                break;
+            }
+            uint32_t span = StringSpan(&stock, label->off);
+            int safe = !label->unk16 && !label->has_marker && span >= 5;
+            for (int i = 0; safe && i < structure.nl; i++)
+                if (i != li && structure.l[i].off >= label->off &&
+                    structure.l[i].off - label->off < 5)
+                    safe = 0;
+            Item item = {0};
+            int accepted = safe && GaiaStockWindow(&stock, label->off, &item.toks, &tokens, 0);
+            if (safe && supplement) {
+                item.toks.n = 0;
+                accepted = !accepted && GaiaStockWindow(&stock, label->off, &item.toks, &tokens, 1);
+            }
+            if (accepted) {
+                unsigned len = (unsigned)Encode(NULL, &item, NULL);
+                if (!pack->nbanks || fill + len > kIogVirtualBankSize) {
+                    if (pack->nbanks == kIogVirtualBanks || len > kIogVirtualBankSize) {
+                        free(item.toks.t);
+                        free(tokens.t);
+                        malformed = 1;
+                        break;
+                    }
+                    uint8_t *bank_data = calloc(1, kIogVirtualBankSize);
+                    if (!bank_data) {
+                        free(item.toks.t);
+                        free(tokens.t);
+                        malformed = 1;
+                        break;
+                    }
+                    pack->banks[pack->nbanks++] = bank_data;
+                    fill = 0;
+                }
+                unsigned bank = (unsigned)pack->nbanks - 1;
+                Encode(NULL, &item, pack->banks[bank] + fill);
+                AddRedirect(pack, label->off, CMD_PRT, ((kVBankFirst + bank) << 16) | (kVBase + fill), CMD_RET);
+                fill += len;
+                pack->strings_translated++;
+            }
+            free(item.toks.t);
+            free(tokens.t);
         }
-        free(item.toks.t);
-        free(tokens.t);
+        malformed |= ferror(file);
+        if (!supplement && !malformed && fseek(file, 0, SEEK_SET))
+            malformed = 1;
     }
-    malformed |= ferror(file);
     fclose(file);
     free(structure.l);
     free(structure.t);

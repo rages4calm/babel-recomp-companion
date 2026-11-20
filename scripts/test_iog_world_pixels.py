@@ -134,6 +134,26 @@ int main(int argc,char**argv){
   source.cgram[line&255]=(uint16_t)(line*139)&0x7fff;source.cgadsub=(uint8_t)line;source.cgwsel=(line>>2)&255;
   source.window1left=line&255;source.window1right=(line+48)&255;pair(line);
  }
+ /* At a clipped block, both 4bpp and 2bpp must still sample the
+  * original upper-left pixel. On line 1, the two vertical phases
+  * sample different tile rows: repeat the test with identical rows. */
+ fixture(31);
+ for(unsigned tile=0;tile<32768;tile+=8)
+  for(unsigned row=1;row<8;row++)source.vram[tile+row]=source.vram[tile];
+ for(unsigned layer=0;layer<3;layer++)
+  for(unsigned entry=0;entry<1024;entry++)
+   source.vram[PPU_bgTilemapAdr((&source),layer)+entry]=(uint16_t)((entry*31u+layer*7u)&0xffffu);
+ source.inidisp=15;source.mosaic=0x17;source.screenEnabled[1]=0;
+ source.cgwsel=0;source.cgadsub=0;source.wbgobjlog=0;
+ source.windowsel=0x222;source.window1left=0;
+ for(unsigned layer=0;layer<3;layer++){
+  source.screenEnabled[0]=source.screenWindowed[0]=(uint8_t)(1u<<layer);
+  source.vScroll[layer]=0;source.hScroll[layer]=3;
+  for(unsigned right=0;right<16;right+=2){
+   source.window1right=(uint8_t)right;
+   pair(1);
+  }
+ }
  for(int i=1;i<argc;i++)snapshot(argv[i]);
  source.renderFlags=kPpuRenderFlags_NewRenderer|kPpuRenderFlags_NoSpriteLimits;candidate=source;
  IogWorldPixelsDrawLine(NULL,1);IogWorldPixelsDrawLine(&candidate,-1);IogWorldPixelsDrawLine(&candidate,241);IogWorldPixelsDrawLine(&live,1);

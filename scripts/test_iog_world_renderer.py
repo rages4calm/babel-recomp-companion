@@ -1134,6 +1134,10 @@ static void ship_dream_mosaic(void){
  g_ppu->cgadsub=0x21;CHECK(!StockMosaicLayout(g_ppu,ram));
  g_ppu->cgadsub=0x22;
  g_snesrecomp_last_hdmaen=0x1f;CHECK(!StockMosaicLayout(g_ppu,ram));
+ word(0x644,0x2E);
+ g_ppu->screenEnabled[0]=21;g_ppu->cgadsub=0xa3;g_snesrecomp_last_hdmaen=6;
+ CHECK(StockMosaicLayout(g_ppu,ram));
+ g_ppu->screenEnabled[0]=23;CHECK(!StockMosaicLayout(g_ppu,ram));
  g_snesrecomp_last_hdmaen=0;
 }
 static void mode7_angkor_neighbor_mosaic(void){
@@ -1157,7 +1161,7 @@ static void mode7_angkor_neighbor_mosaic(void){
  g_ppu->mosaic=0x53;IogWorldCaptureLine(1);CHECK(!s.valid);
  word(0x644,0xBE);CHECK(!AngkorVisionMosaic(g_ppu,ram));
 }
-static void dao_and_solid_arm_mosaic(void){
+static void late_story_mosaics(void){
  fixture();word(0x644,0xC3);word(0x6EE,0x0485);
  word(0x692,768);word(0x694,512);word(0x696,512);word(0x698,512);
  g_ppu->bgmode=9;g_ppu->mosaic=0x83;g_ppu->mosaicStartLine=1;
@@ -1180,6 +1184,22 @@ static void dao_and_solid_arm_mosaic(void){
  g_ppu->mosaic=0x91;IogWorldCaptureLine(2);CHECK(!s.valid);
  g_ppu->mosaic=0x93;word(0x696,512);
  IogWorldBeginRaster();CHECK(!s.valid);
+
+ IogWorldReset();
+ word(0x644,0xE9);word(0x692,1024);word(0x696,1024);
+ publication();IogWorldBeginRaster();CHECK(s.valid&&!s.mode7);
+ IogWorldCaptureLine(0);IogWorldCaptureLine(1);CHECK(s.valid);
+ g_ppu->cgadsub=0x20;IogWorldCaptureLine(2);CHECK(!s.valid);
+ g_ppu->cgadsub=0x21;word(0x698,512);
+ IogWorldBeginRaster();CHECK(!s.valid);
+
+ IogWorldReset();
+ word(0x644,0xE3);word(0x6EE,1);word(0x694,256);word(0x698,1024);
+ g_ppu->screenEnabled[0]=0x17;g_ppu->screenEnabled[1]=0;
+ g_ppu->cgwsel=0x80;g_ppu->cgadsub=0xA3;g_snesrecomp_last_hdmaen=6;
+ publication();IogWorldBeginRaster();CHECK(s.valid&&!s.mode7);
+ IogWorldCaptureLine(0);IogWorldCaptureLine(1);CHECK(s.valid);
+ word(0x694,512);IogWorldCaptureLine(2);CHECK(!s.valid);
  g_snesrecomp_last_hdmaen=0;
 }
 static void story_sky_after_unpaired_upload(void){
@@ -1224,7 +1244,7 @@ static void story_sky_after_unpaired_upload(void){
 }
 static void mode7_lifecycle_and_packet(const char*base){
  ship_dream_mosaic();
- dao_and_solid_arm_mosaic();
+ late_story_mosaics();
  story_sky_after_unpaired_upload();
  mode7_angkor_neighbor_mosaic();
  mode7_menu_dismissal();
