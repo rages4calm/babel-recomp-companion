@@ -674,6 +674,12 @@ static bool RenderWorld(void)
         (authored_bounds.left || authored_bounds.top ||
          authored_bounds.right!=(int)Word(first->ram,0x692) ||
          authored_bounds.bottom!=(int)Word(first->ram,0x696));
+    /* The elevator cable, cage and rockwork share a registered picture even
+     * while BG2 follows the elevator camera at half rate. Keep that captured
+     * raster phase at the original viewport's position when extending BG2. */
+    bool elevator_backdrop=scene==0x43 && Word(first->ram,0x692)==1536 &&
+        Word(first->ram,0x696)==1024 && Word(first->ram,0x694)==1024 &&
+        Word(first->ram,0x698)==768;
     EffectCamera effect_camera;
     bool tracked_effect=ReadEffectCamera(s.active_ram,&effect_camera);
     IogRasterParallax horizon_model={0};
@@ -797,7 +803,7 @@ static bool RenderWorld(void)
                 int wx=camx-left+start,wy=camy+native_y;
                 bool effect=logical==1 && (!bounded || scene==0x85) && !classroom &&
                     (tracked_effect || horizon || EffectPlaneScene(scene));
-                if(effect) {
+                if(effect && !elevator_backdrop) {
                     /* Reframe at this plane's rate. Subtracting the whole
                      * foreground offset makes a quarter-speed/fixed backdrop
                      * slide as the player moves inside a clamped host view.
