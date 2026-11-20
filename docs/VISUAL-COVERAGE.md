@@ -368,6 +368,40 @@ These are bounded, checkpoint-linked replays with a virtual controller and
 a 598×336 square-pixel 1.5× presentation. The stock world map fallback passed
 on the same production build.
 
+## Prison, Watermia and Babel continuation
+
+Batch 022 extends three controller routes using original game interactions.
+The replays retain the 757-entry dialogue pack and use the square-pixel
+1.5× full picture, including the original framing during authored fades.
+
+- **Edward's Prison.** From a staged prison arrival, Will examined the bars,
+  moss and chain ball, then waited for the bread and the flute dialogue.
+  The controller pulled the gem into reach before collecting it. The pig
+  sequence awarded the Prison Key, and Will equipped it through the original
+  inventory, opened the bars and walked through. Linked exit replays then
+  reached both the Aqueduct entrance and the next room, where a controller
+  attack reduced the room's enemy count. The starting fixture carried boosted
+  player stats. A separate setup supplies the story prerequisite for the
+  later Aqueduct portal. From there, controller input enters Dark Space,
+  advances the statue dialogue, earns Freedan and exits into the Aqueduct
+  in that form.
+- **Watermia.** The route from Luke's house used ordinary doors, boards and
+  the ladder to Lance's father. Talking to Lance, his father and then Lance
+  set the party prerequisite. Following the real exit and raft back to
+  Luke's house led to the birthday and earned Lance's Letter. A separate
+  departure replay equipped and read the letter, left Watermia through the
+  southern boardwalk and walked to the Great Wall entrance on the world
+  map. The first Great Wall stair leads into the lower course with its own
+  camera window and parallax.
+- **Babel.** The linked lower-corridor route triggered the laser and picked up
+  the Crystal Ring. After the stock fanfare finished, the controller equipped
+  it and crossed the lasers, took the stairs and advanced the full Kara
+  conversation. The adjacent room's door was tested in both directions.
+  The route reaches the Dark Castoth rematch, with the live starfield visible.
+  A replay from that earned checkpoint defeated both hands and the head
+  with inherited player stats. The original victory script returned the
+  player to Babel, where the controller verified movement.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

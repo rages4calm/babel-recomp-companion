@@ -63,7 +63,9 @@ through Angel Village, Watermia, Diamond Mine and the Pyramid-to-Babel story.
 The Angel Village entrance clips the green strip below the visible floor.
 Private receipts are in `.local/batch-001/visual-fullgame-021`.
 Batch 022 adds [discovered chest markers](docs/MAP-SYSTEM-DIRECTION.md#implemented-first-runtime)
-to the full local map. Private receipts are in
+to the full local map and extends
+[prison, Watermia and Babel routes](docs/VISUAL-COVERAGE.md#prison-watermia-and-babel-continuation).
+Private receipts are in
 `.local/batch-001/visual-fullgame-022`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
