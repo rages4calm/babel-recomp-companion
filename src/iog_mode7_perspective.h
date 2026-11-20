@@ -69,15 +69,21 @@ static inline IogMode7PerspectiveStatus IogMode7PerspectiveSample(
     return kIogMode7PerspectiveUnknown;
 }
 
-static inline bool IogMode7PerspectiveMatches(const IogMode7PerspectiveParameters *p,
-    const int16_t captured[224][4])
+static inline bool IogMode7PerspectiveMatchesPrefix(const IogMode7PerspectiveParameters *p,
+    const int16_t captured[224][4],int row_count)
 {
-    if(!p || !captured)return false;
-    for(int row=0;row<224;row++) {
+    if(!p || !captured || row_count<1 || row_count>224)return false;
+    for(int row=0;row<row_count;row++) {
         int16_t matrix[4];
         if(IogMode7PerspectiveSample(p,row,matrix)!=kIogMode7PerspectiveMatrix)return false;
         for(unsigned i=0;i<4;i++)if(matrix[i]!=captured[row][i])return false;
     }
     return true;
+}
+
+static inline bool IogMode7PerspectiveMatches(const IogMode7PerspectiveParameters *p,
+    const int16_t captured[224][4])
+{
+    return IogMode7PerspectiveMatchesPrefix(p,captured,224);
 }
 #endif

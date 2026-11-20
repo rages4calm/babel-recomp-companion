@@ -22,6 +22,10 @@ int main(int argc,char**argv){
   }
   if(!IogMode7PerspectiveMatches(&p,captured))return 4;
   captured[113][2]^=1;if(IogMode7PerspectiveMatches(&p,captured))return 5;
+  if(!IogMode7PerspectiveMatchesPrefix(&p,captured,113))return 6;
+  if(IogMode7PerspectiveMatchesPrefix(&p,captured,114))return 7;
+  if(IogMode7PerspectiveMatchesPrefix(&p,captured,0))return 8;
+  if(IogMode7PerspectiveMatchesPrefix(&p,captured,225))return 9;
   n++;
  }
  fclose(f);return 0;

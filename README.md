@@ -1,14 +1,17 @@
 # Illusion of Gaia Companion
 
-Illusion of Gaia Companion is a noncommercial PC port project led by
-**[Carl Prewitt Jr. / rages4calm](https://github.com/rages4calm)**.
-It brings controller-first play, square-pixel widescreen, optional MSU-1 music
-and new maps and settings to Quintet's original SNES game.
-Bring your own unmodified **Illusion of Gaia (USA)** ROM.
+A controller-first PC edition of Quintet's SNES adventure, with square-pixel
+widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 
-Companion is in development. Windows is the current playtest target.
-The project uses mr0ta / mrOt4's **Babel Recomp** as its original foundation.
-[Project credits](#thanks) · [Progress and handoff](HANDOFF.md)
+[Features](#features) · [Build from source](#build-from-source) ·
+[Development status](#development-status) · [Credits](#thanks)
+
+**Windows playtest in development.** Bring your own unmodified
+**Illusion of Gaia (USA)** ROM. Maintained by
+[Carl Prewitt Jr. / rages4calm](https://github.com/rages4calm), based on
+[Babel Recomp](https://github.com/mrOt4/babel-recomp) by mr0ta / mrOt4.
+
+![Watermia's docks in square-pixel widescreen at 1.5×](https://github.com/user-attachments/assets/81a3df72-cc86-41c4-ba7e-5ea2dc49f566)
 
 ## Features
 
@@ -32,7 +35,15 @@ The project uses mr0ta / mrOt4's **Babel Recomp** as its original foundation.
   Live unlocks and notifications are still in development.
   [Achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md)
 
+| Companion radar in Freejia | Walkable world map at South Cape |
+| --- | --- |
+| ![Freejia street with the Companion area radar in the lower-right corner](https://github.com/user-attachments/assets/9a9be356-f8c2-4117-b952-bc3e8f75e75a) | ![Will standing above South Cape on the expanded Mode 7 world map](https://github.com/user-attachments/assets/bfba1b8c-bd55-42c8-a6d6-d355d04d1560) |
+
 ## Development status
+
+Original v28 fixes the Great Wall approach's mountain scroll and keeps the
+top of the Mode 7 map visible as the stock destination menu opens at 1.5×.
+[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#great-wall-approach-and-mode-7-destination-menu)
 
 The Original v27 controller replays verify the linked Solid Arm fight and
 return to Babel, the rooftop, both Dark Gaia forms and the ending through
