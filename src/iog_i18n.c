@@ -43,6 +43,8 @@
 #include "snes/cart.h"
 #include "snes/ppu.h"
 #include "snes/snes.h"
+#include "sha256.h"
+#include "snesrecomp_rom_identity.h"
 
 enum {
     kMaxLanguages = 8,
@@ -59,10 +61,12 @@ static int g_nlangs;
 static int g_scanned;
 
 static IogPack *g_active;        /* applied pack, NULL: original text */
+static IogPack *g_gaia;
+static uint8_t *g_gaia_stock;
 static uint8_t *g_usa;           /* pristine copy of the USA ROM */
 static size_t g_usa_size;
 
-static char g_pending[8];
+static char g_pending[9];
 static int g_has_pending;
 
 /* ---- paths -------------------------------------------------------------- */
@@ -259,8 +263,66 @@ static void Apply(IogPack *p)
             p->menu_total, p->sprite_translated, p->nbanks, p->npatches, p->has_font ? ", own font" : "");
 }
 
+static int GaiaDialoguePath(char *path, size_t capacity)
+{
+    const char *override = getenv("IOG_GAIALABS_DIALOGUE");
+    if (override && !strcmp(override, "0"))
+        return 0;
+    int n = override && *override ? snprintf(path, capacity, "%s", override) :
+        snprintf(path, capacity, "%si18n/gaialabs-dialogue.tsv", ExeDir());
+    if (n < 0 || (size_t)n >= capacity)
+        return 0;
+    FILE *file = fopen(path, "rb");
+    if (!file)
+        return 0;
+    fclose(file);
+    return 1;
+}
+
+void IogI18nBindStock(void)
+{
+    const Cart *cart = g_snes ? g_snes->cart : NULL;
+    char path[1024], hex[65];
+    uint8_t digest[32];
+    if (g_gaia_stock || !cart || !cart->rom || cart->romImageSize != 0x200000 ||
+        !GaiaDialoguePath(path, sizeof(path)))
+        return;
+    sha256_compute(cart->rom, cart->romImageSize, digest);
+    for (unsigned i = 0; i < sizeof(digest); i++)
+        snprintf(hex + 2 * i, 3, "%02x", digest[i]);
+    if (strcmp(hex, SNESRECOMP_ROM_EXPECTED_SHA256))
+        return;
+    /* Bind the original bytes before MSU-1 and other guest mods activate. */
+    g_gaia_stock = malloc(cart->romImageSize);
+    if (g_gaia_stock)
+        memcpy(g_gaia_stock, cart->rom, cart->romImageSize);
+}
+
+static IogPack *GaiaPack(void)
+{
+    const Cart *cart = g_snes ? g_snes->cart : NULL;
+    char path[1024], structure[1024];
+    if (!g_gaia_stock || !cart || cart->romImageSize != 0x200000 ||
+        !GaiaDialoguePath(path, sizeof(path)))
+        return NULL;
+    if (!g_gaia) {
+        snprintf(structure, sizeof(structure), "%si18n/structure.txt", ExeDir());
+        g_gaia = IogTextBuildGaiaPack(g_gaia_stock, cart->romImageSize, structure, path);
+        if (!g_gaia)
+            return NULL;
+    }
+    for (int i = 0; i < g_gaia->npatches; i++) {
+        const IogPatch *patch = &g_gaia->patches[i];
+        if (memcmp(cart->rom + patch->offset, g_gaia_stock + patch->offset, patch->len))
+            return NULL;
+    }
+    return g_gaia;
+}
+
 static IogPack *PackFor(const char *code)
 {
+    if (!strcmp(code, "gaia"))
+        return GaiaPack();
     for (int i = 0; i < g_nlangs; i++) {
         Language *l = &g_langs[i];
         if (strcmp(l->code, code))
@@ -308,7 +370,10 @@ static void SwitchNow(const char *code)
     ScanLanguages();
     IogPack *p = PackFor(code);
     if (!p) {
-        fprintf(stderr, "[i18n] no %s ROM found in %slanguages/ (or IOG_LANG_ROMS)\n", code, ExeDir());
+        if (!strcmp(code, "gaia"))
+            fprintf(stderr, "[i18n] GaiaLabs dialogue pack refused; using original text\n");
+        else
+            fprintf(stderr, "[i18n] no %s ROM found in %slanguages/ (or IOG_LANG_ROMS)\n", code, ExeDir());
         return;
     }
     Apply(p);
@@ -328,6 +393,10 @@ int IogI18nAvailable(const char *code)
 {
     if (!code || !strcmp(code, "original"))
         return 1;
+    if (!strcmp(code, "gaia")) {
+        char path[1024];
+        return GaiaDialoguePath(path, sizeof(path));
+    }
     ScanLanguages();
     for (int i = 0; i < g_nlangs; i++)
         if (!strcmp(g_langs[i].code, code))
@@ -355,6 +424,11 @@ const char *IogI18nCycle(void)
 {
     ScanLanguages();
     const char *cur = g_has_pending ? g_pending : IogI18nLanguage();
+    if (!strcmp(cur, "original") && IogI18nAvailable("gaia")) {
+        IogI18nSetLanguage("gaia");
+        Persist("gaia");
+        return "GaiaLabs Retranslation";
+    }
     int i = -1;                      /* -1: original */
     for (int k = 0; k < g_nlangs; k++)
         if (!strcmp(g_langs[k].code, cur))
@@ -444,6 +518,8 @@ void IogI18nInit(void)
             fclose(f);
         }
     }
+    if (!code[0] && IogI18nAvailable("gaia"))
+        snprintf(code, sizeof(code), "gaia");
     if (code[0])
         IogI18nSetLanguage(code);
 }

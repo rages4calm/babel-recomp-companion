@@ -64,6 +64,9 @@ const char *IogTextRomLanguage(const uint8_t *rom, size_t size);
 IogPack *IogTextBuildPack(const uint8_t *usa, size_t usa_size,
                           const uint8_t *eu, size_t eu_size,
                           const char *structure_path);
+/* Build a stock-font overlay from locally prepared GaiaLabs leaf dialogue. */
+IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
+                              const char *structure_path, const char *dialogue_path);
 void IogTextFreePack(IogPack *pack);
 
 

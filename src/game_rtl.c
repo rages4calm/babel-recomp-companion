@@ -44,6 +44,7 @@
 #include "iog_native_poll.h"
 #include "iog_native_continuations.h"
 #include "iog_world_renderer.h"
+#include "iog_i18n.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -104,6 +105,7 @@ static void GameInitialize(void)
     IogNativePollInitialize();
     IogNativeContinuationsInitialize();
     IogWorldInitialize();
+    IogI18nBindStock();
     g_world_observers_ready = false;
     bool observers_ok = true;
     static const uint32_t banks[] = {0x030000, 0x430000, 0x830000, 0xc30000};
