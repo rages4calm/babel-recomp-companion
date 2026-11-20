@@ -385,14 +385,18 @@ static void RegisterDefaultKeys(void) {
    * wins over the button alone, so the game never sees these presses.
    *   ZL+Start  save-state menu      ZL+Select  rewind
    *   ZL+R      quick save (slot 1)  ZL+L       quick load (slot 1)
-   *   ZL+ZR     fast forward (hold)  ZL+X       performance overlay
+   *   ZL+ZR     fast forward (hold, if enabled for this title)
+   *   ZL+X      performance overlay
    *   ZL+Up/Down volume */
   if (!g_config.no_default_pad_hotkeys) {
     const uint32 zl = 1u << kGamepadBtn_L2;
     static const struct { uint8 button; uint16 cmd; } kPadHotkeys[] = {
       {kGamepadBtn_Start, kKeys_SaveStateMenu}, {kGamepadBtn_Back, kKeys_Rewind},
       {kGamepadBtn_R1, kKeys_Save},             {kGamepadBtn_L1, kKeys_Load},
-      {kGamepadBtn_R2, kKeys_Turbo},            {kGamepadBtn_X, kKeys_DisplayPerf},
+#ifndef SNESRECOMP_NO_DEFAULT_PAD_TURBO
+      {kGamepadBtn_R2, kKeys_Turbo},
+#endif
+      {kGamepadBtn_X, kKeys_DisplayPerf},
       {kGamepadBtn_DpadUp, kKeys_VolumeUp},     {kGamepadBtn_DpadDown, kKeys_VolumeDown},
       {kGamepadBtn_R3, kKeys_SettingsMenu},     {kGamepadBtn_L3, kKeys_Companion},
     };

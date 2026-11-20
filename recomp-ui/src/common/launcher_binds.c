@@ -227,7 +227,9 @@ static const char* kHotkeyDef[LNG_HK_COUNT] = {
  * the engine's built-in ones (snesrecomp mmx_config.c RegisterDefaultKeys:
  * ZL is the function button). */
 static const char* kPadHotkeyDef[LNG_HK_COUNT] = {
+#ifndef SNESRECOMP_NO_DEFAULT_PAD_TURBO
     [LNG_HK_TURBO]           = "L2+R2",
+#endif
     [LNG_HK_VOLUME_UP]       = "L2+DpadUp",
     [LNG_HK_VOLUME_DOWN]     = "L2+DpadDown",
     [LNG_HK_DISPLAY_PERF]    = "L2+X",
