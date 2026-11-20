@@ -708,6 +708,19 @@ replays covered the Mu approach, Dao to the Jeweler's Mansion, and the
 walkable and stock world maps. The Mu replay gained the first loaded
 frame and matched the recorded gameplay and later picture.
 
+### Nine more restore layouts and both classroom doors
+
+Original v36 keeps the first loaded frame wide in the Aqueduct sluice,
+Diamond Mine lift, Sky Garden courtyard, Angel Village, Watermia,
+Great Wall, both tested Babel halls, and the Solid Arm arena.
+The verified layout and camera checks are the same as in v35.
+The Jeweler's Mansion retains fallback on its first loaded frame.
+
+The 11,040-frame cold controller route visits South Cape and reenters
+the classroom through both the roof and the east hallway, with no
+save-state load or game-state edits. The sampled full pictures and
+guest-state fields agree with the prior build.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

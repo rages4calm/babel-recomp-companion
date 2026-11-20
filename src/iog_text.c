@@ -1436,7 +1436,7 @@ static int GaiaSpeakerTemplate(unsigned id)
     return id < 8 || (id >= 0x12 && id <= 0x15);
 }
 
-enum { kGaiaBase, kGaiaSupplement, kGaiaExtended, kGaiaStockAnchors };
+enum { kGaiaBase, kGaiaSupplement, kGaiaExtended, kGaiaStockAnchors, kGaiaStockLayout };
 
 static int GaiaDialogue(const char *text, Toks *out)
 {
@@ -1449,7 +1449,17 @@ static int GaiaDialogue(const char *text, Toks *out)
     int columns = 0, rows = 1, glyphs = 0, page_start = 1;
     while (*text) {
         Tok token = {.type = T_CMD, .ref = -1};
-        if (extended && !strncmp(text, "[PRT:", 5)) {
+        if (extended && glyphs && !strcmp(text, "[JMP:06BF7C]")) {
+            token.code = CMD_JMP;
+            token.a[0] = 0x06bf7c;
+            Push(out, &token);
+            return 1;
+        } else if (extended && (!strncmp(text, "[CLR]", 5) || !strncmp(text, "[CLD]", 5))) {
+            token.code = text[3] == 'R' ? 0xce : 0xc8;
+            columns = 0;
+            rows = 1;
+            text += 5;
+        } else if (extended && !strncmp(text, "[PRT:", 5)) {
             unsigned offset;
             int length = 0;
             if (sscanf(text + 5, "%6X]%n", &offset, &length) != 1 ||
@@ -1544,8 +1554,9 @@ static int GaiaDialogue(const char *text, Toks *out)
         /* A speaker tag may be followed by a pause before the first glyph. */
         page_start = (token.type == T_CMD && token.code == CMD_FIN) ||
                      (token.type == T_MARK && !token.code) ||
-                     (extended && page_start && token.type == T_CMD &&
-                      (token.code == 0xc9 || token.code == 0xc3));
+                     (extended && token.type == T_CMD &&
+                      (token.code == 0xce || token.code == 0xc8 ||
+                       (page_start && (token.code == 0xc9 || token.code == 0xc3))));
     }
     return 0;
 }
@@ -1779,7 +1790,8 @@ static int GaiaStockReturn(const Toks *stock, Toks *out, const Toks *text)
 /* Extended rows keep the original interpreter command stream and its row
  * boundaries. New timed or dynamic controls must match a stock command with
  * the same operands, between the same runs of printable text. */
-static int GaiaStockExactRows(const Toks *stock, Toks *out, const Toks *text)
+static int GaiaStockExactRows(const Toks *stock, Toks *out, const Toks *text,
+                              int measured_layout)
 {
     int src = 0, dst = 0, width = 0, height = 0, row = 1, column = 0;
     unsigned left = 0, top = 0;
@@ -1827,7 +1839,7 @@ static int GaiaStockExactRows(const Toks *stock, Toks *out, const Toks *text)
                     !left || !top || left + 2 * original->a[0] > 33 ||
                     top + 2 * original->a[1] > 31)
                     return 0;
-                width = (int)original->a[0] * 2 - 2;
+                width = (int)original->a[0] * 2 - (measured_layout ? 0 : 2);
                 height = (int)original->a[1];
                 row = 1;
                 break;
@@ -1842,7 +1854,7 @@ static int GaiaStockExactRows(const Toks *stock, Toks *out, const Toks *text)
                         dst++;
                     }
                 } else if (id >= 8 && id <= 0x10) {
-                    width = 24;
+                    width = measured_layout ? 26 : 24;
                     height = kGaiaTemplateRows[id - 8];
                     row = 1;
                 } else {
@@ -1853,14 +1865,26 @@ static int GaiaStockExactRows(const Toks *stock, Toks *out, const Toks *text)
             case 0xd3:
                 if (column)
                     return 0;
-                width = 24;
+                width = measured_layout ? 26 : 24;
                 height = 4;
                 row = 1;
                 break;
             case 0xc3:
                 dst += matches;
                 break;
-            case 0xc8: case 0xce: case CMD_SFX: case 0xd5:
+            case 0xc8: case 0xce:
+                if (measured_layout && matches) {
+                    column = 0;
+                    row = 1;
+                    if (code == 0xc8)
+                        width = height = 0;
+                    dst++;
+                    break;
+                }
+                if (column)
+                    return 0;
+                break;
+            case CMD_SFX: case 0xd5:
                 if (column)
                     return 0;
                 break;
@@ -1898,7 +1922,7 @@ static int GaiaStockExactRows(const Toks *stock, Toks *out, const Toks *text)
  * authored page breaks still cap an inherited box, where the caller's
  * dimensions are unknown. An explicit box can insert manual page waits. */
 static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text,
-                          int allow_stock_calls)
+                          int allow_stock_calls, int measured_layout)
 {
     const int sn = stock->n, tn = text->n;
     if (!sn || !tn || stock->t[sn - 1].code != text->t[tn - 1].code)
@@ -1922,7 +1946,7 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text,
             position = 1;
             break;
         case 0xc7:
-            width = (int)t->a[0] * 2 - 2;
+            width = (int)t->a[0] * 2 - (measured_layout ? 0 : 2);
             height = (int)t->a[1];
             position = 0;
             break;
@@ -1932,14 +1956,14 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text,
                     return 0;
                 speaker = (int)t->a[0];
             } else if (t->a[0] >= 8 && t->a[0] <= 0x10) {
-                width = 24;
+                width = measured_layout ? 26 : 24;
                 height = kGaiaTemplateRows[t->a[0] - 8];
             } else {
                 return 0;
             }
             break;
         case 0xd3:
-            width = 24;
+            width = measured_layout ? 26 : 24;
             height = 4;
             break;
         case CMD_PRT:
@@ -2063,7 +2087,8 @@ static int GaiaSpeakerPhaseEnd(const Toks *tokens, int start, int source, int *s
     return tokens->n;
 }
 
-static int GaiaStockSpeakerPhases(const Toks *stock, Toks *out, const Toks *text)
+static int GaiaStockSpeakerPhases(const Toks *stock, Toks *out, const Toks *text,
+                                  int measured_layout)
 {
     Toks stock_phase = {0}, text_phase = {0};
     int start = 0, first = 0, phases = 0, ok = 0;
@@ -2089,7 +2114,7 @@ static int GaiaStockSpeakerPhases(const Toks *stock, Toks *out, const Toks *text
             Push(&stock_phase, &boundary);
             Push(&text_phase, &boundary);
         }
-        if (!GaiaStockProse(&stock_phase, out, &text_phase, 0))
+        if (!GaiaStockProse(&stock_phase, out, &text_phase, 0, measured_layout))
             goto done;
         if (internal)
             out->n--;
@@ -2102,6 +2127,130 @@ done:
     free(stock_phase.t);
     free(text_phase.t);
     return ok;
+}
+
+/* D1 keeps the current bank. Include the verified plain stock suffix in
+ * the same payload instead of copying a near pointer into a virtual bank. */
+static int GaiaStockKnownJump(const Rom *rom, uint32_t offset,
+                              Toks *stock, Toks *out, const Toks *text)
+{
+    const uint32_t target = 0x06bf7c;
+    if (offset != 0x06be1f && offset != 0x06be85 && offset != 0x06bf0a)
+        return 0;
+    Tok *stock_end = &stock->t[stock->n - 1];
+    const Tok *text_end = &text->t[text->n - 1];
+    if (stock_end->type != T_CMD || stock_end->code != CMD_JMP ||
+        stock_end->a[0] != (target & 0xffff) ||
+        text_end->type != T_CMD || text_end->code != CMD_JMP ||
+        text_end->a[0] != target)
+        return 0;
+    Toks translated = {0}, tail = {0};
+    for (int i = 0; i < text->n - 1; i++)
+        Push(&translated, &text->t[i]);
+    const Tok boundary = {.type = T_CMD, .code = CMD_RET, .ref = -1};
+    Push(&translated, &boundary);
+    const Tok saved = *stock_end;
+    *stock_end = boundary;
+    int ok = GaiaStockSpeakerPhases(stock, out, &translated, 1);
+    *stock_end = saved;
+    if (ok)
+        ok = Decode(rom, target, &tail, 0, 0) && tail.n &&
+             tail.t[tail.n - 1].code == CMD_END;
+    for (int i = 0; ok && i < tail.n; i++) {
+        const Tok *token = &tail.t[i];
+        ok = token->type == T_GLYPH || (token->type == T_CMD &&
+             (token->code == 0xc2 || token->code == 0xc3 || token->code == CMD_N ||
+              token->code == CMD_FIN || token->code == CMD_END));
+    }
+    if (ok) {
+        out->n--;  /* Remove the synthetic boundary; the stock tail ends it. */
+        for (int i = 0; i < tail.n; i++)
+            Push(out, &tail.t[i]);
+    }
+    free(translated.t);
+    free(tail.t);
+    return ok;
+}
+
+/* Timed cards use the stock wait immediately followed by a clear or close.
+ * Reflow between those boundaries, preserving all wait arguments and the
+ * open box's verified dimensions. Do not add any player-input waits. */
+static int GaiaStockTimedClears(const Toks *stock, Toks *out, const Toks *text)
+{
+    int at = 0, source = 0, cards = 0, left = -1, top = -1;
+    int width = 0, height = 0;
+    while (at < stock->n && source < text->n) {
+        int speaker = -1;
+        while (at < stock->n && !GaiaPageText(&stock->t[at])) {
+            const Tok *token = &stock->t[at];
+            if (token->type != T_CMD)
+                return 0;
+            if (token->code == CMD_RET) {
+                if (!cards || width || at != stock->n - 1 || source != text->n - 1 ||
+                    text->t[source].type != T_CMD || text->t[source].code != CMD_RET)
+                    return 0;
+                Push(out, token);
+                return 1;
+            }
+            if (token->code == 0xc1) {
+                left = (int)token->a[0];
+                top = (int)token->a[1];
+                width = height = 0;
+            } else if (token->code == 0xc7) {
+                width = 2 * (int)token->a[0];
+                height = (int)token->a[1];
+                if (left < 0 || top < 1 || width < 4 || left + width >= 32 ||
+                    height < 1 || top + 2 * height > 30)
+                    return 0;
+            } else if (token->code == 0xc2 && GaiaSpeakerTemplate(token->a[0])) {
+                speaker = (int)token->a[0];
+                if (speaker >= 0x12) {
+                    static const uint8_t audible_speakers[] = {0, 1, 2, 4};
+                    speaker = audible_speakers[speaker - 0x12];
+                }
+            } else if (token->code == 0xd3) {
+                width = 26;
+                height = 4;
+            } else if (token->code != CMD_SFX && token->code != 0xd5 &&
+                       token->code != 0xc3 && !(token->code == 0xce && !cards)) {
+                return 0;
+            }
+            Push(out, token);
+            at++;
+        }
+        if (source < text->n && text->t[source].type == T_MARK && !text->t[source].code) {
+            if ((int)text->t[source].a[0] != speaker)
+                return 0;
+            source++;
+        }
+        if (!width || !height)
+            return 0;
+        const int first = source;
+        while (source < text->n && GaiaPageText(&text->t[source]))
+            source++;
+        while (at < stock->n && GaiaPageText(&stock->t[at]))
+            at++;
+        if (source == first || at >= stock->n || source + 1 >= text->n ||
+            stock->t[at].type != T_CMD || stock->t[at].code != 0xc9 ||
+            text->t[source].type != T_CMD || text->t[source].code != 0xc9 ||
+            stock->t[at].a[0] != text->t[source].a[0] ||
+            !GaiaWrapPage(text->t + first, text->t + source, out, width, height, 0))
+            return 0;
+        Push(out, &stock->t[at++]);
+        source++;
+        if (at < stock->n && stock->t[at].type == T_CMD && stock->t[at].code == 0xc3)
+            Push(out, &stock->t[at++]);
+        if (at >= stock->n || stock->t[at].type != T_CMD ||
+            (stock->t[at].code != 0xce && stock->t[at].code != 0xc8) ||
+            text->t[source].type != T_CMD || text->t[source].code != stock->t[at].code)
+            return 0;
+        if (stock->t[at].code == 0xc8)
+            width = height = 0;
+        Push(out, &stock->t[at++]);
+        source++;
+        cards++;
+    }
+    return 0;
 }
 
 /* Keep the original window and control bytes on their exact page boundary.
@@ -2237,19 +2386,40 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
         return 0;
     }
     if (supplement == kGaiaExtended) {
-        ok = GaiaStockExactRows(&original, out, text);
+        ok = GaiaStockExactRows(&original, out, text, 0);
         if (!ok) {
             out->n = 0;
-            ok = GaiaStockProse(&original, out, text, 0);
+            ok = GaiaStockProse(&original, out, text, 0, 0);
         }
         free(original.t);
         return ok;
     }
     if (supplement == kGaiaStockAnchors) {
-        ok = GaiaStockProse(&original, out, text, 1);
+        ok = GaiaStockProse(&original, out, text, 1, 0);
         if (!ok) {
             out->n = 0;
-            ok = GaiaStockSpeakerPhases(&original, out, text);
+            ok = GaiaStockSpeakerPhases(&original, out, text, 0);
+        }
+        free(original.t);
+        return ok;
+    }
+    if (supplement == kGaiaStockLayout) {
+        if (text->t[text->n - 1].code == CMD_JMP) {
+            ok = GaiaStockKnownJump(stock, offset, &original, out, text);
+        } else {
+            ok = GaiaStockExactRows(&original, out, text, 1);
+            if (!ok) {
+                out->n = 0;
+                ok = GaiaStockProse(&original, out, text, 0, 1);
+            }
+            if (!ok) {
+                out->n = 0;
+                ok = GaiaStockSpeakerPhases(&original, out, text, 1);
+            }
+            if (!ok) {
+                out->n = 0;
+                ok = GaiaStockTimedClears(&original, out, text);
+            }
         }
         free(original.t);
         return ok;
@@ -2373,7 +2543,7 @@ static int GaiaStockMarkerTail(const Rom *stock, uint32_t offset, Toks *out, con
     Toks original = {0};
     int ok = Decode(stock, offset, &original, 0, 0) &&
         original.n && original.t[original.n - 1].code == CMD_END &&
-        GaiaStockProse(&original, out, text, 0);
+        GaiaStockProse(&original, out, text, 0, 0);
     if (ok) {
         int waits = 0;
         for (int i = 0; i < original.n; i++)
@@ -2415,7 +2585,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
     int malformed = 0;
     /* Append supplemental entries only after the original overlay layout.
      * Save states can hold an active dialogue pointer into those banks. */
-    for (int supplement = kGaiaBase; supplement <= kGaiaStockAnchors && !malformed; supplement++) {
+    for (int supplement = kGaiaBase; supplement <= kGaiaStockLayout && !malformed; supplement++) {
         uint32_t last = 0;
         while (fgets(line, sizeof(line), file)) {
             size_t size = strlen(line);
@@ -2441,6 +2611,12 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             const Label *label = &structure.l[li];
             last = label->off;
             pack->strings_total += !supplement;
+            const int layout_only = !strncmp(text, "[LAY][EXT]", 10);
+            if (layout_only) {
+                if (supplement != kGaiaStockLayout)
+                    continue;
+                text += 5;
+            }
             const int tail = !strncmp(text, "[TAIL][EXT]", 11);
             if (tail) {
                 if (supplement != kGaiaStockAnchors)
@@ -2478,7 +2654,8 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             if (safe && tail) {
                 accepted = GaiaStockMarkerTail(&stock, patch_at, &item.toks, &tokens);
             } else if (safe) {
-                int first = extended ? kGaiaExtended : kGaiaBase;
+                int first = layout_only ? kGaiaStockLayout :
+                            extended ? kGaiaExtended : kGaiaBase;
                 for (int stage = first; stage <= supplement; stage++) {
                     item.toks.n = 0;
                     if (GaiaStockWindow(&stock, label->off, &item.toks, &tokens, stage)) {
@@ -2516,7 +2693,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             free(tokens.t);
         }
         malformed |= ferror(file);
-        if (supplement < kGaiaStockAnchors && !malformed && fseek(file, 0, SEEK_SET))
+        if (supplement < kGaiaStockLayout && !malformed && fseek(file, 0, SEEK_SET))
             malformed = 1;
     }
     fclose(file);

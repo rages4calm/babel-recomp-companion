@@ -6,9 +6,9 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **833 of 1,138** chapter-dialogue replacements in the
+The import now covers **837 of 1,138** chapter-dialogue replacements in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer produces 1,067 candidates. Batch 031 added 28 replacements,
+The importer produces 1,091 candidates. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
 Castle dialogue and the Dao Snake Panic score response. New formatted
 rows can retain verified stock pause, input-wait, palette and live
@@ -38,8 +38,20 @@ Psycho Dash advice. Both language modes advanced through the same save
 prompt and returned to the Aqueduct with matching scene timing and
 post-exit pictures.
 
-The importer excludes 71 declarations. The runtime leaves 234 candidates
-in stock form, for 305 stock chapter entries in total. The remaining
+Batch 033 adds four replacements in Angel Village, Native Village and
+the final classroom scene. The verified large stock dialogue boxes can
+use their full text width. The timed classroom sequence keeps each
+original pause and window-clear or close operation. New entries are
+assigned after the previous overlays, preserving all 833 earlier
+encoded payloads and virtual addresses. Unsatisfied jump and timing
+checks leave the original text in place.
+The linked 38,000-frame New Babel-to-END replay reached its checkpoints
+at the prior scene times with the expanded pack active. A v35 save
+made during the translated Psycho Dash advice resumed and continued to
+the Aqueduct with matching picture and sampled guest state.
+
+The importer excludes 47 declarations. The runtime leaves 254 candidates
+in stock form, for 301 stock chapter entries in total. The remaining
 constraints include marker prefixes with printable text, unverified
 script targets, window bounds, and timed controls. Full menu and sprite
 lettering and custom-font coverage remain open.

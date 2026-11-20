@@ -113,14 +113,19 @@ and qualifies the cold classroom-to-South-Cape round trip on Original v35.
 The [GaiaLabs dialogue import](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue)
 now installs 833 replacements. Private evidence is in
 `.local/batch-001/visual-fullgame-032`.
+Batch 033 extends [save-resume framing to nine more rooms and tests both
+classroom doors from cold boot](docs/VISUAL-COVERAGE.md#nine-more-restore-layouts-and-both-classroom-doors)
+on Original v36. The [GaiaLabs dialogue import](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue)
+now installs 837 replacements. Private evidence is in
+`.local/batch-001/visual-fullgame-033`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 032's
-`babel-originalv35visual.exe` and its private dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 033's
+`babel-originalv36final.exe` and its private dialogue pack, and
 continues the isolated test profile's save. The test executable has the
-required `i18n/structure.txt` alongside it. `Play Original v34 Rollback.cmd`
+required `i18n/structure.txt` alongside it. `Play Original v35 Rollback.cmd`
 selects the previous build. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.
