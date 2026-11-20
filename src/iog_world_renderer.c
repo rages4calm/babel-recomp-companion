@@ -485,13 +485,14 @@ static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
     return AuthoredWindow(e,out);
 }
 
-static void RoomPictureView(int camera_x,int camera_y,const PictureBounds *bounds)
+static bool RoomPictureView(int camera_x,int camera_y,const PictureBounds *bounds)
 {
     IogWorldView view;
     if(IogWorldViewCompute(camera_x-bounds->left,camera_y-bounds->top,
             (unsigned)(bounds->right-bounds->left),(unsigned)(bounds->bottom-bounds->top),
             (uint16_t)s.width,(uint16_t)s.height,&view)) {
         view.world_x+=bounds->left;view.world_y+=bounds->top;s.view=view;
+        return true;
     } else {
         /* Original forced-walk stairs can change the destination window
          * before their camera finishes panning. Keep the real source field
@@ -505,6 +506,7 @@ static void RoomPictureView(int camera_x,int camera_y,const PictureBounds *bound
         s.view.padding_right=(uint16_t)Clamp(s.view.world_x+s.width-bounds->right,0,s.width);
         s.view.padding_top=(uint16_t)Clamp(bounds->top-s.view.world_y,0,s.height);
         s.view.padding_bottom=(uint16_t)Clamp(s.view.world_y+s.height-bounds->bottom,0,s.height);
+        return false;
     }
 }
 
@@ -715,13 +717,19 @@ static bool RenderWorld(void)
         }
     }
     bool flat_horizon_tail=horizon&&HorizonFlatTail(first,p);
+    bool authored_window_pan=false;
     if(bounded) {
         PictureBounds bounds;
         if(!RoomPictureBounds(first,camera_x,camera_y,&bounds)) {
             s.reason="unsupported_room_window";return false;
         }
         RoomPictureView(camera_x,camera_y,&bounds);
-    } else if(authored) RoomPictureView(camera_x,camera_y,&authored_bounds);
+    } else if(authored) {
+        /* A stair can announce the new floor before the camera leaves the
+         * old one. Preserve the visible field and HUD on that frame without
+         * pulling cells from the destination floor into its margins. */
+        authored_window_pan=!RoomPictureView(camera_x,camera_y,&authored_bounds);
+    }
     int left=s.view.native_x,top=s.view.native_y;
     IogVisualViewport viewport={s.view.world_x,s.view.world_y,
         s.view.width,s.view.height};
@@ -910,8 +918,11 @@ static bool RenderWorld(void)
                  * whole authoritative field during shake. This may include
                  * a hardware-wrapped edge; expanded outside-map space is
                  * still padding, never guessed or repeated terrain. */
-                bool inside=(bounded||authored)?(native_pixel || (worldx>=bounds.left && worldx<bounds.right &&
-                   worldy>=bounds.top && worldy<bounds.bottom)):
+                /* The map fetch samples the following row. A final authored
+                 * row at the edge must not expose the next page's tiles. */
+                int picture_bottom=bounds.bottom-(authored?1:0);
+                bool inside=(bounded||authored)?(native_pixel || (!authored_window_pan && worldx>=bounds.left && worldx<bounds.right &&
+                   worldy>=bounds.top && worldy<picture_bottom)):
                    classroom?OriginalClassroomPixel(e,worldx,worldy):
                    (native_pixel||(worldx>=0&&worldx<(int)Word(e->ram,0x692)&&
                    worldy>=0&&worldy<(int)Word(e->ram,0x696)));
@@ -928,7 +939,7 @@ static bool RenderWorld(void)
         if((color>>24) && x+hudx>=0 && x+hudx<s.width)
             s.output[y*s.width+x+hudx]=color;
     }
-    s.reason=freejia_wave?"ready_freejia_wave":
+    s.reason=authored_window_pan?"ready_authored_window_pan":freejia_wave?"ready_freejia_wave":
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;
 }
 

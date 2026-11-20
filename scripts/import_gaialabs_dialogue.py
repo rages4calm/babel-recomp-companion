@@ -21,6 +21,7 @@ GLYPHS = frozenset(" 0123456789.,\":ABCDEFGHIJKLMNOPQRSTUVWXYZ!/*-()"
                    "abcdefghijklmnopqrstuvwxyz;?'")
 TYPOGRAPHY = str.maketrans({"…": "...", "ˮ": '"'})
 COSMETICS = {"TPL": 0x24, "BOR": 0xD, "DLY": 0xFF, "SFX": 0xFF}
+STOCK_SPEAKER_TEMPLATES = frozenset(range(8)) | frozenset(range(0x12, 0x16))
 
 
 def read_source(repo, path):
@@ -57,7 +58,7 @@ def stock_labels(path):
 def convert(source, names):
     if not source.endswith("[END]"):
         raise ValueError("No explicit terminal END")
-    pages, lines, line = [], [], ""
+    pages, lines, line, speaker = [], [], "", None
     for part in re.split(r"(\[[^\]]*\])", source.translate(TYPOGRAPHY)):
         if not part:
             continue
@@ -72,8 +73,12 @@ def convert(source, names):
         command, raw_arg = match.groups()
         if command in COSMETICS and raw_arg is not None:
             # Keep the stock message's window and typing presentation.
-            if int(raw_arg, 16) > COSMETICS[command]:
+            value = int(raw_arg, 16)
+            if value > COSMETICS[command]:
                 raise ValueError("Invalid cosmetic argument")
+            if (command == "TPL" and value in STOCK_SPEAKER_TEMPLATES
+                    and not (lines or line.strip()) and speaker is None):
+                speaker = value
         elif command == "NAM" and raw_arg is not None:
             # The stock engine lacks the selectable GaiaLabs name dictionary.
             # Use the upstream default English spelling for this profile.
@@ -88,8 +93,8 @@ def convert(source, names):
             lines.append(line)
             if not any(row.strip() for row in lines):
                 raise ValueError("Empty dialogue page")
-            pages.append(lines)
-            lines, line = [], ""
+            pages.append((speaker, lines))
+            lines, line, speaker = [], "", None
         elif command in ("CLD", "CLR", "DEF") and raw_arg is None and not (lines or line.strip()):
             continue
         else:
@@ -98,7 +103,7 @@ def convert(source, names):
         raise ValueError("Unexpected terminal command structure")
 
     rendered = []
-    for page in pages:
+    for speaker, page in pages:
         rows = []
         for text in page:
             layout = textwrap.wrap(text.strip(), 24, break_long_words=False, break_on_hyphens=False)
@@ -109,7 +114,8 @@ def convert(source, names):
             group = rows[start:start + 3]
             if not any(group):
                 raise ValueError("Empty dialogue page after repagination")
-            rendered.append("[N]".join(group))
+            marker = f"[TPL:{speaker:02X}]" if speaker is not None and start == 0 else ""
+            rendered.append(marker + "[N]".join(group))
     return "[FIN]".join(rendered) + "[END]"
 
 

@@ -21,12 +21,16 @@ town maps and warp coordinates are specific to that preview.
 the first dialogue import, walkable world travel, the wider stock Mode 7
 destination menu and the Freejia scrolling fix. Private exact-build receipts
 are in `.local/batch-001/visual-fullgame-009` and `visual-fullgame-010`.
-Continue with unsupported chapter commands and unverified rooms.
+Batch 011 extends the [ship and Freejia renderer coverage](docs/VISUAL-COVERAGE.md#original-ship-and-freejia-routes)
+and raises the Retranslation import to 696 dialogue entries. Its private
+receipts are in `.local/batch-001/visual-fullgame-011`. Continue with
+unsupported chapter commands and unverified rooms.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects `babel-originalv7.exe` and
+`.local/batch-001/visual-fullgame-010`. It selects batch 011's
+`babel-originalv10.exe` and refreshed dialogue pack, and
 continues the isolated test profile's save. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.
