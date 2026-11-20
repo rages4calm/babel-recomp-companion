@@ -1,6 +1,7 @@
 /* Opt-in private observation of one pinned received build. No guest writes,
  * generated dispatch, patches, sprite reconstruction or gameplay hooks. */
 #include "iog_received_observer.h"
+#include "iog_received_world.h"
 #include "common_cpu_infra.h"
 #include "common_rtl.h"
 #include "snes/snes.h"
@@ -115,7 +116,7 @@ static void Exit(CpuState *cpu,uint32_t pc)
 
 void IogReceivedObserverInitialize(void)
 {
-    const char *world=getenv("IOG_RECEIVED_WORLD_RENDERER");live.requested=world&&!strcmp(world,"1");
+    live.requested=IogReceivedWorldEnabled();
     const char *path=getenv("IOG_RECEIVED_OBSERVER_DIR");
     if(path && !*path)path=NULL;
     if(!path&&!live.requested)return;

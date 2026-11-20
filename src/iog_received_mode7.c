@@ -28,7 +28,7 @@ static unsigned Word(const uint8_t *p,unsigned n)
 static bool Layout(const Ppu *p)
 {
     return p && (p->bgmode&7)==7 && !PPU_forcedBlank(p) &&
-        PPU_brightness(p)==15 && !PPU_m7extBg(p) && !p->frameInterlace &&
+        !PPU_m7extBg(p) && !p->frameInterlace &&
         !PPU_objInterlace(p) && !(p->mosaic>>4) &&
         (p->screenEnabled[0]&1) && !(p->screenEnabled[0]&~21u) &&
         !p->screenEnabled[1] &&

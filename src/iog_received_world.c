@@ -1,4 +1,4 @@
-/* Experimental received-content classroom picture. Original Babel credits and
+/* Received-content Mode 1 picture. Original Babel credits and
  * GaiaLabs contributor/license notices remain with the project. No game data is
  * embedded; this host decoder never changes guest CPU, RAM, ROM or hardware
  * registers. Overlay capture bindings are host presentation state only. */
@@ -12,6 +12,7 @@
 #include "sha256.h"
 #include "snes/cart.h"
 #include "snes/ppu.h"
+#include "snes/ppu_brightness.h"
 #include "snes/snes.h"
 #include <math.h>
 #include <stdio.h>
@@ -21,9 +22,10 @@ extern Snes *g_snes;
 extern Ppu *g_ppu;
 enum { Width = 598, Height = 336, Chunk = 224 };
 static struct {
-  bool initialized, enabled, valid, complete, mode7;
+  bool initialized, enabled, valid, complete, mode7, town, town_enabled;
   int width, height, frame;
   const char *reason;
+  unsigned lines;
   FILE *audit;
   uint8_t ram[131072], registers[225][PPU_SAVESTATE_REGS_SIZE];
   uint16_t palettes[225][256];
@@ -44,16 +46,25 @@ static unsigned Word(const uint8_t *r, unsigned a) {
 static int Clamp(int v, int lo, int hi) {
   return v < lo ? lo : v > hi ? hi : v;
 }
+static int ScrollWorld(int camera, unsigned scroll) {
+  int world = (camera & ~1023) | (int)(scroll & 1023);
+  if (world - camera > 512)
+    world -= 1024;
+  if (camera - world > 512)
+    world += 1024;
+  return world;
+}
 bool IogReceivedWorldEnabled(void) {
   if (!s.initialized) {
     s.initialized = true;
     const char *t = getenv("IOG_RECEIVED_WORLD_RENDERER");
 #ifdef IOG_RECEIVED_MAIN_CONTENT
-    (void)t;
-    s.enabled = true;
+    s.enabled = !t || strcmp(t, "0");
 #else
     s.enabled = t && !strcmp(t, "1");
 #endif
+    const char *town = getenv("IOG_RECEIVED_SOUTH_CAPE");
+    s.town_enabled = !town || strcmp(town, "0");
     const char *a = getenv("IOG_RECEIVED_WORLD_AUDIT");
     if (s.enabled && a && *a)
       s.audit = fopen(a, "wb");
@@ -152,6 +163,8 @@ void IogReceivedWorldBeginRaster(void) {
     return;
   s.frame++;
   s.valid = s.complete = false;
+  s.town = false;
+  s.lines = 0;
   s.reason = "unpaired_or_unqualified";
   memset(s.ui, 0, sizeof(s.ui));
   s.mode7 = g_ppu && (g_ppu->bgmode & 7) == 7;
@@ -168,8 +181,14 @@ void IogReceivedWorldBeginRaster(void) {
     s.reason = "current_publication_mismatch";
     return;
   }
-  if (PPU_forcedBlank(g_ppu) || PPU_brightness(g_ppu) != 15 ||
-      Word(s.source.ram, 0x644) != 8 || (g_ppu->bgmode & 7) != 1 ||
+  unsigned scene = Word(s.source.ram, 0x644);
+  s.town = scene == 1;
+  if (s.town && !s.town_enabled) {
+    s.reason = "south_cape_fallback_requested";
+    return;
+  }
+  if (PPU_forcedBlank(g_ppu) || (!s.town && PPU_brightness(g_ppu) != 15) ||
+      (scene != 8 && !s.town) || (g_ppu->bgmode & 7) != 1 ||
       PPU_objInterlace(g_ppu) || g_ppu->frameInterlace || (g_ppu->mosaic >> 4))
     return;
   memcpy(s.ram, g_snes->ram, sizeof(s.ram));
@@ -179,14 +198,16 @@ void IogReceivedWorldBeginRaster(void) {
   /* These are authored bounds, not the entire map allocation. Native384
    * reveals64 each side of the legacy256 camera window; clip that envelope
    * to the actual768x256 map. Spare storage beyond it stays black. */
-  if (Word(s.ram, 0x692) != 768 || Word(s.ram, 0x696) != 256 ||
-      Word(s.ram, 0x694) != 768 || Word(s.ram, 0x698) != 512 ||
+  unsigned map_width = s.town ? 1280 : 768;
+  if (Word(s.ram, 0x644) != scene ||
+      Word(s.ram, 0x692) != map_width || Word(s.ram, 0x696) != (s.town ? 1024 : 256) ||
+      Word(s.ram, 0x694) != map_width || Word(s.ram, 0x698) != (s.town ? 1024 : 512) ||
       Word(s.ram, 0x69e) != 0xa000 || Word(s.ram, 0x6a0) != 0xc000 ||
       Word(s.ram, 0x6ae) != 0x2000 || Word(s.ram, 0x6b0) != 0x2800) {
     s.reason = "map_layout";
     return;
   }
-  if (!Exterior()) {
+  if (!s.town && !Exterior()) {
     s.reason = "exterior_map_identity";
     return;
   }
@@ -200,7 +221,7 @@ void IogReceivedWorldBeginRaster(void) {
   }
   int l = Word(s.ram, 0x6d6), r = Word(s.ram, 0x6da), t = Word(s.ram, 0x6d8),
       b = Word(s.ram, 0x6de);
-  if (l != 0 || r != 512 || t != 0 || b != 256) {
+  if (l != 0 || r != (s.town ? 768 : 512) || t != 0 || b != (s.town ? 1024 : 256)) {
     s.reason = "authored_window";
     return;
   }
@@ -208,6 +229,23 @@ void IogReceivedWorldBeginRaster(void) {
   s.right = Clamp(r + 64, 0, 768);
   s.top = t;
   s.bottom = b;
+  if (s.town) {
+    /* The widened town allocates five authored pages across each plane.
+     * The legacy window right bound is not the end of the widened map. */
+    if (physical || Word(s.ram, 0x69a) != 0x1400 || Word(s.ram, 0x69c) != 0x1400 ||
+        Word(s.ram, 0x6dc) != 0x420 ||
+        g_ppu->windowsel || !PPU_bgTilemapWider(g_ppu, 0) ||
+        !PPU_bgTilemapWider(g_ppu, 1) ||
+        PPU_bgTilemapHigher(g_ppu, 0) || PPU_bgTilemapHigher(g_ppu, 1) ||
+        Word(s.source.ram, 0x68c) != (unsigned)camera ||
+        Word(s.source.ram, 0x690) != (unsigned)cy ||
+        (g_ppu->hScroll[1] & 1023) != (camera & 1023) ||
+        (g_ppu->vScroll[1] & 1023) != (cy & 1023)) {
+      s.reason = "town_camera_layout";
+      return;
+    }
+    s.right = (int)map_width;
+  }
   if (!IogWorldViewCompute(camera, cy, s.right, s.bottom, (uint16_t)s.width,
                            (uint16_t)s.height, &s.view)) {
     s.reason = "world_view";
@@ -235,7 +273,7 @@ void IogReceivedWorldCaptureLine(int line) {
   }
   if (!s.enabled || !s.valid || line < 0 || line > 224)
     return;
-  if ((g_ppu->bgmode & 7) != 1 || g_ppu->vramWriteCount != s.vram_writes ||
+  if ((unsigned)line != s.lines || (g_ppu->bgmode & 7) != 1 || g_ppu->vramWriteCount != s.vram_writes ||
       g_ppu->oamWriteCount != s.oam_writes || g_ppu->frameInterlace ||
       (g_ppu->mosaic >> 4) ||
       memcmp(s.ram + 0x644, g_snes->ram + 0x644, 0xbe) ||
@@ -245,8 +283,18 @@ void IogReceivedWorldCaptureLine(int line) {
     s.reason = "raster_layout_change";
     return;
   }
+  if (s.town && (g_ppu->windowsel ||
+      (g_ppu->hScroll[0] & 1023) != (Word(s.source.ram, 0x68a) & 1023) ||
+      (g_ppu->hScroll[1] & 1023) != (Word(s.source.ram, 0x68c) & 1023) ||
+      (g_ppu->vScroll[0] & 1023) != (Word(s.source.ram, 0x68e) & 1023) ||
+      (g_ppu->vScroll[1] & 1023) != (Word(s.source.ram, 0x690) & 1023))) {
+    s.valid = false;
+    s.reason = "town_raster_scroll";
+    return;
+  }
   memcpy(s.registers[line], g_ppu, PPU_SAVESTATE_REGS_SIZE);
   memcpy(s.palettes[line], g_ppu->cgram, 512);
+  ++s.lines;
 }
 static unsigned MapTile(unsigned logical, int x, int y) {
   unsigned off = logical * 2, w = Word(s.ram, 0x692 + off),
@@ -316,9 +364,11 @@ static bool Render(void) {
         unsigned phys = logical ^ ((s.ram[0x6ee] >> 7) & 1);
         int camx = (int16_t)Word(s.source.ram, 0x68a + logical * 2),
             camy = (int16_t)Word(s.source.ram, 0x68e + logical * 2);
-        int wx = (int)p->hScroll[phys] + s.view.world_x -
+        int scroll_x = ScrollWorld(camx, p->hScroll[phys]);
+        int scroll_y = ScrollWorld(camy, p->vScroll[phys]);
+        int wx = scroll_x + s.view.world_x -
                  (int16_t)Word(s.source.ram, 0x68a) + start,
-            wy = (int)p->vScroll[phys] + ny;
+            wy = scroll_y + ny;
         unsigned sh = p->hScroll[phys], sv = p->vScroll[phys];
         p->hScroll[phys] = (uint16_t)wx & 1023;
         p->vScroll[phys] = (uint16_t)wy & 1023;
@@ -350,7 +400,6 @@ static bool Render(void) {
           dirty[nd++] = a;
           p->vram[a] = (uint16_t)tile;
         }
-        (void)camy;
       }
       for (size_t n = 0; n < count; n++)
         s.objects[n].x -= start;
@@ -364,7 +413,7 @@ static bool Render(void) {
       for (int x = 0; x < width; x++) {
         int wx = s.view.world_x + start + x, wy = s.view.world_y + row;
         if (wx >= s.left && wx < s.right && wy >= s.top && wy < s.bottom &&
-            !s.exterior[(wy / 16) * 48 + wx / 16])
+            (s.town || !s.exterior[(wy / 16) * 48 + wx / 16]))
           s.output[row * s.width + start + x] = s.row[x];
       }
     }
@@ -376,24 +425,25 @@ void IogReceivedWorldEndRaster(void) {
     return;
   if (s.mode7) {
     s.complete=s.valid && IogReceivedMode7End();s.reason=IogReceivedMode7Reason();
-  } else if (s.valid) {
+  } else if (s.valid && s.lines == 225) {
     s.complete = Render();
     if (s.complete)
-      s.reason = "received_classroom_ready";
+      s.reason = s.town ? "received_south_cape_ready" : "received_classroom_ready";
   }
   if (s.audit) {
     fprintf(s.audit,
             "{\"frame\":%d,\"ready\":%s,\"reason\":\"%s\",\"source_x_bias\":64,"
-            "\"authored_right\":%d}\n",
+            "\"authored_right\":%d,\"width\":%d,\"height\":%d}\n",
             s.frame, s.complete ? "true" : "false",
-            s.reason ? s.reason : "disabled", s.right);
+            s.reason ? s.reason : "disabled", s.right, s.width, s.height);
     fflush(s.audit);
   }
 }
-static uint32_t Rgb(unsigned color) {
+static uint32_t Rgb(unsigned color, unsigned brightness) {
   unsigned r = color & 31, g = (color >> 5) & 31, b = (color >> 10) & 31;
-  return 0xff000000u | ((r << 3 | r >> 2) << 16) | ((g << 3 | g >> 2) << 8) |
-         (b << 3 | b >> 2);
+  return 0xff000000u | ((uint32_t)ppu_brightness_level(r, brightness) << 16) |
+         ((uint32_t)ppu_brightness_level(g, brightness) << 8) |
+         ppu_brightness_level(b, brightness);
 }
 static void ExportPicture(const uint8_t *dst,size_t pitch,int w,int h) {
   static bool written;
@@ -428,11 +478,14 @@ int IogReceivedWorldDraw(uint8_t *dst, size_t pitch, const uint8_t *field,
     memcpy(dst + y * pitch, s.output + y * w, w * 4);
   /* UI is independent of the world extent. Its authored384-column surface
    * and screen-space direct prefix retain their readable reference scale. */
-  int uw = 384 * h / 224, ux = (w - uw) / 2;
+  int uh = s.town ? 224 : h;
+  int uy = (h - uh) / 2;
+  int uw = 384 * uh / 224, ux = (w - uw) / 2;
   for (unsigned n = s.visual.screen_count; n > 0; n--) {
     IogVisualScreenPart *q = &s.visual.screen[n - 1];
-    for (int y = 0; y < h; y++) {
-      int py = y * 224 / h - q->y;
+    for (int y = 0; y < uh; y++) {
+      int source_y = y * 224 / uh;
+      int py = source_y - q->y;
       if (py < 0 || py >= q->height)
         continue;
       for (int x = 0; x < uw; x++) {
@@ -440,17 +493,18 @@ int IogReceivedWorldDraw(uint8_t *dst, size_t pitch, const uint8_t *field,
         if (px < 0 || px >= q->width)
           continue;
         unsigned idx = q->indices[py * q->width + px];
-        if (idx && x + ux >= 0 && x + ux < w)
-          ((uint32_t *)(dst + y * pitch))[x + ux] =
-              Rgb(s.palettes[Clamp(y * 224 / h, 0, 223) + 1][idx]);
+        unsigned display = s.registers[source_y + 1][offsetof(Ppu, inidisp)];
+        if (idx && !(display & 0x80) && x + ux >= 0 && x + ux < w)
+          ((uint32_t *)(dst + (y + uy) * pitch))[x + ux] =
+              Rgb(s.palettes[source_y + 1][idx], display & 15);
       }
     }
   }
-  for (int y = 0; y < h; y++)
+  for (int y = 0; y < uh; y++)
     for (int x = 0; x < uw; x++) {
-      uint32_t color = s.ui[(y * 224 / h) * 384 + x * 384 / uw];
+      uint32_t color = s.ui[(y * 224 / uh) * 384 + x * 384 / uw];
       if ((color >> 24) && x + ux >= 0 && x + ux < w)
-        ((uint32_t *)(dst + y * pitch))[x + ux] = color;
+        ((uint32_t *)(dst + (y + uy) * pitch))[x + ux] = color;
     }
   ExportPicture(dst,pitch,w,h);
   return 1;

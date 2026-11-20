@@ -45,6 +45,7 @@ static void drawcheck(void){
 int main(void){
  setup();capture(false,0);CHECK(!m.perspective);CHECK(!memcmp(&source,&live_before,sizeof source));drawcheck();
  CHECK(m.output[56*598+171]!=0);setup();capture(true,0);CHECK(m.perspective);drawcheck();
+ setup();source.inidisp=7;capture(true,0);CHECK(m.perspective);drawcheck();
  setup();capture(true,1);CHECK(!m.perspective);for(int x=0;x<598;x++)CHECK(m.output[x]==0);drawcheck();
  setup();source.windowsel=2;CHECK(!IogReceivedMode7Begin(&source,wram,romdata,sizeof romdata,598,336));
  setup();source.windowsel=0x20000;CHECK(!IogReceivedMode7Begin(&source,wram,romdata,sizeof romdata,598,336));

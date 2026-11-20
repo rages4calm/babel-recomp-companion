@@ -14,9 +14,11 @@ Keep performance checks focused on visible smoothness, not repeated benchmarks.
 Continue from [batch 004](docs/VISUAL-FULLGAME-004.md) and the private receipts in
 `.local/batch-001/visual-fullgame-004`. The Original test launcher selects
 `babel-originalv3.exe`, with the batch 003 launcher available as fallback.
-The separate private GaiaLabs preview selects `babel-mainv3.exe` and starts at
-the staged world map for South Cape testing. The strict received reference is
-`babel-referencev4.exe`.
+The private GaiaLabs preview now selects `babel-mainv4.exe` from
+`.local/batch-001/visual-fullgame-005` and starts at the staged world map.
+[South Cape's renderer changes and proof](docs/GAIALABS-SOUTH-CAPE.md) describe
+the expanded town view, transition checks and fallback. The batch 004 preview
+remains beside the new launcher as a fallback.
 
 - Great Wall rooms 82/83/87/88/8A/8B use calibrated scrolling at widescreen/1.5×.
   The room 82 missing scenery and room 8A band phase are corrected. Neighbor

@@ -234,7 +234,7 @@ static IogVisualStatus BuildLayout(const IogVisualSource *s,
         return out->status;
     if (!received && !s->stock_identity_verified) { out->status = kIogVisualUnsupportedFormat; return out->status; }
     out->scene = Word(s->ram, 0x644);
-    if (received ? out->scene != 8 : !IogVisualObjectsSupportsScene(out->scene)) { out->status = kIogVisualUnsupportedScene; return out->status; }
+    if (received ? (out->scene != 1 && out->scene != 8) : !IogVisualObjectsSupportsScene(out->scene)) { out->status = kIogVisualUnsupportedScene; return out->status; }
     if ((s->ppu->bgmode & 7) != 1 || PPU_objSize(s->ppu) || PPU_objInterlace(s->ppu) ||
         (!received && (Word(s->ram, 0x6ee) & 0x1000))) { out->status = kIogVisualUnsupportedFormat; return out->status; }
     ActorOrder actors[kIogVisualMaxActors] = {{0,0}};
@@ -345,9 +345,10 @@ IogVisualStatus IogVisualReceivedBuild(const IogVisualReceivedSource *s,
     if(!id->rom || id->rom_size!=0x320000) return out->status=kIogVisualIdentityMismatch;
     for(unsigned i=0;i<3;i++) if(!DigestMatches(id->digests[i],ReceivedPins[i]))
         return out->status=kIogVisualIdentityMismatch;
-    /* This binding is qualified only for the observed Will classroom. In
+    /* This binding is qualified for the observed Will town and classroom. In
      * particular the received0600 direct path and other body records refuse. */
-    if(Word(s->ram,0x644)!=8 || Word(s->ram,0xad4)!=0 || (Word(s->ram,0x9ae)&0x8000))
+    unsigned scene = Word(s->ram,0x644);
+    if((scene!=1 && scene!=8) || Word(s->ram,0xad4)!=0 || (Word(s->ram,0x9ae)&0x8000))
         return out->status=kIogVisualSourceUnqualified;
     if(!s->staging || !s->published || s->staging_size!=544 || s->published_size!=544 ||
        !s->compose_epoch || s->compose_epoch!=s->publication_epoch ||
