@@ -41,9 +41,10 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 
 ## Development status
 
-Original v28 fixes the Great Wall approach's mountain scroll and keeps the
-top of the Mode 7 map visible as the stock destination menu opens at 1.5×.
-[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#great-wall-approach-and-mode-7-destination-menu)
+Original v29 fixes bottom-edge sprites in Mu and Sky Garden, mountain scroll
+in the lower Great Wall gallery, and the one-frame snap when the stock
+destination menu closes at 1.5×.
+[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#bottom-edges-lower-great-wall-and-map-dismissal)
 
 The Original v27 controller replays verify the linked Solid Arm fight and
 return to Babel, the rooftop, both Dark Gaia forms and the ending through

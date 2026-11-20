@@ -105,8 +105,8 @@ Sky Garden's top-side backdrop now stays aligned with the stock raster.
 The four underside scenes repeat only their verified drift layer, removing
 the rectangular seam around the original field. Paired captures show that
 the underside fix leaves the original rectangle byte-identical. Scene `54`
-still has an inherited 28-pixel difference against stock on its last native
-scanline in one tested pose.
+had an inherited 28-pixel difference against stock on its last native
+scanline in one tested pose. [Batch 026 fixes that edge](#bottom-edges-lower-great-wall-and-map-dismissal).
 
 Seaside Palace and Mu extend both scroll axes using the measured eight-line
 cycle. The coffin hall's lower floor can use the same extension when its
@@ -496,11 +496,43 @@ history, complete widescreen picture and all seven compared guest state fields.
 - **Other phases.** Cold prologue and storybook skips, Sky Garden's flight,
   ocean crash and descent, and the Dao-to-Babel flight were compared on v27
   and v28. The sampled pictures and recorded transitions matched. The tiny
-  Mu twins bottom-edge difference still reproduces in one active pose.
+  Mu twins bottom-edge difference reproduced in one active pose on v28.
 
 The combined Original v28 build uses the 757-entry dialogue pack. Checks used
 headless SDL virtual gamepads and inspected the 598×336 square-pixel 1.5×
 picture. The production launcher profile also booted with MSU-1 enabled.
+
+## Bottom edges, lower Great Wall and map dismissal
+
+- **Mu twins (`67`) and western Sky Garden underside (`54`).** The original
+  object writer culls actor sprite parts that start on the last displayed
+  row. The renderer now applies that boundary inside the original picture
+  in these two scenes, with the parts still drawn in the expanded area.
+  Pixel differences on the original bottom row dropped from 13 to zero in
+  Mu and 28 to zero in Sky Garden. The tested Sky Garden route returned
+  to `53`, and the east route also passed (`4E` to `4D`). Seaside Palace's
+  `5D`–`5C` door round trip served as a control.
+- **Lower Great Wall gallery (`82`).** The existing captured mountain phase
+  now covers the measured lower-gallery camera bounds. At the west and east
+  Necklace Stone approaches, the original field's differing pixels fell
+  from 139 and 328 to zero. The neighboring exit and an `8B`–`8A` door round
+  trip kept the same scale across the transition.
+- **Stock Mode 7 destination menu (`FE`).** At dismissal, the PPU begins with
+  Mode 1 register state, then the stock HDMA producer selects full-height
+  Mode 7 before drawing. V29 captures that verified transition. The formerly
+  narrowed frame restored 118,935 nonblack pixels around an identical
+  original 256×224 image. The four adjacent frames and the earlier menu
+  opening capture matched v28. Controller input reached South Cape with the
+  renderer enhancement and with the explicit map fallback. Sky Garden's
+  flight, ocean crash and descent and the Dao-to-Babel flight also matched
+  v28 in the sampled pictures and recorded guest state.
+
+All checks used the Original-based build and virtual SDL controller input.
+The sampled 598×336 output was inspected at square-pixel 1.5×. Seven guest
+state fields matched in the tested comparisons. The renderer reference and
+interpreter remained available and were replayed across the western Sky
+Garden transition. The production launcher profile booted with MSU-1 and
+the 757-entry dialogue pack.
 
 ## Bounded entry survey
 

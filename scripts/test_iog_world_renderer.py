@@ -37,6 +37,7 @@ static bool background_probe,static_plane_probe,stream_plane_probe,source_row_pr
 static bool water_wave_probe;
 static unsigned water_wave_lines, water_wave_layer;
 static bool cloud_probe,wall_probe;static unsigned wall_calls;
+static bool bottom_edge_object_probe;
 static bool horizon_probe,horizon_expected_valid,horizon_flat_expected;
 static unsigned horizon_main_calls,horizon_background_calls;
 static int expected_background_x,expected_background_y;
@@ -68,6 +69,13 @@ IogVisualStatus IogVisualObjectsBuild(const IogVisualSource*in,const IogVisualVi
  visual_builds++;memset(out,0,sizeof(*out));out->status=kIogVisualReady;out->viewport=*v;out->scene=(uint16_t)Word(in->ram,0x644);
  out->part_count=1;IogVisualPart*p=&out->parts[0];p->x=4;p->y=4;p->width=p->height=8;p->order=1;
  for(unsigned n=0;n<64;n++){p->indices[n]=193;p->pixels[n]=0x8001;}
+ if(bottom_edge_object_probe){
+  p->x=s.view.native_x-3;p->y=s.view.native_y+223;
+  for(unsigned n=1;n<3;n++){out->parts[n]=*p;out->parts[n].x+=16*n;}
+  out->parts[1].manual=1;
+  out->parts[2].y--;
+  out->part_count=3;
+ }
  return kIogVisualReady;
 }
 bool PpuBindOverlaySurface(Ppu*p,PpuOverlaySource source,uint8_t*pixels,size_t pitch){
@@ -174,6 +182,15 @@ void PpuDrawDetachedLine(Ppu*p,int line){
   return;
  }
  for(unsigned x=0;x<256;x++)row[x]=0xff000000u|((p->hScroll[0]+x)&1023)|(((p->vScroll[0]+1)&1023)<<10);
+ if(bottom_edge_object_probe){
+  for(size_t n=0;n<p->extraObjectCount;n++){
+   const PpuExtraObject*object=&p->extraObjects[n];
+   for(int x=0;x<object->width;x++){
+    int col=object->x+x;
+    if(col>=0&&col<256&&object->pixels[x])row[col]=0xfff00df0u;
+   }
+  }
+ }
 }
 static void fixture(void){
  if(s.audit)fclose(s.audit);memset(&s,0,sizeof(s));memset(ram,0,sizeof(ram));memset(rom,0,sizeof(rom));
@@ -195,6 +212,7 @@ static void fixture(void){
  background_probe_first_row=0;
  source_row_probe=false;
  cloud_probe=wall_probe=false;wall_calls=0;
+ bottom_edge_object_probe=false;
  horizon_probe=false;horizon_expected_valid=false;horizon_flat_expected=false;horizon_main_calls=horizon_background_calls=0;
 }
 static void publication(void){
@@ -707,16 +725,18 @@ static void calibrated_wall_picture(void){
  CHECK(!memcmp(before_ram,ram,sizeof ram)&&!memcmp(&cpu,&g_cpu,sizeof cpu)&&!memcmp(&before_ppu,g_ppu,sizeof before_ppu));
 }
 static void anchored_wall_passages(void){
- const unsigned scenes[]={0x8a,0x8b,0x88,0x82};
+ const unsigned scenes[]={0x8a,0x8b,0x88,0x82,0x82};
  for(unsigned n=0;n<sizeof scenes/sizeof scenes[0];n++){
-  bool upper_entry=scenes[n]==0x82,upper_approach=scenes[n]==0x88;
+  bool lower_entry=n==4,upper_entry=scenes[n]==0x82&&!lower_entry,upper_approach=scenes[n]==0x88;
   bool upper_floor=upper_entry||upper_approach;
-  unsigned x=upper_entry?618:upper_approach?768:400,y=upper_floor?0:100;
-  unsigned width=upper_entry?2048:1024;
+  unsigned x=lower_entry?1490:upper_entry?618:upper_approach?768:400;
+  unsigned y=lower_entry?512:upper_floor?0:100;
+  unsigned width=scenes[n]==0x82?2048:1024;
   fixture();word(0x644,scenes[n]);word(0x692,width);word(0x696,upper_approach?768:1024);
   word(0x694,256);word(0x698,upper_approach?2048:n?1024:768);
   word(0x68a,x);word(0x68e,y);word(0x68c,0);word(0x690,y);
   if(upper_floor){word(0x6de,256);word(0x6da,width);}
+  if(lower_entry){word(0x6d8,256);word(0x6de,1024);word(0x6da,width);}
   word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xEAB4,0,0x0101);
   g_ppu->hScroll[0]=(uint16_t)x;g_ppu->hScroll[1]=(uint16_t)(x/2);
   g_ppu->vScroll[0]=g_ppu->vScroll[1]=(uint16_t)y;
@@ -733,8 +753,8 @@ static void anchored_wall_passages(void){
   for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
   /* Keep the captured phase at the native screen offset, even at the
    * right-hand approach door. Check both margins and chunk seams. */
-  expected_background_x=upper_entry?138:upper_approach?42:n?28:29;
-  expected_background_y=upper_floor?-40:44;background_probe=true;
+  expected_background_x=lower_entry?574:upper_entry?138:upper_approach?42:n?28:29;
+  expected_background_y=lower_entry?456:upper_floor?-40:44;background_probe=true;
   /* Rows above the authored field have no calibrated producer band. */
   background_probe_first_row=upper_floor?39:0;
   IogWorldEndRaster(0,225,0);background_probe=false;
@@ -918,7 +938,32 @@ static void mode7_fixture(void){
  for(unsigned n=0;n<32768;n++)g_ppu->vram[n]=(uint16_t)(((n*29u+11u)&255u)<<8)|((n*13u+7u)&255u);
  CHECK(!s.active&&!s.pending&&!s.composed); /* no actor/OAM publication */
 }
+static void mode7_menu_dismissal(void){
+ static Dma dma;
+ mode7_fixture();word(0x644,0xFE);g_ppu->bgmode=9;
+ g_snes->dma=&dma;g_snesrecomp_last_hdmaen=0x40;
+ dma.channel[6]=(DmaChannel){.bAdr=5,.aBank=0x7E,.aAdr=0x8800};
+ uint8_t table[]={127,7,96,7,1,9,0};memcpy(ram+0x8800,table,sizeof(table));
+ IogWorldBeginRaster();CHECK(s.valid&&s.mode7&&s.mode7_split==223);
+ /* On dismissal the split is at line 225. Admit Mode 7 before HDMA
+  * writes BGMODE on line zero, then apply the per-line checks. */
+ ram[0x8802]=98;IogWorldBeginRaster();CHECK(s.valid&&s.mode7&&!s.mode7_split);
+ g_ppu->bgmode=7;
+ for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_mode7_plane"));
+ CHECK(s.output[0]!=0&&s.output[335*598]!=0);
+ g_ppu->bgmode=9;IogWorldBeginRaster();CHECK(s.valid);
+ g_ppu->bgmode=7;IogWorldCaptureLine(0);
+ g_ppu->bgmode=9;IogWorldCaptureLine(1);CHECK(!s.valid);
+ /* A repeat bit or a different channel target isn't the menu producer. */
+ ram[0x8802]=0xE2;IogWorldBeginRaster();CHECK(!s.valid&&!s.mode7);
+ ram[0x8802]=98;dma.channel[6].bAdr=6;
+ IogWorldBeginRaster();CHECK(!s.valid&&!s.mode7);
+ g_snesrecomp_last_hdmaen=0;
+}
 static void mode7_lifecycle_and_packet(const char*base){
+ mode7_menu_dismissal();
  mode7_fixture();memcpy(before_ram,ram,sizeof(ram));CpuState cpu=g_cpu;
  IogWorldBeginRaster();CHECK(s.mode7&&s.valid&&!s.active);before_ppu=*g_ppu;
  for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
@@ -1047,6 +1092,20 @@ static void mode7_producer_validated_extension(const char*base){
    for(int x=0;x<598;x++)CHECK(s.output[y*598+x]==0);
  }
 }
+static void preserve_stock_bottom_object_edge(void){
+ const unsigned scenes[]={0x54,0x67,1};
+ for(unsigned n=0;n<sizeof scenes/sizeof scenes[0];n++){
+  fixture();word(0x644,scenes[n]);bottom_edge_object_probe=true;
+  publication();IogWorldBeginRaster();
+  for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+  IogWorldEndRaster(0,225,0);CHECK(s.complete);
+  const uint32_t*bottom=s.output+(s.view.native_y+223)*s.width+s.view.native_x;
+  CHECK(bottom[-1]==0xfff00df0u);
+  CHECK((bottom[0]==0xfff00df0u)==(scenes[n]==1));
+  CHECK(bottom[13]==0xfff00df0u&&bottom[29]==0xfff00df0u);
+  CHECK(bottom[s.width]==0xfff00df0u);
+ }
+}
 static void projected_source_row_seam(void){
  fixture();word(0x644,0xcc);word(0x692,512);word(0x696,512);
  word(0x694,512);word(0x698,512);word(0x68a,0);word(0x68e,288);
@@ -1097,7 +1156,7 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 
