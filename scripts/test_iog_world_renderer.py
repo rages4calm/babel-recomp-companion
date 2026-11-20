@@ -503,6 +503,31 @@ static void water_wave(void){
   CHECK(!WaterWave(&s.epochs[0],&probe));
  }
 }
+static void mansion_fog(void){
+ fixture();word(0x644,0xe9);
+ word(0x692,1024);word(0x694,512);word(0x696,1024);word(0x698,256);
+ word(0x68c,144);word(0x690,9);word(0x6ee,0x0485);
+ word(0x56,0x1060);word(0x58,0x1060);
+ effect_camera_actor(0x1060,0xea26,0,0);
+ g_ppu->hScroll[1]=g_ppu->vScroll[1]=256;
+ g_ppu->hScroll[0]=144;g_ppu->vScroll[0]=777;
+ g_ppu->bgXsc[0]=0x19;g_ppu->bgXsc[1]=0x11;
+ g_ppu->cgwsel=2;g_ppu->cgadsub=0x21;
+ publication();IogWorldBeginRaster();
+ for(int line=0;line<=224;line++){
+  unsigned phase=(unsigned)(line+63)%64;
+  g_ppu->hScroll[0]=(uint16_t)(144+(phase/8));
+  IogWorldCaptureLine(line);
+ }
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_mansion_fog"));
+ CHECK(!memcmp(s.detached.vram,s.epochs[0].vram,sizeof(s.detached.vram)));
+ s.lines[99].registers[offsetof(Ppu,hScroll)]^=1;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"unsupported_mansion_fog"));
+ s.lines[99].registers[offsetof(Ppu,hScroll)]^=1;
+ s.lines[99].registers[offsetof(Ppu,cgadsub)]^=1;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"unsupported_mansion_fog"));
+}
 static void village_heat(void){
  fixture();word(0x644,0xac);
  word(0x692,512);word(0x694,512);word(0x696,512);word(0x698,512);
@@ -679,7 +704,48 @@ static void calibrated_finite_horizon(void){
  horizon_picture(0x1c,160,false,0);horizon_picture(0x1c,168,false,0);
  horizon_picture(0x1a,160,true,0);horizon_picture(0x1c,168,true,0);
 }
+static void bounded_rooftop_and_hieroglyph(void){
+ fixture();word(0x644,0xE4);word(0x692,512);word(0x696,512);
+ word(0x694,512);word(0x698,512);
+ publication();IogWorldBeginRaster();
+ for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&s.view.native_x==171&&s.view.native_y==56);
+ for(int y=0;y<336;y++)for(int x=0;x<598;x++){
+  bool inside=x>=171&&x<427&&y>=56&&y<280;
+  CHECK(!!s.output[y*598+x]==inside);
+ }
+ PictureBounds bounds;
+ PictureEpoch *e=&s.epochs[0];
+ e->ram[0x695]=1;
+ CHECK(!RoomPictureBounds(e,256,256,&bounds));
+ fixture();word(0x644,0xDA);word(0x692,1536);word(0x696,256);
+ word(0x6D6,256);word(0x6DA,512);word(0x6DE,256);
+ word(0x68e,0);g_ppu->vScroll[0]=0;
+ publication();IogWorldBeginRaster();
+ for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&s.view.native_x==171&&s.view.native_y==56);
+ CHECK(RoomPictureBounds(&s.epochs[0],256,0,&bounds)&&bounds.bottom==224);
+ for(int y=0;y<336;y++)for(int x=0;x<598;x++){
+  bool inside=x>=171&&x<427&&y>=56&&y<280;
+  CHECK(!!s.output[y*598+x]==inside);
+ }
+ s.epochs[0].ram[0x6DB]=3;
+ CHECK(!RoomPictureBounds(&s.epochs[0],256,0,&bounds));
+ fixture();word(0x644,0x49);word(0x692,256);word(0x696,256);
+ word(0x6D6,0);word(0x6D8,0);word(0x6DA,256);word(0x6DE,256);
+ publication();IogWorldBeginRaster();IogWorldCaptureLine(1);
+ CHECK(RoomPictureBounds(&s.epochs[0],0,0,&bounds)&&bounds.bottom==224);
+ fixture();word(0x644,0x0B);word(0x692,512);word(0x696,768);
+ word(0xA5EE,0xFFFE);word(0xA5FE,0xFDFC);
+ publication();IogWorldBeginRaster();IogWorldCaptureLine(1);
+ CHECK(CastleMapMarker(&s.epochs[0]));
+ s.epochs[0].ram[0xA5EE]=0;
+ CHECK(!CastleMapMarker(&s.epochs[0]));
+}
 static void generic_authored_window(void){
+ bounded_rooftop_and_hieroglyph();
  fixture();word(0x644,0x0D);word(0x692,1024);word(0x696,1024);
  word(0x694,1024);word(0x698,1024);
  word(0x6D6,256);word(0x6D8,256);word(0x6DA,768);word(0x6DE,512);
@@ -712,6 +778,11 @@ static void generic_authored_window(void){
 }
 static void mode7_fixture(void){
  fixture();g_ppu->bgmode=7;g_ppu->inidisp=15;g_ppu->screenEnabled[0]=21;
+ g_ppu->screenEnabled[1]=1;g_ppu->cgwsel=0x82;g_ppu->cgadsub=1;
+ CHECK(Mode7PlaneLayout(g_ppu,0x59)&&!Mode7PlaneLayout(g_ppu,0x58));
+ g_ppu->screenWindowed[1]=1;CHECK(!Mode7PlaneLayout(g_ppu,0x59));
+ g_ppu->screenWindowed[1]=0;g_ppu->cgadsub=0;CHECK(!Mode7PlaneLayout(g_ppu,0x59));
+ g_ppu->screenEnabled[1]=0;g_ppu->cgwsel=0;
  g_ppu->screenEnabled[1]=0;memset(g_ppu->m7matrix,0,sizeof(g_ppu->m7matrix));
  g_ppu->m7matrix[0]=g_ppu->m7matrix[3]=256;
  /* A synthetic two-byte VRAM bus: tilemap low bytes and character high
@@ -898,7 +969,7 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();village_heat();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();mansion_fog();village_heat();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 

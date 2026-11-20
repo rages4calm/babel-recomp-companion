@@ -172,6 +172,40 @@ The checked player view uses square pixels and 1.5×, including selected
 the separately composed HUD masked. These samples cover the listed paths
 and phases. Uninspected story phases and the remaining scenery are open.
 
+## Early rooms, Pyramid and late story
+
+Batch 015 adds 40 Mode 1 scene IDs, bringing the structural list from 165
+to 205. The separate Mode 7 extension now handles the crash's tested
+same-plane color effect. Exact v17 routes begin from assisted checkpoints.
+Controller routes use SDL virtual input, including stock doors and combat.
+In the early rooms, 12 selected door routes completed a round trip and nine
+others reached their neighboring scene in one direction. Tests covered the
+actual composed screen, with original gameplay pixels compared separately
+from the repositioned HUD.
+
+| Area | Added scenes | Verified behavior |
+| --- | --- | --- |
+| South Cape, Castle and Itory | `07, 0A–0B, 10–11, 13, 16–19, 1B` | Town and Itory return doors, dungeon adjoining rooms, and castle prison dialogue and movement. A disconnected map marker stays outside the expanded picture. |
+| Inca and Freejia | `1D, 1F–22, 24, 30, 34–38, 3A–3C` | Inca movement and Freejia room transitions. The cliff retains its captured raster effect. |
+| Neil's Cottage, Sky Garden aftermath and Angel Village | `49, 58, 68` | The Hotel-to-Cottage story path, flight through the Mode 7 crash and descent, and tunnel/portrait story checks. The cottage stays within its original field. |
+| Pyramid and Dao flight | `CF, D1, D3, D5, D7, D9–DC` | Eight branch exits, all six Hieroglyph Chamber panels, a stock first-stone reward from an assisted setup, and the flight into Babel. |
+| Babel rooftop and Jeweler's Mansion | `E4, E9` | Rooftop dialogue retains its original cutscene framing at 1.5×. The Mansion preserves the uploaded fog through camera motion and active combat. |
+
+Babel's rooftop blue strips came from showing cutscene background pixels
+outside the authored camera. The composed field is now centered in the
+widescreen presentation. The mansion's 64-line fog wave continues across
+the full width using the live uploaded ring and original color math. The
+renderer checks the phase before extending it and retains fallback for
+other layouts. The Pyramid and cottage clip allocation rows beyond their
+authored 224-line fields.
+
+The Sky Garden crash uses the actual Mode 7 color math for both screen
+inputs, and the bookending flight repeats the verified stock cloud
+planes. The three final rechecks cover the flight, ocean and descent
+phases. Other cutscenes, dark-space changes and the Babel boss rematch star
+effects still need dedicated visual work. The previously reported Great
+Wall ceremony fade difference remains open.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

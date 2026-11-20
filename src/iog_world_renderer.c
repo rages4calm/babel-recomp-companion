@@ -116,12 +116,16 @@ static bool DaoHeatWave(const PictureEpoch *e,const Ppu *p)
     return varied;
 }
 
-static bool Mode7PlaneLayout(const Ppu *p)
+static bool Mode7PlaneLayout(const Ppu *p,unsigned scene)
 {
+    /* The Sky Garden crash adds its Mode 7 plane to itself on the
+     * subscreen. The same texel feeds both inputs of the real color math. */
+    bool crash_color_math=scene==0x59 && p->screenEnabled[1]==1 &&
+        p->cgwsel==0x82 && p->cgadsub==1 && !p->screenWindowed[1];
     return (p->bgmode&7)==7 && !PPU_m7extBg(p) && !p->frameInterlace &&
         !PPU_objInterlace(p) && !(p->mosaic>>4) &&
         (p->screenEnabled[0]&1) && !(p->screenEnabled[0]&~21u) &&
-        !p->screenEnabled[1] && !ActiveWorldWindow(p) &&
+        (!p->screenEnabled[1] || crash_color_math) && !ActiveWorldWindow(p) &&
         !(p->windowsel&0xA00000u);
 }
 static int WorldMapModeSplit(void)
@@ -253,7 +257,7 @@ void IogWorldBeginRaster(void)
     PpuSetOverlayCapture(g_ppu,kPpuOverlaySource_Bg3,0,0,256,224,0);
     if(!s.stock || IogRandomizerActive()) return;
     s.mode7_split=WorldMapModeSplit();
-    if(s.mode7_split || Mode7PlaneLayout(g_ppu)) {
+    if(s.mode7_split || Mode7PlaneLayout(g_ppu,Word(g_snes->ram,0x644))) {
         s.base=*g_ppu;s.mode7=s.valid=true;s.reason="awaiting_mode7_plane";
         return;
     }
@@ -277,7 +281,7 @@ void IogWorldCaptureLine(int line)
         s.valid=false; s.reason="unexpected_secondary_background"; return;
     }
     bool mode7_line=s.mode7 && (!s.mode7_split || line<s.mode7_split);
-    if((mode7_line?!Mode7PlaneLayout(g_ppu):(g_ppu->bgmode&7)!=1) ||
+    if((mode7_line?!Mode7PlaneLayout(g_ppu,Word(g_snes->ram,0x644)):(g_ppu->bgmode&7)!=1) ||
        g_ppu->frameInterlace || (g_ppu->mosaic>>4)!=0 ||
        (ActiveWorldWindow(g_ppu) && !DaoWorldWindow(g_ppu,g_snes->ram))) {
         s.valid=false; s.reason="unsupported_line_effect"; return;
@@ -442,7 +446,28 @@ static int ProjectEffect(unsigned ratio,int position)
     return product>=0?product/denominator:-((-product+denominator-1)/denominator);
 }
 
-enum { FreejiaWavePeriod = 64 };
+enum { RingWavePeriod = 64 };
+
+static bool UploadedRingWave(const Ppu *p,bool stable_color)
+{
+    unsigned vscroll = Word(s.lines[1].registers,offsetof(Ppu,vScroll)) & 1023;
+    bool varied = false;
+    unsigned first = Word(s.lines[1].registers,offsetof(Ppu,hScroll)) & 1023;
+    for (unsigned line = 1; line <= 224; line++) {
+        const uint8_t *regs = s.lines[line].registers;
+        unsigned hscroll = Word(regs,offsetof(Ppu,hScroll)) & 1023;
+        unsigned phase = (line - 1) % RingWavePeriod + 1;
+        if ((Word(regs,offsetof(Ppu,vScroll)) & 1023) != vscroll ||
+            hscroll != (Word(s.lines[phase].registers,offsetof(Ppu,hScroll)) & 1023) ||
+            regs[offsetof(Ppu,bgXsc)] != p->bgXsc[0] ||
+            Word(regs,offsetof(Ppu,bgTileAdr)) != p->bgTileAdr ||
+            (stable_color && (regs[offsetof(Ppu,cgwsel)]!=p->cgwsel ||
+             regs[offsetof(Ppu,cgadsub)]!=p->cgadsub)))
+            return false;
+        varied |= hscroll != first;
+    }
+    return varied;
+}
 
 /* Freejia's BG1 is the drifting secondary layer despite the PPU layer
  * numbering. Its slow-wave thinker repeats a single 64-line HDMA table.
@@ -457,21 +482,22 @@ static bool FreejiaRingWave(const PictureEpoch *e, const Ppu *p,
         camera->ratio[1] != 0x0101 ||
         PPU_bigTiles(p,0) || PPU_bgTilemapWider(p,0) || PPU_bgTilemapHigher(p,0))
         return false;
-    unsigned vscroll = Word(s.lines[1].registers,offsetof(Ppu,vScroll)) & 1023;
-    bool varied = false;
-    unsigned first = Word(s.lines[1].registers,offsetof(Ppu,hScroll)) & 1023;
-    for (unsigned line = 1; line <= 224; line++) {
-        const uint8_t *regs = s.lines[line].registers;
-        unsigned hscroll = Word(regs,offsetof(Ppu,hScroll)) & 1023;
-        unsigned phase = (line - 1) % FreejiaWavePeriod + 1;
-        if ((Word(regs,offsetof(Ppu,vScroll)) & 1023) != vscroll ||
-            hscroll != (Word(s.lines[phase].registers,offsetof(Ppu,hScroll)) & 1023) ||
-            regs[offsetof(Ppu,bgXsc)] != p->bgXsc[0] ||
-            Word(regs,offsetof(Ppu,bgTileAdr)) != p->bgTileAdr)
-            return false;
-        varied |= hscroll != first;
-    }
-    return varied;
+    return UploadedRingWave(p,false);
+}
+
+/* The Mansion uses a two-page uploaded BG1 fog ring in display mode $22.
+ * Leaving that ring for the finite map drops the color-math input at a
+ * camera-dependent edge. Retain the live ring only for its witnessed phase. */
+static bool MansionFog(const PictureEpoch *e,const Ppu *p,
+                       const EffectCamera *camera)
+{
+    const uint8_t *ram=e->ram;
+    return Word(ram,0x644)==0xE9 && (ram[0x6EE]&128) &&
+        Word(ram,0x692)==1024 && Word(ram,0x696)==1024 &&
+        Word(ram,0x694)==512 && Word(ram,0x698)==256 &&
+        camera->uploaded_ring && camera->ratio[0]==0x0101 && camera->ratio[1]==0x0101 &&
+        !PPU_bigTiles(p,0) && PPU_bgTilemapWider(p,0) && !PPU_bgTilemapHigher(p,0) &&
+        p->cgwsel==0x02 && p->cgadsub==0x21 && UploadedRingWave(p,true);
 }
 
 enum { WaterWavePeriod = 8 };
@@ -594,7 +620,8 @@ static bool BoundedRoomScene(unsigned scene)
 {
     switch(scene) {
     case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x31:
-    case 0x85: case 0xE5: case 0xE6: case 0xE7: case 0xE8: return true;
+    case 0x49: case 0x85: case 0xDA: case 0xE4: case 0xE5:
+    case 0xE6: case 0xE7: case 0xE8: return true;
     default: return false;
     }
 }
@@ -625,16 +652,40 @@ static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
     /* Rampway storage contains three courses. Only the current authored
      * camera window is this visit's floor; the other pages are not scenery. */
     if(scene==0x85) {expected_width=2048;expected_height=768;}
+    if(scene==0xDA) expected_width=1536;
+    if(scene==0xE4) {expected_width=512;expected_height=512;}
     if(scene==0x03 || scene==0x04 || scene==0xE6 || scene==0xE8) expected_height=512;
     if(scene==0x06) expected_height=1280;
     if(!BoundedRoomScene(scene) || width!=expected_width || height!=expected_height) return false;
-    if(scene>=0xE5 && scene<=0xE8) {
+    if(scene>=0xE4 && scene<=0xE8) {
+        /* The Babel rooftop's blue vortex is cutscene art in its BG2
+         * allocation. Showing the unused side tiles creates a water strip
+         * suspended over the void. Keep the composed cutscene field. */
+        if(scene==0xE4 && (Word(ram,0x694)!=512 || Word(ram,0x698)!=512))
+            return false;
         *out=(PictureBounds){camera_x,camera_y,camera_x+256,camera_y+224};
         return true;
     }
     /* 06DE is the uncorrected bottom edge; 06DC additionally contains the
      * original visible-height correction. Neither word is a player edit. */
-    return AuthoredWindow(e,out);
+    if(!AuthoredWindow(e,out)) return false;
+    if(scene==0x49 || scene==0xDA) {
+        /* These rooms store map material below the authored field. Each
+         * Hieroglyph panel and Neil's cottage use one original-height view. */
+        if(out->right-out->left!=256 || out->bottom-out->top!=256) return false;
+        out->bottom=out->top+224;
+    }
+    return true;
+}
+
+static bool CastleMapMarker(const PictureEpoch *e)
+{
+    const uint8_t *ram=e->ram;
+    /* This disconnected 2×2 metatile marker is stored in the last corner of
+     * the prison passage. It only becomes visible in the expanded margins. */
+    return Word(ram,0x644)==0x0B && Word(ram,0x692)==512 &&
+        Word(ram,0x696)==768 && Word(ram,0xA5EE)==0xFFFE &&
+        Word(ram,0xA5FE)==0xFDFC;
 }
 
 static bool RoomPictureView(int camera_x,int camera_y,const PictureBounds *bounds)
@@ -694,7 +745,10 @@ static bool RenderMode7Plane(void)
     int map_end=s.mode7_split?s.mode7_split-1:224;
     for(int line=1;line<=map_end;line++) {
         memcpy(source,s.lines[line].registers,PPU_SAVESTATE_REGS_SIZE);
-        if(!Mode7PlaneLayout(source)) {s.reason="mode7_unsupported_raster";return false;}
+        const PictureEpoch *epoch=&s.epochs[s.lines[line].epoch];
+        if(!Mode7PlaneLayout(source,Word(epoch->ram,0x644))) {
+            s.reason="mode7_unsupported_raster";return false;
+        }
         if(source->m7sel!=control || memcmp(source->m7matrix,matrix,sizeof(matrix)))
             uniform=false;
     }
@@ -755,7 +809,7 @@ static bool RenderMode7Plane(void)
             memcpy(source->vram,epoch->vram,sizeof(source->vram));
             memcpy(palette,line->registers,PPU_SAVESTATE_REGS_SIZE);
             memcpy(palette->cgram,epoch->cgram,sizeof(palette->cgram));
-            palette->screenEnabled[0]=1;palette->screenEnabled[1]=0;
+            palette->screenEnabled[0]=1;palette->screenEnabled[1]=source->screenEnabled[1];
             palette->screenWindowed[0]=palette->screenWindowed[1]=0;
             memset(palette->m7matrix,0,sizeof(palette->m7matrix));
             palette->m7matrix[0]=palette->m7matrix[3]=256;palette->m7sel=0;
@@ -802,7 +856,7 @@ static bool RenderWorld(void)
     int camera_x=(int16_t)Word(s.active_ram,0x68A);
     int camera_y=(int16_t)Word(s.active_ram,0x68E);
     bool village_heat=scene==0xAC && VillageHeat(first,p);
-    bool source_plate=scene>=0xE5 && scene<=0xE8;
+    bool source_plate=scene>=0xE4 && scene<=0xE8;
     if(source_plate) {
         /* These verified compositions expose only their native field. Their
          * BG scroll can animate independently of the actor camera (E7 flight),
@@ -851,14 +905,18 @@ static bool RenderWorld(void)
     }
     bool freejia_wave = tracked_effect && s.epoch_count == 1 &&
         FreejiaRingWave(first,p,&effect_camera);
+    bool mansion_fog=tracked_effect && s.epoch_count==1 && MansionFog(first,p,&effect_camera);
     bool water_wave = WaterWave(first,p);
     bool dao_heat=DaoHeatWave(first,p);
     if (scene == 0x32 && !freejia_wave) {
         s.reason = "unsupported_freejia_wave";
         return false;
     }
+    if(scene==0xE9 && !mansion_fog) {
+        s.reason="unsupported_mansion_fog";return false;
+    }
     bool deferred_raster_effect=false;
-    if(tracked_effect && !horizon && !wall_bands && !freejia_wave) {
+    if(tracked_effect && !horizon && !wall_bands && !freejia_wave && !mansion_fog) {
         /* A camera actor does not describe per-band HDMA derivatives.
          * Keep those on their prior sampling policy until their actual
          * raster producer is bound; a global ratio would be misleading. */
@@ -879,6 +937,16 @@ static bool RenderWorld(void)
      * clouds drift. Only that map repeats. The walkable floors stay finite. */
     bool underside_backdrop=(scene==0x4e || scene==0x50 || scene==0x52 || scene==0x54) &&
         Word(first->ram,0x694)==512 && Word(first->ram,0x698)==512;
+    /* The flight cutscene stores two repeating cloud planes behind its
+     * small camera window. Only the known stock sky may fill the margins. */
+    bool story_sky=scene==0x58 && physical==1 && s.epoch_count==1 &&
+        Word(first->ram,0x692)==512 && Word(first->ram,0x694)==512 &&
+        Word(first->ram,0x696)==512 && Word(first->ram,0x698)==512 &&
+        Word(first->ram,0x6D6)==0 && Word(first->ram,0x6D8)==0 &&
+        Word(first->ram,0x6DA)==256 && Word(first->ram,0x6DE)==256;
+    if(scene==0x58 && !story_sky) {
+        s.reason="unsupported_story_sky";return false;
+    }
     bool authored_window_pan=false;
     if(bounded) {
         PictureBounds bounds;
@@ -929,6 +997,7 @@ static bool RenderWorld(void)
         if(authored && !AuthoredWindow(e,&bounds)) {
             s.reason="unsupported_authored_window";return false;
         }
+        bool castle_marker=CastleMapMarker(e);
         /* Objects were decoded from the exact composition/OAM publication
          * pair. Recolor the one visible row with this raster's palette. */
         size_t count=0;
@@ -995,8 +1064,8 @@ static bool RenderWorld(void)
                     if(IogRasterParallaxSample(&wall_model,wy+1,s.view.world_x,&phase))
                         wx=(int)phase+start;
                 }
-                if(logical==1&&freejia_wave&&(native_y<0 || native_y>=224)) {
-                    int phase=(native_y%FreejiaWavePeriod+FreejiaWavePeriod)%FreejiaWavePeriod+1;
+                if(logical==1&&(freejia_wave||mansion_fog)&&(native_y<0 || native_y>=224)) {
+                    int phase=(native_y%RingWavePeriod+RingWavePeriod)%RingWavePeriod+1;
                     unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,hScroll));
                     int wave_x=ScrollWorld(e->ram,0x68C,scroll);
                     wx+=wave_x-camx;
@@ -1037,8 +1106,8 @@ static bool RenderWorld(void)
                         int repeat_width=finite_wall?wall_model.width:512;
                         sample_x%=repeat_width;if(sample_x<0)sample_x+=repeat_width;
                     }
-                    bool repeat=(effect || (logical==1 && underside_backdrop)) &&
-                        !finite_horizon && !finite_wall && (!bounded || scene==0x85) && !classroom;
+                    bool repeat=story_sky || ((effect || (logical==1 && underside_backdrop)) &&
+                        !finite_horizon && !finite_wall && (!bounded || scene==0x85) && !classroom);
                     unsigned tile=MapTile(e,logical,sample_x,wy+1,repeat);
                     if(tile==0xFFFFFFFFu) tile=(unsigned)blank[logical];
                     /* Overlapping authentic cells use the actual uploaded
@@ -1109,7 +1178,9 @@ static bool RenderWorld(void)
                    classroom?OriginalClassroomPixel(e,worldx,worldy):
                    (native_pixel||(worldx>=0&&worldx<(int)Word(e->ram,0x692)&&
                    worldy>=0&&worldy<(int)Word(e->ram,0x696)));
-                if(inside || cloud_sky)
+                if(castle_marker && !native_pixel && worldx>=480 && worldy>=735)
+                    inside=false;
+                if(inside || cloud_sky || story_sky)
                     s.output[row*s.width+start+x]=cloud_sky&&inside?composite[x]:s.row[x];
             }
         }
@@ -1126,6 +1197,7 @@ static bool RenderWorld(void)
         water_wave?"ready_water_wave":
         dao_heat?"ready_dao_heat":
         village_heat?"ready_village_heat":
+        mansion_fog?"ready_mansion_fog":
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;
 }
 
