@@ -33,6 +33,21 @@ does not establish that secondary scenery should stop at the floor boundary.
 Per-line HDMA camera derivatives also cannot be inferred from a global actor
 ratio. Deferred raster-camera paths remain explicit review work.
 
+## Inventory and Sand Fanger ceremony framing
+
+The dedicated stock inventory and statue-ceremony scenes now display their
+full live graphics in a centered 384×336 region of the square-pixel 598×336
+view. Text, the item pedestal, and the ceremony's exit mosaic keep the same
+1.5× scale as the surrounding game. Each plate uses its own Mode 1 layout
+checks. Unrecognized layouts retain the existing fallback.
+
+The v38 controller runs exercised the Crystal Ring inventory, Angel Village
+inventory and return, inventory save resume, Sand Fanger's complete statue
+ceremony, and the Mansion fog as a neighboring control. Across 7,010 frames,
+the 554 intended modal frames changed. All 119 sampled game-state and PPU
+payloads matched the v37 control. Inventory also passed at 1280×720,
+2560×1080 and 1080×2340 window sizes.
+
 ## Save-resume framing from Diamond Mine to Babel
 
 The first frame after loading a save now keeps the 598×336 square-pixel 1.5×

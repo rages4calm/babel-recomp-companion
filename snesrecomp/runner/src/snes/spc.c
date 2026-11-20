@@ -167,6 +167,77 @@ int spc_probePortCycle(Spc* spc) {
   return last;
 }
 
+#ifdef IOG_NATIVE_SPC_EFFECTS_HEADER
+/* Companion's private, source-qualified ARAM sites. Each still retires one
+ * guest instruction through the usual APU clock and device boundaries. */
+typedef struct SpcTimerSite {
+  uint16_t pc;
+  uint8_t opcode;
+  uint8_t operand;
+  uint64_t instructions;
+  uint64_t cycles;
+} SpcTimerSite;
+
+static SpcTimerSite s_spc_timer_sites[] = {
+#define SPC_NATIVE_TIMER_SITE(pc, opcode, operand) {pc, opcode, operand, 0, 0},
+#include IOG_NATIVE_SPC_EFFECTS_HEADER
+#undef SPC_NATIVE_TIMER_SITE
+};
+static int s_spc_native_timer_enabled = -1;
+static bool s_spc_native_timer_stats;
+
+static void spc_reportNativeTimerStats(void) {
+  for (size_t i = 0; i < sizeof(s_spc_timer_sites) / sizeof(s_spc_timer_sites[0]); i++) {
+    SpcTimerSite *site = &s_spc_timer_sites[i];
+    fprintf(stderr, "[spc-native] pc=%04x instructions=%llu cycles=%llu\n",
+            (unsigned)site->pc, (unsigned long long)site->instructions,
+            (unsigned long long)site->cycles);
+  }
+}
+
+static bool spc_tryNativeTimerOpcode(Spc *spc, uint8_t opcode) {
+  if (s_spc_native_timer_enabled < 0) {
+    const char *enabled = getenv("IOG_NATIVE_SPC_TIMER_OPCODES");
+    const char *reference = getenv("SNESRECOMP_INTERPRET_ALL");
+    const char *stats = getenv("IOG_NATIVE_SPC_STATS");
+    s_spc_native_timer_enabled = enabled && !strcmp(enabled, "1") &&
+                                !(reference && !strcmp(reference, "1"));
+    s_spc_native_timer_stats = stats && !strcmp(stats, "1") &&
+                             atexit(spc_reportNativeTimerStats) == 0;
+  }
+  if (!s_spc_native_timer_enabled || spc->dry || spc->p ||
+      (opcode != 0xeb && opcode != 0xf0))
+    return false;
+
+  for (size_t i = 0; i < sizeof(s_spc_timer_sites) / sizeof(s_spc_timer_sites[0]); i++) {
+    SpcTimerSite *site = &s_spc_timer_sites[i];
+    if (site->pc != spc->opPc || site->opcode != opcode)
+      continue;
+    /* Both instruction bytes must be in ordinary ARAM, away from MMIO
+     * and the IPL overlay. Inspect the operand without a bus access before
+     * deciding. On acceptance, fetch it through the ordinary timed bus. */
+    if (site->pc < 0x0100 || site->pc >= 0xffbf ||
+        spc->op != opcode || spc->pc != site->pc + 1u ||
+        spc->apu->ram[spc->pc] != site->operand ||
+        (opcode == 0xeb && site->operand < 0xfd))
+      return false;
+    uint8_t operand = spc_readOpcode(spc);
+    if (opcode == 0xeb) {
+      spc->y = spc_read(spc, operand);
+      spc_setZN(spc, spc->y);
+    } else {
+      spc_doBranch(spc, operand, spc->z);
+    }
+    if (s_spc_native_timer_stats) {
+      site->instructions++;
+      site->cycles += spc->cyclesUsed;
+    }
+    return true;
+  }
+  return false;
+}
+#endif
+
 int spc_runOpcode(Spc* spc) {
   spc->cyclesUsed = 0;
   spc->busIdx = 0;
@@ -184,6 +255,9 @@ int spc_runOpcode(Spc* spc) {
     if (s_spc_trace_count < SPC_TRACE_RING) s_spc_trace_count++;
   }
   spc->cyclesUsed = cyclesPerOpcode[opcode];
+#ifdef IOG_NATIVE_SPC_EFFECTS_HEADER
+  if (!spc_tryNativeTimerOpcode(spc, opcode))
+#endif
   spc_doOpcode(spc, opcode);
   if (spc->stopped && s_spc_trace_on) {
     fprintf(stderr, "[spc] HALT at pc=%04x opcode=%02x (%s) after %u traced insns\n",

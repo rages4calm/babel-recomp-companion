@@ -204,6 +204,23 @@ if(IOG_NATIVE_WRAM_EFFECTS_SOURCE)
     target_compile_definitions(IllusionOfGaiaUsaSNESRecomp PRIVATE IOG_HAS_NATIVE_WRAM_CONTINUATIONS=1)
 endif()
 
+# Private exact-address SPC700 timer effects. Ordinary builds keep the existing
+# SPC interpreter, and a private module still requires a per-run opt-in.
+set(IOG_NATIVE_SPC_EFFECTS_HEADER "" CACHE FILEPATH "Private SPC700 timer site list")
+if(IOG_NATIVE_SPC_EFFECTS_HEADER)
+    if(SNESRECOMP_INTERPRETER_ONLY OR SNESRECOMP_SETUP_HOST OR IOG_RECEIVED_REFERENCE)
+        message(FATAL_ERROR "SPC effects require the private Original game build")
+    endif()
+    file(REAL_PATH "${IOG_NATIVE_SPC_EFFECTS_HEADER}" _iog_spc_effects)
+    file(REAL_PATH "${CMAKE_SOURCE_DIR}/.local" _iog_private)
+    string(FIND "${_iog_spc_effects}" "${_iog_private}/" _iog_private_index)
+    if(NOT _iog_private_index EQUAL 0 OR NOT EXISTS "${_iog_spc_effects}")
+        message(FATAL_ERROR "SPC effects header must exist beneath this project's .local")
+    endif()
+    target_compile_definitions(IllusionOfGaiaUsaSNESRecomp PRIVATE
+        IOG_NATIVE_SPC_EFFECTS_HEADER="${_iog_spc_effects}")
+endif()
+
 # The mod catalog. This names WHERE the packages are; the framework owns the
 # layout they are staged into beside the executable, and stages them on every
 # build OF THE EXECUTABLE -- including the launcher's own Generate & rebuild on
