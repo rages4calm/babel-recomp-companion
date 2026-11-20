@@ -261,6 +261,8 @@ static void Apply(IogPack *p)
     fprintf(stderr, "[i18n] language %s (%s): dialogue %d/%d, menus %d/%d, sprite text %d, %d banks, %d patches%s\n",
             p->code, p->name, p->strings_translated, p->strings_total, p->menu_translated,
             p->menu_total, p->sprite_translated, p->nbanks, p->npatches, p->has_font ? ", own font" : "");
+    if (p->scene_total)
+        fprintf(stderr, "[i18n] scene titles %d/%d\n", p->scene_translated, p->scene_total);
 }
 
 static int GaiaDialoguePath(char *path, size_t capacity)

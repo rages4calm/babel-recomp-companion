@@ -342,6 +342,49 @@ static void CheckInheritedChoices(void)
     free(raw);
 }
 
+static void CheckInterfaceText(void)
+{
+    Tok stock_tokens[] = {{.type = T_GLYPH}, {.type = T_GLYPH},
+                          {.type = T_CMD, .code = 0x0d},
+                          {.type = T_GLYPH}, {.type = T_GLYPH}};
+    Toks menu = {.t = stock_tokens, .n = 5};
+    uint8_t encoded[128];
+    CHECK(GaiaMenuText(&menu, "AB[DBL]a?", encoded) == 6);
+    const uint8_t expected[] = {0x41, 0x42, 0x0d, 0x61, 0x3f, 0};
+    CHECK(!memcmp(encoded, expected, sizeof(expected)));
+    CHECK(!GaiaMenuText(&menu, "ABC[DBL]a?", encoded));
+    CHECK(!GaiaMenuText(&menu, "AB[N]a?", encoded));
+    CHECK(!GaiaMenuText(&menu, "AB[DBL][TBL]", encoded));
+
+    const uint8_t rom[] = {0, 1, 8, 0, 2, 10, 0, 0, 0, CMD_RET, 1, CMD_RET};
+    const Rom stock = {.rom = rom, .size = sizeof(rom)};
+    const Structure layout = {.map_table = 1, .map_start = 8, .map_end = sizeof(rom)};
+    const GaiaMapName names[] = {{8, "A"}, {10, "A"}};
+    IogPack *pack = calloc(1, sizeof(*pack));
+    CHECK(pack != NULL);
+    GaiaMapSprites(&stock, &layout, pack, names, 2);
+    CHECK(pack->sprite_translated == 2 && pack->npatches == 2);
+    CHECK(pack->patches[0].data[0] == 1 && pack->patches[0].data[3] == 2);
+    CHECK(pack->patches[0].data[1] == 8 && pack->patches[0].data[4] == 8);
+    CHECK(pack->patches[1].len == 2 && pack->patches[1].data[1] == CMD_RET);
+    IogTextFreePack(pack);
+
+    const uint8_t scene_rom[] = {0, 4, 0, 0, 0xff, 0x40, 0x41, 0x42,
+                                 0x43, 0x44, 0x45, CMD_RET, 0};
+    const Rom scene = {.rom = scene_rom, .size = sizeof(scene_rom)};
+    const Structure scene_layout = {.scene_table = 1, .scene_n = 1};
+    unsigned occupied = kIogVirtualBankSize;
+    pack = calloc(1, sizeof(*pack));
+    CHECK(pack != NULL);
+    CHECK(!GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "[END]"));
+    CHECK(!GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "This title is too wide"));
+    CHECK(!GaiaTitle(&scene, &scene_layout, pack, &occupied, 3, "Incorrect source"));
+    CHECK(GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "Long title"));
+    CHECK(pack->npatches == 1 && pack->nbanks == 1 && pack->patches[0].len == 7);
+    CHECK(pack->patches[0].data[4] == 0xcc && pack->patches[0].data[5] == 7);
+    IogTextFreePack(pack);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -380,6 +423,7 @@ int main(void)
     CheckMeasuredLayouts();
     CheckSharedBoxes();
     CheckInheritedChoices();
+    CheckInterfaceText();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }

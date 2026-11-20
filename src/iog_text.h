@@ -50,6 +50,7 @@ typedef struct IogPack {
     uint8_t usa_font[0x2000];
     int has_font;
     int strings_translated, strings_total;     /* dialogue */
+    int scene_translated, scene_total;          /* scene titles */
     int menu_translated, menu_total;           /* menus, items, HUD */
     int sprite_translated;                     /* map names, prologue */
 } IogPack;

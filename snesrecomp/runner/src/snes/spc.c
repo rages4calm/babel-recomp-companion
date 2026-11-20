@@ -168,74 +168,7 @@ int spc_probePortCycle(Spc* spc) {
 }
 
 #ifdef IOG_NATIVE_SPC_EFFECTS_HEADER
-/* Companion's private, source-qualified ARAM sites. Each still retires one
- * guest instruction through the usual APU clock and device boundaries. */
-typedef struct SpcTimerSite {
-  uint16_t pc;
-  uint8_t opcode;
-  uint8_t operand;
-  uint64_t instructions;
-  uint64_t cycles;
-} SpcTimerSite;
-
-static SpcTimerSite s_spc_timer_sites[] = {
-#define SPC_NATIVE_TIMER_SITE(pc, opcode, operand) {pc, opcode, operand, 0, 0},
-#include IOG_NATIVE_SPC_EFFECTS_HEADER
-#undef SPC_NATIVE_TIMER_SITE
-};
-static int s_spc_native_timer_enabled = -1;
-static bool s_spc_native_timer_stats;
-
-static void spc_reportNativeTimerStats(void) {
-  for (size_t i = 0; i < sizeof(s_spc_timer_sites) / sizeof(s_spc_timer_sites[0]); i++) {
-    SpcTimerSite *site = &s_spc_timer_sites[i];
-    fprintf(stderr, "[spc-native] pc=%04x instructions=%llu cycles=%llu\n",
-            (unsigned)site->pc, (unsigned long long)site->instructions,
-            (unsigned long long)site->cycles);
-  }
-}
-
-static bool spc_tryNativeTimerOpcode(Spc *spc, uint8_t opcode) {
-  if (s_spc_native_timer_enabled < 0) {
-    const char *enabled = getenv("IOG_NATIVE_SPC_TIMER_OPCODES");
-    const char *reference = getenv("SNESRECOMP_INTERPRET_ALL");
-    const char *stats = getenv("IOG_NATIVE_SPC_STATS");
-    s_spc_native_timer_enabled = enabled && !strcmp(enabled, "1") &&
-                                !(reference && !strcmp(reference, "1"));
-    s_spc_native_timer_stats = stats && !strcmp(stats, "1") &&
-                             atexit(spc_reportNativeTimerStats) == 0;
-  }
-  if (!s_spc_native_timer_enabled || spc->dry || spc->p ||
-      (opcode != 0xeb && opcode != 0xf0))
-    return false;
-
-  for (size_t i = 0; i < sizeof(s_spc_timer_sites) / sizeof(s_spc_timer_sites[0]); i++) {
-    SpcTimerSite *site = &s_spc_timer_sites[i];
-    if (site->pc != spc->opPc || site->opcode != opcode)
-      continue;
-    /* Both instruction bytes must be in ordinary ARAM, away from MMIO
-     * and the IPL overlay. Inspect the operand without a bus access before
-     * deciding. On acceptance, fetch it through the ordinary timed bus. */
-    if (site->pc < 0x0100 || site->pc >= 0xffbf ||
-        spc->op != opcode || spc->pc != site->pc + 1u ||
-        spc->apu->ram[spc->pc] != site->operand ||
-        (opcode == 0xeb && site->operand < 0xfd))
-      return false;
-    uint8_t operand = spc_readOpcode(spc);
-    if (opcode == 0xeb) {
-      spc->y = spc_read(spc, operand);
-      spc_setZN(spc, spc->y);
-    } else {
-      spc_doBranch(spc, operand, spc->z);
-    }
-    if (s_spc_native_timer_stats) {
-      site->instructions++;
-      site->cycles += spc->cyclesUsed;
-    }
-    return true;
-  }
-  return false;
-}
+static bool spc_tryNativeOpcode(Spc *spc, uint8_t opcode);
 #endif
 
 int spc_runOpcode(Spc* spc) {
@@ -256,7 +189,7 @@ int spc_runOpcode(Spc* spc) {
   }
   spc->cyclesUsed = cyclesPerOpcode[opcode];
 #ifdef IOG_NATIVE_SPC_EFFECTS_HEADER
-  if (!spc_tryNativeTimerOpcode(spc, opcode))
+  if (!spc_tryNativeOpcode(spc, opcode))
 #endif
   spc_doOpcode(spc, opcode);
   if (spc->stopped && s_spc_trace_on) {
@@ -610,6 +543,212 @@ static void spc_dec(Spc* spc, uint16_t adr) {
   spc_setZN(spc, val);
 }
 
+static inline void spc_effect_0x0b(Spc *spc) { // asl dp
+  spc_asl(spc, spc_adrDp(spc));
+}
+
+static inline void spc_effect_0x24(Spc *spc) { // and dp
+  spc_and(spc, spc_adrDp(spc));
+}
+
+static inline void spc_effect_0x3d(Spc *spc) { // incx imp
+  spc->x++;
+  spc_setZN(spc, spc->x);
+}
+
+static inline void spc_effect_0x3f(Spc *spc) { // call abs
+  uint16_t dst = spc_readOpcodeWord(spc);
+  spc_pushWord(spc, spc->pc);
+  spc->pc = dst;
+}
+
+static inline void spc_effect_0x48(Spc *spc) { // eor imm
+  spc_eor(spc, spc_adrImm(spc));
+}
+
+static inline void spc_effect_0x5d(Spc *spc) { // movxa imp
+  spc->x = spc->a;
+  spc_setZN(spc, spc->x);
+}
+
+static inline void spc_effect_0x5f(Spc *spc) { // jmp abs
+  spc->pc = spc_readOpcodeWord(spc);
+}
+
+static inline void spc_effect_0x69(Spc *spc) { // cmpm dp, dp
+  uint16_t src = 0;
+  uint16_t dst = spc_adrDpDp(spc, &src);
+  spc_cmpm(spc, dst, src);
+}
+
+static inline void spc_effect_0x6f(Spc *spc) { // ret imp
+  spc->pc = spc_pullWord(spc);
+}
+
+static inline void spc_effect_0x8d(Spc *spc) { // movy imm
+  spc_movy(spc, spc_adrImm(spc));
+}
+
+static inline void spc_effect_0x8f(Spc *spc) { // movm dp, imm
+  uint16_t src = 0;
+  uint16_t dst = spc_adrDpImm(spc, &src);
+  uint8_t val = spc_read(spc, src);
+  spc_read(spc, dst);
+  spc_write(spc, dst, val);
+}
+
+static inline void spc_effect_0xad(Spc *spc) { // cmpy imm
+  spc_cmpy(spc, spc_adrImm(spc));
+}
+
+static inline void spc_effect_0xb0(Spc *spc) { // bcs rel
+  spc_doBranch(spc, spc_readOpcode(spc), spc->c);
+}
+
+static inline void spc_effect_0xbb(Spc *spc) { // inc dpx
+  spc_inc(spc, spc_adrDpx(spc));
+}
+
+static inline void spc_effect_0xc4(Spc *spc) { // movs dp
+  spc_movs(spc, spc_adrDp(spc));
+}
+
+static inline void spc_effect_0xcb(Spc *spc) { // movsy dp
+  spc_movsy(spc, spc_adrDp(spc));
+}
+
+static inline void spc_effect_0xd0(Spc *spc) { // bne rel
+  spc_doBranch(spc, spc_readOpcode(spc), !spc->z);
+}
+
+static inline void spc_effect_0xda(Spc *spc) { // movws dp
+  uint16_t low = 0;
+  uint16_t high = spc_adrDpWord(spc, &low);
+  spc_read(spc, low);
+  spc_write(spc, low, spc->a);
+  spc_write(spc, high, spc->y);
+}
+
+static inline void spc_effect_0xe4(Spc *spc) { // mov dp
+  spc_mov(spc, spc_adrDp(spc));
+}
+
+static inline void spc_effect_0xe6(Spc *spc) { // mov ind
+  spc_mov(spc, spc_adrInd(spc));
+}
+
+static inline void spc_effect_0xeb(Spc *spc) { // movy dp
+  spc_movy(spc, spc_adrDp(spc));
+}
+
+static inline void spc_effect_0xf0(Spc *spc) { // beq rel
+  spc_doBranch(spc, spc_readOpcode(spc), spc->z);
+}
+
+static inline void spc_effect_0xf4(Spc *spc) { // mov dpx
+  spc_mov(spc, spc_adrDpx(spc));
+}
+
+static inline void spc_effect_0xf5(Spc *spc) { // mov abx
+  spc_mov(spc, spc_adrAbx(spc));
+}
+
+static inline void spc_effect_0xf6(Spc *spc) { // mov aby
+  spc_mov(spc, spc_adrAby(spc));
+}
+
+static inline void spc_effect_0xfd(Spc *spc) { // movya imp
+  spc->y = spc->a;
+  spc_setZN(spc, spc->y);
+}
+
+static inline void spc_effect_0xfe(Spc *spc) { // dbnzy rel
+  spc->y--;
+  spc_doBranch(spc, spc_readOpcode(spc), spc->y != 0);
+}
+
+#ifdef IOG_NATIVE_SPC_EFFECTS_HEADER
+static inline void spc_effect_0xe3(Spc *spc) { // bbs dp, rel
+  uint8_t val = spc_read(spc, spc_adrDp(spc));
+  spc_doBranch(spc, spc_readOpcode(spc), val & (1 << (0xe3 >> 5)));
+}
+
+static inline void spc_effect_0xf2(Spc *spc) { // clr1 dp
+  uint16_t adr = spc_adrDp(spc);
+  spc_write(spc, adr, spc_read(spc, adr) & ~(1 << (0xf2 >> 5)));
+}
+
+static inline void spc_effect_0xf3(Spc *spc) { // bbc dp, rel
+  uint8_t val = spc_read(spc, spc_adrDp(spc));
+  spc_doBranch(spc, spc_readOpcode(spc), (val & (1 << (0xf3 >> 5))) == 0);
+}
+
+typedef struct SpcNativeSite {
+  void (*effect)(Spc *spc);
+  uint8_t opcode;
+  uint8_t length;
+  uint8_t first;
+  uint8_t second;
+  uint64_t instructions;
+  uint64_t cycles;
+} SpcNativeSite;
+
+/* This table contains private stable-ARAM sites. The callback is chosen when
+ * the header is compiled. A runtime miss continues to the general decoder. */
+static SpcNativeSite *const s_spc_native_sites[0xffc0] = {
+#define SPC_NATIVE_SITE(pc, op, length, first, second) \
+  [pc] = &(SpcNativeSite){spc_effect_ ## op, op, length, first, second, 0, 0},
+#define SPC_NATIVE_TIMER_SITE(pc, op, operand) SPC_NATIVE_SITE(pc, op, 2, operand, 0)
+#include IOG_NATIVE_SPC_EFFECTS_HEADER
+#undef SPC_NATIVE_TIMER_SITE
+#undef SPC_NATIVE_SITE
+};
+static int s_spc_native_enabled = -1;
+static bool s_spc_native_stats;
+
+static void spc_reportNativeStats(void) {
+  for (unsigned pc = 0x0100; pc < 0xffc0; pc++) {
+    const SpcNativeSite *site = s_spc_native_sites[pc];
+    if (site)
+      fprintf(stderr, "[spc-native] pc=%04x instructions=%llu cycles=%llu\n", pc,
+              (unsigned long long)site->instructions, (unsigned long long)site->cycles);
+  }
+}
+
+static bool spc_tryNativeOpcode(Spc *spc, uint8_t opcode) {
+  if (s_spc_native_enabled < 0) {
+    const char *enabled = getenv("IOG_NATIVE_SPC_TIMER_OPCODES");
+    const char *reference = getenv("SNESRECOMP_INTERPRET_ALL");
+    const char *stats = getenv("IOG_NATIVE_SPC_STATS");
+    s_spc_native_enabled = enabled && !strcmp(enabled, "1") &&
+                           !(reference && reference[0] && reference[0] != '0');
+    s_spc_native_stats = stats && !strcmp(stats, "1") && atexit(spc_reportNativeStats) == 0;
+  }
+  unsigned pc = spc->opPc;
+  if (!s_spc_native_enabled || spc->dry || spc->p || pc < 0x0100 || pc >= 0xffc0)
+    return false;
+  SpcNativeSite *site = s_spc_native_sites[pc];
+  if (!site || site->opcode != opcode || spc->op != opcode ||
+      spc->pc != pc + 1u || site->length < 1 || site->length > 3 ||
+      pc + site->length > 0xffc0)
+    return false;
+
+  /* No MMIO or IPL mapping can occur at these instruction-byte addresses.
+   * Compare bytes without a bus access. The effect still fetches its operands
+   * through the ordinary bus, with the original order and access clock. */
+  const uint8_t *operands = spc->apu->ram + spc->pc;
+  if ((site->length > 1 && operands[0] != site->first) ||
+      (site->length > 2 && operands[1] != site->second))
+    return false;
+  site->effect(spc);
+  if (s_spc_native_stats) {
+    site->instructions++;
+    site->cycles += spc->cyclesUsed;
+  }
+  return true;
+}
+#endif
+
 static void spc_doOpcode(Spc* spc, uint8_t opcode) {
   switch(opcode) {
     case 0x00: { // nop imp
@@ -718,7 +857,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x0b: { // asl dp
-      spc_asl(spc, spc_adrDp(spc));
+      spc_effect_0x0b(spc);
       break;
     }
     case 0x0c: { // asl abs
@@ -815,7 +954,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x24: { // and dp
-      spc_and(spc, spc_adrDp(spc));
+      spc_effect_0x24(spc);
       break;
     }
     case 0x25: { // and abs
@@ -921,8 +1060,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x3d: { // incx imp
-      spc->x++;
-      spc_setZN(spc, spc->x);
+      spc_effect_0x3d(spc);
       break;
     }
     case 0x3e: { // cmpx dp
@@ -930,9 +1068,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x3f: { // call abs
-      uint16_t dst = spc_readOpcodeWord(spc);
-      spc_pushWord(spc, spc->pc);
-      spc->pc = dst;
+      spc_effect_0x3f(spc);
       break;
     }
     case 0x40: { // setp imp
@@ -956,7 +1092,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x48: { // eor imm
-      spc_eor(spc, spc_adrImm(spc));
+      spc_effect_0x48(spc);
       break;
     }
     case 0x49: { // eorm dp, dp
@@ -1051,8 +1187,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x5d: { // movxa imp
-      spc->x = spc->a;
-      spc_setZN(spc, spc->x);
+      spc_effect_0x5d(spc);
       break;
     }
     case 0x5e: { // cmpy abs
@@ -1060,7 +1195,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x5f: { // jmp abs
-      spc->pc = spc_readOpcodeWord(spc);
+      spc_effect_0x5f(spc);
       break;
     }
     case 0x60: { // clrc imp
@@ -1088,9 +1223,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x69: { // cmpm dp, dp
-      uint16_t src = 0;
-      uint16_t dst = spc_adrDpDp(spc, &src);
-      spc_cmpm(spc, dst, src);
+      spc_effect_0x69(spc);
       break;
     }
     case 0x6a: { // and1n abs.bit
@@ -1119,7 +1252,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x6f: { // ret imp
-      spc->pc = spc_pullWord(spc);
+      spc_effect_0x6f(spc);
       break;
     }
     case 0x70: { // bvs rel
@@ -1239,7 +1372,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x8d: { // movy imm
-      spc_movy(spc, spc_adrImm(spc));
+      spc_effect_0x8d(spc);
       break;
     }
     case 0x8e: { // popp imp
@@ -1247,11 +1380,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0x8f: { // movm dp, imm
-      uint16_t src = 0;
-      uint16_t dst = spc_adrDpImm(spc, &src);
-      uint8_t val = spc_read(spc, src);
-      spc_read(spc, dst);
-      spc_write(spc, dst, val);
+      spc_effect_0x8f(spc);
       break;
     }
     case 0x90: { // bcc rel
@@ -1383,7 +1512,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xad: { // cmpy imm
-      spc_cmpy(spc, spc_adrImm(spc));
+      spc_effect_0xad(spc);
       break;
     }
     case 0xae: { // popa imp
@@ -1396,7 +1525,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xb0: { // bcs rel
-      spc_doBranch(spc, spc_readOpcode(spc), spc->c);
+      spc_effect_0xb0(spc);
       break;
     }
     case 0xb4: { // sbc dpx
@@ -1438,7 +1567,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xbb: { // inc dpx
-      spc_inc(spc, spc_adrDpx(spc));
+      spc_effect_0xbb(spc);
       break;
     }
     case 0xbc: { // inca imp
@@ -1472,7 +1601,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xc4: { // movs dp
-      spc_movs(spc, spc_adrDp(spc));
+      spc_effect_0xc4(spc);
       break;
     }
     case 0xc5: { // movs abs
@@ -1503,7 +1632,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xcb: { // movsy dp
-      spc_movsy(spc, spc_adrDp(spc));
+      spc_effect_0xcb(spc);
       break;
     }
     case 0xcc: { // movsy abs
@@ -1526,7 +1655,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xd0: { // bne rel
-      spc_doBranch(spc, spc_readOpcode(spc), !spc->z);
+      spc_effect_0xd0(spc);
       break;
     }
     case 0xd4: { // movs dpx
@@ -1554,11 +1683,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xda: { // movws dp
-      uint16_t low = 0;
-      uint16_t high = spc_adrDpWord(spc, &low);
-      spc_read(spc, low);
-      spc_write(spc, low, spc->a);
-      spc_write(spc, high, spc->y);
+      spc_effect_0xda(spc);
       break;
     }
     case 0xdb: { // movsy dpx
@@ -1598,7 +1723,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xe4: { // mov dp
-      spc_mov(spc, spc_adrDp(spc));
+      spc_effect_0xe4(spc);
       break;
     }
     case 0xe5: { // mov abs
@@ -1606,7 +1731,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xe6: { // mov ind
-      spc_mov(spc, spc_adrInd(spc));
+      spc_effect_0xe6(spc);
       break;
     }
     case 0xe7: { // mov idx
@@ -1629,7 +1754,7 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xeb: { // movy dp
-      spc_movy(spc, spc_adrDp(spc));
+      spc_effect_0xeb(spc);
       break;
     }
     case 0xec: { // movy abs
@@ -1649,19 +1774,19 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xf0: { // beq rel
-      spc_doBranch(spc, spc_readOpcode(spc), spc->z);
+      spc_effect_0xf0(spc);
       break;
     }
     case 0xf4: { // mov dpx
-      spc_mov(spc, spc_adrDpx(spc));
+      spc_effect_0xf4(spc);
       break;
     }
     case 0xf5: { // mov abx
-      spc_mov(spc, spc_adrAbx(spc));
+      spc_effect_0xf5(spc);
       break;
     }
     case 0xf6: { // mov aby
-      spc_mov(spc, spc_adrAby(spc));
+      spc_effect_0xf6(spc);
       break;
     }
     case 0xf7: { // mov idy
@@ -1693,13 +1818,11 @@ static void spc_doOpcode(Spc* spc, uint8_t opcode) {
       break;
     }
     case 0xfd: { // movya imp
-      spc->y = spc->a;
-      spc_setZN(spc, spc->y);
+      spc_effect_0xfd(spc);
       break;
     }
     case 0xfe: { // dbnzy rel
-      spc->y--;
-      spc_doBranch(spc, spc_readOpcode(spc), spc->y != 0);
+      spc_effect_0xfe(spc);
       break;
     }
     case 0xff: { // stop imp

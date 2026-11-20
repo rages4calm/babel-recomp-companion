@@ -72,8 +72,25 @@ Translated No left it locked.
 The importer excludes 47 declarations. The runtime leaves 215 candidates
 in stock form, for 262 stock chapter entries in total. The remaining
 constraints include marker prefixes with printable text, unverified
-script targets, window bounds, and timed controls. Full menu and sprite
-lettering and custom-font coverage remain open.
+script targets, window bounds, and timed controls. Custom-font coverage remains
+open.
+
+### Inventory, room titles and map lettering
+
+Original v39 appends 65 of the 124 approved console menu entries, 48 of
+64 named room titles, and all 35 indexed world-map sprite strings. The 177
+empty room-title records stay empty. The runtime checks each title against the
+stock 18-column box and its entry space. Longer labels and unsupported stock
+control sequences keep their original text. All 876 previous chapter dialogue
+payloads retain their bytes and addresses, and dialogue-only packs still load.
+
+A controller replay from Dao showed the translated title on the same frame
+and in the original box while leaving the scenery unchanged. A staged Lift
+Key inventory test showed the approved label, equipped the original item ID,
+and returned to the prison at the same frame as the stock-label control.
+A stock Mode 7 flight showed the translated Freesia caption and reached the
+Diamond Mine with the same timing as the Freejia control. Lettering baked
+into the map artwork remains as authored in the original ROM.
 
 The text uses the Original localization overlay. Start with a local Git
 checkout containing the pinned revision, then generate a pack into the

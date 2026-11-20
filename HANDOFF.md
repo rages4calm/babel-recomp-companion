@@ -153,13 +153,32 @@ is `scripts/test_iog_native_spc.py`. The private trial and header are in
 matched upstream main at `22c01ef1`. A separate scheduler mismatch is tracked
 in [SNESRecomp #293](https://github.com/RetroPortingToolKit/snesrecomp/issues/293).
 
+Batch 035 uses Original v39. [The new GaiaLabs pack](docs/GAIALABS-ORIGINAL-INTEGRATION.md#inventory-room-titles-and-map-lettering)
+adds menu, room and world-map text without relocating the earlier 876 chapter
+payloads. [Larai Cliff and the ending](docs/VISUAL-COVERAGE.md#larai-cliff-mist-and-ending-framing)
+now hold their intended 1.5× framing across the tested transitions.
+The desktop achievement writer passes durable progress and lock tests. A
+position-assisted Red Jewel and a prepared Aqueduct fight/revisit verified real
+item and room-clear signals in read-only mode. Browser, launcher provider and
+notification work remain in [achievements integration](docs/ACHIEVEMENTS-INTEGRATION.md).
+
+The private Kress build adds 101 verified 65816 contexts and retains the
+earlier ones. It displaces 149,262 interpreter cycles across the bridge and
+wrong-region controls while keeping full guest and device parity. The expanded
+optional SPC700 experiment keeps all four original sites and adds 56 guarded
+sites across DSP register and voice updates. Bounded cold and Kress tests with
+MSU-1 disabled matched the same executable's interpreter for sampled APU and
+game state. The private receipts and generated inputs are in
+`visual-fullgame-035/native`. Standard builds still select SPC fallback.
+
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 034's
-`babel-originalv38kress.exe` and retains the same private dialogue pack and
+`.local/batch-001/visual-fullgame-010`. It selects batch 035's
+`babel-originalv39kress.exe` and the corresponding private interface pack and
 continues the isolated test profile's save. The test executable has the
-required `i18n/structure.txt` alongside it. `Play Original v37 Kress Rollback.cmd`
+required `i18n/structure.txt` alongside it. `Play Original v38 Rollback.cmd`
+selects the prior build and its dialogue-only pack. `Play Original v37 Kress Rollback.cmd`
 selects the previously tested Kress build. `Play Original v37 Pre-Kress
 Rollback.cmd` selects the dialogue and visual build before the Kress changes.
 `Play Original v36 Rollback.cmd` selects the earlier build. Hold Down from the initial Itory

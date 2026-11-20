@@ -368,7 +368,7 @@ static void stock_modal_plate_scale(void){
  g_ppu->screenEnabled[0]=0x17;g_ppu->screenEnabled[1]=0;
  g_ppu->cgwsel=0x80;g_ppu->cgadsub=0;g_snesrecomp_last_hdmaen=6;
  IogWorldBeginRaster();IogWorldEndRaster(0,225,0);
- CHECK(s.complete&&s.modal_plate&&!strcmp(s.reason,"ready_stock_modal_plate"));
+ CHECK(s.complete&&s.fixed_plate&&!strcmp(s.reason,"ready_stock_modal_plate"));
  const unsigned extents[]={4,5,6};
  for(unsigned n=0;n<3;n++){
   int w=0,h=0;s.extent_quarters=extents[n];IogWorldGeometry(1920,1080,&w,&h);
@@ -386,19 +386,40 @@ static void stock_modal_plate_scale(void){
   }
   free(dst);
  }
- word(0x644,0xfd);IogWorldBeginRaster();CHECK(!s.modal_plate&&!s.complete);
+ word(0x644,0xfd);IogWorldBeginRaster();CHECK(!s.fixed_plate&&!s.complete);
  g_ppu->bgXsc[0]=8;g_ppu->screenEnabled[0]=0x13;g_ppu->screenEnabled[1]=0x11;
  g_ppu->cgwsel=0x82;g_ppu->cgadsub=2;g_snesrecomp_last_hdmaen=2;
- IogWorldBeginRaster();IogWorldEndRaster(0,225,0);CHECK(s.modal_plate&&s.complete);
- g_ppu->mosaic=0xc3;IogWorldBeginRaster();IogWorldEndRaster(0,225,0);CHECK(s.modal_plate&&s.complete);
- g_ppu->mosaic=0xc1;IogWorldBeginRaster();CHECK(!s.modal_plate);
+ IogWorldBeginRaster();IogWorldEndRaster(0,225,0);CHECK(s.fixed_plate&&s.complete);
+ g_ppu->mosaic=0xc3;IogWorldBeginRaster();IogWorldEndRaster(0,225,0);CHECK(s.fixed_plate&&s.complete);
+ g_ppu->mosaic=0xc1;IogWorldBeginRaster();CHECK(!s.fixed_plate);
  g_ppu->mosaic=0;
- g_ppu->inidisp=0x80;IogWorldBeginRaster();CHECK(!s.modal_plate&&!s.complete);
- g_ppu->inidisp=15;g_ppu->bgXsc[1]=8;IogWorldBeginRaster();CHECK(!s.modal_plate);
- g_ppu->bgXsc[1]=0x0c;word(0x644,0x8a);IogWorldBeginRaster();CHECK(!s.modal_plate);
- word(0x644,0xfd);IogWorldBeginRaster();CHECK(s.modal_plate);
- IogWorldReset();CHECK(!s.modal_plate&&!s.complete);
- s.stock=false;IogWorldBeginRaster();CHECK(!s.modal_plate);
+ g_ppu->inidisp=0x80;IogWorldBeginRaster();CHECK(!s.fixed_plate&&!s.complete);
+ g_ppu->inidisp=15;g_ppu->bgXsc[1]=8;IogWorldBeginRaster();CHECK(!s.fixed_plate);
+ g_ppu->bgXsc[1]=0x0c;word(0x644,0x8a);IogWorldBeginRaster();CHECK(!s.fixed_plate);
+ word(0x644,0xfd);IogWorldBeginRaster();CHECK(s.fixed_plate);
+ IogWorldReset();CHECK(!s.fixed_plate&&!s.complete);
+ s.stock=false;IogWorldBeginRaster();CHECK(!s.fixed_plate);
+}
+static void stock_ending_plate(void){
+ fixture();word(0x644,0x90);word(0x6ee,1);
+ g_ppu->bgmode=9;g_ppu->inidisp=9;g_ppu->bgTileAdr=0x622;
+ g_ppu->bgXsc[0]=0x11;g_ppu->bgXsc[1]=0x18;g_ppu->bgXsc[2]=0x78;
+ g_ppu->screenEnabled[0]=0x17;g_ppu->screenEnabled[1]=2;
+ g_ppu->cgwsel=2;g_ppu->cgadsub=0x41;
+ IogWorldBeginRaster();IogWorldEndRaster(0,225,0);
+ CHECK(s.fixed_plate&&s.complete&&!strcmp(s.reason,"ready_stock_ending_plate"));
+ word(0x644,0x89);word(0x6ee,5);
+ g_ppu->bgXsc[1]=0x19;g_ppu->screenEnabled[0]=0x11;g_ppu->screenEnabled[1]=4;
+ g_ppu->cgwsel=0x82;g_ppu->cgadsub=1;
+ CHECK(StockEndingPlate(g_ppu,ram));
+ word(0x644,0xf7);word(0x6ee,0x0401);
+ g_ppu->bgXsc[1]=0x18;g_ppu->bgXsc[2]=0x7a;g_ppu->windowsel=0x33;
+ g_ppu->screenEnabled[0]=0x14;g_ppu->screenEnabled[1]=0;
+ g_ppu->cgwsel=2;g_ppu->cgadsub=0x83;
+ CHECK(StockEndingPlate(g_ppu,ram));
+ g_ppu->bgXsc[2]=0x7b;CHECK(!StockEndingPlate(g_ppu,ram));g_ppu->bgXsc[2]=0x7a;
+ g_ppu->bgmode=7;CHECK(!StockEndingPlate(g_ppu,ram));g_ppu->bgmode=9;
+ g_ppu->inidisp=0x80;CHECK(!StockEndingPlate(g_ppu,ram));
 }
 static void effect_camera_actor(unsigned at,unsigned entry,unsigned x,unsigned y){
  word(at,entry);ram[at+2]=0x80;word(at+0x12,0x1000);word(at+0x14,x);word(at+0x16,y);
@@ -806,6 +827,28 @@ static void village_heat(void){
  s.lines[99].registers[offsetof(Ppu,vScroll)+2]^=1;
  s.epochs[0].ram[0x68a]++;s.epochs[0].ram[0x68c]++;
  CHECK(!VillageHeat(&s.epochs[0],&probe)); /* A three-pixel camera disagreement fails. */
+}
+static void larai_mist(void){
+ fixture();word(0x644,0x1d);word(0x6ee,0x85);
+ word(0x692,768);word(0x694,512);word(0x696,1536);word(0x698,1536);
+ word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xeab4,0,0x0101);
+ g_ppu->bgmode=9;g_ppu->bgXsc[0]=0x19;g_ppu->bgXsc[1]=0x11;
+ g_ppu->screenEnabled[0]=0x17;g_ppu->screenEnabled[1]=0x12;
+ g_ppu->cgwsel=0x82;g_ppu->cgadsub=0x41;
+ g_ppu->hScroll[1]=(uint16_t)Word(ram,0x68a);
+ g_ppu->vScroll[1]=(uint16_t)Word(ram,0x68e);
+ publication();IogWorldBeginRaster();
+ for(int line=0;line<=224;line++){
+  g_ppu->hScroll[0]=(uint16_t)(176+((line+15)%16)/4);
+  IogWorldCaptureLine(line);
+ }
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_larai_mist"));
+ s.lines[99].registers[offsetof(Ppu,hScroll)]^=1;
+ CHECK(RenderWorld()&&!strcmp(s.reason,"ready_legacy_raster_effect"));
+ s.lines[99].registers[offsetof(Ppu,hScroll)]^=1;
+ s.lines[99].registers[offsetof(Ppu,cgadsub)]^=1;
+ CHECK(RenderWorld()&&!strcmp(s.reason,"ready_legacy_raster_effect"));
 }
 static void great_wall_authored_courses(void){
  /* One allocation stores three256px courses. Observe the active original
@@ -1577,7 +1620,7 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 
