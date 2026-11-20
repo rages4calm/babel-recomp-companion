@@ -24,6 +24,7 @@ bool IogMapRuntimeFlush(IogMapRuntime *r){(void)r;return true;}
 bool IogMapRuntimeUpdate(IogMapRuntime*r,const IogMapRuntimeFrame*f){(void)r;(void)f;return false;}
 void IogMapRuntimeGetStatus(const IogMapRuntime*r,IogMapRuntimeStatus*s){(void)r;memset(s,0,sizeof(*s));s->frame_valid=ready;}
 bool IogMapRuntimeGetViewSource(IogMapRuntime*r,IogMapViewSource*s){(void)r;(void)s;return false;}
+bool IogMapRuntimeGetRadarSource(IogMapRuntime*r,IogMapViewSource*s){(void)r;(void)s;return false;}
 static void word(uint8_t*r,unsigned at,unsigned value){r[at]=(uint8_t)value;r[at+1]=(uint8_t)(value>>8);}
 static void request(bool expected){uint32_t pad=0;C(!IogMapHostInput(&pad));pad=SNES_PAD_START|SNES_PAD_RIGHT;C(!!IogMapHostInput(&pad)==expected);C(pad==(expected?SNES_PAD_RIGHT:SNES_PAD_START|SNES_PAD_RIGHT));}
 int main(int argc,char**argv){

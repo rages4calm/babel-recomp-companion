@@ -31,7 +31,12 @@ static void update(IogMapRuntime*r,const IogMapRuntimeFrame*f){
 int main(int argc,char**argv){
  CHECK(argc==3);IogMapRuntimeFrame f=fixture();IogMapRuntime*r=IogMapRuntimeCreate(argv[1]);CHECK(r);
  IogMapViewSource view;IogMapRuntimeStatus status;
- update(r,&f);CHECK(IogMapRuntimeGetViewSource(r,&view));IogMapRuntimeGetStatus(r,&status);
+ update(r,&f);
+ IogMapViewSource radar;
+ CHECK(IogMapRuntimeGetRadarSource(r,&radar));
+ CHECK(!radar.scenery_rgba&&!radar.scenery_bytes&&!radar.scenery_stride);
+ CHECK(IogMapRuntimeGetViewSource(r,&view));IogMapRuntimeGetStatus(r,&status);
+ CHECK(radar.discovery==view.discovery&&radar.walkable==view.walkable);
  CHECK(status.frame_valid&&status.grid_width==16&&status.grid_height==16&&status.cell_world_pixels==16&&status.atlas_cell_pixels==8);
  CHECK(view.walkable[6*16+4]&&ram[0x1c000+6*16+4]==0xf0);
  CHECK(IogMapDiscoveryIsRevealed(view.discovery,8,6)&&!IogMapDiscoveryIsRevealed(view.discovery,9,6));
@@ -171,6 +176,9 @@ int main(int argc,char**argv){
  CHECK(status.persistent_loads>0&&IogMapDiscoveryIsRevealed(view.discovery,11,6));
  IogMapViewSettings settings={0};settings.mode=kIogMapViewRadar;settings.transform=(IogMapViewTransform){0,0,1,1,1};settings.fog=(IogMapViewColor){1,2,3,255};
  uint8_t pixels[16*16*4];CHECK(IogMapRuntimeDraw(r,pixels,sizeof(pixels),16*4,16,16,&settings));
+ uint8_t full_source_pixels[sizeof(pixels)];
+ CHECK(IogMapViewRender(full_source_pixels,sizeof(full_source_pixels),16*4,16,16,&view,&settings));
+ CHECK(!memcmp(pixels,full_source_pixels,sizeof(pixels)));
  CHECK(IogMapRuntimeFlush(r));printf("ACTIVE_LAYOUT ");for(unsigned i=0;i<32;i++)printf("%02x",status.layout_sha256[i]);printf("\n");
  IogMapRuntimeDestroy(r);
  r=IogMapRuntimeCreate(argv[1]);CHECK(r);update(r,&f);CHECK(IogMapRuntimeGetViewSource(r,&view));CHECK(IogMapDiscoveryIsRevealed(view.discovery,11,6));IogMapRuntimeDestroy(r);

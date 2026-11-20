@@ -246,6 +246,37 @@ movement even when the background and foreground publish different
 camera positions. Checked the `8B → 8A → 8B` round trip and the v18
 post-ceremony fade. Controller routes use SDL virtual input.
 
+## Radar, inventory and connected routes
+
+v20 feeds the small radar from the walkable grid, revealed cells and player
+position. Scenery decoding is reserved for the full area map. Both still
+use the same discovery journal. The radar pixel comparison used both source
+paths. In game, the virtual controller opened and closed the full map, and
+its output matched v19 byte for byte.
+
+The virtual controller also opened and closed the original inventory from
+the Ishtar studio. Two menu pictures and the settled room matched v19
+exactly, as did all seven checked guest snapshot fields after the return.
+The inventory keeps its centered stock framing at square-pixel 1.5×.
+
+The Castle staircase and all four Larai Cliff links completed in both
+directions from assisted entries. The routes used the original dialogue
+and controller movement. Eight inspected views matched their sampled
+original gameplay pixels, including the lower cliff mist.
+
+The assisted Cottage route reached Nazca through the original world map.
+The Seaside Tunnel route advanced through all three story phases into
+Angel Village. Both tested Angkor routes from `B2` returned to that room.
+The routes used the original transition scripts after setup.
+
+The four remaining Babel rematches were won from assisted starts. Castoth
+lost both hands before the head opened, and both Vampires fell. Viper,
+the Vampires, Castoth and the Mummy Queen each returned to the tower
+through the original victory script. Player-only setup included form,
+stats and positioning. Sand Fanger's win and return were verified on v18.
+The original Sky Garden Viper also reached its stock reward ceremony and
+returned to the arena from an assisted combat checkpoint.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

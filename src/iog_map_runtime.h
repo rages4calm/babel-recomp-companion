@@ -62,6 +62,7 @@ void IogMapRuntimeGetStatus(const IogMapRuntime *runtime,IogMapRuntimeStatus *st
  * accepted frames; room/layout/character-bank/map/definition changes force a
  * fresh atlas immediately. */
 bool IogMapRuntimeGetViewSource(IogMapRuntime *runtime,IogMapViewSource *source);
+bool IogMapRuntimeGetRadarSource(IogMapRuntime *runtime,IogMapViewSource *source);
 bool IogMapRuntimeDraw(IogMapRuntime *runtime,uint8_t *destination,size_t bytes,
     size_t stride,unsigned width,unsigned height,const IogMapViewSettings *settings);
 #endif
