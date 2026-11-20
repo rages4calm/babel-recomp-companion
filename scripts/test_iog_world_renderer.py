@@ -707,14 +707,16 @@ static void calibrated_wall_picture(void){
  CHECK(!memcmp(before_ram,ram,sizeof ram)&&!memcmp(&cpu,&g_cpu,sizeof cpu)&&!memcmp(&before_ppu,g_ppu,sizeof before_ppu));
 }
 static void anchored_wall_passages(void){
- const unsigned scenes[]={0x8a,0x8b,0x88};
+ const unsigned scenes[]={0x8a,0x8b,0x88,0x82};
  for(unsigned n=0;n<sizeof scenes/sizeof scenes[0];n++){
-  bool upper_approach=scenes[n]==0x88;
-  unsigned x=upper_approach?768:400,y=upper_approach?0:100;
-  fixture();word(0x644,scenes[n]);word(0x692,1024);word(0x696,upper_approach?768:1024);
+  bool upper_entry=scenes[n]==0x82,upper_approach=scenes[n]==0x88;
+  bool upper_floor=upper_entry||upper_approach;
+  unsigned x=upper_entry?618:upper_approach?768:400,y=upper_floor?0:100;
+  unsigned width=upper_entry?2048:1024;
+  fixture();word(0x644,scenes[n]);word(0x692,width);word(0x696,upper_approach?768:1024);
   word(0x694,256);word(0x698,upper_approach?2048:n?1024:768);
   word(0x68a,x);word(0x68e,y);word(0x68c,0);word(0x690,y);
-  if(upper_approach){word(0x6de,256);word(0x6da,1024);}
+  if(upper_floor){word(0x6de,256);word(0x6da,width);}
   word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xEAB4,0,0x0101);
   g_ppu->hScroll[0]=(uint16_t)x;g_ppu->hScroll[1]=(uint16_t)(x/2);
   g_ppu->vScroll[0]=g_ppu->vScroll[1]=(uint16_t)y;
@@ -731,13 +733,13 @@ static void anchored_wall_passages(void){
   for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
   /* Keep the captured phase at the native screen offset, even at the
    * right-hand approach door. Check both margins and chunk seams. */
-  expected_background_x=upper_approach?42:n?28:29;
-  expected_background_y=upper_approach?-40:44;background_probe=true;
+  expected_background_x=upper_entry?138:upper_approach?42:n?28:29;
+  expected_background_y=upper_floor?-40:44;background_probe=true;
   /* Rows above the authored field have no calibrated producer band. */
-  background_probe_first_row=upper_approach?39:0;
+  background_probe_first_row=upper_floor?39:0;
   IogWorldEndRaster(0,225,0);background_probe=false;
   CHECK(s.complete&&s.view.native_x==(upper_approach?342:171)&&
-   s.view.native_y==(upper_approach?40:56)&&background_probe_calls==3*336);
+   s.view.native_y==(upper_floor?40:56)&&background_probe_calls==3*336);
  }
 }
 static void flat_horizon_tail_guards(void){

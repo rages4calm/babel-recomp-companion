@@ -474,6 +474,34 @@ Solid Arm and Dark Gaia checkpoints and an ending classroom checkpoint, the
 default, forced-interpreter and reference-pixel paths produced the same scene
 history, complete widescreen picture and all seven compared guest state fields.
 
+## Great Wall approach and Mode 7 destination menu
+
+- **Mode 1, Great Wall (`82`, `83`).** The upper approach now keeps the
+  mountain layer aligned with the captured game raster. Two controller samples
+  in the upper route went from 11,285 and 7,047 differing gameplay pixels to
+  zero in the original field. The fix applies to the observed upper-floor
+  layout. After a source-verified entry setup, the controller walked through
+  the west door and returned through the east door. The staircase, both door
+  views and the picture through fallback kept square-pixel 1.5×. The
+  reference-pixel replay matched the full captured picture and all seven
+  compared guest-state fields.
+- **Mode 7, stock destination menu (`FE`).** When the map opens its Mode 1
+  dialogue band, the Mode 7 portion now retains the top 56 rows on the 1.5×
+  view. The new extension requires every captured map-row transform to match
+  the original camera formula. On the verified opening frame, 23,912 nonblack
+  pixels were restored above the original field and all 167,440 lower pixels
+  stayed exact. The same SDL virtual controller route exited Itory, chose
+  South Cape and moved in town through both the extended renderer and the
+  explicit split fallback. The guest state matched.
+- **Other phases.** Cold prologue and storybook skips, Sky Garden's flight,
+  ocean crash and descent, and the Dao-to-Babel flight were compared on v27
+  and v28. The sampled pictures and recorded transitions matched. The tiny
+  Mu twins bottom-edge difference still reproduces in one active pose.
+
+The combined Original v28 build uses the 757-entry dialogue pack. Checks used
+headless SDL virtual gamepads and inspected the 598×336 square-pixel 1.5×
+picture. The production launcher profile also booted with MSU-1 enabled.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

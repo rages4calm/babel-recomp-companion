@@ -823,14 +823,14 @@ static bool RenderMode7Plane(void)
     const PictureEpoch *initial=&s.epochs[s.lines[0].epoch];
     unsigned angle=Word(initial->ram,0xBC)&511u;
     const Cart *cart=g_snes?g_snes->cart:NULL;
-    if(!s.mode7_split && cart && cart->rom && cart->romImageSize==2097152) {
+    if(cart && cart->rom && cart->romImageSize==2097152) {
         unsigned sin_at=0x1C595+angle*2,cos_at=0x1C695+angle*2;
         s.mode7_parameters=(IogMode7PerspectiveParameters){
             (uint16_t)Word(initial->ram,0xB8),(uint16_t)Word(initial->ram,0xB6),
             IogMode7PerspectiveSigned(Word(cart->rom,cos_at)),
             IogMode7PerspectiveSigned(Word(cart->rom,sin_at))};
         int16_t captured[224][4];bool stable=true;
-        for(int line=0;line<=224;line++) {
+        for(int line=0;line<=map_end;line++) {
             memcpy(source,s.lines[line].registers,PPU_SAVESTATE_REGS_SIZE);
             if(line<224)memcpy(captured[line],source->m7matrix,sizeof(captured[line]));
             if(memcmp(source->m7matrix+4,matrix+4,4*sizeof(int16_t)) ||
@@ -838,9 +838,14 @@ static bool RenderMode7Plane(void)
             const PictureEpoch *e=&s.epochs[s.lines[line].epoch];
             if(memcmp(e->ram+0xB6,initial->ram+0xB6,8))stable=false;
         }
+        /* The stock destination menu switches to Mode 1 below map_end.
+         * Verify every Mode 7 row, including the initialized raster row,
+         * before continuing its projection above the visible map. The
+         * terminal hold only applies when Mode 7 spans the full display. */
+        int verified_rows=s.mode7_split?map_end+1:224;
         s.mode7_perspective=stable &&
-            !memcmp(source->m7matrix,captured[223],sizeof(captured[223])) &&
-            IogMode7PerspectiveMatches(&s.mode7_parameters,captured);
+            (s.mode7_split || !memcmp(source->m7matrix,captured[223],sizeof(captured[223]))) &&
+            IogMode7PerspectiveMatchesPrefix(&s.mode7_parameters,captured,verified_rows);
     }
     *palette=s.base;Detach(palette);memset(palette->vram,0,sizeof(palette->vram));
     /* Ask the actual detached PPU for all256 palette results, including
@@ -862,10 +867,9 @@ static bool RenderMode7Plane(void)
     memset(prior_registers,0,sizeof(prior_registers));
     for(int row=0;row<s.height;row++) {
         int y=row-top+1;
-        /* Perspective/raster planes use the real224 row transforms across
-         * the entire expanded width. There is no authored transform above
-         * or below that band: preserve padding instead of inventing HDMA. */
-        if((s.mode7_split && (y<1 || y>map_end)) ||
+        /* Extend only a validated camera above the stock menu. Its
+         * Mode 1 dialogue band and the padding below stay intact. */
+        if((s.mode7_split && (y>map_end || (y<1 && !s.mode7_perspective))) ||
            (!uniform && !s.mode7_perspective && (y<1 || y>224))) {
             memset(s.output+row*s.width,0,s.width*4);continue;
         }
@@ -1005,10 +1009,13 @@ static bool RenderWorld(void)
     bool flat_horizon_tail=horizon&&HorizonFlatTail(first,p);
     bool raster_anchored=RasterAnchoredBackdrop(scene,first->ram,
         tracked_effect?&effect_camera:NULL);
-    bool wall_approach=scene==0x88 && authored &&
-        Word(first->ram,0x692)==1024 && Word(first->ram,0x696)==768 &&
+    bool wall_approach=authored &&
         !authored_bounds.left && !authored_bounds.top &&
-        authored_bounds.right==1024 && authored_bounds.bottom==256;
+        authored_bounds.bottom==256 &&
+        ((scene==0x82 && Word(first->ram,0x692)==2048 &&
+          Word(first->ram,0x696)==1024 && authored_bounds.right==2048) ||
+         (scene==0x88 && Word(first->ram,0x692)==1024 &&
+          Word(first->ram,0x696)==768 && authored_bounds.right==1024));
     bool wall_field_phase=wall_bands && (wall_approach || scene==0x8A || scene==0x8B);
     /* The captured backdrop can be from the next camera publication. */
     int wall_source_camera=wall_field_phase?wall_model.source_camera_x:camera_x;
