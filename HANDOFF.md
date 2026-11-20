@@ -125,15 +125,25 @@ matched v36 in its pictures, position and transition timing. The
 [read-only achievement audit](docs/ACHIEVEMENTS-INTEGRATION.md) checks forward
 state restoration and cheat exclusion. Exact receipts are in
 `.local/batch-001/visual-fullgame-034`.
+The same checkpoint advances native Mt. Kress actor execution. The isolated
+build adds 274 verified Skulker and acid spider contexts with 112 precise COP
+frame permissions. The assisted Mushroom Water bridge and wrong-region
+control match forced-interpreter gameplay, CPU and device state. The new paths
+executed 118,463 instructions across the two replays, displacing 817,866 guest
+cycles previously spent in the interpreter. Both earned saves also pass
+movement and the inventory round trip at 1.5× with virtual controller input.
+The generated selection, build and displacement receipts are private under
+`visual-fullgame-034/native-design`. Interpreter fallback remains available.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
 `.local/batch-001/visual-fullgame-010`. It selects batch 034's
-`babel-originalv37final.exe` and retains the same private dialogue pack and
+`babel-originalv37kress.exe` and retains the same private dialogue pack and
 continues the isolated test profile's save. The test executable has the
-required `i18n/structure.txt` alongside it. `Play Original v36 Rollback.cmd`
-selects the previous build. Hold Down from the initial Itory
+required `i18n/structure.txt` alongside it. `Play Original v37 Pre-Kress
+Rollback.cmd` selects the dialogue and visual build before the Kress changes.
+`Play Original v36 Rollback.cmd` selects the earlier build. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.
 The test profile selects the existing local MSU-1 pack. An SPC save can keep
