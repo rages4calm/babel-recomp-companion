@@ -74,14 +74,14 @@ static void gates(void) {
     const unsigned rooms[]={0x01,0x0c,0x0e,0x0f,0x12,0x15,0x1e,0x23,0x25,0x26,
         0x27,0x28,0x29,0x2d,0x3d,0x3e,0x3f,0x40,0x41,0x42,0x45,0x46,0x4f,0x51,0x53,
         0x55,0x61,0x62,0x64,0x67,0x6d,0x6f,0x85,0x86,0x8a,0x8b,0xa7,0xb6,0xb8,0xcc,
-        0xcd,0xce,0xdd,0xde,0xdf,0xe0,0xe1,0xe2,0xe3,0xea};
+        0xcd,0xce,0xdd,0xde,0xdf,0xe0,0xe1,0xe2,0xe3,0xea,0x02,0x03,0x06,0x08,0x31};
     for(unsigned i=0;i<sizeof(rooms)/sizeof(rooms[0]);i++) {
         fixture();word(0x644,rooms[i]);
         CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewReady);
         CHECK(IogSceneViewReadSource(ram,sizeof(ram),&ppu,false,&s));
         CHECK(s.gate==((rooms[i]==1||rooms[i]==12)?kIogSceneViewReady:kIogSceneViewUnsupportedScene));
     }
-    const unsigned rejected[]={0,2,3,6,8,0x31,255,256,65535};
+    const unsigned rejected[]={0,0x84,0x89,255,256,65535};
     for(unsigned i=0;i<sizeof(rejected)/sizeof(rejected[0]);i++) {
         fixture();word(0x644,rejected[i]);
         CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewUnsupportedScene);
@@ -104,6 +104,37 @@ static void gates(void) {
     for(unsigned i=0;i<sizeof(bad)/sizeof(bad[0]);i++){
         fixture();word(0x68a,bad[i]);
         CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewUnsupportedLayout);
+    }
+}
+static void pyramid_single_background(void) {
+    const unsigned rooms[][3]={{0xcc,1024,1024},{0xd0,1536,1280},{0xd2,1536,1024},
+        {0xd4,1280,1280},{0xd8,1280,1280}};
+    for(unsigned i=0;i<sizeof(rooms)/sizeof(rooms[0]);i++) {
+        IogSceneViewSource s;
+        fixture();word(0x644,rooms[i][0]);
+        word(0x692,rooms[i][1]);word(0x696,rooms[i][2]);
+        word(0x69a,rooms[i][1]*rooms[i][2]/256);
+        word(0x694,0);word(0x698,0);word(0x69c,0);
+        ppu.screenEnabled[0]=0x15;
+        CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s));
+        CHECK(s.gate==kIogSceneViewReady&&s.absent_secondary);
+        CHECK(IogSceneViewReadSource(ram,sizeof(ram),&ppu,false,&s));
+        CHECK(s.gate==kIogSceneViewUnsupportedScene&&!s.absent_secondary);
+        for(unsigned screen=0;screen<2;screen++) {
+            ppu.screenEnabled[screen]|=2;
+            CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s));
+            CHECK(s.gate==kIogSceneViewUnsupportedLayout&&!s.absent_secondary);
+            ppu.screenEnabled[screen]&=~2;
+        }
+        word(0x69c,256);
+        CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s));
+        CHECK(s.gate==kIogSceneViewUnsupportedLayout&&!s.absent_secondary);
+        word(0x69c,0);word(0x696,rooms[i][2]+256);
+        CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s));
+        CHECK(s.gate==kIogSceneViewUnsupportedLayout&&!s.absent_secondary);
+        word(0x696,rooms[i][2]);word(0x644,0xd6);
+        CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s));
+        CHECK(s.gate==kIogSceneViewUnsupportedLayout&&!s.absent_secondary);
     }
 }
 static void lifecycle_and_pixels(void) {
@@ -170,7 +201,7 @@ static void lifecycle_and_pixels(void) {
     IogSceneViewInit(&view,"0");CHECK(!IogSceneViewDraw(&view,dst,pitch,pixels,342,224,1));
     free(pixels);free(dst);
 }
-int main(void) { gates();lifecycle_and_pixels();printf("%u scene-view assertions passed\n",checks);return 0; }
+int main(void) { gates();pyramid_single_background();lifecycle_and_pixels();printf("%u scene-view assertions passed\n",checks);return 0; }
 '''
 
 
@@ -186,6 +217,7 @@ def main():
     source = out/'scene_view.c'
     source.write_text(HARNESS, encoding='utf-8')
     inputs = [ROOT/'src/iog_scene_view.c', ROOT/'src/iog_visual_objects.c',
+              ROOT/'snesrecomp/runner/src/sha256.c',
               ROOT/'snesrecomp/runner/src/widescreen.c']
     exe = out/'scene_view.exe'
     command = [args.compiler,'-std=c11','-O1','-Wall','-Wextra','-Werror',

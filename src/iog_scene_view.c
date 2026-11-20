@@ -14,6 +14,23 @@ static uint16_t Word(const uint8_t *ram, unsigned at)
     return (uint16_t)(ram[at] | (uint16_t)ram[at + 1] << 8);
 }
 
+bool IogSceneViewAbsentPyramidSecondary(const uint8_t *ram, const Ppu *ppu)
+{
+    unsigned width, height;
+    switch (Word(ram, 0x0644)) {
+    case 0xCC: width = 1024; height = 1024; break;
+    case 0xD0: width = 1536; height = 1280; break;
+    case 0xD2: width = 1536; height = 1024; break;
+    case 0xD4:
+    case 0xD8: width = 1280; height = 1280; break;
+    default: return false;
+    }
+    return !(ram[0x06EE] & 0x80) &&
+        Word(ram, 0x0692) == width && Word(ram, 0x0696) == height &&
+        !Word(ram, 0x0694) && !Word(ram, 0x0698) && !Word(ram, 0x069C) &&
+        !((ppu->screenEnabled[0] | ppu->screenEnabled[1]) & 2);
+}
+
 void IogSceneViewInit(IogSceneView *view, const char *token)
 {
     if (!view) return;
@@ -55,6 +72,7 @@ static bool ReadSource(const uint8_t *ram, size_t size, const Ppu *ppu,
     if (randomizer) return true;
     out->gate = kIogSceneViewUnsupportedLayout;
     if ((ppu->bgmode & 7) != 1 || (ram[0x06EF] & 8)) return true;
+    bool absent_secondary = independent_world && IogSceneViewAbsentPyramidSecondary(ram, ppu);
     uint32_t signature = 2166136261u;
     for (unsigned i = 0; i < 2; i++) {
         unsigned off = i * 2;
@@ -64,7 +82,8 @@ static bool ReadSource(const uint8_t *ram, size_t size, const Ppu *ppu,
         uint16_t map = Word(ram, 0x069E + off);
         uint16_t definitions = Word(ram, 0x06AE + off);
         uint32_t bytes = (uint32_t)(width >> 8) * (height >> 8) * 256u;
-        if (width < 256 || height < 256 || (width & 255) || (height & 255) ||
+        if (((!absent_secondary || !i) && (width < 256 || height < 256)) ||
+            (width & 255) || (height & 255) ||
             width > 32768 || height > 8192 ||
             map != (i ? 0xC000 : 0xA000) ||
             definitions != (i ? 0x2800 : 0x2000) ||
@@ -85,6 +104,7 @@ static bool ReadSource(const uint8_t *ram, size_t size, const Ppu *ppu,
     } else if (out->camera_x > out->world_width - 256u ||
                out->camera_y > out->world_height - 224u) return true;
     out->layout_signature = signature;
+    out->absent_secondary = absent_secondary;
     out->gate = kIogSceneViewReady;
     return true;
 }

@@ -137,6 +137,41 @@ Detailed output remains ignored/private. Existing output files are refused;
 produce a new receipt when policy changes. Do not commit private indexes,
 captures, states, ROM-derived generated code or asset data.
 
+## Euro through Pyramid
+
+Batch 014 adds 52 Original scene IDs, bringing structural admission from
+113 to 165. It also extends the existing Pyramid hub admission to its
+one-background form. Arrivals use assisted, source-checked checkpoints.
+Door checks use SDL virtual controller movement after setup. Scripted
+quest and combat checks are identified separately.
+
+| Region | New scene IDs | Verified route or behavior |
+| --- | --- | --- |
+| Watermia and Great Wall | `7F` | Watermia story exit to Luke's house. Sand Fanger defeated from an assisted combat setup, with the reward flag set. Separate earned defeat checkpoint reaches the Dark Space statue ceremony and returns with the statue recorded. |
+| Euro | `91–9D` | All 13 rooms moved on both axes, 12 door round trips, and selected stairs and the shrine cellar. Visual checks use interiors entered through their normal doors so that stock graphics have loaded. |
+| Mt. Temple and Native Village | `A0–A6, A8–A9, AC–AE` | Movement checks, 11 assisted door round trips including previously admitted `A7`, and one temple spider kill with the enemy counter decrement. |
+| Angkor Wat | `B0–B5, B7, B9–BF` | Stable captures across all 16 scenes including previously admitted `B6/B8`, 12 door round trips, and stock Flower exchange driven by a scripted confirm sequence with a full starting inventory. The `B2` outbound door passed, with its return still open. |
+| Dao | `C3–C9` | Square-pixel 1.5× town heat and six door round trips. |
+| Pyramid | `D0, D2, D4, D6, D8` | Movement and branch returns into hub `CC`. Four branches and the hub return use a guarded layout with the secondary background absent. `D6` uses its normal two-background route. |
+
+Dao's window bounds translate with each detached width segment. The
+renderer checks the actual 64-line heat phase before extending it. Native
+Village repeats its separately verified 32-line vertical pattern only
+while its camera and raster agree within the guarded bounds. Transient
+frames outside those bounds, the Great Wall Dark Space ceremony, and
+unrecognized layouts retain the same-scale fallback. One sample during
+the Native Village return had two differing pixels on the last stock row,
+and one Great Wall ceremony return fade sample had lower-edge differences.
+
+The broad movement and transition runs came from `originalv15`. The final
+`originalv16` rechecks Native Village motion, all five Pyramid branch returns,
+Euro door-entry visuals, and selected Dao and Angkor views. The final build
+also passed controller map open/close and stock world travel fallback checks.
+The checked player view uses square pixels and 1.5×, including selected
+1920×1080 NVIDIA captures and comparisons of source gameplay pixels with
+the separately composed HUD masked. These samples cover the listed paths
+and phases. Uninspected story phases and the remaining scenery are open.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

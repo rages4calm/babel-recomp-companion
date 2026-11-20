@@ -58,6 +58,7 @@ int snes_mod_runtime_feature_resource_path_c(const char*package,const char*featu
 int snes_mod_runtime_package_root_c(const char*package,const char*version,char*out,uint32_t cap){
  (void)package;(void)version;(void)out;(void)cap;return 0;
 }
+bool IogSceneViewAbsentPyramidSecondary(const uint8_t*r,const Ppu*p){(void)r;(void)p;return false;}
 bool IogSceneViewReadWorldSource(const uint8_t*r,size_t n,const Ppu*p,bool random,IogSceneViewSource*out){
  CHECK(r==ram&&n==sizeof(ram)&&p==g_ppu&&!random);memset(out,0,sizeof(*out));
  out->scene=(uint16_t)Word(r,0x644);out->gate=scene_ready?kIogSceneViewReady:kIogSceneViewUnsupportedScene;return true;
@@ -338,6 +339,24 @@ static void actual_window_enable_gates(void){
  IogWorldBeginRaster();CHECK(s.valid);
  fixture();publication();g_ppu->screenWindowed[0]=4;g_ppu->windowsel=2u<<8;
  IogWorldBeginRaster();CHECK(s.valid); /* BG3 is separately captured HUD */
+ /* Dao's captured mask may move into, across or entirely past a chunk. */
+ fixture();word(0x644,0xc3);word(0x6ee,0x80);
+ word(0x692,768);word(0x696,512);word(0x694,512);word(0x698,512);
+ g_ppu->windowsel=2;g_ppu->screenWindowed[0]=1;
+ publication();IogWorldBeginRaster();CHECK(s.valid);
+ for(int line=0;line<=224;line++){
+  g_ppu->hScroll[0]=(uint16_t)(256+((line+63)%64)/4);
+  IogWorldCaptureLine(line);
+ }
+ CHECK(s.valid&&DaoHeatWave(&s.epochs[0],g_ppu));
+ s.lines[100].registers[offsetof(Ppu,hScroll)]^=1;
+ CHECK(!DaoHeatWave(&s.epochs[0],g_ppu));
+ g_ppu->window1left=0;g_ppu->window1right=120;
+ RebaseWindow1(g_ppu,-50);CHECK(g_ppu->window1left==0&&g_ppu->window1right==70);
+ RebaseWindow1(g_ppu,250);CHECK(g_ppu->window1left==250&&g_ppu->window1right==255);
+ RebaseWindow1(g_ppu,80);CHECK(g_ppu->window1left==255&&g_ppu->window1right==0);
+ RebaseWindow1(g_ppu,-255);CHECK(g_ppu->window1left==255&&g_ppu->window1right==0);
+ g_ppu->windowsel=10;CHECK(!DaoWorldWindow(g_ppu,ram));
 }
 static void real_map_edge_framing(void){
  fixture();word(0x68a,152);word(0x68e,484);word(0x696,768);word(0x698,768);
@@ -483,6 +502,32 @@ static void water_wave(void){
   s.lines[99].registers[offsetof(Ppu,vScroll)+layer*2]^=1;
   CHECK(!WaterWave(&s.epochs[0],&probe));
  }
+}
+static void village_heat(void){
+ fixture();word(0x644,0xac);
+ word(0x692,512);word(0x694,512);word(0x696,512);word(0x698,512);
+ word(0x68a,64);word(0x68c,64);word(0x68e,128);word(0x690,128);
+ publication();
+ word(0x68a,66);word(0x68c,66);word(0x68e,130);word(0x690,130);
+ g_ppu->hScroll[0]=g_ppu->hScroll[1]=64;
+ IogWorldBeginRaster();
+ for(int line=0;line<=224;line++){
+  unsigned phase=(unsigned)(line+31)%32;
+  g_ppu->vScroll[0]=g_ppu->vScroll[1]=(uint16_t)(128+phase/8);
+  IogWorldCaptureLine(line);
+ }
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_village_heat"));
+ Ppu probe=s.base;memcpy(&probe,s.lines[1].registers,PPU_SAVESTATE_REGS_SIZE);
+ CHECK(VillageHeat(&s.epochs[0],&probe));
+ s.lines[99].registers[offsetof(Ppu,vScroll)]^=1;
+ CHECK(!VillageHeat(&s.epochs[0],&probe)); /* The two layers must share their phase. */
+ s.lines[99].registers[offsetof(Ppu,vScroll)+2]^=1;
+ CHECK(!VillageHeat(&s.epochs[0],&probe)); /* A shared but aperiodic row still fails. */
+ s.lines[99].registers[offsetof(Ppu,vScroll)]^=1;
+ s.lines[99].registers[offsetof(Ppu,vScroll)+2]^=1;
+ s.epochs[0].ram[0x68a]++;s.epochs[0].ram[0x68c]++;
+ CHECK(!VillageHeat(&s.epochs[0],&probe)); /* A three-pixel camera disagreement fails. */
 }
 static void great_wall_authored_courses(void){
  /* One allocation stores three256px courses. Observe the active original
@@ -853,7 +898,7 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();village_heat();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 

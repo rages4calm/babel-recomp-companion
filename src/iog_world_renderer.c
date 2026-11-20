@@ -40,7 +40,7 @@ typedef struct PictureLine {
 static struct {
     bool initialized, enabled, stock, pending, composed, active, complete, valid;
     bool copy_reference;
-    bool source_packet,mode7,mode7_perspective;
+    bool source_packet,mode7,mode7_perspective,absent_secondary;
     int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
     int width, height, extent_quarters, epoch_count;
@@ -74,6 +74,46 @@ static bool ActiveWorldWindow(const Ppu *p)
            ((p->windowsel>>(layer*4))&10u)) return true;
     }
     return false;
+}
+
+/* Dao's heat effect uses only the first hardware window on BG1. The
+ * captured bounds are in native screen coordinates, not map coordinates. */
+static bool DaoWorldWindow(const Ppu *p,const uint8_t *ram)
+{
+    return Word(ram,0x644)==0xc3 && (ram[0x6ee]&0x80) &&
+        Word(ram,0x692)==768 && Word(ram,0x696)==512 &&
+        Word(ram,0x694)==512 && Word(ram,0x698)==512 && p->windowsel==2;
+}
+
+static void RebaseWindow1(Ppu *p,int offset)
+{
+    int left=p->window1left+offset,right=p->window1right+offset;
+    if(left>right || right<0 || left>255) {
+        p->window1left=255;
+        p->window1right=0;
+    } else {
+        p->window1left=(uint8_t)Clamp(left,0,255);
+        p->window1right=(uint8_t)Clamp(right,0,255);
+    }
+}
+
+enum { DaoHeatPeriod=64 };
+
+static bool DaoHeatWave(const PictureEpoch *e,const Ppu *p)
+{
+    if(!DaoWorldWindow(p,e->ram) || s.epoch_count!=1) return false;
+    bool varied=false;
+    size_t offset=offsetof(Ppu,hScroll);
+    for(unsigned line=1;line<=224;line++) {
+        const uint8_t *regs=s.lines[line].registers;
+        const uint8_t *phase=s.lines[(line-1)%DaoHeatPeriod+1].registers;
+        unsigned scroll=Word(regs,offset)&1023;
+        if(scroll!=(Word(phase,offset)&1023) ||
+           regs[offsetof(Ppu,bgXsc)]!=p->bgXsc[0] ||
+           Word(regs,offsetof(Ppu,bgTileAdr))!=p->bgTileAdr) return false;
+        varied|=scroll!=(p->hScroll[0]&1023);
+    }
+    return varied;
 }
 
 static bool Mode7PlaneLayout(const Ppu *p)
@@ -203,6 +243,7 @@ void IogWorldBeginRaster(void)
     if(!s.enabled || !g_ppu || !g_snes) return;
     s.complete=false; s.valid=false; s.epoch_count=0;
     s.mode7=s.mode7_perspective=false;
+    s.absent_secondary=false;
     s.mode7_split=0;
     memset(&s.view,0,sizeof(s.view));
     s.reason="unsupported_scene_or_layout";
@@ -221,18 +262,24 @@ void IogWorldBeginRaster(void)
     IogSceneViewReadWorldSource(g_snes->ram,131072,g_ppu,false,&source);
     if(source.gate!=kIogSceneViewReady || source.scene!=Word(s.active_ram,0x644)) return;
     if(PPU_objInterlace(g_ppu) || g_ppu->frameInterlace ||
-       (g_ppu->mosaic>>4)!=0 || ActiveWorldWindow(g_ppu)) return;
+       (g_ppu->mosaic>>4)!=0 ||
+       (ActiveWorldWindow(g_ppu) && !DaoWorldWindow(g_ppu,g_snes->ram))) return;
     s.base=*g_ppu;
+    s.absent_secondary=source.absent_secondary;
     s.valid=true; s.reason="awaiting_picture";
 }
 
 void IogWorldCaptureLine(int line)
 {
     if(!s.enabled || !s.valid || line<0 || line>224) return;
+    if(s.absent_secondary && (Word(g_snes->ram,0x644)!=Word(s.active_ram,0x644) ||
+       !IogSceneViewAbsentPyramidSecondary(g_snes->ram,g_ppu))) {
+        s.valid=false; s.reason="unexpected_secondary_background"; return;
+    }
     bool mode7_line=s.mode7 && (!s.mode7_split || line<s.mode7_split);
     if((mode7_line?!Mode7PlaneLayout(g_ppu):(g_ppu->bgmode&7)!=1) ||
        g_ppu->frameInterlace || (g_ppu->mosaic>>4)!=0 ||
-       ActiveWorldWindow(g_ppu)) {
+       (ActiveWorldWindow(g_ppu) && !DaoWorldWindow(g_ppu,g_snes->ram))) {
         s.valid=false; s.reason="unsupported_line_effect"; return;
     }
     PictureEpoch *prior=s.epoch_count?&s.epochs[s.epoch_count-1]:NULL;
@@ -428,6 +475,45 @@ static bool FreejiaRingWave(const PictureEpoch *e, const Ppu *p,
 }
 
 enum { WaterWavePeriod = 8 };
+enum { VillageHeatPeriod = 32 };
+
+/* Scene AC binds one 32-line heat table to both vertical scroll registers.
+ * Keep the actual raster across the native field. Extend it only when both
+ * layers agree throughout the captured picture. */
+static bool VillageHeat(const PictureEpoch *e,const Ppu *p)
+{
+    const uint8_t *ram=e->ram;
+    if(s.epoch_count!=1 || Word(ram,0x644)!=0xAC ||
+       Word(ram,0x692)!=512 || Word(ram,0x694)!=512 ||
+       Word(ram,0x696)!=512 || Word(ram,0x698)!=512)
+        return false;
+    /* The raster can be one walking step ahead of the composed camera.
+     * Horizontal scroll still follows composition. The sine table is
+     * centered on the raster's vertical camera. */
+    int camera_x=(int16_t)Word(s.active_ram,0x68A);
+    int camera_y=(int16_t)Word(ram,0x68E);
+    int delta_x=(int16_t)Word(ram,0x68A)-camera_x;
+    int delta_y=camera_y-(int16_t)Word(s.active_ram,0x68E);
+    if(delta_x < -2 || delta_x > 2 || delta_y < -2 || delta_y > 2 ||
+       Word(ram,0x68C)!=Word(ram,0x68A) || Word(ram,0x690)!=Word(ram,0x68E))
+        return false;
+    bool varied=false;
+    size_t h=offsetof(Ppu,hScroll),v=offsetof(Ppu,vScroll),maps=offsetof(Ppu,bgXsc);
+    for(unsigned line=1;line<=224;line++) {
+        const uint8_t *regs=s.lines[line].registers;
+        const uint8_t *phase=s.lines[(line-1)%VillageHeatPeriod+1].registers;
+        unsigned x=Word(regs,h)&1023,y=Word(regs,v)&1023;
+        int drift=ScrollWorld(ram,0x68E,y)-camera_y;
+        if(x!=((unsigned)camera_x&1023) || x!=(Word(regs,h+2)&1023) ||
+           y!=(Word(regs,v+2)&1023) || y!=(Word(phase,v)&1023) ||
+           drift < -4 || drift > 4 ||
+           regs[maps]!=p->bgXsc[0] || regs[maps+1]!=p->bgXsc[1] ||
+           Word(regs,offsetof(Ppu,bgTileAdr))!=p->bgTileAdr)
+            return false;
+        varied |= y!=(p->vScroll[0]&1023);
+    }
+    return varied;
+}
 
 /* Mu and Seaside Palace bind both secondary scroll registers to a repeating
  * sine table. Require the known layout and agreement across all published
@@ -715,6 +801,7 @@ static bool RenderWorld(void)
     int physical=(s.active_ram[0x6EE]>>7)&1;
     int camera_x=(int16_t)Word(s.active_ram,0x68A);
     int camera_y=(int16_t)Word(s.active_ram,0x68E);
+    bool village_heat=scene==0xAC && VillageHeat(first,p);
     bool source_plate=scene>=0xE5 && scene<=0xE8;
     if(source_plate) {
         /* These verified compositions expose only their native field. Their
@@ -726,8 +813,9 @@ static bool RenderWorld(void)
            !RoomPictureBounds(first,camera_x,camera_y,&bounds)) {
             s.reason="unsupported_room_window";return false;
         }
-    } else if(ScrollWorld(s.active_ram,0x68A,p->hScroll[physical])!=camera_x ||
-              ScrollWorld(s.active_ram,0x68E,p->vScroll[physical])!=camera_y) {
+    } else if(!village_heat &&
+              (ScrollWorld(s.active_ram,0x68A,p->hScroll[physical])!=camera_x ||
+               ScrollWorld(s.active_ram,0x68E,p->vScroll[physical])!=camera_y)) {
         s.reason="camera_publication_mismatch";return false;
     }
     if(!IogWorldViewCompute(camera_x,camera_y,Word(first->ram,0x692),
@@ -764,6 +852,7 @@ static bool RenderWorld(void)
     bool freejia_wave = tracked_effect && s.epoch_count == 1 &&
         FreejiaRingWave(first,p,&effect_camera);
     bool water_wave = WaterWave(first,p);
+    bool dao_heat=DaoHeatWave(first,p);
     if (scene == 0x32 && !freejia_wave) {
         s.reason = "unsupported_freejia_wave";
         return false;
@@ -817,7 +906,8 @@ static bool RenderWorld(void)
     *p=s.base;Detach(p);
     memcpy(p->vram,first->vram,sizeof(p->vram));
     int blank[2]={-1,-1};
-    for(int logical=0;logical<2;logical++) {
+    int layers=s.absent_secondary?1:2;
+    for(int logical=0;logical<layers;logical++) {
         int physical=logical^((first->ram[0x6EE]>>7)&1);
         unsigned base=PPU_bgTileAdr(p,physical);
         for(unsigned tile=0;tile<1024;tile++) {
@@ -858,12 +948,13 @@ static bool RenderWorld(void)
             int width=Clamp(s.width-start,0,Chunk);
             unsigned dirty[64],dirty_count=0;
             memcpy(p,line->registers,PPU_SAVESTATE_REGS_SIZE);
+            if(DaoWorldWindow(p,e->ram)) RebaseWindow1(p,left-start);
             uint16_t source_hscroll[2]={p->hScroll[0],p->hScroll[1]};
             uint16_t source_vscroll[2]={p->vScroll[0],p->vScroll[1]};
             if(s.copy_reference) memcpy(p->vram,e->vram,sizeof(p->vram));
             memcpy(p->cgram,e->cgram,sizeof(p->cgram));
             p->screenEnabled[0]&=~4;p->screenEnabled[1]&=~4;
-            for(int logical=0;logical<2;logical++) {
+            for(int logical=0;logical<layers;logical++) {
                 int physical=logical^((e->ram[0x6EE]>>7)&1);
                 int camx=ScrollWorld(e->ram,0x68A+logical*2,p->hScroll[physical]);
                 int camy=ScrollWorld(e->ram,0x68E + logical*2,p->vScroll[physical]);
@@ -917,6 +1008,16 @@ static bool RenderWorld(void)
                     int wave_y = ScrollWorld(e->ram, 0x690, Word(regs, offsetof(Ppu, vScroll) + physical * 2));
                     wx += wave_x - camx;
                     wy += wave_y - camy;
+                }
+                if(logical==1 && dao_heat && (native_y<0 || native_y>=224)) {
+                    int phase=(native_y%DaoHeatPeriod+DaoHeatPeriod)%DaoHeatPeriod+1;
+                    unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,hScroll));
+                    wx+=ScrollWorld(e->ram,0x68C,scroll)-camx;
+                }
+                if(village_heat && (native_y<0 || native_y>=224)) {
+                    int phase=(native_y%VillageHeatPeriod+VillageHeatPeriod)%VillageHeatPeriod+1;
+                    unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,vScroll)+physical*2);
+                    wy+=ScrollWorld(e->ram,0x68E + logical*2,scroll)-camy;
                 }
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)wy&1023;
@@ -1023,6 +1124,8 @@ static bool RenderWorld(void)
     }
     s.reason=authored_window_pan?"ready_authored_window_pan":freejia_wave?"ready_freejia_wave":
         water_wave?"ready_water_wave":
+        dao_heat?"ready_dao_heat":
+        village_heat?"ready_village_heat":
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;
 }
 
