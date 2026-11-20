@@ -402,6 +402,41 @@ The replays retain the 757-entry dialogue pack and use the square-pixel
   with inherited player stats. The original victory script returned the
   player to Babel, where the controller verified movement.
 
+## Sand Fanger, Babel and Solid Arm
+
+V27 uses the captured band phase for the verified upper Great Wall
+approach layout. On the west return from the Sand Fanger arena, the
+farther-back camera previously shifted the sky against the original
+field. Settled and moving captures dropped from 11,521 and 12,464
+different gameplay pixels to zero. Five neighboring, fade and menu
+captures stayed byte-identical.
+
+- **Great Wall.** From an assisted original room arrival, controller input
+  passed through the authored west door, took both drops and reached the
+  active 40-HP Sand Fanger. A player-only combat setup then defeated it,
+  earned the original power-up, advanced the Mystic Statue ceremony and
+  climbed the revealed ladder to the east passage. A separate controller
+  replay earned the first Necklace Stone. From an earned victory checkpoint,
+  both upper exits and the inventory round trip passed. Lily and Lance's
+  reunion led back to Watermia. That reunion checkpoint lacked the stones,
+  so their consumption remains unverified.
+- **Babel.** From the earned Dark Castoth return, linked controller replays
+  went through the original stairs and light elevators, defeated Dark Viper,
+  both Dark Vampires, Dark Sand Fanger and the Dark Mummy Queen and verified
+  their returns. The final summit fight and second lift ran on v27. The
+  original dialogue with the travel spirit then returned the player to Dao.
+  These runs retained earlier checkpoint stats and used no further outcome writes.
+- **Solid Arm.** From that Dao arrival, controller input walked to Gem and
+  handed in one Red Jewel. The fixture staged 49 previously given jewels
+  and their completed reward tiers. The hand-in reached 50 and opened the
+  Jeweler's Mansion. A player-position assist shortened the mansion approach,
+  then controller input took the actual door and advanced the original
+  introduction to active combat. A separate assisted v27 combat replay
+  defeated Solid Arm and returned to Babel through the stock script.
+
+The linked routes use virtual controller input and a 598×336 square-pixel
+1.5× output. The stock map fallback passed on the v27 production build.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

@@ -40,7 +40,7 @@ static bool cloud_probe,wall_probe;static unsigned wall_calls;
 static bool horizon_probe,horizon_expected_valid,horizon_flat_expected;
 static unsigned horizon_main_calls,horizon_background_calls;
 static int expected_background_x,expected_background_y;
-static unsigned background_probe_calls;
+static unsigned background_probe_calls,background_probe_first_row;
 #define CHECK(c) do{checks++;if(!(c)){fprintf(stderr,"line%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 static void word(unsigned at,unsigned value){ram[at]=(uint8_t)value;ram[at+1]=(uint8_t)(value>>8);}
 bool IogRandomizerActive(void){return randomizer;}
@@ -97,7 +97,8 @@ void PpuDrawDetachedLine(Ppu*p,int line){
  }
  if(background_probe){
   unsigned row=background_probe_calls/3,start=(background_probe_calls%3)*224;
-  CHECK(p->hScroll[1]==((expected_background_x+(int)start)&1023));
+  if(row>=background_probe_first_row)
+   CHECK(p->hScroll[1]==((expected_background_x+(int)start)&1023));
   CHECK(p->vScroll[1]==((expected_background_y+(int)row)&1023));
   if(source_row_probe&&row==112&&start==224){
    /* The foreground's original field starts here, but a fixed backdrop
@@ -191,6 +192,7 @@ static void fixture(void){
  detached_lines=visual_builds=0;
  identity_hashes=interpret_all_calls=0;interpreted=0;ips_path=NULL;
  background_probe=static_plane_probe=stream_plane_probe=false;background_probe_calls=0;
+ background_probe_first_row=0;
  source_row_probe=false;
  cloud_probe=wall_probe=false;wall_calls=0;
  horizon_probe=false;horizon_expected_valid=false;horizon_flat_expected=false;horizon_main_calls=horizon_background_calls=0;
@@ -705,29 +707,37 @@ static void calibrated_wall_picture(void){
  CHECK(!memcmp(before_ram,ram,sizeof ram)&&!memcmp(&cpu,&g_cpu,sizeof cpu)&&!memcmp(&before_ppu,g_ppu,sizeof before_ppu));
 }
 static void anchored_wall_passages(void){
- const unsigned scenes[]={0x8a,0x8b};
+ const unsigned scenes[]={0x8a,0x8b,0x88};
  for(unsigned n=0;n<sizeof scenes/sizeof scenes[0];n++){
-  fixture();word(0x644,scenes[n]);word(0x692,1024);word(0x696,1024);
-  word(0x694,256);word(0x698,n?1024:768);
-  word(0x68a,400);word(0x68e,100);word(0x68c,0);word(0x690,100);
+  bool upper_approach=scenes[n]==0x88;
+  unsigned x=upper_approach?768:400,y=upper_approach?0:100;
+  fixture();word(0x644,scenes[n]);word(0x692,1024);word(0x696,upper_approach?768:1024);
+  word(0x694,256);word(0x698,upper_approach?2048:n?1024:768);
+  word(0x68a,x);word(0x68e,y);word(0x68c,0);word(0x690,y);
+  if(upper_approach){word(0x6de,256);word(0x6da,1024);}
   word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xEAB4,0,0x0101);
-  g_ppu->hScroll[0]=400;g_ppu->hScroll[1]=200;g_ppu->vScroll[0]=g_ppu->vScroll[1]=100;
+  g_ppu->hScroll[0]=(uint16_t)x;g_ppu->hScroll[1]=(uint16_t)(x/2);
+  g_ppu->vScroll[0]=g_ppu->vScroll[1]=(uint16_t)y;
   g_ppu->screenEnabled[0]=19;
   raster_rom_word(0x1cc00+(n?0x1e:0x1f)*2,0x8000);
   raster_rom_word(0x18000,0x7800);rom[0x18002]=0x7e;rom[0x18003]=0x0f;rom[0x18004]=8;
   raster_rom_word(0x18005,65536-2048);raster_rom_word(0x18007,0x720);
   raster_rom_word(0x18009,0x0108);
   publication();
-  if(n){ /* BG2 captured a different camera publication from BG1. */
+  if(n==1){ /* BG2 captured a different camera publication from BG1. */
    word(0x68a,398);g_ppu->hScroll[1]=199;
   }
   IogWorldBeginRaster();
   for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
-  /* At native screen x171, keep the captured phase. Check both margins
-   * and chunk seams against that one continuous phase. */
-  expected_background_x=n?28:29;expected_background_y=44;background_probe=true;
+  /* Keep the captured phase at the native screen offset, even at the
+   * right-hand approach door. Check both margins and chunk seams. */
+  expected_background_x=upper_approach?42:n?28:29;
+  expected_background_y=upper_approach?-40:44;background_probe=true;
+  /* Rows above the authored field have no calibrated producer band. */
+  background_probe_first_row=upper_approach?39:0;
   IogWorldEndRaster(0,225,0);background_probe=false;
-  CHECK(s.complete&&s.view.native_x==171&&s.view.native_y==56&&background_probe_calls==3*336);
+  CHECK(s.complete&&s.view.native_x==(upper_approach?342:171)&&
+   s.view.native_y==(upper_approach?40:56)&&background_probe_calls==3*336);
  }
 }
 static void flat_horizon_tail_guards(void){

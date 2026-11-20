@@ -1005,7 +1005,11 @@ static bool RenderWorld(void)
     bool flat_horizon_tail=horizon&&HorizonFlatTail(first,p);
     bool raster_anchored=RasterAnchoredBackdrop(scene,first->ram,
         tracked_effect?&effect_camera:NULL);
-    bool wall_field_phase=wall_bands && (scene==0x8A || scene==0x8B);
+    bool wall_approach=scene==0x88 && authored &&
+        Word(first->ram,0x692)==1024 && Word(first->ram,0x696)==768 &&
+        !authored_bounds.left && !authored_bounds.top &&
+        authored_bounds.right==1024 && authored_bounds.bottom==256;
+    bool wall_field_phase=wall_bands && (wall_approach || scene==0x8A || scene==0x8B);
     /* The captured backdrop can be from the next camera publication. */
     int wall_source_camera=wall_field_phase?wall_model.source_camera_x:camera_x;
     /* On the underside of Sky Garden, the real BG2 ring wraps as the
@@ -1151,8 +1155,8 @@ static bool RenderWorld(void)
                      * each background world height. The expanded top/bottom
                      * must select their own band, not clamp to a native row. */
                     uint16_t phase;
-                    /* Keep the lair and approach aligned with their captured
-                     * field as the host camera pulls back from a doorway. */
+                    /* Keep the upper approach, lair and passage aligned with
+                     * their captured field when the expanded view pulls back. */
                     if(IogRasterParallaxSample(&wall_model,wy+1,
                             wall_field_phase?wall_source_camera:s.view.world_x,&phase))
                         wx=(int)phase+start-(wall_field_phase?left:0);

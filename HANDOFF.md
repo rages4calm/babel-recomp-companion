@@ -67,12 +67,17 @@ to the full local map and extends
 [prison, Watermia and Babel routes](docs/VISUAL-COVERAGE.md#prison-watermia-and-babel-continuation).
 Private receipts are in
 `.local/batch-001/visual-fullgame-022`.
+Batch 023 [extends the Great Wall and Babel routes](docs/VISUAL-COVERAGE.md#sand-fanger-babel-and-solid-arm)
+through Sand Fanger, the remaining Babel rematches and Gem's Solid Arm
+quest. The upper Great Wall sky now stays aligned after the west exit
+from the boss area. Private receipts are in
+`.local/batch-001/visual-fullgame-023`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 022's
-`babel-originalv26.exe` and batch 020's dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 023's
+`babel-originalv27.exe` and batch 020's dialogue pack, and
 continues the isolated test profile's save. The test executable has the
 required `i18n/structure.txt` alongside it. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
