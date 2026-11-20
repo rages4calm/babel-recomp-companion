@@ -1299,7 +1299,9 @@ static void restored_actor_field_before_first_upload(void){
  IogWorldCaptureAfterCompose(&g_cpu,0x83c789);
  IogWorldBeginRaster();CHECK(s.valid);
  IogWorldCaptureLine(0);word(0x6bc,0x1c00);IogWorldCaptureLine(1);CHECK(!s.valid);
- static const uint8_t additional_rooms[]={0x0c,0x43,0x4f,0x69,0x78,0x85,0xe0,0xe3,0xea};
+ static const uint8_t additional_rooms[]={
+  0x0c,0x43,0x47,0x4f,0x69,0x6b,0x74,0x78,0x79,0x85,0xc8,0xe0,0xe1,0xe3,0xea
+ };
  for(unsigned i=0;i<sizeof(additional_rooms);i++){
   word(0x644,additional_rooms[i]);word(0x6bc,0);
   IogWorldReset();IogWorldCaptureAtCompose(&g_cpu,0x83c714);
@@ -1308,6 +1310,17 @@ static void restored_actor_field_before_first_upload(void){
   g_ppu->mosaic=0x11;CHECK(!RestoredActorFieldLayout(g_ppu,ram));g_ppu->mosaic=0;
   word(0x642,1);CHECK(!RestoredActorFieldLayout(g_ppu,ram));word(0x642,0);
  }
+ fixture();word(0x644,0xe9);word(0x6ee,0x0485);
+ word(0x692,1024);word(0x694,512);word(0x696,1024);word(0x698,256);
+ g_ppu->inidisp=9;g_ppu->bgmode=9;g_ppu->mosaic=0x63;
+ g_ppu->screenEnabled[0]=0x15;g_ppu->screenEnabled[1]=0x16;
+ g_ppu->cgwsel=2;g_ppu->cgadsub=0x21;g_snesrecomp_last_hdmaen=2;
+ IogWorldReset();IogWorldCaptureAtCompose(&g_cpu,0x83c714);
+ IogWorldCaptureAfterCompose(&g_cpu,0x83c789);
+ CHECK(RestoredActorFieldLayout(g_ppu,ram));
+ g_ppu->mosaic=0x61;CHECK(!RestoredActorFieldLayout(g_ppu,ram));
+ g_ppu->mosaic=0x63;g_ppu->cgadsub=0x20;CHECK(!RestoredActorFieldLayout(g_ppu,ram));
+ g_snesrecomp_last_hdmaen=0;
 }
 static void south_cape_house_mosaic(void){
  fixture();

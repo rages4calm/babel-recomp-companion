@@ -6,7 +6,7 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **837 of 1,138** chapter-dialogue replacements in the
+The import now covers **851 of 1,138** chapter-dialogue replacements in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
 The importer produces 1,091 candidates. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
@@ -50,8 +50,17 @@ at the prior scene times with the expanded pack active. A v35 save
 made during the translated Psycho Dash advice resumed and continued to
 the Aqueduct with matching picture and sampled guest state.
 
-The importer excludes 47 declarations. The runtime leaves 254 candidates
-in stock form, for 301 stock chapter entries in total. The remaining
+Batch 034 adds 14 replacements using verified stock dialogue boxes that
+stay open across speaker changes. The original speaker opcodes and return
+boundaries are preserved. All 837 older overlays keep the same encoded bytes
+and virtual addresses, including active text pointers in save states.
+The Watermia birthday replay continued from Luke's house to the dock and
+back, earning Lance's Letter in both the new and original Neil dialogue
+paths. Both had the same room-transition timing. The translated page fit
+the stock box at square-pixel 1.5×.
+
+The importer excludes 47 declarations. The runtime leaves 240 candidates
+in stock form, for 287 stock chapter entries in total. The remaining
 constraints include marker prefixes with printable text, unverified
 script targets, window bounds, and timed controls. Full menu and sprite
 lettering and custom-font coverage remain open.

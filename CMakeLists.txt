@@ -111,6 +111,8 @@ set(IOG_SOURCES
     src/iog_randomizer.c
     src/iog_settings.c
     src/iog_companion.c
+    src/companion_achievements/audit.c
+    src/companion_achievements/observer.c
     src/iog_text.c
     src/gen_stubs.c
 )

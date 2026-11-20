@@ -1436,7 +1436,8 @@ static int GaiaSpeakerTemplate(unsigned id)
     return id < 8 || (id >= 0x12 && id <= 0x15);
 }
 
-enum { kGaiaBase, kGaiaSupplement, kGaiaExtended, kGaiaStockAnchors, kGaiaStockLayout };
+enum { kGaiaBase, kGaiaSupplement, kGaiaExtended, kGaiaStockAnchors, kGaiaStockLayout,
+       kGaiaSharedBox };
 
 static int GaiaDialogue(const char *text, Toks *out)
 {
@@ -1921,8 +1922,13 @@ static int GaiaStockExactRows(const Toks *stock, Toks *out, const Toks *text,
 /* A standalone prose box can reflow without moving script commands. Its
  * authored page breaks still cap an inherited box, where the caller's
  * dimensions are unknown. An explicit box can insert manual page waits. */
+typedef struct {
+    int width, height;
+    int allow_phase_reflow;
+} GaiaBoxState;
+
 static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text,
-                          int allow_stock_calls, int measured_layout)
+                          int allow_stock_calls, int measured_layout, GaiaBoxState *box)
 {
     const int sn = stock->n, tn = text->n;
     if (!sn || !tn || stock->t[sn - 1].code != text->t[tn - 1].code)
@@ -1935,7 +1941,8 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text,
         return 0;
     if (!returning && stock->t[sn - 1].code != CMD_END)
         return 0;
-    int start = 0, width = 0, height = 0, speaker = -1, position = 0;
+    int start = 0, width = box ? box->width : 0, height = box ? box->height : 0;
+    int speaker = -1, position = 0;
     uint32_t call = 0;
     while (start < sn && !GaiaPageText(&stock->t[start])) {
         const Tok *t = &stock->t[start++];
@@ -1980,7 +1987,11 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text,
              * and bank are preserved, including the existing prefix overlay. */
             call = t->a[0] & 0x3fffff;
             break;
-        case 0xc3: case 0xc8: case 0xce: case CMD_SFX: case 0xd5:
+        case 0xc8:
+            if (box)
+                width = height = 0;
+            break;
+        case 0xc3: case 0xce: case CMD_SFX: case 0xd5:
             break;
         default:
             return 0;
@@ -1989,6 +2000,10 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text,
     }
     if (position || (allow_stock_calls && !call))
         return 0;
+    if (box) {
+        box->width = width;
+        box->height = height;
+    }
     const int inherited = width == 0 && height == 0;
     int end = sn - (returning ? 2 : 1);
     if (!returning && end > start &&
@@ -2042,7 +2057,7 @@ static int GaiaStockProse(const Toks *stock, Toks *out, const Toks *text,
     const int before = out->n;
     if (!GaiaWrapPage(text->t + first, text->t + last, out, width, height, 1))
         return 0;
-    if (inherited || returning || call) {
+    if (inherited || (returning && !(box && box->allow_phase_reflow)) || call) {
         int waits = 0;
         for (int i = before; i < out->n; i++)
             waits += out->t[i].type == T_CMD && out->t[i].code == CMD_FIN;
@@ -2088,10 +2103,11 @@ static int GaiaSpeakerPhaseEnd(const Toks *tokens, int start, int source, int *s
 }
 
 static int GaiaStockSpeakerPhases(const Toks *stock, Toks *out, const Toks *text,
-                                  int measured_layout)
+                                  int measured_layout, int shared_box)
 {
     Toks stock_phase = {0}, text_phase = {0};
     int start = 0, first = 0, phases = 0, ok = 0;
+    GaiaBoxState box = {0};
     while (start < stock->n && first < text->n) {
         int stock_speaker, text_speaker;
         int stop = GaiaSpeakerPhaseEnd(stock, start, 0, &stock_speaker);
@@ -2109,12 +2125,15 @@ static int GaiaStockSpeakerPhases(const Toks *stock, Toks *out, const Toks *text
             Push(&text_phase, &text->t[i]);
         if (internal) {
             /* A synthetic RET makes the prose pass retain the phase's final
-             * FIN and its exact number of page waits. Strip it before encoding. */
+             * FIN. For a stock END sequence with a verified shared window,
+             * manual waits may be reflowed within the phase. */
             const Tok boundary = {.type = T_CMD, .code = CMD_RET, .ref = -1};
             Push(&stock_phase, &boundary);
             Push(&text_phase, &boundary);
         }
-        if (!GaiaStockProse(&stock_phase, out, &text_phase, 0, measured_layout))
+        box.allow_phase_reflow = internal && stock->t[stock->n - 1].code == CMD_END;
+        if (!GaiaStockProse(&stock_phase, out, &text_phase, 0, measured_layout,
+                            shared_box ? &box : NULL))
             goto done;
         if (internal)
             out->n--;
@@ -2151,7 +2170,7 @@ static int GaiaStockKnownJump(const Rom *rom, uint32_t offset,
     Push(&translated, &boundary);
     const Tok saved = *stock_end;
     *stock_end = boundary;
-    int ok = GaiaStockSpeakerPhases(stock, out, &translated, 1);
+    int ok = GaiaStockSpeakerPhases(stock, out, &translated, 1, 0);
     *stock_end = saved;
     if (ok)
         ok = Decode(rom, target, &tail, 0, 0) && tail.n &&
@@ -2389,16 +2408,16 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
         ok = GaiaStockExactRows(&original, out, text, 0);
         if (!ok) {
             out->n = 0;
-            ok = GaiaStockProse(&original, out, text, 0, 0);
+            ok = GaiaStockProse(&original, out, text, 0, 0, NULL);
         }
         free(original.t);
         return ok;
     }
     if (supplement == kGaiaStockAnchors) {
-        ok = GaiaStockProse(&original, out, text, 1, 0);
+        ok = GaiaStockProse(&original, out, text, 1, 0, NULL);
         if (!ok) {
             out->n = 0;
-            ok = GaiaStockSpeakerPhases(&original, out, text, 0);
+            ok = GaiaStockSpeakerPhases(&original, out, text, 0, 0);
         }
         free(original.t);
         return ok;
@@ -2410,17 +2429,40 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
             ok = GaiaStockExactRows(&original, out, text, 1);
             if (!ok) {
                 out->n = 0;
-                ok = GaiaStockProse(&original, out, text, 0, 1);
+                ok = GaiaStockProse(&original, out, text, 0, 1, NULL);
             }
             if (!ok) {
                 out->n = 0;
-                ok = GaiaStockSpeakerPhases(&original, out, text, 1);
+                ok = GaiaStockSpeakerPhases(&original, out, text, 1, 0);
             }
             if (!ok) {
                 out->n = 0;
                 ok = GaiaStockTimedClears(&original, out, text);
             }
         }
+        free(original.t);
+        return ok;
+    }
+    if (supplement == kGaiaSharedBox) {
+        /* A source tag can repeat the same speaker for another page. Keep
+         * every original opcode and use tags only to verify speaker changes. */
+        Toks normalized = {0};
+        int speaker = -1;
+        for (int i = 0; i < text->n; ++i) {
+            const Tok *token = &text->t[i];
+            if (token->type == T_MARK && !token->code) {
+                if ((int)token->a[0] == speaker)
+                    continue;
+                speaker = (int)token->a[0];
+            }
+            Push(&normalized, token);
+        }
+        ok = GaiaStockProse(&original, out, &normalized, 0, 1, NULL);
+        if (!ok) {
+            out->n = 0;
+            ok = GaiaStockSpeakerPhases(&original, out, &normalized, 1, 1);
+        }
+        free(normalized.t);
         free(original.t);
         return ok;
     }
@@ -2543,7 +2585,7 @@ static int GaiaStockMarkerTail(const Rom *stock, uint32_t offset, Toks *out, con
     Toks original = {0};
     int ok = Decode(stock, offset, &original, 0, 0) &&
         original.n && original.t[original.n - 1].code == CMD_END &&
-        GaiaStockProse(&original, out, text, 0, 0);
+        GaiaStockProse(&original, out, text, 0, 0, NULL);
     if (ok) {
         int waits = 0;
         for (int i = 0; i < original.n; i++)
@@ -2585,7 +2627,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
     int malformed = 0;
     /* Append supplemental entries only after the original overlay layout.
      * Save states can hold an active dialogue pointer into those banks. */
-    for (int supplement = kGaiaBase; supplement <= kGaiaStockLayout && !malformed; supplement++) {
+    for (int supplement = kGaiaBase; supplement <= kGaiaSharedBox && !malformed; supplement++) {
         uint32_t last = 0;
         while (fgets(line, sizeof(line), file)) {
             size_t size = strlen(line);
@@ -2613,7 +2655,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             pack->strings_total += !supplement;
             const int layout_only = !strncmp(text, "[LAY][EXT]", 10);
             if (layout_only) {
-                if (supplement != kGaiaStockLayout)
+                if (supplement < kGaiaStockLayout)
                     continue;
                 text += 5;
             }
@@ -2693,7 +2735,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             free(tokens.t);
         }
         malformed |= ferror(file);
-        if (supplement < kGaiaStockLayout && !malformed && fseek(file, 0, SEEK_SET))
+        if (supplement < kGaiaSharedBox && !malformed && fseek(file, 0, SEEK_SET))
             malformed = 1;
     }
     fclose(file);

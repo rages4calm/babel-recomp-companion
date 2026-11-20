@@ -289,6 +289,30 @@ static void CheckMeasuredLayouts(void)
     free(out.t);
 }
 
+static void CheckSharedBoxes(void)
+{
+    uint8_t commands[] = {
+        0xc2, 9, 0xc2, 0, 0x40, CMD_FIN, 0xc2, 1, 0x41, 0xc3, 0, CMD_END
+    };
+    Rom stock = {.rom = commands, .size = sizeof(commands)};
+    Toks text = {0}, out = {0};
+    CHECK(GaiaDialogue("[EXT][TPL:00]First speaker.[FIN][TPL:00]Continues.[FIN]"
+                       "[TPL:01]Second speaker uses[N]the same wide box.[END]", &text));
+    CHECK(!GaiaStockWindow(&stock, 0, &out, &text, kGaiaStockLayout));
+    out.n = 0;
+    CHECK(GaiaStockWindow(&stock, 0, &out, &text, kGaiaSharedBox));
+    CHECK(CountToken(&out, T_CMD, 0xc2, 0) == 1);
+    CHECK(CountToken(&out, T_CMD, 0xc2, 1) == 1);
+    CHECK(CountToken(&out, T_CMD, 0xc2, 9) == 1);
+    CHECK(CountToken(&out, T_CMD, 0xc3, 0) == 1);
+    CHECK(CountToken(&out, T_CMD, CMD_END, 0) == 1);
+    text.n = out.n = 0;
+    CHECK(GaiaDialogue("[EXT][TPL:00]First.[FIN][TPL:02]Wrong speaker.[END]", &text));
+    CHECK(!GaiaStockWindow(&stock, 0, &out, &text, kGaiaSharedBox));
+    free(text.t);
+    free(out.t);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -325,6 +349,7 @@ int main(void)
     CheckStockAnchors();
     CheckMarkerTails();
     CheckMeasuredLayouts();
+    CheckSharedBoxes();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }

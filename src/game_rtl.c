@@ -47,6 +47,7 @@
 #include "iog_i18n.h"
 #ifndef IOG_RECEIVED_REFERENCE
 #include "iog_walkable_world.h"
+#include "companion_achievements/audit.h"
 #endif
 
 #include <stdio.h>
@@ -108,6 +109,7 @@ static void GameInitialize(void)
     IogNativePollInitialize();
     IogNativeContinuationsInitialize();
     IogWorldInitialize();
+    IogAchievementAuditBind();
     IogI18nBindStock();
     IogWalkableWorldInitialize();
     g_world_observers_ready = false;
@@ -389,6 +391,7 @@ static void GameStateLoad(SaveLoadInfo *sli, uint32_t version)
     cpu_p_to_mirrors(&g_cpu);
 #ifndef IOG_RECEIVED_REFERENCE
     IogWorldReset();
+    IogAchievementAuditInvalidate();
 #else
     IogReceivedObserverReset();
 #endif
@@ -413,6 +416,7 @@ void GameSessionReset(void)
     g_resume_pc = 0;
 #ifndef IOG_RECEIVED_REFERENCE
     IogWorldReset();
+    IogAchievementAuditInvalidate();
 #else
     IogReceivedObserverReset();
 #endif

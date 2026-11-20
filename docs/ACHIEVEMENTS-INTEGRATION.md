@@ -1,11 +1,11 @@
 # CompanionAchievements foundation
 
-This batch adds a **tested observation foundation, not enabled gameplay
-achievement tracking**. Babel's RetroAchievements sources and credits are
-preserved; account/service support is compiled out in this edition. See
-[the service policy and build boundary](RETROACHIEVEMENTS.md).
-No current game frame calls this observer, no achievement profile is written,
-and no browser, toast or sound has been wired into Gaia yet.
+The Original build can audit achievement signals after completed frames.
+Set `IOG_ACHIEVEMENT_AUDIT=1` to log events from the verified USA ROM during
+development. State loads and resets start a new observation generation.
+The audit writes to stderr only. Profiles, the achievement browser, toasts
+and sounds still need integration. Babel's RetroAchievements sources and credits
+are preserved. [Service policy and build boundary](RETROACHIEVEMENTS.md)
 
 The unchanged MIT-licensed shared core and presentation module are pinned from
 [CompanionAchievements](https://github.com/rages4calm/companion-achievements)
@@ -55,9 +55,9 @@ does not award completion.
 1. Qualify the source-derived signals on controlled real-game routes against
    GaiaLabs symbols and a matched reference. Distinguish fixtures from natural
    progression and keep assisted sessions read-only.
-2. Add host lifecycle hooks to `game_rtl.c` and all save/load/rewind paths, with a
-   reliable generation and sticky eligibility flag. Observe after completed game
-   frames, outside guest simulation and outside achievement-worker threads.
+2. Qualify battery-save continuation, rewind and profile changes before enabling
+   progression. Bind the existing frame and reset hooks to the production
+   eligibility and storage path.
 3. Add the serialized storage worker, bounded immutable event queue, single-writer
    profile lock, strict JSON validation and unknown-ID preservation. The worker
    calls `ca_event`; its commit callback must durably replace a temporary file
@@ -76,6 +76,12 @@ does not award completion.
    write progress or turn a save's already-set flags into unlocks.
 
 ## Verification
+
+The Original v37 host emitted one jewel event after a controlled inventory
+write. Loading the earlier state and then the later state emitted no duplicate.
+The same diagnostic route with its cheat settings enabled emitted no event.
+This checks the adapter's load and cheat guards. Natural pickup, room-clear
+and ending events still need playback qualification.
 
 Standalone foundation build (no ROM or game build required):
 

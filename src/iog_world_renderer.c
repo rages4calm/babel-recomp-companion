@@ -237,13 +237,18 @@ static bool RestoredActorFieldLayout(const Ppu *p,const uint8_t *ram)
     /* A loaded frame has the original actors already in live OAM. The next
      * composition has started, but its OAM upload will arrive one frame later.
      * Extend the verified terrain only while that first composition agrees. */
-    if((p->bgmode&7)!=1 || p->mosaic || p->windowsel || PPU_forcedBlank(p) ||
+    unsigned scene=Word(ram,0x644);
+    bool mansion_mosaic=scene==0xE9 && MansionAndSolidArmMosaic(p,ram);
+    if((p->bgmode&7)!=1 || (p->mosaic && !mansion_mosaic) || p->windowsel || PPU_forcedBlank(p) ||
        !SameActorFieldRoom(ram,s.pending_ram)) return false;
-    switch(Word(ram,0x644)) {
+    switch(scene) {
     case 0x01: case 0x0B: case 0x0C: case 0x3E: case 0x43: case 0x4F:
     case 0x5D: case 0x69: case 0x78: case 0x85: case 0x8A: case 0x8B:
     case 0xE0: case 0xE3: case 0xEA:
+    case 0x47: case 0x6B: case 0x74: case 0x79: case 0xC8: case 0xE1:
         return true;
+    case 0xE9:
+        return mansion_mosaic;
     default: return false;
     }
 }

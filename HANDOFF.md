@@ -118,14 +118,21 @@ classroom doors from cold boot](docs/VISUAL-COVERAGE.md#nine-more-restore-layout
 on Original v36. The [GaiaLabs dialogue import](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue)
 now installs 837 replacements. Private evidence is in
 `.local/batch-001/visual-fullgame-033`.
+Batch 034 adds [seven save-resume layouts](docs/VISUAL-COVERAGE.md#save-resume-framing-from-diamond-mine-to-babel)
+and 14 GaiaLabs dialogue replacements on Original v37. Watermia's birthday
+route earned Lance's Letter; the cold route through both classroom doors
+matched v36 in its pictures, position and transition timing. The
+[read-only achievement audit](docs/ACHIEVEMENTS-INTEGRATION.md) checks forward
+state restoration and cheat exclusion. Exact receipts are in
+`.local/batch-001/visual-fullgame-034`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 033's
-`babel-originalv36final.exe` and its private dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 034's
+`babel-originalv37final.exe` and retains the same private dialogue pack and
 continues the isolated test profile's save. The test executable has the
-required `i18n/structure.txt` alongside it. `Play Original v35 Rollback.cmd`
+required `i18n/structure.txt` alongside it. `Play Original v36 Rollback.cmd`
 selects the previous build. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.
