@@ -91,6 +91,14 @@ game's own. Randomizer mode disables this stock-address music integration.
 These are inherited engine rules; a short title/intro audio check does not
 qualify every song transition or a complete campaign.
 
+The clubhouse music now resumes after Erik's dialogue. The scripted transfer
+uses the music loader's completed song cache to restart the selected PCM track.
+The scene's intentional silence still plays out before the music returns.
+A paced virtual-controller replay from an assisted cave setup advanced the
+dialogue and walked the normal exit into South Cape. Track 3 restarted after
+the dialogue and its PCM cursor kept advancing after the exit. The same route
+also passed with the stock soundtrack. These checks used SDL's dummy device.
+
 ## Validation and credits
 
 Each imported PCM must have an `MSU1` header, nonempty aligned 16-bit stereo

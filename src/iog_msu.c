@@ -16,8 +16,8 @@
  *    sees a different pointer per song.
  *  - The music loader ($02:8B91) sends $FF, uploads the song through the IPL,
  *    waits three frames and sends $01. That start is recognised on the APU
- *    port and the song pointer the loader was given ($3E-$40) says which
- *    song started:
+ *    port. Scene loads use $3E-$40; scripted music changes use the loaded
+ *    song cache when their transfer has completed ($06FA = $FFFF):
  *    a copy starts its MSU-1 track, a real song stops MSU-1 playback.
  *  - $F1 (music fade, COP 05) and $F2 (fade before a song change) fade the
  *    MSU-1 volume out; $F0 stops it.
@@ -104,6 +104,11 @@ static uint64_t g_state_generation;
 
 static uint32_t Off24(uint32_t a) { return ((a >> 16) & 0x3F) << 16 | (a & 0xFFFF); }
 
+static uint32_t MusicPointer(const uint8_t *ram, uint16_t address)
+{
+    return ram[address] | ram[address + 1] << 8 | ram[address + 2] << 16;
+}
+
 static void Msu(uint16_t reg, uint8_t v) { msu1_write(reg, v); }
 
 static bool TrackExists(int track)
@@ -153,9 +158,11 @@ static int ApuWrite(uint16_t reg, uint8_t value)
         }
         g_loading = 0;
         if (value == 0x01) {   /* the loader's start, after the upload settled */
-            /* $3E-$40: the song the loader was given ($46 has moved on). */
             const uint8_t *ram = g_snes->ram;
-            const uint32_t ptr = ram[0x3E] | ram[0x3F] << 8 | ram[0x40] << 16;
+            /* The COP music thinker starts playback before clearing its
+             * completed transfer marker. Its loader never writes $3E-$40. */
+            const bool scripted_start = ram[0x06FA] == 0xFF && ram[0x06FB] == 0xFF;
+            const uint32_t ptr = MusicPointer(ram, scripted_start ? 0x0687 : 0x003E);
             /* A copy means MSU-1; the loader's own $06F2 says which id. */
             int id = 0, track = 0;
             for (int i = 0; i < g_ncopies; i++)
@@ -193,7 +200,7 @@ static int ApuWrite(uint16_t reg, uint8_t value)
 static void Resync(void)
 {
     const uint8_t *ram = g_snes->ram;
-    const uint32_t ptr = ram[0x0687] | ram[0x0688] << 8 | ram[0x0689] << 16;
+    const uint32_t ptr = MusicPointer(ram, 0x0687);
     int track = 0;
     for (int i = 0; i < g_ncopies; i++)
         if (g_copies[i].addr == ptr)
