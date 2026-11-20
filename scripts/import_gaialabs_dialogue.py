@@ -27,6 +27,11 @@ STOCK_SPEAKER_TEMPLATES = frozenset(range(8)) | frozenset(range(0x12, 0x16))
 RETURN_WIDTH = 24
 EXTENDED_SOURCE_WIDTH = 26
 MAX_PAGE_ROWS = 7
+STOCK_JUMPS = {
+    "06BE1F": "06BF7C",
+    "06BE85": "06BF7C",
+    "06BF0A": "06BF7C",
+}
 TAIL_PREFIXES = {
     "049B82": (2, "[PAU:40]"),
     "09BE70": (4, "[TPL:2]"),
@@ -195,7 +200,7 @@ def convert(source, names):
     return "[FIN]".join(rendered) + "[END]"
 
 
-def convert_return(source, names, *, extended=False):
+def convert_return(source, names, *, extended=False, wrap_prose=False, timed=False):
     """Keep authored rows intact for stock window and terminal validation."""
     parts = []
     for part in re.split(r"(\[[^\]]*\])", source.translate(TYPOGRAPHY)):
@@ -207,6 +212,9 @@ def convert_return(source, names, *, extended=False):
             parts.append(part)
             continue
         if part in ("[N]", "[FIN]"):
+            parts.append(part)
+            continue
+        if timed and part in ("[CLR]", "[CLD]"):
             parts.append(part)
             continue
         if part in ("[CLD]", "[CLR]", "[DEF]") or BOX_TAG.fullmatch(part):
@@ -250,26 +258,79 @@ def convert_return(source, names, *, extended=False):
     if source.count("[RET]") > 1 or not parts:
         raise ValueError("Invalid return fragment")
     candidate = "".join(parts)
-    pages = candidate.split("[FIN]")
+    delimiters = r"(\[(?:FIN|CLR|CLD)\])" if timed else r"(\[FIN\])"
+    pages = re.split(delimiters, candidate)
     if extended:
         if not (re.sub(r"\[[^\]]+\]", "", candidate).strip() or "[BCD:" in candidate):
             raise ValueError("Empty return fragment")
     elif not any(any(ch in GLYPHS - {" "} for ch in p) for p in pages):
         raise ValueError("Empty return fragment")
     width = EXTENDED_SOURCE_WIDTH if extended else RETURN_WIDTH
-    for page in pages:
+    layouts = []
+    for index, page in enumerate(pages):
+        if index % 2:
+            layouts.append(page)
+            continue
         lines = page.split("[N]")
         visible_lines = (re.sub(
             r"\[BCD:([1-5]),[0-9A-F]{4}\]", lambda m: "0" * int(m[1]), row
         ) for row in lines)
         if extended:
             visible_lines = (re.sub(r"\[[^\]]+\]", "", row) for row in visible_lines)
-        if len(lines) > MAX_PAGE_ROWS or any(len(row) > width for row in visible_lines):
+        layout = []
+        for line, visible in zip(lines, visible_lines):
+            if len(visible) <= width:
+                layout.append(line)
+                continue
+            # Keep a bound on transported rows. Split ordinary prose at
+            # spaces while retaining its speaker selector, if present.
+            prose = re.fullmatch(
+                r"((?:\[(?:TPL|PAU|PAL):[0-9A-F]{2}\])*)([^\[\]]+)"
+                r"((?:\[(?:PAU|PAL):[0-9A-F]{2}\])*)", line
+            ) if wrap_prose else None
+            if prose is None:
+                raise ValueError("Return fragment exceeds stock bounds")
+            prefix, content, suffix = prose.groups()
+            wrapped = textwrap.wrap(content, width, break_long_words=False, break_on_hyphens=False)
+            if not wrapped or any(len(row) > width for row in wrapped):
+                raise ValueError("Return fragment exceeds stock bounds")
+            wrapped[0] = prefix + wrapped[0]
+            wrapped[-1] += suffix
+            layout.extend(wrapped)
+        if len(layout) > MAX_PAGE_ROWS:
             raise ValueError("Return fragment exceeds stock bounds")
+        layouts.append("[N]".join(layout))
     if extended:
         terminal = "[END]" if source.endswith("[END]") else "[RET]"
-        return "[EXT]" + candidate + terminal
+        return "[EXT]" + "".join(layouts) + terminal
     return candidate + "[RET]"
+
+
+def convert_stock_jump(offset, source, names):
+    target = STOCK_JUMPS[offset]
+    body, separator, operand = source.rpartition("[JMP:")
+    if not separator or operand != f"&dialogstring_{target}]" or not body.endswith(("[FIN]", "[FIN][CLD]")):
+        raise ValueError("Stock jump target or boundary differs")
+    return convert_return(body, names, extended=True, wrap_prose=True).removesuffix("[RET]") + f"[JMP:{target}]"
+
+
+def convert_extended(offset, source, names):
+    try:
+        return convert_return(source, names, extended=True)
+    except ValueError:
+        pass
+    return "[LAY]" + convert_stock_layout(offset, source, names)
+
+
+def convert_stock_layout(offset, source, names):
+    if offset in STOCK_JUMPS:
+        return convert_stock_jump(offset, source, names)
+    try:
+        return convert_return(source, names, extended=True, wrap_prose=True)
+    except ValueError:
+        if "[PAU:" not in source or not ("[CLR]" in source or "[CLD]" in source):
+            raise
+    return convert_return(source, names, extended=True, wrap_prose=True, timed=True)
 
 
 def main():
@@ -316,7 +377,7 @@ def main():
                 # Leave existing rows byte-identical. The runtime checks the
                 # new pool after allocating the established dialogue addresses.
                 try:
-                    converted = convert_return(content, names, extended=True)
+                    converted = convert_extended(offset, content, names)
                 except ValueError:
                     excluded[offset] = str(error)
                     continue

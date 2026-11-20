@@ -256,6 +256,39 @@ static void CheckMarkerTails(void)
     free(bytes);
 }
 
+static void CheckMeasuredLayouts(void)
+{
+    const uint8_t box[] = {0xc2, 9, 0x40, CMD_END};
+    const uint8_t timed[] = {0xc1, 0, 23, 0xc7, 15, 3,
+        0x40, 0xc9, 0x28, 0xce, 0x41, 0x42, 0xc9, 0x3c, 0xc8, CMD_RET};
+    Rom stock = {.rom = box, .size = sizeof(box)};
+    Toks text = {0}, out = {0};
+    CHECK(GaiaDialogue("[EXT]ABCDEFGHIJKLMNOPQRSTUVWXYZ[END]", &text));
+    CHECK(!GaiaStockWindow(&stock, 0, &out, &text, kGaiaExtended));
+    out.n = 0;
+    CHECK(GaiaStockWindow(&stock, 0, &out, &text, kGaiaStockLayout));
+    CHECK(out.n == 28 && out.t[27].code == CMD_END);
+    RejectMalformed("[EXT]ABCDEFGHIJKLMNOPQRSTUVWXYZX[END]");
+    stock = (Rom){.rom = timed, .size = sizeof(timed)};
+    text.n = out.n = 0;
+    CHECK(GaiaDialogue("[EXT]A short line[N]fits[PAU:28][CLR]The next timed[N]card[PAU:3C][CLD][RET]", &text));
+    CHECK(GaiaStockWindow(&stock, 0, &out, &text, kGaiaStockLayout));
+    CHECK(CountToken(&out, T_CMD, 0xc9, 0x28) == 1);
+    CHECK(CountToken(&out, T_CMD, 0xc9, 0x3c) == 1);
+    CHECK(CountToken(&out, T_CMD, 0xce, 0) == 1);
+    CHECK(CountToken(&out, T_CMD, 0xc8, 0) == 1);
+    CHECK(CountToken(&out, T_CMD, CMD_FIN, 0) == 0);
+    text.n = out.n = 0;
+    CHECK(GaiaDialogue("[EXT]Wrong[PAU:29][CLR]Card[PAU:3C][CLD][RET]", &text));
+    CHECK(!GaiaStockWindow(&stock, 0, &out, &text, kGaiaStockLayout));
+    text.n = out.n = 0;
+    CHECK(GaiaDialogue("[EXT]Right[PAU:28][CLD]Card[PAU:3C][CLD][RET]", &text));
+    CHECK(!GaiaStockWindow(&stock, 0, &out, &text, kGaiaStockLayout));
+    RejectMalformed("[EXT]A[JMP:06BF7D]");
+    free(text.t);
+    free(out.t);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -291,6 +324,7 @@ int main(void)
     CheckProse();
     CheckStockAnchors();
     CheckMarkerTails();
+    CheckMeasuredLayouts();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }

@@ -240,7 +240,9 @@ static bool RestoredActorFieldLayout(const Ppu *p,const uint8_t *ram)
     if((p->bgmode&7)!=1 || p->mosaic || p->windowsel || PPU_forcedBlank(p) ||
        !SameActorFieldRoom(ram,s.pending_ram)) return false;
     switch(Word(ram,0x644)) {
-    case 0x01: case 0x0B: case 0x3E: case 0x5D: case 0x8A: case 0x8B:
+    case 0x01: case 0x0B: case 0x0C: case 0x3E: case 0x43: case 0x4F:
+    case 0x5D: case 0x69: case 0x78: case 0x85: case 0x8A: case 0x8B:
+    case 0xE0: case 0xE3: case 0xEA:
         return true;
     default: return false;
     }
