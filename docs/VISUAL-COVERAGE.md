@@ -86,6 +86,41 @@ These checks cover the tested routes and elevator phases. Collecting the
 two keys and completing the Memory Melody rescue sequence remain separate
 quest coverage.
 
+## Nazca through Watermia
+
+This batch adds expanded rendering to 35 Original scene IDs across five
+regions. It increases structural admission from 78 to 113 scenes. The
+controller checks below use separate source-validated arrivals and disclosed
+story setup. They cover the routes and phases observed in those runs.
+
+| Region | Newly admitted rooms | Verified gameplay and presentation |
+| --- | --- | --- |
+| Nazca and Sky Garden | `4B, 4D, 4E, 50, 52, 54, 56` | Nazca movement on both axes, Sky Garden door round trips and underside exits, and an active Viper phase with projectiles and rubble |
+| Seaside Palace | `5A–5E` | Room and coffin door round trips, main stair both directions, passage toward Mu, and stock Purification Stone use |
+| Mu | `5F, 60, 63, 65, 66` | Full, half and drained water phases, six natural transitions and a live Vampire combat phase |
+| Angel Village and tunnels | `69, 6A–6C, 6E, 70–75` | Terrain and light shafts during movement, four village/tunnel door round trips and the statue-room round trip |
+| Watermia | `78–7E` | Day and night docks, movement in six interiors and all six house door round trips |
+
+Sky Garden's top-side backdrop now stays aligned with the stock raster.
+The four underside scenes repeat only their verified drift layer, removing
+the rectangular seam around the original field. Paired captures show that
+the underside fix leaves the original rectangle byte-identical. Scene `54`
+still has an inherited 28-pixel difference against stock on its last native
+scanline in one tested pose.
+
+Seaside Palace and Mu extend both scroll axes using the measured eight-line
+cycle. The coffin hall's lower floor can use the same extension when its
+two epochs change only the palette. Discontinuous layouts still use the
+existing fallback. Expanded foreground geometry stays within the actual
+room window.
+
+V14 verifies the combined renderer, including full NVIDIA OpenGL 1080p
+captures at square-pixel 1.5×. Some unaffected routes use the exact v13
+candidate, and changed regions have v14 replay evidence. The 18 Angel
+Village and Watermia movement captures and the separate night capture
+match stock gameplay pixels outside the separately placed HUD. Both boss
+checks cover active fights. Boss victories and Neil's Cottage remain open.
+
 The optional manual visual receipt binds the eight historical samples to their
 actual build and dependency hashes. A later source edit changes those samples
 to historical evidence. Neither current nor historical samples are silently

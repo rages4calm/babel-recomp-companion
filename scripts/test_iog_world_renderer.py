@@ -34,6 +34,8 @@ static const char *ips_path;
 static SNESModActivationCallback ips_activation;
 static uint8_t source_field[256*224*4];
 static bool background_probe,static_plane_probe,stream_plane_probe,source_row_probe;
+static bool water_wave_probe;
+static unsigned water_wave_lines, water_wave_layer;
 static bool cloud_probe,wall_probe;static unsigned wall_calls;
 static bool horizon_probe,horizon_expected_valid,horizon_flat_expected;
 static unsigned horizon_main_calls,horizon_background_calls;
@@ -122,6 +124,13 @@ void PpuDrawDetachedLine(Ppu*p,int line){
    CHECK(changed); /* A missing streaming patch cannot pass the static test. */
   }
   background_probe_calls++;
+ }
+ if(water_wave_probe){
+  unsigned row=water_wave_lines/3,start=(water_wave_lines%3)*224;
+  int native=(int)row-56,phase=(native%8+8)%8;
+  CHECK(p->hScroll[water_wave_layer]==((256+(phase&3)-2-171+(int)start)&1023));
+  CHECK(p->vScroll[water_wave_layer]==((256+((phase*3)&7)-4+native)&1023));
+  water_wave_lines++;
  }
  uint32_t*row=(uint32_t*)p->renderBuffer;
  if(wall_probe){
@@ -397,6 +406,10 @@ static void background_picture(unsigned scene,unsigned camera_x,unsigned camera_
  fixture();word(0x644,scene);word(0x68a,camera_x);word(0x68e,camera_y);
  word(0x68c,effect_x);word(0x690,effect_y);
  if(scene==0x4f||scene==0xcc){word(0x692,1024);word(0x696,1024);word(0x694,512);word(0x698,512);}
+ if(scene==0x4d){
+  word(0x692,1024);word(0x696,1024);word(0x694,512);word(0x698,512);
+  word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xEAA3,0x0401,0x0401);
+ }
  if(scene==0x85){
   word(0x692,2048);word(0x696,768);word(0x694,256);word(0x698,768);
   word(0x6D6,0);word(0x6D8,0);word(0x6DA,2048);word(0x6DE,256);
@@ -432,7 +445,8 @@ static void parallax_host_camera_and_static_upload(void){
  background_picture(0x4f,12,16,3,4,5,7,false);
  background_picture(0x85,8,16,0,16,5,-33,false); /* vertical-only; bounded floor adds40px padding */
  background_picture(0xcc,760,592,0,0,5,7,false); /* fixed wall plate */
- background_picture(0x55,128,128,0,0,5,7,false); /* independent sky */
+ background_picture(0x55,128,128,0,0,-166,-49,false); /* sky aligned to native viewport */
+ background_picture(0x4d,512,384,128,96,-38,47,false); /* top-side quarter-rate backdrop */
  /* Mine BG2 keeps the actual 271+5,149+7 phase at native offset171,56. */
  background_picture(0x43,543,299,271,149,105,100,false);
  /* SceneEA's finite256 world is centered at (-171,-40). Its uploaded512
@@ -440,6 +454,35 @@ static void parallax_host_camera_and_static_upload(void){
   * streamed control MUST modify detached map cells, then restore them. */
  background_picture(0xea,0,0,320,81,154,48,true);
  background_picture(0xea,0,0,320,81,154,48,false);
+}
+static void water_wave(void){
+ for(unsigned layer=0;layer<=1;layer++){
+  fixture();word(0x644,layer?0x5c:0x5f);word(0x692,1024);
+  word(0x694,layer?768:1024);word(0x698,layer?512:1024);
+  word(0x68c,256);word(0x690,256);word(0x6ee,layer?5:0x185);
+  word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xEAA3,0x0101,0x0101);
+  publication();IogWorldBeginRaster();
+  for(int line=0;line<=224;line++){
+   int phase=(line+7)%8;
+   g_ppu->hScroll[layer]=(uint16_t)(256+(phase&3)-2);
+   g_ppu->vScroll[layer]=(uint16_t)(256+((phase*3)&7)-4);
+   if(layer&&line==110)g_ppu->cgram[1]=0x1234; /* coffin room's palette IRQ */
+   IogWorldCaptureLine(line);
+  }
+  water_wave_lines=0;water_wave_layer=layer;water_wave_probe=true;
+  IogWorldEndRaster(0,225,0);water_wave_probe=false;
+  CHECK(s.complete&&!strcmp(s.reason,"ready_water_wave")&&water_wave_lines==3*336);
+  CHECK(s.view.native_x==171&&s.view.native_y==56);
+  Ppu probe=s.base;memcpy(&probe,s.lines[1].registers,PPU_SAVESTATE_REGS_SIZE);
+  CHECK(s.epoch_count==1+(int)layer);
+  if(layer){
+   s.epochs[1].ram[0x68c]^=1;
+   CHECK(!WaterWave(&s.epochs[0],&probe));
+   s.epochs[1].ram[0x68c]^=1;
+  }
+  s.lines[99].registers[offsetof(Ppu,vScroll)+layer*2]^=1;
+  CHECK(!WaterWave(&s.epochs[0],&probe));
+ }
 }
 static void great_wall_authored_courses(void){
  /* One allocation stores three256px courses. Observe the active original
@@ -761,7 +804,7 @@ static void mode7_producer_validated_extension(const char*base){
  }
 }
 static void projected_source_row_seam(void){
- fixture();word(0x644,0x55);word(0x692,512);word(0x696,512);
+ fixture();word(0x644,0xcc);word(0x692,512);word(0x696,512);
  word(0x694,512);word(0x698,512);word(0x68a,0);word(0x68e,288);
  word(0x68c,0);word(0x690,0);
  g_ppu->hScroll[0]=g_ppu->hScroll[1]=0;
@@ -810,7 +853,7 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 

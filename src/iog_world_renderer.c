@@ -367,6 +367,26 @@ static bool ReadEffectCamera(const uint8_t *ram,EffectCamera *out)
     return found && Word(ram,0x58)==previous;
 }
 
+/* These measured BG2 layouts stay registered to the original gameplay
+ * rectangle. Extend the captured scroll instead of recentering the backdrop
+ * at a second rate, which shifts rocks or clouds underneath stock objects. */
+static bool RasterAnchoredBackdrop(unsigned scene,const uint8_t *ram,const EffectCamera *effect)
+{
+    unsigned width=Word(ram,0x692),height=Word(ram,0x696);
+    unsigned bg_width=Word(ram,0x694),bg_height=Word(ram,0x698);
+    if(scene==0x43)
+        return width==1536 && height==1024 && bg_width==1024 && bg_height==768;
+    if(bg_width!=512 || bg_height!=512) return false;
+    switch(scene) {
+    case 0x4c: case 0x4d: case 0x4f: case 0x51: case 0x53:
+        return effect && effect->ratio[0]==0x0401 && effect->ratio[1]==0x0401;
+    case 0x55:
+        return width==512 && height==512;
+    default:
+        return false;
+    }
+}
+
 static int ProjectEffect(unsigned ratio,int position)
 {
     int denominator=(int)(ratio>>8),numerator=(int)(ratio&255);
@@ -403,6 +423,52 @@ static bool FreejiaRingWave(const PictureEpoch *e, const Ppu *p,
             Word(regs,offsetof(Ppu,bgTileAdr)) != p->bgTileAdr)
             return false;
         varied |= hscroll != first;
+    }
+    return varied;
+}
+
+enum { WaterWavePeriod = 8 };
+
+/* Mu and Seaside Palace bind both secondary scroll registers to a repeating
+ * sine table. Require the known layout and agreement across all published
+ * rows before extending the wave beyond the recorded field. */
+static bool WaterWave(const PictureEpoch *e, const Ppu *p)
+{
+    const uint8_t *ram = e->ram;
+    unsigned scene = Word(ram, 0x644);
+    unsigned physical = 1 ^ ((ram[0x6EE] >> 7) & 1);
+    unsigned width = Word(ram, 0x692), height = Word(ram, 0x696);
+    unsigned water_width = Word(ram, 0x694), water_height = Word(ram, 0x698);
+    bool mu = ((scene >= 0x5F && scene <= 0x62) || scene == 0x64 || scene == 0x65) &&
+        physical == 0 && width == water_width && height == water_height;
+    bool palace = ((scene == 0x5A && width == 1024 && height == 1536) ||
+                   (scene == 0x5B && width == 256 && height == 1024) ||
+                   (scene == 0x5C && width == 1024 && height == 1024)) &&
+        physical == 1 && water_width == 768 && water_height == 512;
+    if (!mu && !palace)
+        return false;
+    /* The measured coffin room changes its palette during the raster.
+     * RenderWorld has already matched every epoch's VRAM. Bind the two
+     * palettes to their real raster rows and require identical room RAM. */
+    if (s.epoch_count != 1 &&
+        !(scene == 0x5C && s.epoch_count == 2 &&
+          !memcmp(s.epochs[0].ram, s.epochs[1].ram, sizeof(e->ram)) &&
+          memcmp(s.epochs[0].cgram, s.epochs[1].cgram, sizeof(e->cgram))))
+        return false;
+    size_t xoff = offsetof(Ppu, hScroll) + physical * 2;
+    size_t yoff = offsetof(Ppu, vScroll) + physical * 2;
+    unsigned first_x = p->hScroll[physical] & 1023, first_y = p->vScroll[physical] & 1023;
+    bool varied = false;
+    for (unsigned line = 1; line <= 224; line++) {
+        const uint8_t *regs = s.lines[line].registers;
+        const uint8_t *period = s.lines[(line - 1) % WaterWavePeriod + 1].registers;
+        unsigned x = Word(regs, xoff) & 1023;
+        unsigned y = Word(regs, yoff) & 1023;
+        if (x != (Word(period, xoff) & 1023) || y != (Word(period, yoff) & 1023) ||
+            regs[offsetof(Ppu, bgXsc) + physical] != p->bgXsc[physical] ||
+            Word(regs, offsetof(Ppu, bgTileAdr)) != p->bgTileAdr)
+            return false;
+        varied |= x != first_x || y != first_y;
     }
     return varied;
 }
@@ -674,12 +740,6 @@ static bool RenderWorld(void)
         (authored_bounds.left || authored_bounds.top ||
          authored_bounds.right!=(int)Word(first->ram,0x692) ||
          authored_bounds.bottom!=(int)Word(first->ram,0x696));
-    /* The elevator cable, cage and rockwork share a registered picture even
-     * while BG2 follows the elevator camera at half rate. Keep that captured
-     * raster phase at the original viewport's position when extending BG2. */
-    bool elevator_backdrop=scene==0x43 && Word(first->ram,0x692)==1536 &&
-        Word(first->ram,0x696)==1024 && Word(first->ram,0x694)==1024 &&
-        Word(first->ram,0x698)==768;
     EffectCamera effect_camera;
     bool tracked_effect=ReadEffectCamera(s.active_ram,&effect_camera);
     IogRasterParallax horizon_model={0};
@@ -703,6 +763,7 @@ static bool RenderWorld(void)
     }
     bool freejia_wave = tracked_effect && s.epoch_count == 1 &&
         FreejiaRingWave(first,p,&effect_camera);
+    bool water_wave = WaterWave(first,p);
     if (scene == 0x32 && !freejia_wave) {
         s.reason = "unsupported_freejia_wave";
         return false;
@@ -723,6 +784,12 @@ static bool RenderWorld(void)
         }
     }
     bool flat_horizon_tail=horizon&&HorizonFlatTail(first,p);
+    bool raster_anchored=RasterAnchoredBackdrop(scene,first->ram,
+        tracked_effect?&effect_camera:NULL);
+    /* On the underside of Sky Garden, the real BG2 ring wraps as the
+     * clouds drift. Only that map repeats. The walkable floors stay finite. */
+    bool underside_backdrop=(scene==0x4e || scene==0x50 || scene==0x52 || scene==0x54) &&
+        Word(first->ram,0x694)==512 && Word(first->ram,0x698)==512;
     bool authored_window_pan=false;
     if(bounded) {
         PictureBounds bounds;
@@ -803,7 +870,7 @@ static bool RenderWorld(void)
                 int wx=camx-left+start,wy=camy+native_y;
                 bool effect=logical==1 && (!bounded || scene==0x85) && !classroom &&
                     (tracked_effect || horizon || EffectPlaneScene(scene));
-                if(effect && !elevator_backdrop) {
+                if(effect && !raster_anchored) {
                     /* Reframe at this plane's rate. Subtracting the whole
                      * foreground offset makes a quarter-speed/fixed backdrop
                      * slide as the player moves inside a clamped host view.
@@ -843,6 +910,14 @@ static bool RenderWorld(void)
                     int wave_x=ScrollWorld(e->ram,0x68C,scroll);
                     wx+=wave_x-camx;
                 }
+                if (logical == 1 && water_wave && (native_y < 0 || native_y >= 224)) {
+                    int phase = (native_y % WaterWavePeriod + WaterWavePeriod) % WaterWavePeriod + 1;
+                    const uint8_t *regs = s.lines[phase].registers;
+                    int wave_x = ScrollWorld(e->ram, 0x68C, Word(regs, offsetof(Ppu, hScroll) + physical * 2));
+                    int wave_y = ScrollWorld(e->ram, 0x690, Word(regs, offsetof(Ppu, vScroll) + physical * 2));
+                    wx += wave_x - camx;
+                    wy += wave_y - camy;
+                }
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)wy&1023;
                 /* Layer-1 position bypass deliberately performs no map
@@ -861,8 +936,9 @@ static bool RenderWorld(void)
                         int repeat_width=finite_wall?wall_model.width:512;
                         sample_x%=repeat_width;if(sample_x<0)sample_x+=repeat_width;
                     }
-                    unsigned tile=MapTile(e,logical,sample_x,wy+1,
-                        !finite_horizon&&!finite_wall&&effect && (!bounded || scene==0x85) && !classroom);
+                    bool repeat=(effect || (logical==1 && underside_backdrop)) &&
+                        !finite_horizon && !finite_wall && (!bounded || scene==0x85) && !classroom;
+                    unsigned tile=MapTile(e,logical,sample_x,wy+1,repeat);
                     if(tile==0xFFFFFFFFu) tile=(unsigned)blank[logical];
                     /* Overlapping authentic cells use the actual uploaded
                      * VRAM entry, including partially updated scroll strips. */
@@ -946,6 +1022,7 @@ static bool RenderWorld(void)
             s.output[y*s.width+x+hudx]=color;
     }
     s.reason=authored_window_pan?"ready_authored_window_pan":freejia_wave?"ready_freejia_wave":
+        water_wave?"ready_water_wave":
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;
 }
 
