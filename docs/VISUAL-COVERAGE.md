@@ -202,9 +202,27 @@ authored 224-line fields.
 The Sky Garden crash uses the actual Mode 7 color math for both screen
 inputs, and the bookending flight repeats the verified stock cloud
 planes. The three final rechecks cover the flight, ocean and descent
-phases. Other cutscenes, dark-space changes and the Babel boss rematch star
-effects still need dedicated visual work. The previously reported Great
-Wall ceremony fade difference remains open.
+phases. The next batch addresses the Babel boss rematch stars and the
+Great Wall ceremony fade.
+
+## Babel rematches, Great Wall ceremony and ending
+
+Batch 016 adds seven Mode 1 scene IDs, bringing the structural list from
+205 to 212. v18 keeps the same square-pixel 1.5× scale and stock fallback.
+The verification uses assisted starts and SDL virtual controller input
+where movement or combat is required.
+
+| Area | Verification |
+| --- | --- |
+| Babel rematches `F2–F6` | Live fights use the original 64-line star wave, screen enables and color math. Only the star layer extends outside the arena. Sand Fanger was defeated with assisted player stats, and the stock script recorded the reward flag and returned to Babel. |
+| Great Wall `8A`, statue ceremony `FD` | The wall parallax now accepts the stock terminal validation sample when its descriptor and phase agree. The drawable map remains finite. The return no longer misaligns sand during the tested fade. The statue inventory ceremony keeps the original framing and mosaic through fallback. |
+| Adrift `2F` | Seven scripted raft phases, including dialogue, preserve the original horizon and moving sea. Only the background repeats past the raft. Controller dialogue from an assisted start also reaches Diamond Coast. |
+| Credits `F7` and final school scene `F0` | The stock credits ran through their authored handoff into the school scene. The field stays centered with the original scenery and motion, and the dialogue uses the host frame. |
+
+The Sand Fanger rematch return fade can still use fallback. The upper
+Great Wall sky before the fight retains its existing parallax reframe.
+The title prologue, a dream scene and other unqualified cutscene phases
+remain open.
 
 ## Bounded entry survey
 

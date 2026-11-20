@@ -127,6 +127,17 @@ static void wall_bands(void){
  CHECK(IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out)); /* equivalent still phases */
  memset(&out,0xa5,sizeof out);before=out;captured[224]^=1;snapshot();
  CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));CHECK(!memcmp(&out,&before,sizeof out));immutable();
+ wall_fixture(0x8a,544,0);
+ CHECK(IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));
+ uint16_t end=777;
+ CHECK(IogRasterParallaxSample(&out,767,168,&end)&&end==captured[224]);
+ CHECK(!IogRasterParallaxSample(&out,768,168,&end)&&end==captured[224]);immutable();
+ before=out;captured[224]^=1;snapshot();
+ CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));
+ CHECK(!memcmp(&out,&before,sizeof out));immutable();
+ wall_fixture(0x8a,544,0);word(rom,0x18005+8,65536-(768-96));snapshot();
+ CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));
+ CHECK(!memcmp(&out,&before,sizeof out));immutable();
  wall_fixture(0x86,32,0);rom[0x18004]=4;snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
  wall_fixture(0x86,32,0);word(rom,0x18005+4,0);snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
  wall_fixture(0x86,32,0);word(ram,0x644,0x84);snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();

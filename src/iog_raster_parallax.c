@@ -182,8 +182,13 @@ bool IogRasterParallaxPrepareWall(const uint8_t *rom,size_t size,bool verified,
             trial.bands[i].fixed_phase=(uint16_t)(Project(trial.bands[i].factor,x)+speeds[i]);
         bool ok=true;unsigned y=Word(ram,0x690);
         for(unsigned line=0;line<lines && ok;line++) {
+            unsigned row=y+line;
+            /* The terminal hardware sample can reach the allocation edge.
+             * Check the last band's phase only if its ROM descriptor also
+             * covers that sample. Keep the drawable map finite. */
+            if(row==height && Band(&trial,row)) row--;
             uint16_t h;
-            if(!IogRasterParallaxSample(&trial,(int)(y+line),
+            if(!IogRasterParallaxSample(&trial,(int)row,
                 base.source_camera_x,&h) || h!=(captured[line]&1023u))ok=false;
         }
         if(ok){*out=trial;return true;}

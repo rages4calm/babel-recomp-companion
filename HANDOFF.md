@@ -42,12 +42,15 @@ Batch 015 adds 40 [widescreen scene admissions](docs/VISUAL-COVERAGE.md#early-ro
 plus the Sky Garden crash's Mode 7 color effect. It also fixes the reported
 blue strips beside Babel's rooftop and the fog seam in the Jeweler's Mansion.
 Private receipts are in `.local/batch-001/visual-fullgame-015`.
+Batch 016 covers the [Babel rematches, Great Wall ceremony and ending](docs/VISUAL-COVERAGE.md#babel-rematches-great-wall-ceremony-and-ending).
+It fixes the Great Wall post-ceremony alignment and widens the sea around
+the Adrift raft. Private receipts are in `.local/batch-001/visual-fullgame-016`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 015's
-`babel-originalv17.exe` and batch 011's dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 016's
+`babel-originalv18.exe` and batch 011's dialogue pack, and
 continues the isolated test profile's save. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.
@@ -70,7 +73,8 @@ Both visible classroom exits were verified with controller input at 1.5×.
   The room 82 missing scenery and room 8A band phase are corrected. Neighbor
   exits, both movement axes, GPU views and same-scale transition fallback were
   checked. Batch 014 covers the Sand Fanger fight and statue ceremony from
-  separate assisted checkpoints. Other phases and branches remain open.
+  separate assisted checkpoints. Batch 016 reproduces and fixes the
+  return fade and rechecks three connected door routes.
 - GaiaLabs world travel uses a calibrated Mode 7 plane around the exact
   received field. Two GPU views and walking/turning were checked. The local
   scenery map remains ours. Select opens controller bindings in both builds.
