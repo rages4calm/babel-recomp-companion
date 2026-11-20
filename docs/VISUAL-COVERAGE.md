@@ -319,8 +319,12 @@ South Cape after the story flag has opened the road.
 
 From assisted starts, ordered virtual-controller input defeated the Mu twins,
 defused the bomb, rescued Erik, walked out and reached the reunion camp in
-Seaside Tunnel. The replay then walked around camp and opened the mushroom
-dialogue. Progression beyond that conversation remains open.
+Seaside Tunnel. The replay then walked around camp, opened the mushroom
+dialogue and reached the second camp phase through the ordinary story
+conditions. A separate test reached that phase with the dialogue open and
+restored it in a new process. The v23 build loads the configured translation
+before the restored dialogue reads from it. The replay closes the message
+and stays in Seaside Tunnel. The following Angel Village arrival remains open.
 The widened combat capture's 13-pixel difference on the last stock row comes
 from the reconstructed actor parts starting at that edge. The widened renderer
 draws those parts into the expanded picture. The stock OAM publication culls

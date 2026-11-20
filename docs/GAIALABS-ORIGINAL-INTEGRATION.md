@@ -29,6 +29,11 @@ the executable. Use `IOG_LANG=original` or `IOG_GAIALABS_DIALOGUE=0` for
 stock dialogue. Keep generated packs private. Credits for the retranslation
 remain with GaiaLabs and contributors in the pinned source.
 
+A save state made with translated dialogue open needs the same configured
+dialogue pack on the next launch. The build installs that pack before the
+first game frame, so a restored text pointer is ready when dialogue resumes.
+Live language changes still wait for the current dialogue box to close.
+
 An SDL virtual controller opened and advanced translated dialogue in the
 classroom at 1920×1080 with MSU-1 active. The same route used stock text
 with the original-language setting and with a refused import.

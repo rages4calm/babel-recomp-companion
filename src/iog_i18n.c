@@ -500,6 +500,8 @@ void IogI18nFrame(void)
 
 void IogI18nInit(void)
 {
+    if (IogRandomizerActive())
+        return;
     const char *env = getenv("IOG_LANG");
     char code[16] = "";
     if (env && *env) {
@@ -507,6 +509,8 @@ void IogI18nInit(void)
     } else if (snes_mod_runtime_feature_enabled_c("iog.languages", "language") > 0) {
         /* The Mods page is authoritative when its feature is on: the plugin
          * already chose; a language.txt left by Ctrl+L must not override. */
+        if (g_has_pending)
+            SwitchNow(g_pending);
         return;
     } else {
         char path[1024];
@@ -520,8 +524,11 @@ void IogI18nInit(void)
     }
     if (!code[0] && IogI18nAvailable("gaia"))
         snprintf(code, sizeof(code), "gaia");
+    /* The first frame can start from a state with an open message. Attach
+     * its configured text banks before the guest reads its saved pointer.
+     * The in-session switch path still waits for the message to finish. */
     if (code[0])
-        IogI18nSetLanguage(code);
+        SwitchNow(code);
 }
 
 /* Mods page: "Languages" package, feature "language", option "code". Used

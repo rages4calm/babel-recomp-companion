@@ -63,7 +63,7 @@ The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
 `.local/batch-001/visual-fullgame-010`. It selects batch 019's
-`babel-originalv22.exe` and batch 020's dialogue pack, and
+`babel-originalv23.exe` and batch 020's dialogue pack, and
 continues the isolated test profile's save. The test executable has the
 required `i18n/structure.txt` alongside it. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
