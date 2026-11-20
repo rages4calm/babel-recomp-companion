@@ -33,6 +33,21 @@ does not establish that secondary scenery should stop at the floor boundary.
 Per-line HDMA camera derivatives also cannot be inferred from a global actor
 ratio. Deferred raster-camera paths remain explicit review work.
 
+## Save-resume framing from Diamond Mine to Babel
+
+The first frame after loading a save now keeps the 598×336 square-pixel 1.5×
+view in seven stock rooms. The restored terrain, actor position and camera
+must agree with the incoming room. The Jeweler's Mansion also requires its
+specific mosaic layout before the renderer extends the picture.
+
+Seven SDL virtual-controller replays covered the Diamond Mine, Angel Village
+and its inventory, Watermia's birthday, Dao, the Jeweler's Mansion and Babel.
+They continued into adjacent rooms and effects where the route allowed it.
+Across 21,890 frames, only the first restored frame changed on each route.
+The center pixels of those frames and all 182 sampled guest payloads matched
+the v36 control. Six sampled Pyramid starts retained their genuine stock
+black frames. Fallback remains available when the live layout differs.
+
 ## Original ship and Freejia routes
 
 The Original renderer now admits the Wrecked Ship and Gold Ship decks
