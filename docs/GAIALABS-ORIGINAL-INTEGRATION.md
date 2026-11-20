@@ -6,12 +6,13 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **696 of 1,138** chapter-dialogue replacements in the
+The import now covers **728 of 1,138** chapter-dialogue replacements in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer produces 862 candidates. The runtime accepts 696 with known
-stock windows. The latest pass accepts 14 shorter-box entries and 50 entries
-whose page-boundary speaker sequence matches the stock commands. The 632
-previously accepted dialogue payloads are byte-identical. Entries requiring
+The importer produces 862 candidates. The runtime accepts 728 with known
+stock windows. The earlier pass added 14 shorter-box entries and 50 entries
+with stock-matched speaker changes. The current pass accepts 32 more by
+retaining the original leading sound-effect command and operand. The
+previously accepted 696 dialogue payloads are byte-identical. Entries requiring
 choice tables, relocated pointers, a new font, or unverified commands still
 use the original text. Menu and sprite lettering are pending.
 
@@ -33,9 +34,11 @@ remain with GaiaLabs and contributors in the pinned source.
 An SDL virtual controller opened and advanced translated dialogue in the
 classroom at 1920×1080 with MSU-1 active. The same route used stock text
 with the original-language setting and with a refused import.
-In the latest build, a controller advanced Hamlet's reflowed two-line text
+The previous dialogue pass verified Hamlet's reflowed two-line text
 and Kara's three-page conversation from separately assisted Original room
 checkpoints. The stock-language test restored the original Hamlet text.
+The Watermia arrival replay checks the translated and stock Luke dialogue
+and reaches Luke's house in both variants. The stock sound cue remains.
 
 ## World map and widescreen
 

@@ -402,6 +402,10 @@ static void background_picture(unsigned scene,unsigned camera_x,unsigned camera_
   word(0x6D6,0);word(0x6D8,0);word(0x6DA,2048);word(0x6DE,256);
  }
  if(scene==0x55){word(0x692,512);word(0x696,512);word(0x694,512);word(0x698,512);}
+ if(scene==0x43){
+  word(0x692,1536);word(0x696,1024);word(0x694,1024);word(0x698,768);
+  word(0x56,0x1060);word(0x58,0x1060);effect_camera_actor(0x1060,0xEAA3,0x0201,0x0201);
+ }
  if(scene==0xea){
   word(0x692,256);word(0x696,256);word(0x694,512);word(0x698,256);
   word(0x6ee,static_plane?0x400:0);
@@ -429,6 +433,8 @@ static void parallax_host_camera_and_static_upload(void){
  background_picture(0x85,8,16,0,16,5,-33,false); /* vertical-only; bounded floor adds40px padding */
  background_picture(0xcc,760,592,0,0,5,7,false); /* fixed wall plate */
  background_picture(0x55,128,128,0,0,5,7,false); /* independent sky */
+ /* Mine BG2 keeps the actual 271+5,149+7 phase at native offset171,56. */
+ background_picture(0x43,543,299,271,149,105,100,false);
  /* SceneEA's finite256 world is centered at (-171,-40). Its uploaded512
   * ring is authoritative in position-bypass mode; the otherwise identical
   * streamed control MUST modify detached map cells, then restore them. */

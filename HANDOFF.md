@@ -25,12 +25,15 @@ Batch 011 extends the [ship and Freejia renderer coverage](docs/VISUAL-COVERAGE.
 and raises the Retranslation import to 696 dialogue entries. Its private
 receipts are in `.local/batch-001/visual-fullgame-011`. Continue with
 unsupported chapter commands and unverified rooms.
+Batch 012 verifies the [Diamond Mine elevator, foyer and rescue chamber](docs/VISUAL-COVERAGE.md#diamond-mine)
+and extends the Retranslation import to 728 entries with their stock sound
+cue. Private receipts are in `.local/batch-001/visual-fullgame-012`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 011's
-`babel-originalv10.exe` and refreshed dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 012's
+`babel-originalv12.exe` and batch 011's dialogue pack, and
 continues the isolated test profile's save. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint
 and press SNES B (the bottom face button by default) at the entrance.

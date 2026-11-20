@@ -10,7 +10,7 @@
 
 enum {
     CMD_END = 0xC0, CMD_ADR = 0xC5, CMD_RET = 0xCA, CMD_N = 0xCB,
-    CMD_PRT = 0xCD, CMD_FIN = 0xCF, CMD_JMP = 0xD1, CMD_LU1 = 0xD6,
+    CMD_PRT = 0xCD, CMD_FIN = 0xCF, CMD_JMP = 0xD1, CMD_SFX = 0xD2, CMD_LU1 = 0xD6,
     CMD_LU2 = 0xD7, CMD_ESC = 0xD8, CMD_LAST = 0xDA,
 };
 /* Argument sizes in bytes per command $C0-$DA; ESC is delimited by $00. */
@@ -1588,7 +1588,8 @@ static int GaiaStockWindow(const Rom *stock, uint32_t offset, Toks *out, const T
                    original.t[i - 1].code == CMD_FIN) {
             changes_speaker = 1;
         } else if (prefix && (t->code == 0xc1 || t->code == 0xc2 || t->code == 0xc7 ||
-                              t->code == 0xc8 || t->code == 0xd3 || t->code == 0xd5)) {
+                              t->code == 0xc8 || t->code == CMD_SFX ||
+                              t->code == 0xd3 || t->code == 0xd5)) {
             if (t->code == 0xc2 && t->a[0] >= 8 && t->a[0] <= 0x10) {
                 width = 24;
                 height = template_rows[t->a[0] - 8];

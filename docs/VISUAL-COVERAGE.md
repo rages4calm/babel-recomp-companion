@@ -61,6 +61,31 @@ Diamond Mine round trip with movement inside both areas and MSU-1 changes.
 That test used three linked controller checkpoints. The locked mine and
 stock-route recovery also passed.
 
+## Diamond Mine
+
+The elevator, foyer and rescue chamber (`43`, `44`, `47`) now use the
+expanded renderer with their stock scene data. The elevator's two cave layers
+keep the captured BG2 phase during the diagonal ride. The wider view extends
+the actual cave without moving the rocks relative to the stock cable and
+player. In one paired mid-ride frame, the previous projected composition
+displaced 37,005 gameplay pixels in the sampled original rectangle below
+the HUD. The corrected composition matches all those source pixels.
+
+Final v12 SDL virtual controller replays verified the entrance and main-room
+doors, both elevator directions and exits, and the foyer doors to the Morgue
+and rescue chamber. An entrance combat check killed a Flayzer with a controller
+attack using the retained boosted-stat fixture. The rescue route uses an assisted foyer
+arrival and opens the stock two-key requirement in its starting state. The
+same approach with the flags clear stayed in the foyer. The rescue route
+walked the lower chamber and returned through its original door.
+
+The full 1080p square-pixel 1.5× pictures were inspected with the original
+cave layers, cable, actors and Companion radar. The rescue chamber is a
+finite 256-pixel room and uses black space beyond its authored geometry.
+These checks cover the tested routes and elevator phases. Collecting the
+two keys and completing the Memory Melody rescue sequence remain separate
+quest coverage.
+
 The optional manual visual receipt binds the eight historical samples to their
 actual build and dependency hashes. A later source edit changes those samples
 to historical evidence. Neither current nor historical samples are silently

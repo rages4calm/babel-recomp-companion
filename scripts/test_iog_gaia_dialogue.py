@@ -46,6 +46,23 @@ static void RejectMalformed(const char *text)
     free(tokens.t);
 }
 
+static void CheckStockSound(void)
+{
+    const uint8_t leading[] = {0xc2, 9, CMD_SFX, 0x10, 0x40, CMD_END};
+    const uint8_t midpage[] = {0xc2, 9, 0x40, CMD_SFX, 0x10, 0x41, CMD_END};
+    const uint8_t next_page[] = {0xc2, 9, 0x40, CMD_FIN, CMD_SFX, 0x10, 0x41, CMD_END};
+    Rom stock = {.rom = leading, .size = sizeof(leading)};
+    Toks parsed = {0}, rendered = {0};
+    CHECK(GaiaDialogue("A[END]", &parsed));
+    CHECK(GaiaStockWindow(&stock, 0, &rendered, &parsed));
+    CHECK(rendered.n == 4 && rendered.t[1].code == CMD_SFX && rendered.t[1].a[0] == 0x10);
+    free(parsed.t);
+    free(rendered.t);
+    CheckWindow(midpage, sizeof(midpage), "A[END]", 0, 0, 0, 0);
+    CheckWindow(next_page, sizeof(next_page), "A[FIN]B[END]", 0, 0, 0, 0);
+    RejectMalformed("[SFX:10]A[END]");
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -70,6 +87,7 @@ int main(void)
     RejectMalformed("A[TPL:01]B[END]");
     RejectMalformed("[TPL:+1]A[END]");
     RejectMalformed("[TPL:01][TPL:01]A[END]");
+    CheckStockSound();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }
