@@ -181,6 +181,17 @@ save presentation. The optional SPC700 pilot covers 886 guarded sites in
 the private `visual-fullgame-036/native` build. Cold, Kress and Aqueduct tests
 matched sampled interpreter state. Standard builds still use SPC fallback.
 
+Batch 037 integrates 82 additional GaiaLabs chapter declarations for 963 of
+1,138, all 124 approved console menu strings, and all 64 named room titles.
+Older v40 addresses and payloads remain valid. The timed dialogue keeps
+stock wait and choice control. The renderer fixes the first restored frame
+in the tested Mode 1 rooms, including the Itory departure, Dao and Dark
+Gaia. The private receipts are under `visual-fullgame-037`. This is an
+internal candidate. There are 175 chapter declarations still using stock
+behavior, and the linked 1.5× controller checks do not qualify a continuous
+campaign. Keep the owner playtest selector on the prior build until the
+remaining text and full campaign checks are complete.
+
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in

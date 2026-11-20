@@ -6,9 +6,10 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **881 of 1,138** chapter-dialogue replacements in the
+The import now covers **963 of 1,138** chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer produces 1,107 candidates. Batch 031 added 28 replacements,
+The importer supplies 1,108 candidates. The runtime keeps stock text when
+a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
 Castle dialogue and the Dao Snake Panic score response. New formatted
 rows can retain verified stock pause, input-wait, palette and live
@@ -69,12 +70,6 @@ tested the map child's choice at 1.5×. From the same restored position and
 declared prerequisite flags, both stock and translated Yes unlocked Angkor.
 Translated No left it locked.
 
-The importer excludes 31 declarations. The runtime leaves 226 candidates
-in stock form, for 257 stock chapter entries in total. The remaining
-constraints include marker prefixes with printable text, unverified
-script targets, window bounds, and timed controls. Custom-font coverage remains
-open.
-
 v40 adds five dialogue entries with a separate stock interior-marker entry
 point. Both entry points share one verified translation and preserve the
 stock wait before the marker. It also adds two menu descriptions and ten
@@ -82,14 +77,32 @@ prologue cards. Paired 1.5× replays exercised both Inca Queen callers, the
 Prayer Statue description and equipping, and the second prologue card.
 All 970 prior patch payloads and the five previous overlay banks stayed exact.
 
+Original v41 adds 82 chapter translations across stock manual dialogue,
+returning fragments and timed sequences. The reflow keeps the original
+speaker and voice commands and checks row limits, choices and wait boundaries.
+Paired controller replays through the Angkor Wat entrance and the prison-key
+reward exercised two of the new paths. Both reward runs granted the same
+key and story flag. Both Dao Snake Panic outcomes displayed their live
+score, preserved the correct jewel payout, and exited to Dao on controller
+input. All 1,002 v40 patches and its six overlay banks retain their bytes
+and addresses.
+
+175 chapter declarations still use stock behavior. Pending work includes
+inherited dialogue box bounds, shared bank-relative targets, and timed
+sequences whose source and stock beats differ.
+
 ### Inventory, room titles and map lettering
 
-Original v39 appends 65 of the 124 approved console menu entries, 48 of
-64 named room titles, and all 35 indexed world-map sprite strings. The 177
-empty room-title records stay empty. The runtime checks each title against the
-stock 18-column box and its entry space. Longer labels and unsupported stock
-control sequences keep their original text. All 876 previous chapter dialogue
-payloads retain their bytes and addresses, and dialogue-only packs still load.
+Original v41 applies all 124 approved console menu entries and all 64 named
+room titles. The 177 empty room-title records stay empty. Stock menu slots
+retain their layout and control bytes. Fifteen longer titles use the wider
+title box and the short stock Mu slot uses a dictionary entry. Paired mixed
+and interpreter runs display the same centered Mu title at 1.5×. Virtual
+controller replays opened and closed four inventory details and confirmed
+that the correct items equipped.
+
+The pack also includes all 35 indexed world-map sprite strings and ten
+prologue cards. Dialogue-only packs still load.
 
 A controller replay from Dao showed the translated title on the same frame
 and in the original box while leaving the scenery unchanged. A staged Lift

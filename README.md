@@ -20,8 +20,9 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
   [Visual coverage and renderer direction](docs/VISUAL-COVERAGE.md)
 - **World travel and local maps** combine GaiaLabs' walkable world map
   with Companion's scenery-based area map, explored terrain, discovered
-  markers and radar. Locally prepared packs also supply 881 retranslated
-  chapter entries and verified inventory, room-title and map lettering.
+  markers and radar. Locally prepared packs also supply 963 retranslated
+  chapter entries, all 124 approved menu strings, and all 64 named room
+  titles.
   [GaiaLabs integration](docs/GAIALABS-ORIGINAL-INTEGRATION.md) ·
   [Companion map](docs/MAP-SYSTEM-DIRECTION.md)
 - **Companion Launcher** verifies your ROM and exposes display, audio
@@ -40,6 +41,10 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 | ![Freejia street with the Companion area radar in the lower-right corner](https://github.com/user-attachments/assets/9a9be356-f8c2-4117-b952-bc3e8f75e75a) | ![Will standing above South Cape on the expanded Mode 7 world map](https://github.com/user-attachments/assets/bfba1b8c-bd55-42c8-a6d6-d355d04d1560) |
 
 ## Development status
+
+Original v41 fixes save-resume framing at square-pixel 1.5× across
+tested stock rooms. Campaign-wide visual and retranslation checks continue.
+[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#save-resume-framing-across-the-campaign)
 
 Original v39 fixes the Larai Cliff mist seam and preserves square-pixel 1.5×
 through the Changed World map, New Babel and the credits.
