@@ -86,12 +86,16 @@ Batch 027 [keeps the prison, Babel and Angkor vision transitions at
 scale](docs/VISUAL-COVERAGE.md#prison-babel-victory-waves-and-angkor-vision)
 on Original v30. Private comparisons and controller receipts are in
 `.local/batch-001/visual-fullgame-027`.
+Batch 028 [stabilizes the Babel rematches, Ship Dream and Sky Garden
+flight](docs/VISUAL-COVERAGE.md#babel-victory-waves-ship-dream-and-sky-garden-flight)
+on Original v31. Private controller comparisons and exact-build receipts are in
+`.local/batch-001/visual-fullgame-028`.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The new world travel launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 027's
-`babel-originalv30playtest.exe` and batch 020's dialogue pack, and
+`.local/batch-001/visual-fullgame-010`. It selects batch 028's
+`babel-originalv31final.exe` and batch 020's dialogue pack, and
 continues the isolated test profile's save. The test executable has the
 required `i18n/structure.txt` alongside it. Hold Down from the initial Itory
 departure checkpoint to leave town. On the map, follow the destination hint

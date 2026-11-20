@@ -40,7 +40,7 @@ typedef struct PictureLine {
 static struct {
     bool initialized, enabled, stock, pending, composed, active, complete, valid;
     bool copy_reference;
-    bool source_packet,mode7,mode7_perspective,absent_secondary;
+    bool source_packet,mode7,mode7_perspective,absent_secondary,sky_field;
     int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
     int width, height, extent_quarters, epoch_count;
@@ -183,6 +183,54 @@ static bool AngkorVisionMosaic(const Ppu *p,const uint8_t *ram)
         Word(ram,0x694)==768 && Word(ram,0x698)==1024;
 }
 
+static bool StorySkyLayout(const uint8_t *ram)
+{
+    return Word(ram,0x644)==0x58 && (ram[0x6EE]&0x80) &&
+        Word(ram,0x692)==512 && Word(ram,0x694)==512 &&
+        Word(ram,0x696)==512 && Word(ram,0x698)==512 &&
+        !Word(ram,0x6D6) && !Word(ram,0x6D8) &&
+        Word(ram,0x6DA)==256 && Word(ram,0x6DE)==256;
+}
+
+static bool StorySkyFieldLayout(const Ppu *p,const uint8_t *ram)
+{
+    return StorySkyLayout(ram) && Word(ram,0x6EE)==0x0085 &&
+        !Word(ram,0x68A) && !Word(ram,0x68E) && p->bgmode==9 &&
+        p->screenEnabled[0]==21 && p->screenEnabled[1]==17 &&
+        !p->windowsel && !p->cgwsel && !p->cgadsub;
+}
+
+static bool BabelQueenMosaic(const Ppu *p,const uint8_t *ram)
+{
+    /* The Queen's exit mosaics the stock starfield and foreground on the
+     * same grid, while the regular channel-1 BG2 wave keeps running. */
+    return Word(ram,0x644)==0xF6 && Word(ram,0x6EE)==0x0405 &&
+        p->bgmode==9 && (p->mosaic&15)==3 && !p->windowsel &&
+        p->screenEnabled[0]==21 && p->screenEnabled[1]==2 &&
+        p->cgwsel==0x02 && p->cgadsub==0x31 && g_snesrecomp_last_hdmaen==0x02 &&
+        Word(ram,0x692)==512 && Word(ram,0x696)==512 &&
+        Word(ram,0x694)==512 && Word(ram,0x698)==512;
+}
+
+static bool ShipDreamMosaic(const Ppu *p,const uint8_t *ram)
+{
+    if(p->bgmode!=9 || (p->mosaic&15)!=3 || p->screenEnabled[0]!=23 ||
+       p->screenEnabled[1] || p->cgwsel!=0x80 ||
+       Word(ram,0x694)!=512 || Word(ram,0x698)!=512)
+        return false;
+    if(DreamWorldWindow(p,ram))
+        return p->cgadsub==0xA3 && g_snesrecomp_last_hdmaen==6 && Word(ram,0x6EE)==5;
+    /* The cabin's existing HDMA swaps the sunset color math below the sky. */
+    return Word(ram,0x644)==0x2D && Word(ram,0x692)==768 && Word(ram,0x696)==512 &&
+        Word(ram,0x6EE)==1 && !p->windowsel && (p->cgadsub==0xA1 || p->cgadsub==0x22) &&
+        g_snesrecomp_last_hdmaen==0x1E;
+}
+
+static bool StockMosaicLayout(const Ppu *p,const uint8_t *ram)
+{
+    return AngkorVisionMosaic(p,ram) || BabelQueenMosaic(p,ram) || ShipDreamMosaic(p,ram);
+}
+
 static int PositiveMod(int value,int divisor)
 {
     int remainder=value%divisor;
@@ -285,6 +333,7 @@ void IogWorldBeginRaster(void)
     s.complete=false; s.valid=false; s.epoch_count=0;
     s.mode7=s.mode7_perspective=false;
     s.absent_secondary=false;
+    s.sky_field=false;
     s.mode7_split=0;
     memset(&s.view,0,sizeof(s.view));
     s.reason="unsupported_scene_or_layout";
@@ -299,14 +348,20 @@ void IogWorldBeginRaster(void)
         s.base=*g_ppu;s.mode7=s.valid=true;s.reason="awaiting_mode7_plane";
         return;
     }
-    if(!s.active) return;
+    /* During Neil's flight, some OAM uploads do not match the observed
+     * composer. Keep the hardware picture for the actors, and extend only
+     * the known repeating sky after a paired frame has established the room. */
+    bool sky_field=!s.active && s.publish_sequence && StorySkyLayout(s.active_ram) &&
+        StorySkyFieldLayout(g_ppu,g_snes->ram);
+    if(!s.active && !sky_field) return;
     IogSceneViewSource source;
     IogSceneViewReadWorldSource(g_snes->ram,131072,g_ppu,false,&source);
     if(source.gate!=kIogSceneViewReady || source.scene!=Word(s.active_ram,0x644)) return;
     if(PPU_objInterlace(g_ppu) || g_ppu->frameInterlace ||
-       ((g_ppu->mosaic>>4)!=0 && !AngkorVisionMosaic(g_ppu,g_snes->ram)) ||
+       ((g_ppu->mosaic>>4)!=0 && !StockMosaicLayout(g_ppu,g_snes->ram)) ||
        (ActiveWorldWindow(g_ppu) && !KnownWorldWindow(g_ppu,g_snes->ram))) return;
     s.base=*g_ppu;
+    s.sky_field=sky_field;
     s.absent_secondary=source.absent_secondary;
     s.valid=true; s.reason="awaiting_picture";
 }
@@ -314,6 +369,9 @@ void IogWorldBeginRaster(void)
 void IogWorldCaptureLine(int line)
 {
     if(!s.enabled || !s.valid || line<0 || line>224) return;
+    if(s.sky_field && !StorySkyFieldLayout(g_ppu,g_snes->ram)) {
+        s.valid=false; s.reason="unsupported_story_sky"; return;
+    }
     if(s.absent_secondary && (Word(g_snes->ram,0x644)!=Word(s.active_ram,0x644) ||
        !IogSceneViewAbsentPyramidSecondary(g_snes->ram,g_ppu))) {
         s.valid=false; s.reason="unexpected_secondary_background"; return;
@@ -322,7 +380,7 @@ void IogWorldCaptureLine(int line)
     if((mode7_line?!Mode7PlaneLayout(g_ppu,Word(g_snes->ram,0x644)):(g_ppu->bgmode&7)!=1) ||
        g_ppu->frameInterlace ||
        (((g_ppu->mosaic|s.base.mosaic)>>4)!=0 &&
-          (!AngkorVisionMosaic(g_ppu,g_snes->ram) || g_ppu->mosaic!=s.base.mosaic ||
+          (!StockMosaicLayout(g_ppu,g_snes->ram) || g_ppu->mosaic!=s.base.mosaic ||
            (line>0 && g_ppu->mosaicStartLine!=1))) ||
        (ActiveWorldWindow(g_ppu) && !KnownWorldWindow(g_ppu,g_snes->ram))) {
         s.valid=false; s.reason="unsupported_line_effect"; return;
@@ -590,13 +648,23 @@ static unsigned StockHorizontalWave(const PictureEpoch *e,const Ppu *p,int camer
         return 0;
     bool varied=false,periodic=true;
     const size_t h=offsetof(Ppu,hScroll),v=offsetof(Ppu,vScroll);
+    /* The higher channels end together. Sand Fanger's alternating
+     * channel-1 source can write zero to BG2 for the final two lines. */
+    const bool bg2_zero_tail=hdma_mask==0xC2 && Word(ram,0x644)==0xF5 &&
+        g_snes->dma->channel[1].aAdr==0x8A00 &&
+        !(Word(s.lines[223].registers,h+2)&1023) &&
+        !(Word(s.lines[224].registers,h+2)&1023);
     for(int line=0;line<=224;line++) {
         const uint8_t *regs=s.lines[line].registers;
         unsigned sample=(unsigned)Clamp(line,0,LastWaveLine);
         unsigned shift=Word(ram,origin+2*sample)&1023;
         int distance=(int)((shift-(unsigned)camera_x+512)&1023)-512;
-        if(distance < -64 || distance > 64 || (Word(regs,h)&1023)!=shift ||
-           (Word(regs,h+2)&1023)!=shift ||
+        /* Babel's alternating BG2 source data can carry its camera
+         * displacement. Both final scroll registers must still match
+         * the actual wave table. */
+        if((hdma_mask==0xC0 && (distance < -64 || distance > 64)) ||
+           (Word(regs,h)&1023)!=shift ||
+           (Word(regs,h+2)&1023)!=((bg2_zero_tail && line>LastWaveLine)?0u:shift) ||
            (Word(regs,v)&1023)!=(p->vScroll[0]&1023) ||
            (Word(regs,v+2)&1023)!=(p->vScroll[1]&1023) ||
            regs[offsetof(Ppu,bgXsc)]!=p->bgXsc[0] ||
@@ -1000,12 +1068,23 @@ static bool RenderMode7Plane(void)
         uniform?"ready_mode7_plane":"ready_mode7_raster_band";return true;
 }
 
+static void CompositeHud(uint8_t *dst,size_t pitch)
+{
+    int hudw=256*s.height/224,hudx=(s.width-hudw)/2;
+    for(int y=0;y<s.height;y++) for(int x=0;x<hudw;x++) {
+        uint32_t color=s.hud[(y*224/s.height)*256+x*256/hudw];
+        if((color>>24) && x+hudx>=0 && x+hudx<s.width)
+            memcpy(dst+y*pitch+(x+hudx)*4,&color,sizeof(color));
+    }
+}
+
 static bool RenderWorld(void)
 {
     if(s.mode7) return RenderMode7Plane();
     if(!s.valid || !s.epoch_count || s.width<256 || s.height<224) return false;
     PictureEpoch *first=&s.epochs[s.lines[1].epoch];
-    unsigned scene=Word(s.active_ram,0x644);
+    const uint8_t *picture_ram=s.sky_field?first->ram:s.active_ram;
+    unsigned scene=Word(picture_ram,0x644);
     bool classroom=scene==0x08;
     if(classroom) for(int n=0;n<s.epoch_count;n++)
         if(!OriginalClassroomLayout(&s.epochs[n])) {
@@ -1016,9 +1095,9 @@ static bool RenderWorld(void)
     }
     Ppu *p=&s.detached;
     *p=s.base;memcpy(p,s.lines[1].registers,PPU_SAVESTATE_REGS_SIZE);
-    int physical=(s.active_ram[0x6EE]>>7)&1;
-    int camera_x=(int16_t)Word(s.active_ram,0x68A);
-    int camera_y=(int16_t)Word(s.active_ram,0x68E);
+    int physical=(picture_ram[0x6EE]>>7)&1;
+    int camera_x=(int16_t)Word(picture_ram,0x68A);
+    int camera_y=(int16_t)Word(picture_ram,0x68E);
     bool village_heat=scene==0xAC && VillageHeat(first,p);
     bool babel_starfield_layout=s.epoch_count==1 && BabelStarfieldLayout(first,p);
     bool transition_wave_repeats=false;
@@ -1026,9 +1105,7 @@ static bool RenderWorld(void)
         ArrivalWaveLayout(scene,first,p,camera_x,camera_y)?
             StockHorizontalWave(first,p,camera_x,0xC0,&transition_wave_repeats):0;
     if(!transition_wave_repeats) transition_wave=0;
-    /* The entire Dark Vampires return uses this validated layout. The
-     * other rematches still need a continuous capture of both phases. */
-    if(babel_starfield_layout && scene==0xF4 && Word(first->ram,0x6EE)==0x0405)
+    if(babel_starfield_layout && scene<=0xF5 && Word(first->ram,0x6EE)==0x0405)
         transition_wave=StockHorizontalWave(first,p,camera_x,0xC2,&transition_wave_repeats);
     bool babel_victory_wave=transition_wave && babel_starfield_layout;
     bool source_plate=SourcePlateScene(scene);
@@ -1043,22 +1120,22 @@ static bool RenderWorld(void)
             s.reason="unsupported_room_window";return false;
         }
     } else if(!village_heat && !transition_wave &&
-              (ScrollWorld(s.active_ram,0x68A,p->hScroll[physical])!=camera_x ||
-               ScrollWorld(s.active_ram,0x68E,p->vScroll[physical])!=camera_y)) {
+              (ScrollWorld(picture_ram,0x68A,p->hScroll[physical])!=camera_x ||
+               ScrollWorld(picture_ram,0x68E,p->vScroll[physical])!=camera_y)) {
         s.reason="camera_publication_mismatch";return false;
     }
     if(!IogWorldViewCompute(camera_x,camera_y,Word(first->ram,0x692),
             Word(first->ram,0x696),(uint16_t)s.width,(uint16_t)s.height,&s.view)) {
         s.reason="invalid_world_view";return false;
     }
-    bool bounded=BoundedRoomScene(Word(s.active_ram,0x644));
+    bool bounded=BoundedRoomScene(scene);
     PictureBounds authored_bounds;
     bool authored=!bounded && !classroom && AuthoredWindow(first,&authored_bounds) &&
         (authored_bounds.left || authored_bounds.top ||
          authored_bounds.right!=(int)Word(first->ram,0x692) ||
          authored_bounds.bottom!=(int)Word(first->ram,0x696));
     EffectCamera effect_camera;
-    bool tracked_effect=ReadEffectCamera(s.active_ram,&effect_camera);
+    bool tracked_effect=!s.sky_field && ReadEffectCamera(s.active_ram,&effect_camera);
     IogRasterParallax horizon_model={0};
     IogRasterParallax wall_model={0};
     bool horizon=false,wall_bands=false;
@@ -1129,11 +1206,7 @@ static bool RenderWorld(void)
         Word(first->ram,0x694)==512 && Word(first->ram,0x698)==512;
     /* The flight cutscene stores two repeating cloud planes behind its
      * small camera window. Only the known stock sky may fill the margins. */
-    bool story_sky=scene==0x58 && physical==1 && s.epoch_count==1 &&
-        Word(first->ram,0x692)==512 && Word(first->ram,0x694)==512 &&
-        Word(first->ram,0x696)==512 && Word(first->ram,0x698)==512 &&
-        Word(first->ram,0x6D6)==0 && Word(first->ram,0x6D8)==0 &&
-        Word(first->ram,0x6DA)==256 && Word(first->ram,0x6DE)==256;
+    bool story_sky=scene==0x58 && s.epoch_count==1 && StorySkyLayout(first->ram);
     if(scene==0x58 && !story_sky) {
         s.reason="unsupported_story_sky";return false;
     }
@@ -1169,7 +1242,8 @@ static bool RenderWorld(void)
     memcpy(s.detached.cgram,first->cgram,sizeof(first->cgram));
     IogVisualSource source={s.active_ram,sizeof(s.active_ram),g_snes->cart->rom,
         g_snes->cart->romImageSize,&s.detached,true};
-    if(IogVisualObjectsBuild(&source,&viewport,&s.visual)!=kIogVisualReady) {
+    s.visual.part_count=0;
+    if(!s.sky_field && IogVisualObjectsBuild(&source,&viewport,&s.visual)!=kIogVisualReady) {
         s.reason="unsupported_visual_object";return false;
     }
     *p=s.base;Detach(p);
@@ -1395,7 +1469,9 @@ static bool RenderWorld(void)
                 p->screenEnabled[0]&=(uint8_t)~((1u<<terrain)|16u);
                 p->screenEnabled[1]&=(uint8_t)~((1u<<terrain)|16u);
                 PpuSetExtraObjects(p,NULL,0);
-                IogWorldPixelsDrawLine(p,0);IogWorldPixelsDrawLine(p,1);
+                IogWorldPixelsDrawLine(p,0);
+                if(mosaic>1) p->mosaicStartLine=0;
+                IogWorldPixelsDrawLine(p,1);
             }
             /* Only tilemap entries were changed on the owned picture. All
              * epochs have identical VRAM (checked above), so restoring these
@@ -1426,14 +1502,10 @@ static bool RenderWorld(void)
             }
         }
     }
+    if(s.sky_field) {s.reason="ready_story_sky_field";return true;}
     /* Keep HUD physical size while the world camera shows a larger extent.
      * It is an independently extracted original UI plane, not world terrain. */
-    int hudw=256*s.height/224,hudx=(s.width-hudw)/2;
-    for(int y=0;y<s.height;y++) for(int x=0;x<hudw;x++) {
-        uint32_t color=s.hud[(y*224/s.height)*256+x*256/hudw];
-        if((color>>24) && x+hudx>=0 && x+hudx<s.width)
-            s.output[y*s.width+x+hudx]=color;
-    }
+    CompositeHud((uint8_t *)s.output,s.width*4);
     s.reason=authored_window_pan?"ready_authored_window_pan":freejia_wave?"ready_freejia_wave":
         water_wave?"ready_water_wave":
         dao_heat?"ready_dao_heat":
@@ -1560,7 +1632,19 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
        pitch<(size_t)width*4||!isfinite(alpha)||alpha<0||alpha>1) return 0;
     if(s.complete && width==s.width && height==s.height) {
         for(int y=0;y<height;y++) memcpy(dst+y*pitch,s.output+y*width,width*4);
-        if(s.mode7) {
+        if(s.sky_field) {
+            /* Keep live objects but replace visible source HUD pixels with
+             * the verified sky before drawing BG3 at its usual display scale.
+             * A different source color can be an object over the HUD. */
+            for(int y=0;y<224;y++) for(int x=0;x<256;x++) {
+                int index=y*256+x;
+                uint32_t hud=s.hud[index];
+                if(!(hud>>24) || memcmp(field+index*4,&hud,3))
+                    memcpy(dst+(y+s.view.native_y)*pitch+(x+s.view.native_x)*4,
+                        field+index*4,4);
+            }
+            CompositeHud(dst,pitch);
+        } else if(s.mode7) {
             int left=(width-256)/2,top=(height-224)/2;
             for(int y=0;y<224;y++) memcpy(dst+(y+top)*pitch+left*4,
                 field+y*256*4,256*4);
