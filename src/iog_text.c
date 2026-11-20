@@ -749,12 +749,19 @@ static void AddFont(const Structure *st, const Rom *ru, const Rom *re, IogPack *
  * up to $FF, then the scene's title as a dialogue string ("Lance's House",
  * "TEST MAP"). The European releases translate them at the same map index.
  * Returns the ROM offset of map m's title, 0 if the list does not parse. */
-static uint32_t SceneTitle(const Rom *r, const Structure *st, int m)
+static uint32_t SceneActorList(const Rom *r, const Structure *st, int m)
 {
     uint32_t t = st->scene_table;
     if (!t || m >= st->scene_n || t + 2 * (uint32_t)m + 2 > r->size)
         return 0;
-    uint32_t o = (t & 0xFF0000) | Rd16(r, t + 2 * (uint32_t)m);
+    return (t & 0xFF0000) | Rd16(r, t + 2 * (uint32_t)m);
+}
+
+static uint32_t SceneTitle(const Rom *r, const Structure *st, int m)
+{
+    uint32_t o = SceneActorList(r, st, m);
+    if (!o)
+        return 0;
     for (int n = 0; n < 256; n++) {
         if (o + 9 > r->size)
             return 0;
@@ -969,15 +976,19 @@ static int AsciiInit(AsciiRom *a, const Rom *r)
 static uint32_t Off24(uint32_t a) { return ((a >> 16) & 0x3F) << 16 | (a & 0xFFFF); }
 
 /* Decode one menu string ([LU] expanded). 0 on anything that is not one. */
-static int AsciiDecode(const AsciiRom *a, uint32_t off, Toks *out, int depth)
+static int AsciiDecodeSpan(const AsciiRom *a, uint32_t off, Toks *out, int depth,
+                           uint32_t *span)
 {
     const Rom *r = &a->rom;
     for (uint32_t i = off; i < r->size && i - off < 512;) {
         Tok t = {0};
         t.ref = -1;
         uint8_t b = r->rom[i++];
-        if (b == 0)
+        if (b == 0) {
+            if (span)
+                *span = i - off;
             return 1;
+        }
         if (b >= 0x12) {
             t.type = T_GLYPH;
             t.code = b;
@@ -998,6 +1009,8 @@ static int AsciiDecode(const AsciiRom *a, uint32_t off, Toks *out, int depth)
         if (b == 9 || b == 10 || b == 11 || b == 13 || b == 17 || kAsciiArgs[b][0]) {
             for (int k = 0; k < 3; k++) {
                 uint32_t v = 0;
+                if (i + kAsciiArgs[b][k] > r->size)
+                    return 0;
                 for (int j = 0; j < kAsciiArgs[b][k]; j++)
                     v |= (uint32_t)r->rom[i + j] << (8 * j);
                 i += kAsciiArgs[b][k];
@@ -1008,13 +1021,18 @@ static int AsciiDecode(const AsciiRom *a, uint32_t off, Toks *out, int depth)
         }
         if (b == A_LU && depth < 3) {
             uint32_t w = (a->lu & 0xFF0000) | Rd16(r, a->lu + 2 * t.a[0]);
-            if (!AsciiDecode(a, w, out, depth + 1))
+            if (!AsciiDecodeSpan(a, w, out, depth + 1, NULL))
                 return 0;
             continue;
         }
         Push(out, &t);
     }
     return 0;
+}
+
+static int AsciiDecode(const AsciiRom *a, uint32_t off, Toks *out, int depth)
+{
+    return AsciiDecodeSpan(a, off, out, depth, NULL);
 }
 
 static int AsciiEncode(const Toks *v, uint8_t *out)
@@ -1372,7 +1390,7 @@ static int AdoptUsaStructure(const Toks *usa, Toks *eu)
  * [PRT:@virtual][SKP:k][RET] makes it measure the new text: the address
  * bytes count as the routine sees them and k makes up the rest (the skip
  * lands after the last letter, so nothing moves on screen). */
-static void AddSceneRedirect(IogPack *pack, const Rom *ru, uint32_t off, uint32_t addr,
+static int AddSceneRedirect(IogPack *pack, const Rom *ru, uint32_t off, uint32_t addr,
                              const Toks *v)
 {
     int width = 0;
@@ -1386,13 +1404,14 @@ static void AddSceneRedirect(IogPack *pack, const Rom *ru, uint32_t off, uint32_
     int seen = 0;
     for (int k = 1; k < 4; k++) {
         if (b[k] == CMD_RET || b[k] == 0xCC || b[k] == CMD_LU1 || b[k] == CMD_LU2)
-            return;                    /* would derail the measure: keep USA text */
+            return 0;                  /* would derail the measure: keep USA text */
         seen += b[k] < 0xC0;
     }
     if (width < seen || width - seen > 0xFF || SceneTitleLen(ru, off) + 1 < sizeof(b))
-        return;
+        return 0;
     b[5] = (uint8_t)(width - seen);
     AddPatch(pack, off, b, sizeof(b));
+    return 1;
 }
 
 
@@ -2630,6 +2649,294 @@ static int GaiaStockMarkerTail(const Rom *stock, uint32_t offset, Toks *out, con
     return ok;
 }
 
+/* Render into a fresh UI overlay bank only after all chapter dialogue is
+ * placed. The older dialogue-only TSV and all of its pointers remain valid. */
+static uint32_t GaiaUiAddress(IogPack *pack, unsigned *fill, unsigned length)
+{
+    if (*fill + length > kIogVirtualBankSize) {
+        if (pack->nbanks >= kIogVirtualBanks)
+            return 0;
+        uint8_t *data = calloc(1, kIogVirtualBankSize);
+        if (!data)
+            return 0;
+        pack->banks[pack->nbanks++] = data;
+        *fill = 0;
+    }
+    return ((uint32_t)(kVBankFirst + pack->nbanks - 1) << 16) | (kVBase + *fill);
+}
+
+static int GaiaPatchDisjoint(const IogPack *pack, uint32_t off, unsigned len)
+{
+    for (int i = 0; i < pack->npatches; ++i) {
+        const IogPatch *p = &pack->patches[i];
+        if (p->offset < off + len && off < p->offset + p->len)
+            return 0;
+    }
+    return 1;
+}
+
+static int GaiaTitle(const Rom *r, const Structure *st, IogPack *pack, unsigned *fill,
+                     uint32_t scene_record, const char *value)
+{
+    uint32_t off = 0;
+    for (int i = 0; !off && i < st->scene_n; ++i)
+        if (SceneActorList(r, st, i) == scene_record)
+            off = SceneTitle(r, st, i);
+    if (!off)
+        return 0;
+    Toks original = {0};
+    int ok = Decode(r, off, &original, 0, 0) && original.n &&
+             original.t[original.n - 1].code == CMD_RET;
+    for (int i = 0; ok && i + 1 < original.n; ++i)
+        ok = original.t[i].type == T_GLYPH;
+    free(original.t);
+    if (!ok)
+        return 0;
+    /* DisplaySceneTitle centers within 18 glyphs using an unsigned cursor. */
+    Tok glyphs[18] = {0};
+    uint8_t encoded[19];
+    unsigned n = 0;
+    while (*value && n < sizeof(encoded) - 1) {
+        if (*value == '[' || !GlyphFor(&value, &encoded[n]) || encoded[n] >= CMD_END)
+            return 0;
+        glyphs[n].code = encoded[n];
+        ++n;
+    }
+    if (!n || *value)
+        return 0;
+    encoded[n] = CMD_RET;
+    unsigned span = SceneTitleLen(r, off) + 1;
+    if (n + 1 <= span && GaiaPatchDisjoint(pack, off, n + 1)) {
+        if (memcmp(r->rom + off, encoded, n + 1))
+            AddPatch(pack, off, encoded, n + 1);
+        return 1;
+    }
+    if (span < 7 || !GaiaPatchDisjoint(pack, off, 7))
+        return 0;
+    Toks text = {.t = glyphs, .n = (int)n};
+    /* Address bytes can look like commands to the stock width counter. */
+    for (int i = 0; i < 3; ++i) {
+        const uint32_t addr = GaiaUiAddress(pack, fill, n + 1);
+        if (!addr)
+            return 0;
+        if (AddSceneRedirect(pack, r, off, addr, &text)) {
+            memcpy(pack->banks[pack->nbanks - 1] + *fill, encoded, n + 1);
+            *fill += n + 1;
+            return 1;
+        }
+        ++*fill;
+    }
+    return 0;
+}
+
+static uint8_t GaiaMenuGlyph(unsigned c)
+{
+    if (c >= 'A' && c <= 'Z') return (uint8_t)c;
+    if (c >= 'a' && c <= 'z') return (uint8_t)c;
+    if (c >= '0' && c <= '9') return (uint8_t)c;
+    switch (c) {
+    case ' ': return 0x60;
+    case '.': return 0x20;
+    case '!': return 0x21;
+    case '*': return 0x2a;
+    case ',': return 0x2c;
+    case '+': return 0x2d;
+    case '-': return 0x2e;
+    case '/': return 0x2f;
+    case ':': return 0x3a;
+    case '(': return 0x3c;
+    case ')': return 0x3e;
+    case '?': return 0x3f;
+    case '\'': return 0x5c;
+    case '"': return 0x82;
+    default: return 0;
+    }
+}
+
+/* Menu rows can be shared by multiple callers. Preserve their row advances
+ * and never exceed the stock text's width on any line. */
+static unsigned GaiaMenuText(const Toks *original, const char *text, uint8_t encoded[128])
+{
+    unsigned n = 0, column = 0;
+    for (int i = 0; i <= original->n;) {
+        unsigned limit = 0;
+        while (i < original->n && original->t[i].type == T_GLYPH) {
+            ++i;
+            ++limit;
+        }
+        while (*text && *text != '[') {
+            const uint8_t glyph = GaiaMenuGlyph((unsigned char)*text++);
+            if (!glyph || ++column > limit || n >= 127)
+                return 0;
+            encoded[n++] = glyph;
+        }
+        if (i == original->n) {
+            if (*text || (!n && i))
+                return 0;
+            encoded[n++] = 0;
+            return n;
+        }
+        const unsigned command = original->t[i++].code;
+        if (command == 0x11 && !strncmp(text, "[N]", 3))
+            text += 3;
+        else if (command == 0x0d && !strncmp(text, "[DBL]", 5))
+            text += 5;
+        else
+            return 0;
+        if (n >= 127)
+            return 0;
+        encoded[n++] = (uint8_t)command;
+        column = 0;
+    }
+    return 0;
+}
+
+static int GaiaMenu(const AsciiRom *ascii, const Structure *st, IogPack *pack,
+                    unsigned *fill, uint32_t off, const char *text)
+{
+    if (AsciiIndex(st, off) < 0 || !ascii->engine)
+        return 0;
+    Toks original = {0};
+    uint8_t encoded[128];
+    unsigned length = 0;
+    uint32_t span = 0;
+    if (AsciiDecodeSpan(ascii, off, &original, 0, &span))
+        length = GaiaMenuText(&original, text, encoded);
+    free(original.t);
+    if (!length)
+        return 0;
+    const Rom *r = &ascii->rom;
+    /* The checked stock console labels bound each slot. */
+    uint32_t next = (uint32_t)r->size;
+    for (int i = 0; i < st->nascii; ++i)
+        if (st->ascii[i] > off && st->ascii[i] < next)
+            next = st->ascii[i];
+    for (int i = 0; i < st->nptab; ++i)
+        if (st->ptab[i] > off && st->ptab[i] < next)
+            next = st->ptab[i];
+    if (span > next - off)
+        return 0;
+    if (length <= span && GaiaPatchDisjoint(pack, off, length)) {
+        if (memcmp(r->rom + off, encoded, length))
+            AddPatch(pack, off, encoded, length);
+        return 1;
+    }
+    if (span < 5 || !GaiaPatchDisjoint(pack, off, 5))
+        return 0;
+    uint32_t addr = GaiaUiAddress(pack, fill, length);
+    if (!addr)
+        return 0;
+    AddRedirect(pack, off, A_PRT, addr, 0);
+    memcpy(pack->banks[pack->nbanks - 1] + *fill, encoded, length);
+    *fill += length;
+    return 1;
+}
+
+enum { kGaiaMenu = 1, kGaiaScene, kGaiaSprite, kGaiaMapNames = 64 };
+
+typedef struct {
+    uint32_t off;
+    char text[32];
+} GaiaMapName;
+
+static unsigned GaiaSpriteText(const char *text, uint8_t encoded[32])
+{
+    static const char glyphs[] = "ABCDEFGHIJKLMNO!PQRSTUVWXYZ/?-()"
+                                 "abcdefghijklmno pqrstuvwxyz,.'\"";
+    unsigned n = 0;
+    for (; *text && n < 31; ++text) {
+        const char *glyph = strchr(glyphs, *text);
+        if (!glyph)
+            return 0;
+        unsigned i = (unsigned)(glyph - glyphs);
+        encoded[n++] = (uint8_t)((i & 7) + 16 * (i / 8));
+    }
+    if (*text || !n)
+        return 0;
+    encoded[n++] = CMD_RET;
+    return n;
+}
+
+static void GaiaMapSprites(const Rom *r, const Structure *st, IogPack *pack,
+                           const GaiaMapName *names, unsigned count)
+{
+    if (!count || !st->map_table || st->map_table >= st->map_start ||
+        st->map_start >= st->map_end || st->map_end > r->size ||
+        (st->map_start >> 16) != ((st->map_end - 1) >> 16) ||
+        !GaiaPatchDisjoint(pack, st->map_table, st->map_end - st->map_table))
+        return;
+    const unsigned capacity = st->map_end - st->map_start;
+    if (capacity > 0x4000)
+        return;
+    uint8_t *region = malloc(capacity);
+    if (!region)
+        return;
+    unsigned position[kGaiaMapNames], size[kGaiaMapNames], used = 0, n = 0, applied = 0;
+    uint8_t table[3 * kGaiaMapNames];
+    uint32_t site = st->map_table;
+    while (site < st->map_start && r->rom[site]) {
+        if (site + 3 > st->map_start || n >= kGaiaMapNames)
+            goto done;
+        const uint32_t off = (st->map_table & 0xff0000) | Rd16(r, site + 1);
+        if (off < st->map_start || off >= st->map_end)
+            goto done;
+        const uint8_t *bytes = r->rom + off;
+        unsigned length = SpriteLen(r, off);
+        if (!length || off + length > st->map_end)
+            goto done;
+        uint8_t translated[32];
+        for (unsigned i = 0; i < count; ++i) {
+            if (names[i].off != off)
+                continue;
+            const unsigned len = GaiaSpriteText(names[i].text, translated);
+            if (len) {
+                int seen = 0;
+                for (uint32_t prior = st->map_table; prior < site; prior += 3)
+                    seen |= Rd16(r, prior + 1) == (off & 0xffff);
+                applied += !seen;
+                bytes = translated;
+                length = len;
+            }
+            break;
+        }
+        unsigned at = used;
+        for (unsigned i = 0; i < n; ++i)
+            if (size[i] == length && !memcmp(region + position[i], bytes, length)) {
+                at = position[i];
+                break;
+            }
+        if (at == used) {
+            if (used + length > capacity)
+                goto done;
+            memcpy(region + used, bytes, length);
+            used += length;
+        }
+        position[n] = at;
+        size[n] = length;
+        at += st->map_start;
+        table[3 * n] = r->rom[site];
+        table[3 * n + 1] = (uint8_t)at;
+        table[3 * n + 2] = (uint8_t)(at >> 8);
+        ++n;
+        site += 3;
+    }
+    if (applied && site < st->map_start && !r->rom[site]) {
+        AddPatch(pack, st->map_table, table, n * 3);
+        AddPatch(pack, st->map_start, region, used);
+        pack->sprite_translated += applied;
+    }
+done:
+    free(region);
+}
+
+static int GaiaUiLabel(const char *label)
+{
+    if (!strncmp(label, "menu_", 5)) return kGaiaMenu;
+    if (!strncmp(label, "scene_", 6)) return kGaiaScene;
+    if (!strncmp(label, "sprite_", 7)) return kGaiaSprite;
+    return 0;
+}
+
 IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
                              const char *structure_path, const char *dialogue_path)
 {
@@ -2655,12 +2962,18 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
     snprintf(pack->code, sizeof(pack->code), "gaia");
     snprintf(pack->name, sizeof(pack->name), "GaiaLabs Retranslation");
     unsigned fill = 0;
+    unsigned ui_fill = kIogVirtualBankSize;
+    AsciiRom ascii = {0};
+    GaiaMapName names[kGaiaMapNames];
+    unsigned n_names = 0;
     char line[4096];
     int malformed = 0;
     /* Append supplemental entries only after the original overlay layout.
      * Save states can hold an active dialogue pointer into those banks. */
     for (int supplement = kGaiaBase; supplement <= kGaiaInheritedChoice && !malformed; supplement++) {
         uint32_t last = 0;
+        int ui_kind = 0;
+        uint32_t ui_last = 0;
         while (fgets(line, sizeof(line), file)) {
             size_t size = strlen(line);
             if (!size || line[size - 1] != '\n') {
@@ -2676,8 +2989,35 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
                 break;
             }
             *text++ = 0;
+            const int kind = GaiaUiLabel(line);
+            if (kind) {
+                const char *hex = line + 4 + kind;
+                unsigned off = 0;
+                if (strlen(hex) != 6 || strspn(hex, "0123456789ABCDEF") != 6 ||
+                    sscanf(hex, "%x", &off) != 1 || off >= stock.size ||
+                    kind < ui_kind || (kind == ui_kind && off <= ui_last)) {
+                    malformed = 1;
+                    break;
+                }
+                ui_kind = kind;
+                ui_last = off;
+                if (supplement != kGaiaInheritedChoice)
+                    continue;
+                if (kind == kGaiaMenu) {
+                    if (!pack->menu_total++ && !AsciiInit(&ascii, &stock))
+                        ascii.engine = 0;
+                    pack->menu_translated += GaiaMenu(&ascii, &structure, pack, &ui_fill, off, text);
+                } else if (kind == kGaiaScene) {
+                    ++pack->scene_total;
+                    pack->scene_translated += GaiaTitle(&stock, &structure, pack, &ui_fill, off, text);
+                } else if (n_names < kGaiaMapNames && strlen(text) < sizeof(names[0].text)) {
+                    names[n_names].off = off;
+                    strcpy(names[n_names++].text, text);
+                }
+                continue;
+            }
             int li = FindLabel(&structure, line);
-            if (li < 0 || strncmp(line, "widestring_", 11) ||
+            if (ui_kind || li < 0 || strncmp(line, "widestring_", 11) ||
                 structure.l[li].off <= last) {
                 malformed = 1;
                 break;
@@ -2771,6 +3111,8 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             malformed = 1;
     }
     fclose(file);
+    if (!malformed)
+        GaiaMapSprites(&stock, &structure, pack, names, n_names);
     free(structure.l);
     free(structure.t);
     free(structure.ascii);

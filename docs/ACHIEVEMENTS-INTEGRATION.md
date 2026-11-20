@@ -1,11 +1,13 @@
-# CompanionAchievements foundation
+# CompanionAchievements integration
 
 The Original build can audit achievement signals after completed frames.
 Set `IOG_ACHIEVEMENT_AUDIT=1` to log events from the verified USA ROM during
 development. State loads and resets start a new observation generation.
-The audit writes to stderr only. Profiles, the achievement browser, toasts
-and sounds still need integration. Babel's RetroAchievements sources and credits
-are preserved. [Service policy and build boundary](RETROACHIEVEMENTS.md)
+The audit writes to stderr only. Original v39 has a desktop progress writer
+behind `IOG_ACHIEVEMENT_PROGRESS=1`. Normal launch behavior stays unchanged
+while the browser, notifications and launcher provider are being integrated.
+Babel's RetroAchievements sources and credits are preserved.
+[Service policy and build boundary](RETROACHIEVEMENTS.md)
 
 The unchanged MIT-licensed shared core and presentation module are pinned from
 [CompanionAchievements](https://github.com/rages4calm/companion-achievements)
@@ -35,8 +37,7 @@ added. These definitions are not yet a shipped, stable achievement edition.
 | Red Jewels | Same function; `src/iog_inventory.c` stack stores: BCD `$0AB0`, item `$01` in `$0AB4..$0AC3`, stacked extras `$0B56` | Invalid BCD or total above 50 rejects the snapshot; handing jewels to Gem does not count twice |
 | Ending | Babel NG+ route: epilogue scene `$E5`, terminal END scene `$F0`, current scene `$0644` | Requires observing transition into epilogue and then END in the same generation; no normal gameplay-ready requirement at END |
 
-This is source-derived evidence, **not a naturally completed route or independent
-GaiaLabs verification**. The host must require a verified stock USA ROM and
+The signal guards use the verified stock USA ROM and
 exclude Apocalypse Gaia, IoGR, New Game+, diagnostics, assisted validation and
 any session in which cheats were used. A current cheat toggle is insufficient;
 the host must retain sticky session eligibility. Unsupported editions must not
@@ -50,29 +51,31 @@ RAM comparison. Invalidate on battery-save continuation, state loading, rewind,
 reset, ROM replacement and profile changes. Loading an epilogue or END snapshot
 does not award completion.
 
+## Progress storage
+
+The desktop worker owns a bounded event queue and an exclusive profile lock.
+It validates schema 1 and preserves unknown IDs and newer catalog versions.
+Each changed snapshot passes through a temporary file, flush, and atomic
+replacement before progress and notices become visible to the main thread.
+Corrupt or unrecognized profiles remain on disk for recovery. Clean exit
+drains accepted events. The executable-relative profile is stored at
+`UserData/Achievements/illusion-of-gaia/stock-companion/unseeded/progress.json`.
+
+Read-only audit takes precedence over progress. Builds with a debug server and
+sessions launched for scripted routes, input diagnostics, or state relaunch
+cannot use the writer. Standard cheat, alternate game and New Game Plus guards
+also apply. Battery continuation, rewind and profile changes need additional
+end-to-end verification before enabling progress by default.
+
 ## Required next wiring
 
-1. Qualify the source-derived signals on controlled real-game routes against
-   GaiaLabs symbols and a matched reference. Distinguish fixtures from natural
-   progression and keep assisted sessions read-only.
-2. Qualify battery-save continuation, rewind and profile changes before enabling
-   progression. Bind the existing frame and reset hooks to the production
-   eligibility and storage path.
-3. Add the serialized storage worker, bounded immutable event queue, single-writer
-   profile lock, strict JSON validation and unknown-ID preservation. The worker
-   calls `ca_event`; its commit callback must durably replace a temporary file
-   before returning success. Commit failures must leave progress and notices
-   unchanged. Never overwrite corrupt progress.
-4. Persist outside game saves, using schema 1 and the catalog namespace:
-   `UserData/Achievements/illusion-of-gaia/stock-companion/unseeded/progress.json`.
-   The executable-relative user-data root must match the launcher provider.
-5. Publish only committed snapshots/notices to the UI thread. Add controller and
+1. Publish only committed snapshots/notices to the UI thread. Add controller and
    keyboard browser access, held-opener/dismissal guards and small queued toasts
    through the shared presentation API. Mask the ending entry while locked.
-6. Prepare the shared synthesized chime once at startup, submit through a
+2. Prepare the shared synthesized chime once at startup, submit through a
    separate audio voice, and respect master volume, sound setting and device
    loss. Original SPC audio and optional MSU-1 behavior stay independent.
-7. Give CompanionLauncher a read-only catalog/progress provider. It must never
+3. Give CompanionLauncher a read-only catalog/progress provider. It must never
    write progress or turn a save's already-set flags into unlocks.
 
 ## Verification
@@ -84,8 +87,12 @@ A 75,000-frame controller replay from an earned final-form Dark Gaia checkpoint
 defeated the boss, passed through Changed World and New Babel, and let the full
 credits run. It emitted exactly one ending event on the first END scene frame.
 The checkpoint retained prior player stat boosts. There were no further state
-loads, live cheats or memory writes during the replay. Natural jewel pickup
-and room-clear events still need playback qualification.
+loads, live cheats or memory writes during the replay. In v39, a controller
+interaction at a position-assisted South Cape Red Jewel fired once as the
+original item and event flag changed. An Aqueduct replay from a prepared
+checkpoint earned the original room reward and emitted one clear event across
+the reward and revisit. These assisted replays exercised read-only observation.
+They created no achievement profile.
 
 Standalone foundation build (no ROM or game build required):
 
@@ -93,6 +100,7 @@ Standalone foundation build (no ROM or game build required):
 cmake -S src/companion_achievements -B build-achievements-foundation -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-achievements-foundation
 ./build-achievements-foundation/gaia_achievement_observer_test.exe
+./build-achievements-foundation/gaia_achievement_progress_test.exe
 ```
 
 Windows Clang 22.1.8 Release build passed **100 checks**. The fixture exercises
@@ -101,7 +109,9 @@ milestones, stacked/given jewels, unchanged RAM, epilogue/END ordering, generati
 changes, unsupported modes, bad snapshots, failed commits and queued notices.
 It does not certify game playback, persistence, real-controller handling, audio,
 the renderer or a campaign. The installed toolchain has no `ctest` command; the
-built test executable was run directly and passed.
+built test executables were run directly. The progress test checks writer lock
+contention, forward-compatible rows, shutdown drain, restore without duplicate
+notices, corrupt-profile protection and commit failure.
 
 The catalog was validated and its header generated by the pinned shared
 `tools/catalog.py` with prefix `gaia`. If it changes, regenerate from the shared

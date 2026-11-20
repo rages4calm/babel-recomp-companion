@@ -41,7 +41,7 @@ static struct {
     bool initialized, enabled, stock, pending, composed, active, complete, valid;
     bool copy_reference;
     bool source_packet,mode7,mode7_perspective,absent_secondary,sky_field,stock_actor_field;
-    bool awaiting_restore,restored_actor_field,modal_plate;
+    bool awaiting_restore,restored_actor_field,fixed_plate;
     int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
     int width, height, extent_quarters, epoch_count;
@@ -117,6 +117,34 @@ static bool StockModalPlate(const Ppu *p,const uint8_t *ram)
         p->bgXsc[0]==0x08 && p->screenEnabled[0]==0x13 &&
         p->screenEnabled[1]==0x11 && p->cgwsel==0x82 && p->cgadsub==2 &&
         g_snesrecomp_last_hdmaen==2;
+}
+
+static bool StockEndingPlate(const Ppu *p,const uint8_t *ram)
+{
+    unsigned scene=Word(ram,0x644);
+    if(p->bgmode!=9 || p->mosaic || p->frameInterlace || PPU_objInterlace(p) ||
+       PPU_forcedBlank(p) || p->bgTileAdr!=0x622 || p->bgXsc[0]!=0x11)
+        return false;
+    switch(scene) {
+    case 0x89: /* New Babel skyline */
+        return Word(ram,0x6EE)==5 && !p->windowsel && p->bgXsc[1]==0x19 &&
+            p->bgXsc[2]==0x78 && p->screenEnabled[0]==0x11 &&
+            p->screenEnabled[1]==4 && p->cgwsel==0x82 && p->cgadsub==1;
+    case 0x90: /* Changed World map and its subtitle */
+        return Word(ram,0x6EE)==1 && !p->windowsel && p->bgXsc[1]==0x18 &&
+            p->bgXsc[2]==0x78 && p->screenEnabled[0]==0x17 &&
+            p->screenEnabled[1]==2 && p->cgwsel==2 && p->cgadsub==0x41;
+    case 0xF7:
+        /* The credits script changes the BG3 size, masks and color math as
+         * the staff panels, characters and scenery enter. The live PPU
+         * already combines those layers within a fixed screen-space plate. */
+        return Word(ram,0x6EE)==0x0401 && p->windowsel==0x33 &&
+            p->bgXsc[1]==0x18 && p->bgXsc[2]>=0x78 && p->bgXsc[2]<=0x7A &&
+            !(p->screenEnabled[0]&~0x17u) && !(p->screenEnabled[1]&~2u) &&
+            p->cgwsel==2 && (p->cgadsub==0x83 || p->cgadsub==0x41 || p->cgadsub==1);
+    default:
+        return false;
+    }
 }
 
 static void RebaseWindow1(Ppu *p,int offset)
@@ -415,7 +443,7 @@ void IogWorldInitialize(void)
 void IogWorldReset(void)
 {
     s.pending=s.composed=s.active=s.complete=s.valid=false;
-    s.modal_plate=false;
+    s.fixed_plate=false;
     s.awaiting_restore=true;
     s.publish_sequence=0;
     s.reason="reset_or_unpaired_upload";
@@ -477,7 +505,7 @@ void IogWorldBeginRaster(void)
     s.mode7=s.mode7_perspective=false;
     s.absent_secondary=false;
     s.sky_field=s.stock_actor_field=s.restored_actor_field=false;
-    s.modal_plate=false;
+    s.fixed_plate=false;
     s.mode7_split=0;
     memset(&s.view,0,sizeof(s.view));
     s.reason="unsupported_scene_or_layout";
@@ -487,8 +515,13 @@ void IogWorldBeginRaster(void)
     PpuSetOverlayCapture(g_ppu,kPpuOverlaySource_Bg3,0,0,256,224,0);
     if(!s.stock || IogRandomizerActive()) return;
     if(StockModalPlate(g_ppu,g_snes->ram)) {
-        s.modal_plate=true;
+        s.fixed_plate=true;
         s.reason="ready_stock_modal_plate";
+        return;
+    }
+    if(StockEndingPlate(g_ppu,g_snes->ram)) {
+        s.fixed_plate=true;
+        s.reason="ready_stock_ending_plate";
         return;
     }
     int map_lines=WorldMapMode7Lines();
@@ -705,9 +738,9 @@ static int ProjectEffect(unsigned ratio,int position)
     return product>=0?product/denominator:-((-product+denominator-1)/denominator);
 }
 
-enum { RingWavePeriod = 64 };
+enum { RingWavePeriod = 64, LaraiMistPeriod = 16 };
 
-static bool UploadedRingWave(const Ppu *p,unsigned layer,bool stable_color)
+static bool CapturedHorizontalWave(const Ppu *p,unsigned layer,unsigned period,bool stable_color)
 {
     size_t h=offsetof(Ppu,hScroll)+layer*2,v=offsetof(Ppu,vScroll)+layer*2;
     unsigned vscroll = Word(s.lines[1].registers,v) & 1023;
@@ -716,7 +749,7 @@ static bool UploadedRingWave(const Ppu *p,unsigned layer,bool stable_color)
     for (unsigned line = 1; line <= 224; line++) {
         const uint8_t *regs = s.lines[line].registers;
         unsigned hscroll = Word(regs,h) & 1023;
-        unsigned phase = (line - 1) % RingWavePeriod + 1;
+        unsigned phase = (line - 1) % period + 1;
         if ((Word(regs,v) & 1023) != vscroll ||
             hscroll != (Word(s.lines[phase].registers,h) & 1023) ||
             regs[offsetof(Ppu,bgXsc)+layer] != p->bgXsc[layer] ||
@@ -742,7 +775,23 @@ static bool FreejiaRingWave(const PictureEpoch *e, const Ppu *p,
         camera->ratio[1] != 0x0101 ||
         PPU_bigTiles(p,0) || PPU_bgTilemapWider(p,0) || PPU_bgTilemapHigher(p,0))
         return false;
-    return UploadedRingWave(p,0,false);
+    return CapturedHorizontalWave(p,0,RingWavePeriod,false);
+}
+
+static bool LaraiMist(const PictureEpoch *e,const Ppu *p,const EffectCamera *camera)
+{
+    const uint8_t *ram=e->ram;
+    /* The cliff uses a vertically tracked finite map and a separate short
+     * horizontal mist wave. Its expanded rows continue the measured HDMA
+     * phase instead of repeating the first or last native scanline. */
+    return Word(ram,0x644)==0x1D && Word(ram,0x6EE)==0x85 &&
+        Word(ram,0x692)==768 && Word(ram,0x694)==512 &&
+        Word(ram,0x696)==1536 && Word(ram,0x698)==1536 &&
+        !camera->uploaded_ring && !camera->ratio[0] && camera->ratio[1]==0x0101 &&
+        p->bgmode==9 && p->bgXsc[0]==0x19 && p->bgXsc[1]==0x11 &&
+        p->screenEnabled[0]==0x17 && p->screenEnabled[1]==0x12 &&
+        p->cgwsel==0x82 && p->cgadsub==0x41 &&
+        CapturedHorizontalWave(p,0,LaraiMistPeriod,true);
 }
 
 /* The Mansion uses a two-page uploaded BG1 fog ring in display mode $22.
@@ -757,7 +806,7 @@ static bool MansionFog(const PictureEpoch *e,const Ppu *p,
         Word(ram,0x694)==512 && Word(ram,0x698)==256 &&
         camera->uploaded_ring && camera->ratio[0]==0x0101 && camera->ratio[1]==0x0101 &&
         !PPU_bigTiles(p,0) && PPU_bgTilemapWider(p,0) && !PPU_bgTilemapHigher(p,0) &&
-        p->cgwsel==0x02 && p->cgadsub==0x21 && UploadedRingWave(p,0,true);
+        p->cgwsel==0x02 && p->cgadsub==0x21 && CapturedHorizontalWave(p,0,RingWavePeriod,true);
 }
 
 /* All five rematches retain their stars in an uploaded BG2 ring under the
@@ -1375,9 +1424,10 @@ static bool RenderWorld(void)
     }
     bool freejia_wave = tracked_effect && s.epoch_count == 1 &&
         FreejiaRingWave(first,p,&effect_camera);
+    bool larai_mist=tracked_effect && s.epoch_count==1 && LaraiMist(first,p,&effect_camera);
     bool mansion_fog=tracked_effect && s.epoch_count==1 && MansionFog(first,p,&effect_camera);
     bool babel_stars=babel_victory_wave || babel_victory_setup ||
-        (babel_starfield_layout && UploadedRingWave(p,1,true));
+        (babel_starfield_layout && CapturedHorizontalWave(p,1,RingWavePeriod,true));
     bool water_wave = WaterWave(first,p);
     bool dao_heat=DaoHeatWave(first,p);
     if (scene == 0x32 && !freejia_wave) {
@@ -1578,10 +1628,11 @@ static bool RenderWorld(void)
                             wall_field_phase?wall_source_camera:s.view.world_x,&phase))
                         wx=(int)phase+chunk_x-(wall_field_phase?left:0);
                 }
-                if(logical==1&&(freejia_wave||mansion_fog||
+                if(logical==1&&(freejia_wave||mansion_fog||larai_mist||
                    (star_plane&&!babel_victory_wave&&!babel_victory_setup))&&
                    (native_y<0 || native_y>=224)) {
-                    int phase=(native_y%RingWavePeriod+RingWavePeriod)%RingWavePeriod+1;
+                    int period=larai_mist?LaraiMistPeriod:RingWavePeriod;
+                    int phase=PositiveMod(native_y,period)+1;
                     unsigned scroll=Word(s.lines[phase].registers,offsetof(Ppu,hScroll)+physical*2);
                     int wave_x=ScrollWorld(e->ram,0x68C,scroll);
                     wx+=wave_x-camx;
@@ -1731,6 +1782,7 @@ static bool RenderWorld(void)
      * It is an independently extracted original UI plane, not world terrain. */
     CompositeHud((uint8_t *)s.output,s.width*4);
     s.reason=authored_window_pan?"ready_authored_window_pan":freejia_wave?"ready_freejia_wave":
+        larai_mist?"ready_larai_mist":
         water_wave?"ready_water_wave":
         dao_heat?"ready_dao_heat":
         village_heat?"ready_village_heat":
@@ -1744,7 +1796,7 @@ static bool RenderWorld(void)
 void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count)
 {
     if(!s.enabled && !s.audit) return;
-    ++s.frame;s.complete=s.enabled && (s.modal_plate || RenderWorld());
+    ++s.frame;s.complete=s.enabled && (s.fixed_plate || RenderWorld());
     if(!s.enabled) {s.reason="reference_renderer";s.width=256;s.height=224;}
     if(s.audit) {
         const CpuState *c=&g_cpu;
@@ -1754,7 +1806,7 @@ void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count
             c->_flag_C,c->_flag_I,c->_flag_D,(unsigned long long)c->cycles,
             (unsigned long long)c->master_cycles,hdma_lines,irq_count,s.width,s.height,
             (unsigned long long)s.compose_sequence,(unsigned long long)s.publish_sequence,
-            s.epoch_count,s.complete&&!s.modal_plate?s.visual.part_count:0,s.complete?"true":"false",s.reason?s.reason:"uninitialized");
+            s.epoch_count,s.complete&&!s.fixed_plate?s.visual.part_count:0,s.complete?"true":"false",s.reason?s.reason:"uninitialized");
         /* Raw operand values make accidental widened gameplay policy visible
          * in every frame, instead of trusting a configuration label. */
         static const unsigned sites[]={0x3C617,0x3C61A,0x3C62A,0x3C62D,0x3C729,
@@ -1787,7 +1839,7 @@ static bool PacketFile(const char *base,const char *suffix,const void *data,size
 static bool ExportSourcePacket(const char *base,const uint8_t *field)
 {
     const uint16_t endian=1;
-    if(s.complete && s.modal_plate && *(const uint8_t*)&endian==1)
+    if(s.complete && s.fixed_plate && *(const uint8_t*)&endian==1)
         return PacketFile(base,".field.bgra",field,256*224*4);
     if(s.complete && s.stock_actor_field && *(const uint8_t*)&endian==1)
         return PacketFile(base,".field.bgra",field,256*224*4) &&
@@ -1860,7 +1912,7 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
     ++s.presentation_calls;
     if(!dst||!field||width<256||width>MaxWidth||height<224||height>MaxHeight||
        pitch<(size_t)width*4||!isfinite(alpha)||alpha<0||alpha>1) return 0;
-    if(s.complete && s.modal_plate && 256*height/224<=width) {
+    if(s.complete && s.fixed_plate && 256*height/224<=width) {
         int plate_width=256*height/224,left=(width-plate_width)/2;
         for(int y=0;y<height;y++) {
             uint8_t *row=dst+y*pitch;
@@ -1869,7 +1921,7 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
             for(int x=0;x<plate_width;x++)
                 memcpy(row+(left+x)*4,source+(x*256/plate_width)*4,4);
         }
-    } else if(s.complete && !s.modal_plate && width==s.width && height==s.height) {
+    } else if(s.complete && !s.fixed_plate && width==s.width && height==s.height) {
         for(int y=0;y<height;y++) memcpy(dst+y*pitch,s.output+y*width,width*4);
         if(s.sky_field || s.stock_actor_field) {
             /* Keep live objects but replace visible source HUD pixels with

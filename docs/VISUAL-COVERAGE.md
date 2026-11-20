@@ -33,6 +33,21 @@ does not establish that secondary scenery should stop at the floor boundary.
 Per-line HDMA camera derivatives also cannot be inferred from a global actor
 ratio. Deferred raster-camera paths remain explicit review work.
 
+## Larai Cliff mist and ending framing
+
+The Larai Cliff margins continue the verified 16-line mist wave instead of
+holding the first and last native rows. Across four controller door round
+trips at 1.5×, the two affected lower routes changed only above and below the
+stock raster. The upper routes, where the mist did not reach those margins,
+matched the prior output.
+
+The Changed World map, New Babel skyline and credits use their complete live
+stock pictures at 1.5×. The ending replay included the full credits and its
+return to the final classroom. The v39 controller comparisons covered 42,920
+frames. All 161 sampled guest-state and PPU payloads matched v38.
+Another 4,050 frames matched v38 through the stock Mode 7 destination map and
+Sky Garden flight and crash. Layouts outside these profiles retain fallback.
+
 ## Inventory and Sand Fanger ceremony framing
 
 The dedicated stock inventory and statue-ceremony scenes now display their

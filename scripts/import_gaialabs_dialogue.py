@@ -37,6 +37,12 @@ TAIL_PREFIXES = {
     "09BE70": (4, "[TPL:2]"),
 }
 
+INTERFACE_FILES = (
+    ("menu", "ItemStrings", r"^consolestring_([0-9A-F]{6})!\s+\|([^|]*)\|"),
+    ("scene", "MapNames", r"^scene_event_([0-9A-F]{6})_value!\s+`([^`]*)`"),
+    ("sprite", "OverworldNameSwitch", r"^spritestring_([0-9A-F]{6})!\s+~([^~]*)~"),
+)
+
 
 def read_source(repo, path):
     return subprocess.check_output(
@@ -333,16 +339,38 @@ def convert_stock_layout(offset, source, names):
     return convert_return(source, names, extended=True, wrap_prose=True, timed=True)
 
 
+def interface_rows(repo, names):
+    for kind, filename, declaration in INTERFACE_FILES:
+        rows = {}
+        source = read_source(repo, f"{PATCHES}/{filename}.patch.asm")
+        for address, content in re.findall(declaration, source, re.MULTILINE):
+            if address in rows:
+                raise ValueError(f"Duplicate {kind} label at {address}")
+            text = content.translate(TYPOGRAPHY)
+            if kind == "scene":
+                if not text:
+                    continue
+                text = re.sub(r"\[NAM:([0-9A-F]+)\]",
+                              lambda tag: names[int(tag[1], 16)], text)
+            if not text.isascii() or any(not 32 <= ord(char) < 127 for char in text):
+                continue
+            rows[address] = text
+        for address, text in sorted(rows.items()):
+            yield kind, address, text
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("checkout", type=Path, help="local IOGRetranslation git checkout")
     parser.add_argument("output", type=Path, help="new TSV path under the project's .local directory")
-    parser.add_argument("--chapters", nargs="+", type=int, default=range(1, 37))
+    parser.add_argument("--chapters", nargs="+", type=int,
+                        help="import only the selected chapters and omit interface text")
     args = parser.parse_args()
     output = args.output.resolve()
     if not output.is_relative_to((ROOT / ".local").resolve()) or output.is_file():
         parser.error("output must be a new file within the project's .local directory")
-    if any(chapter < 1 or chapter > 36 for chapter in args.chapters):
+    chapters = args.chapters or range(1, 37)
+    if any(chapter < 1 or chapter > 36 for chapter in chapters):
         parser.error("chapters must be between 1 and 36")
 
     names = load_names(args.checkout.resolve())
@@ -350,7 +378,7 @@ def main():
     labels = stock_labels(structure)
     tails = stock_tail_labels(structure)
     rows, excluded, seen = [], {}, set()
-    for chapter in sorted(set(args.chapters)):
+    for chapter in sorted(set(chapters)):
         source = read_source(args.checkout, f"{PATCHES}/chapter{chapter:02d}.patch.asm")
         for line in source.splitlines():
             if not line.startswith("dialogstring_"):
@@ -385,10 +413,14 @@ def main():
     if not rows:
         raise ValueError("No supported dialogue rows")
 
+    interface = list(interface_rows(args.checkout.resolve(), names)) if args.chapters is None else []
     with output.open("x", encoding="ascii", newline="\n") as stream:
         for _, label, converted in sorted(rows):
             stream.write(f"{label}\t{converted}\n")
+        for kind, address, content in interface:
+            stream.write(f"{kind}_{address}\t{content}\n")
     print(json.dumps({"revision": REVISION, "source_rows": len(seen), "output_rows": len(rows),
+                      "interface": dict(Counter(kind for kind, _, _ in interface)),
                       "excluded": dict(Counter(excluded.values()))}, sort_keys=True))
 
 

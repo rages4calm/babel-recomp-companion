@@ -355,6 +355,11 @@ int main(int argc, char **argv)
     fprintf(stderr,"[gaialabs] Received-content reference: interpreter only; stock hooks/plugins disabled\n");
 #else
     fprintf(stderr, "%s\n", IOG_EXECUTION_ID);
+    IogAchievementAuditStart(argc, argv);
 #endif
-    return snesrecomp_desktop_main(&kGameHost, argc, argv);
+    const int result = snesrecomp_desktop_main(&kGameHost, argc, argv);
+#ifndef IOG_RECEIVED_REFERENCE
+    IogAchievementAuditShutdown();
+#endif
+    return result;
 }

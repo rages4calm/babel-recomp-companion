@@ -15,6 +15,15 @@ SPC_NATIVE_TIMER_SITE(0x0242, 0xf0, 0xfc)
 SPC_NATIVE_TIMER_SITE(0x0270, 0xeb, 0xfe)
 SPC_NATIVE_TIMER_SITE(0x0272, 0xf0, 0xfc)
 """
+DRIVER_FIXTURES = (
+    (0x0B, 0x42), (0x24, 0x42), (0x3D,), (0x3F, 0x30, 0x08),
+    (0x48, 0xAA), (0x5D,), (0x5F, 0x12, 0x34), (0x69, 0x42, 0x43),
+    (0x6F,), (0x8D, 0x79), (0x8F, 0xC3, 0x42), (0xAD, 0x80),
+    (0xB0, 0xBE), (0xBB, 0x01), (0xC4, 0xF3), (0xCB, 0x42),
+    (0xD0, 0xBE), (0xDA, 0x77), (0xE3, 0x42, 0x10), (0xE4, 0xF4),
+    (0xE6,), (0xF2, 0x42), (0xF3, 0x42, 0xBE), (0xF4, 0x01),
+    (0xF5, 0xFE, 0xFF), (0xF6, 0xFE, 0xFF), (0xFD,), (0xFE, 0xBE),
+)
 SOURCE = r"""
 #include <assert.h>
 #include <stddef.h>
@@ -32,6 +41,16 @@ void RtlApuUnlock(void) {}
 static const unsigned sites[] = {0x0240, 0x0242, 0x0270, 0x0272};
 static const uint8_t opcodes[] = {0xeb, 0xf0, 0xeb, 0xf0};
 static const uint8_t operands[] = {0xfd, 0xfc, 0xfe, 0xfc};
+
+typedef struct DriverOpcode {
+  unsigned pc;
+  unsigned length;
+  uint8_t bytes[3];
+} DriverOpcode;
+
+static const DriverOpcode driverOpcodes[] = {
+  DRIVER_FIXTURE_ROWS
+};
 
 typedef struct Snapshot {
   SaveLoadInfo io;
@@ -129,6 +148,31 @@ int main(void) {
       observe(apu, NULL);
     }
   }
+  /* Independent synthetic addresses covering every added opcode family.
+   * Vary registers enough to hit both outcomes of branches and index wrapping. */
+  for (unsigned i = 0; i < sizeof(driverOpcodes) / sizeof(driverOpcodes[0]); i++) {
+    const DriverOpcode *fixture = &driverOpcodes[i];
+    for (unsigned sample = 0; sample < 34; sample++) {
+      setup(apu, 0, sample & 15, sample & 7);
+      Spc *spc = apu->spc;
+      spc->a = (uint8_t)(sample * 137u);
+      spc->x = (uint8_t)(sample * 29u);
+      spc->y = (uint8_t)(sample * 7u);
+      spc->c = (sample & 1) != 0;
+      spc->pc = fixture->pc;
+      apu->ram[0x0042] = (uint8_t)(sample * 17u);
+      apu->ram[0x0043] = (uint8_t)((sample & 2) ? sample : sample * 17u);
+      apu->ram[0x015e] = 0x44;
+      apu->ram[0x015f] = 0x33;
+      memcpy(apu->ram + fixture->pc, fixture->bytes, fixture->length);
+      if (sample == 32)
+        spc->p = true;
+      if (sample == 33)
+        apu->ram[fixture->pc + fixture->length - 1] ^= 0x01;
+      spc_runOpcode(spc);
+      observe(apu, NULL);
+    }
+  }
   for (unsigned site = 0; site < 4; site += 2) {
     setup(apu, site, 0, 3);
     assert(apu_schedulePortWrite(apu, 0, 0x62, 11));
@@ -163,9 +207,22 @@ def main():
         parser.error("--out must be in this project's .local directory")
     out.mkdir(parents=True, exist_ok=True)
     fixture = out / "spc_timer_fixture.c"
-    fixture.write_text(SOURCE, encoding="utf-8")
+    addresses = [0x0600 + index * 8 for index in range(len(DRIVER_FIXTURES))]
+    fixture_rows = []
+    header_rows = []
+    for pc, code in zip(addresses, DRIVER_FIXTURES):
+        padded = (*code, 0, 0)[:3]
+        fixture_rows.append(
+            f"{{0x{pc:04x}, {len(code)}, {{{', '.join(f'0x{x:02x}' for x in padded)}}}}}"
+        )
+        opcode, first, second = padded
+        header_rows.append(
+            f"SPC_NATIVE_SITE(0x{pc:04x}, 0x{opcode:02x}, {len(code)}, 0x{first:02x}, 0x{second:02x})"
+        )
+    fixture.write_text(SOURCE.replace("DRIVER_FIXTURE_ROWS", ",\n  ".join(fixture_rows)),
+                       encoding="utf-8")
     header = out / "timer_sites.h"
-    header.write_text(TIMER_SITES, encoding="utf-8")
+    header.write_text(TIMER_SITES + "\n".join(header_rows) + "\n", encoding="utf-8")
     sources = [fixture, *(RUNNER / name for name in (
         "snes/spc.c", "snes/apu.c", "snes/dsp.c", "snes/dsp_clock.c",
         "snes/dsp_shadow.c", "snes/audio_shadow.c", "audio_trace.c",
@@ -193,10 +250,10 @@ def main():
                                          "IOG_NATIVE_SPC_STATS": "1",
                                      })
                 rows = [(int(insns), int(cycles)) for insns, cycles in native_row.findall(run.stderr)]
-                assert len(rows) == 4, run.stderr
+                assert len(rows) == 4 + len(DRIVER_FIXTURES), run.stderr
                 assert [insns for insns, _ in rows] == (
-                    [130, 130, 130, 130] if enabled == "1" and forced_reference == "0"
-                    else [0, 0, 0, 0]
+                    [130] * 4 + [32] * len(DRIVER_FIXTURES)
+                    if enabled == "1" and forced_reference == "0" else [0] * len(rows)
                 ), rows
                 runs.append(run.stdout)
             assert runs[0] == runs[1] == runs[2]

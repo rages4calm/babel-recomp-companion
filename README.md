@@ -20,8 +20,8 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
   [Visual coverage and renderer direction](docs/VISUAL-COVERAGE.md)
 - **World travel and local maps** combine GaiaLabs' walkable world map
   with Companion's scenery-based area map, explored terrain, discovered
-  markers and radar. The Original-based build uses locally prepared packs
-  for the world map and 757 retranslated dialogue entries.
+  markers and radar. Locally prepared packs also supply 876 retranslated
+  chapter entries and verified inventory, room-title and map lettering.
   [GaiaLabs integration](docs/GAIALABS-ORIGINAL-INTEGRATION.md) ·
   [Companion map](docs/MAP-SYSTEM-DIRECTION.md)
 - **Companion Launcher** verifies your ROM and exposes display, audio
@@ -31,8 +31,8 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 - **MSU-1 soundtrack** can be imported from a local ZIP or folder with
   validation. Original SNES audio remains available.
   [Soundtrack setup and credits](docs/MSU1.md)
-- **Companion Achievements** has a foundation for local achievements.
-  Live unlocks and notifications are still in development.
+- **Companion Achievements** has a tested local progress store. Its browser
+  and notifications are still in development.
   [Achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md)
 
 | Companion radar in Freejia | Walkable world map at South Cape |
@@ -40,6 +40,10 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 | ![Freejia street with the Companion area radar in the lower-right corner](https://github.com/user-attachments/assets/9a9be356-f8c2-4117-b952-bc3e8f75e75a) | ![Will standing above South Cape on the expanded Mode 7 world map](https://github.com/user-attachments/assets/bfba1b8c-bd55-42c8-a6d6-d355d04d1560) |
 
 ## Development status
+
+Original v39 fixes the Larai Cliff mist seam and preserves square-pixel 1.5×
+through the Changed World map, New Babel and the credits.
+[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#larai-cliff-mist-and-ending-framing)
 
 Original v31 keeps the wider view through Babel's victory effects, the
 Ship Dream transitions, and the flight into Sky Garden's Mode 7 crash.

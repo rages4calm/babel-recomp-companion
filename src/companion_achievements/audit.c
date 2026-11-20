@@ -10,6 +10,10 @@
 #include "snes/cart.h"
 #include "snes/snes.h"
 #include "snesrecomp_rom_identity.h"
+#ifdef IOG_ACHIEVEMENT_STORAGE
+#include "host_paths.h"
+#include "progress.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,21 +25,74 @@ static companion_gaia_observer observer;
 static const uint8_t *verified_rom;
 static uint64_t generation;
 static unsigned observed_frame;
+static bool read_only;
+#ifdef IOG_ACHIEVEMENT_STORAGE
+static bool save_progress;
+static IogAchievementStore *store;
+static IogAchievementStatus last_status = kIogAchievementLoading;
+#endif
+
+void IogAchievementAuditStart(int argc, char **argv)
+{
+    const char *flag = getenv("IOG_ACHIEVEMENT_AUDIT");
+    read_only = flag && !strcmp(flag, "1");
+#if defined(IOG_ACHIEVEMENT_STORAGE) && !SNESRECOMP_TRACE
+    flag = getenv("IOG_ACHIEVEMENT_PROGRESS");
+    if (read_only || !flag || strcmp(flag, "1")) return;
+    static const char *const diagnostics[] = {
+        "SNESRECOMP_RUN_FRAMES", "SNESRECOMP_DEBUG_PORT", "SNESRECOMP_OVERLAY_SELFTEST_PAD",
+        "SNESRECOMP_COMPANION_SELFTEST_PAD", "SNESRECOMP_CLASSROOM_PAD_ROUTE",
+        "SNES_NET_MENU_SELFTEST",
+    };
+    for (size_t i = 0; i < sizeof(diagnostics) / sizeof(*diagnostics); ++i)
+        if (getenv(diagnostics[i])) return;
+    for (int i = 1; i < argc; ++i)
+        if (!strcmp(argv[i], "--script") || !strcmp(argv[i], "--start-paused") ||
+            !strcmp(argv[i], "--resume-state") ||
+            !strncmp(argv[i], "--netplay", 9)) return;
+    save_progress = true;
+#else
+    (void)argc;
+    (void)argv;
+#endif
+}
+
+void IogAchievementAuditShutdown(void)
+{
+#ifdef IOG_ACHIEVEMENT_STORAGE
+    IogAchievementStoreClose(store);
+    store = NULL;
+#endif
+}
 
 static bool Report(void *context, const char *event, uint32_t amount)
 {
     (void)context;
-    fprintf(stderr, "[iog_achievement_audit] frame=%u generation=%llu event=%s amount=%u\n",
+    if (read_only) {
+        fprintf(stderr, "[iog_achievement_audit] frame=%u generation=%llu event=%s amount=%u\n",
             observed_frame, (unsigned long long)generation, event, amount);
+        return true;
+    }
+#ifdef IOG_ACHIEVEMENT_STORAGE
+    if (!IogAchievementStoreEvent(store, event, amount)) {
+        fputs("[iog_achievements] progress cue could not be saved for this session\n", stderr);
+        return false;
+    }
     return true;
+#else
+    return false;
+#endif
 }
 
 void IogAchievementAuditBind(void)
 {
     verified_rom = NULL;
-    const char *enabled = getenv("IOG_ACHIEVEMENT_AUDIT");
     const Cart *cart = g_snes ? g_snes->cart : NULL;
-    if (!enabled || strcmp(enabled, "1") || !cart || !cart->rom ||
+    bool enabled = read_only;
+#ifdef IOG_ACHIEVEMENT_STORAGE
+    enabled |= save_progress;
+#endif
+    if (!enabled || !cart || !cart->rom ||
         cart->type != CART_HIROM || cart->romImageSize != 0x200000 ||
         cart->romSize < cart->romImageSize)
         return;
@@ -51,7 +108,7 @@ void IogAchievementAuditBind(void)
     verified_rom = cart->rom;
     companion_gaia_observer_init(&observer, Report, NULL);
     ++generation;
-    fputs("[iog_achievement_audit] observing stock signals in read-only mode\n", stderr);
+    if (read_only) fputs("[iog_achievement_audit] observing stock signals in read-only mode\n", stderr);
 }
 
 void IogAchievementAuditInvalidate(void)
@@ -81,5 +138,33 @@ void IogAchievementAuditFrame(unsigned frame)
          * profile, progress engine or other way to award an achievement. */
         .diagnostic = false,
     };
+#ifdef IOG_ACHIEVEMENT_STORAGE
+    if (!read_only) {
+        if (!sample.verified_stock_rom || sample.cheats_used || sample.new_game_plus) {
+            IogAchievementAuditInvalidate();
+            return;
+        }
+        if (!store) {
+            /* Delay file access until the verified game has entered play. */
+            if (!(ram[0x09aa] | ram[0x09ab])) return;
+            char directory[4096];
+            if (snesrecomp_exe_dir_path("UserData/Achievements/illusion-of-gaia/stock-companion/unseeded",
+                                        directory, sizeof(directory)))
+                store = IogAchievementStoreOpen(directory);
+            if (!store) { verified_rom = NULL; return; }
+        }
+        if (frame % 60 == 0) {
+            ca_state states[CA_MAX_ACHIEVEMENTS];
+            uint64_t notices;
+            const IogAchievementStatus status = IogAchievementStoreSnapshot(store, states, &notices);
+            if (status != last_status && status > kIogAchievementReady)
+                fprintf(stderr, "[iog_achievements] profile unavailable (status %d)\n", status);
+            if (notices) fputs("[iog_achievements] progress saved\n", stderr);
+            last_status = status;
+        }
+        const unsigned scene = ram[0x0644] | (unsigned)ram[0x0645] << 8;
+        if (scene == 0xfa) { IogAchievementAuditInvalidate(); return; }
+    }
+#endif
     (void)companion_gaia_observe(&observer, &sample);
 }

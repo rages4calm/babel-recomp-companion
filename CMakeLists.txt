@@ -133,6 +133,18 @@ else()
     add_executable(IllusionOfGaiaUsaSNESRecomp ${IOG_SOURCES})
 endif()
 
+if(NOT IOG_RECEIVED_REFERENCE AND (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+    find_package(Threads REQUIRED)
+    target_sources(IllusionOfGaiaUsaSNESRecomp PRIVATE
+        src/companion_achievements/progress.cpp
+        src/companion_achievements/toolkit/companion_achievements.c)
+    target_compile_features(IllusionOfGaiaUsaSNESRecomp PRIVATE cxx_std_17)
+    set_property(SOURCE src/companion_achievements/audit.c APPEND PROPERTY COMPILE_DEFINITIONS IOG_ACHIEVEMENT_STORAGE=1)
+    set_property(SOURCE src/companion_achievements/progress.cpp APPEND PROPERTY INCLUDE_DIRECTORIES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/companion_achievements/toolkit")
+    target_link_libraries(IllusionOfGaiaUsaSNESRecomp PRIVATE Threads::Threads)
+endif()
+
 # ROM identity. rom_identity.txt is the one place the digests live: the build
 # turns it into snesrecomp_rom_identity.h (SNESRECOMP_ROM_EXPECTED_SHA256 and
 # friends) for src/main.c, and tools/regen.sh, scripts/package_release.sh and
