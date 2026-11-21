@@ -6,7 +6,7 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **982 of 1,138** chapter-dialogue declarations in the
+The import now covers **990 of 1,138** chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
 The importer supplies 1,108 candidates. The runtime keeps stock text when
 a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
@@ -96,7 +96,14 @@ read the tutorial and exited back to Itory. Both runs set the same ability
 bit and departed on the same frame. The previous 1,164 patches and all 12
 overlay banks remain byte-identical.
 
-156 chapter declarations still use stock behavior. Of these, 145 contain
+Original v43 adds eight more entries. The Jeweler's list keeps its original
+reward thresholds and their column alignment. Paired controller replays
+opened the list in South Cape with and without the five new labels. The
+inherited replies keep the original speaker, input wait and return. Paired
+controller replays of Edward's reply reached identical follow-up pictures
+after the translated or stock response.
+
+148 chapter declarations still use stock behavior. Of these, 137 contain
 visible or dynamic text. Pending work includes dialogue boxes whose caller
 bounds are unknown, shared bank-relative targets, and timed sequences whose
 source and stock beats differ.

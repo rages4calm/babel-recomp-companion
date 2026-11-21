@@ -198,6 +198,12 @@ and the Native Village and Angkor choice branches. It also scales the
 original Mode 7 destination menu at 1.5×. See the batch 037
 `census/combined-v42-residual.json` for the 156 remaining declarations.
 
+Original v43 adds the Jeweler's reward list and three inherited replies
+for 990 of 1,138 chapter declarations. The candidate remains internal.
+There are 148 chapter declarations outstanding. Exact source, receipts and
+the `census/combined-v43-residual.json` remaining-entry list are under
+`visual-fullgame-037`.
+
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
