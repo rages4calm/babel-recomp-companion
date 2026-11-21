@@ -683,6 +683,43 @@ static void CheckJingleNotice(void)
     free(source.t);
 }
 
+static void CheckTimedStoryDeck(void)
+{
+    const uint8_t bytes[] = {0xc1,3,4,0xc7,13,3,0xc2,0x14,0x40,0x2a,0xc9,0x3c,
+                             0xac,0x41,0x2a,0xc9,0xb4,0xce,0xc2,0x15,0x42,0xc9,0xb4,
+                             0xc8,CMD_RET};
+    const Rom rom = {.rom = bytes, .size = sizeof(bytes)};
+    Toks stock = {0}, source = {0}, output = {0};
+    CHECK(Decode(&rom, 0, &stock, 0, 0));
+    CHECK(GaiaDialogue("[EXT]Shira: A longer thought.[N]Then it continues.[PAU:B4][CLR]"
+                       "Olman: Another line.[PAU:B4][CLD][RET]", &source));
+    CHECK(GaiaTimedStoryDeck(&stock, &source, &output, 0));
+    CHECK(CountToken(&output, T_CMD, 0xc2, 0x14) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc2, 0x15) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc9, 0x3c) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc9, 0xb4) == 2);
+    CHECK(CountToken(&output, T_CMD, 0xce, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc8, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, CMD_RET, 0) == 1);
+
+    source.n = output.n = 0;
+    CHECK(GaiaDialogue("[EXT]Shira: No break[N]anywhere here[PAU:B4][CLR]"
+                       "Olman: Another line.[PAU:B4][CLD][RET]", &source));
+    CHECK(!GaiaTimedStoryDeck(&stock, &source, &output, 0));
+    source.n = output.n = 0;
+    CHECK(GaiaDialogue("[EXT]Kara: This is my line.[N]And it continues.[PAU:B4][CLR]"
+                       "Olman: Another line.[PAU:B4][CLD][RET]", &source));
+    CHECK(!GaiaTimedStoryDeck(&stock, &source, &output, 0));
+    stock.t[0].a[1] = 21;
+    source.n = output.n = 0;
+    CHECK(GaiaDialogue("[EXT]Shira: A longer thought.[N]Then it continues.[PAU:B4][CLR]"
+                       "Olman: Another line.[PAU:B4][CLD][RET]", &source));
+    CHECK(!GaiaTimedStoryDeck(&stock, &source, &output, 0));
+    free(stock.t);
+    free(source.t);
+    free(output.t);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -728,6 +765,7 @@ int main(void)
     CheckStockPrompts();
     CheckJewelerAmounts();
     CheckSelectorReplies();
+    CheckTimedStoryDeck();
     CheckClosedTimedLayout();
     CheckJingleNotice();
     CheckAbilityNotice();

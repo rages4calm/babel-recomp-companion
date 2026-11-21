@@ -1595,7 +1595,13 @@ static void finite_room_backdrop(void){
   if(annex) {
    CHECK(!FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,222));
    CHECK(FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,223)==full);
+   g_ppu->cgwsel=0x80;g_ppu->cgadsub=0xa1;
+   CHECK(FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,223)==full);
    g_ppu->screenEnabled[0]=0x15;g_ppu->screenEnabled[1]=0;
+   CHECK(FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,1)==full);
+   g_ppu->cgadsub=0x61;
+   CHECK(!FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,1));
+   g_ppu->cgadsub=0xa1;
   }
   g_ppu->inidisp=7;
   CHECK(FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,1)==(annex?0x080810:0x080808));

@@ -212,6 +212,13 @@ remaining chapter declarations and continuous campaign verification are
 open. Exact remaining entries are recorded under
 `visual-fullgame-038/dialogue/v44-residual.json`.
 
+The follow-up v45 candidate covers 1,021 of 1,138 chapter declarations.
+Three extended ending scripts preserve the original pauses and use
+verified on-screen bounds. The earlier Angel Village portrait uses the
+same stock backdrop through its separate blend profile. The owner
+playtest remains on hold. The current list of 117 outstanding declarations
+is in `visual-fullgame-038/dialogue/v45-residual.json`.
+
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in

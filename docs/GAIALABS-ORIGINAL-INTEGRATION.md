@@ -6,7 +6,7 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **1,018 of 1,138** chapter-dialogue declarations in the
+The import now covers **1,021 of 1,138** chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
 The importer supplies 1,109 candidates. The runtime keeps stock text when
 a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
@@ -115,7 +115,12 @@ script retains its stock pause operands. Paired epilogue replays advanced
 through the same scenes with the new boxes. All 1,191 prior patch payloads
 retain their bytes and addresses.
 
-120 chapter declarations still use stock behavior. Of these, 109 contain
+Original v45 adds three ending scripts. The paired replays kept all 35
+stock pause operands and reached the credits. The dialogue boxes grow
+where the approved text needs more lines. The revised placement leaves
+the actors visible and keeps the lower card inside the stock viewport.
+
+117 chapter declarations still use stock behavior. Of these, 106 contain
 visible or dynamic text. Pending work includes dialogue boxes whose caller
 bounds are unknown, shared bank-relative targets, and timed sequences whose
 source and stock beats differ.
