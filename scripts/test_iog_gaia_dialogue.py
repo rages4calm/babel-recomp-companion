@@ -528,6 +528,76 @@ static void CheckStockPrompts(void)
     free(source.t);
 }
 
+static void CheckJewelerAmounts(void)
+{
+    static uint8_t bytes[0x90000];
+    const uint8_t opener[] = {0xc1,3,0x0b,0xc7,8,7,0xce,0xd2,0,0xca};
+    const uint8_t caller[] = {0x02,0xbf,0x5e,0xd6};
+    const uint8_t list_call[] = {0x02,0xbf,0x67,0xd2,0x02,0xbf,0x17,0xd6};
+    uint8_t label[] = {0x40,0xac,0xac,0xac,0xac,0xac,0xac,0xac,
+                       0xac,0xac,0xac,0xac,0xac,0xac,0x21,0x22,
+                       CMD_N,0xc3,0,CMD_RET};
+    memcpy(bytes + 0x08d617, opener, sizeof(opener));
+    memcpy(bytes + 0x08cfa6, list_call, sizeof(list_call));
+    memcpy(bytes + 0x08cfe2, caller, sizeof(caller));
+    memcpy(bytes + 0x08d65e, label, sizeof(label));
+    const Rom stock = {.rom = bytes, .size = sizeof(bytes)};
+    Toks source = {0}, output = {0};
+    CHECK(GaiaDialogue("Power Force:    12[N][RET]", &source));
+    CHECK(GaiaCompileJewelerReward(&stock, 0x08d65e, &output, &source));
+    CHECK(output.n == 19 && output.t[14].code == 0x21 && output.t[15].code == 0x22);
+    CHECK(output.t[16].code == CMD_N && output.t[17].code == 0xc3);
+    CHECK(output.t[17].a[0] == 0 && output.t[18].code == CMD_RET);
+    source.n = output.n = 0;
+    CHECK(GaiaDialogue("Power Force:    13[N][RET]", &source));
+    CHECK(!GaiaCompileJewelerReward(&stock, 0x08d65e, &output, &source));
+    source.n = 0;
+    CHECK(GaiaDialogue("Longer than room 12[N][RET]", &source));
+    CHECK(!GaiaCompileJewelerReward(&stock, 0x08d65e, &output, &source));
+    source.n = 0;
+    bytes[0x08d61b] = 9;
+    CHECK(GaiaDialogue("Power Force:    12[N][RET]", &source));
+    CHECK(!GaiaCompileJewelerReward(&stock, 0x08d65e, &output, &source));
+    CHECK(output.n == 0);
+    free(output.t);
+    free(source.t);
+}
+
+static void CheckSelectorReplies(void)
+{
+    static uint8_t bytes[0x50000];
+    const uint8_t call[] = {0x02,0xbf,0x0e,0xc4,0x02,0xbe,2,2,0xf6,0xc3};
+    const uint8_t table[] = {0xfc,0xc3,0x02,0xc4,0xfc,0xc3};
+    const uint8_t reply_call[] = {0x02,0xbf,0xd5,0xc4};
+    const uint8_t prompt[] = {0xc2,0x0f,0xc2,4,0x40,CMD_FIN,0x41,CMD_RET};
+    const uint8_t reply[] = {0xce,0xc2,4,0x42,CMD_FIN,CMD_RET};
+    memcpy(bytes + 0x04c3ec, call, sizeof(call));
+    memcpy(bytes + 0x04c3f6, table, sizeof(table));
+    memcpy(bytes + 0x04c3fc, reply_call, sizeof(reply_call));
+    memcpy(bytes + 0x04c40e, prompt, sizeof(prompt));
+    memcpy(bytes + 0x04c4d5, reply, sizeof(reply));
+
+    const Rom stock = {.rom = bytes, .size = sizeof(bytes)};
+    Toks source = {0}, output = {0};
+    CHECK(GaiaDialogue("A longer reply from the[N]same speaker.[FIN][RET]", &source));
+    CHECK(GaiaCompileSelectorReply(&stock, 0x04c4d5, &output, &source));
+    CHECK(CountToken(&output, T_CMD, 0xce, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc2, 4) == 1);
+    CHECK(CountToken(&output, T_CMD, CMD_FIN, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, CMD_RET, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xd3, 0) == 0);
+
+    output.n = 0;
+    bytes[0x04c3fa] = 0x02;
+    CHECK(!GaiaCompileSelectorReply(&stock, 0x04c4d5, &output, &source));
+    bytes[0x04c3fa] = 0xfc;
+    bytes[0x04c40f] = 4;
+    CHECK(!GaiaCompileSelectorReply(&stock, 0x04c4d5, &output, &source));
+    CHECK(output.n == 0);
+    free(output.t);
+    free(source.t);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -571,6 +641,8 @@ int main(void)
     CheckStockReflow();
     CheckTimedBeats();
     CheckStockPrompts();
+    CheckJewelerAmounts();
+    CheckSelectorReplies();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }

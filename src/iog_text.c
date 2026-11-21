@@ -3995,6 +3995,8 @@ static void GaiaLateChapter(FILE *file, const Rom *stock, const Structure *struc
 
 #include "iog_static_chapter.inc"
 #include "iog_called_chapter.inc"
+#include "iog_jeweler_chapter.inc"
+#include "iog_selector_reply.inc"
 
 IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
                              const char *structure_path, const char *dialogue_path)
@@ -4211,6 +4213,8 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
         unsigned called_fill = kIogVirtualBankSize;
         GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileCalledChapter);
         GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompilePrompt);
+        GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileJewelerReward);
+        GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileSelectorReply);
     }
     fclose(file);
     if (!malformed)
