@@ -3928,14 +3928,23 @@ done:
     return ok;
 }
 
+typedef int (*GaiaChapterCompiler)(const Rom *stock, uint32_t off, Toks *out,
+                                   const Toks *source);
+
+static int GaiaCompileLateBeats(const Rom *stock, uint32_t off, Toks *out, const Toks *source)
+{
+    return GaiaTryStockReflow(stock, off, out, source, 2);
+}
+
+#include "iog_prompt_chapter.inc"
+
 /* Run after interface allocation as well as the previous chapter passes.
  * A save can still hold any of their exact virtual pointers. */
-static void GaiaLateBeatDialogue(FILE *file, const Rom *stock, const Structure *structure,
-                                 IogPack *pack)
+static void GaiaLateChapter(FILE *file, const Rom *stock, const Structure *structure,
+                            IogPack *pack, unsigned *fill, GaiaChapterCompiler compile)
 {
     if (fseek(file, 0, SEEK_SET))
         return;
-    unsigned fill = kIogVirtualBankSize;
     char line[4096];
     while (fgets(line, sizeof(line), file)) {
         if (strncmp(line, "widestring_", 11))
@@ -3969,13 +3978,13 @@ static void GaiaLateBeatDialogue(FILE *file, const Rom *stock, const Structure *
             continue;
         Toks parsed = {0};
         Item item = {0};
-        if (GaiaDialogue(text, &parsed) && GaiaTryStockReflow(stock, off, &item.toks, &parsed, 2)) {
+        if (GaiaDialogue(text, &parsed) && compile(stock, off, &item.toks, &parsed)) {
             const unsigned length = (unsigned)Encode(NULL, &item, NULL);
-            const uint32_t address = GaiaUiAddress(pack, &fill, length);
+            const uint32_t address = GaiaUiAddress(pack, fill, length);
             if (address) {
-                Encode(NULL, &item, pack->banks[pack->nbanks - 1] + fill);
+                Encode(NULL, &item, pack->banks[pack->nbanks - 1] + *fill);
                 AddRedirect(pack, off, CMD_PRT, address, CMD_RET);
-                fill += length;
+                *fill += length;
                 ++pack->strings_translated;
             }
         }
@@ -3985,6 +3994,7 @@ static void GaiaLateBeatDialogue(FILE *file, const Rom *stock, const Structure *
 }
 
 #include "iog_static_chapter.inc"
+#include "iog_called_chapter.inc"
 
 IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
                              const char *structure_path, const char *dialogue_path)
@@ -4195,8 +4205,12 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
     if (!malformed) {
         GaiaWideTitles(file, &stock, &structure, pack);
         GaiaLateMenu(file, &ascii, &structure, pack);
-        GaiaLateBeatDialogue(file, &stock, &structure, pack);
+        unsigned late_fill = kIogVirtualBankSize;
+        GaiaLateChapter(file, &stock, &structure, pack, &late_fill, GaiaCompileLateBeats);
         GaiaApplyStaticChapter(file, &stock, &structure, pack);
+        unsigned called_fill = kIogVirtualBankSize;
+        GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileCalledChapter);
+        GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompilePrompt);
     }
     fclose(file);
     if (!malformed)

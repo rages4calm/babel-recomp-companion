@@ -1407,6 +1407,43 @@ static void CompositeHud(uint8_t *dst,size_t pitch)
     }
 }
 
+static void DrawCenteredField(uint8_t *dst,size_t pitch,const uint8_t *field,
+                             int width,int plate_width,int source_rows,int rows)
+{
+    int left=(width-plate_width)/2;
+    for(int y=0;y<rows;y++) {
+        uint8_t *row=dst+y*pitch;
+        memset(row,0,width*4);
+        const uint8_t *source=field+(y*source_rows/rows)*256*4;
+        for(int x=0;x<plate_width;x++)
+            memcpy(row+(left+x)*4,source+(x*256/plate_width)*4,4);
+    }
+}
+
+static bool Mode7DestinationPanel(const uint8_t *field,int map_rows)
+{
+    if(!s.mode7_split || !s.epoch_count) return false;
+    /* Confirm the stock Mode 1 menu band and verify that every colored
+     * pixel in it is the actual published BG3 panel. Any visible scenery
+     * or object in an unknown split keeps its usual source framing. */
+    for(int y=map_rows;y<224;y++) {
+        const PictureLine *line=&s.lines[y+1];
+        const uint8_t *regs=line->registers;
+        if(Word(s.epochs[line->epoch].ram,0x644)!=0xFE ||
+           regs[offsetof(Ppu,bgmode)]!=9 || regs[offsetof(Ppu,mosaic)] ||
+           regs[offsetof(Ppu,bgXsc)+2]!=0x78 ||
+           !(regs[offsetof(Ppu,screenEnabled)]&4)) return false;
+        for(int x=0;x<256;x++) {
+            int i=y*256+x;
+            const uint8_t *rgb=field+4*i;
+            uint32_t color=s.hud[i];
+            if((rgb[0]||rgb[1]||rgb[2]) && ((color>>24)!=255 || memcmp(rgb,&color,3)))
+                return false;
+        }
+    }
+    return true;
+}
+
 static bool RenderWorld(void)
 {
     if(s.mode7) return RenderMode7Plane();
@@ -1980,14 +2017,7 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
     if(!dst||!field||width<256||width>MaxWidth||height<224||height>MaxHeight||
        pitch<(size_t)width*4||!isfinite(alpha)||alpha<0||alpha>1) return 0;
     if(s.complete && s.fixed_plate && 256*height/224<=width) {
-        int plate_width=256*height/224,left=(width-plate_width)/2;
-        for(int y=0;y<height;y++) {
-            uint8_t *row=dst+y*pitch;
-            memset(row,0,width*4);
-            const uint8_t *source=field+(y*224/height)*256*4;
-            for(int x=0;x<plate_width;x++)
-                memcpy(row+(left+x)*4,source+(x*256/plate_width)*4,4);
-        }
+        DrawCenteredField(dst,pitch,field,width,256*height/224,224,height);
     } else if(s.complete && !s.fixed_plate && width==s.width && height==s.height) {
         for(int y=0;y<height;y++) memcpy(dst+y*pitch,s.output+y*width,width*4);
         if(s.sky_field || s.stock_actor_field) {
@@ -2004,8 +2034,17 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
             CompositeHud(dst,pitch);
         } else if(s.mode7) {
             int left=(width-256)/2,top=(height-224)/2;
-            for(int y=0;y<224;y++) memcpy(dst+(y+top)*pitch+left*4,
-                field+y*256*4,256*4);
+            int map_rows=s.mode7_split?s.mode7_split-1:224;
+            int panel_rows=(224-map_rows)*height/224;
+            int panel_top=top+map_rows;
+            int panel_width=256*height/224;
+            bool scale_panel=panel_width<=width && panel_top+panel_rows<=height &&
+                Mode7DestinationPanel(field,map_rows);
+            int source_rows=scale_panel?map_rows:224;
+            for(int y=0;y<source_rows;y++) memcpy(dst+(y+top)*pitch+left*4,field+y*256*4,256*4);
+            if(scale_panel)
+                DrawCenteredField(dst+panel_top*pitch,pitch,field+map_rows*256*4,width,
+                                  panel_width,224-map_rows,panel_rows);
         }
     } else {
         for(int y=0;y<height;y++) memset(dst+y*pitch,0,width*4);

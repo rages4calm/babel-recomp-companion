@@ -1228,6 +1228,57 @@ static void mode7_menu_dismissal(void){
  IogWorldBeginRaster();CHECK(!s.valid&&!s.mode7);
  g_snesrecomp_last_hdmaen=0;
 }
+static void mode7_menu_panel_scale(void){
+ static Dma dma;
+ mode7_fixture();word(0x644,0xfe);g_ppu->bgmode=9;
+ g_snes->dma=&dma;g_snesrecomp_last_hdmaen=0x40;
+ dma.channel[6]=(DmaChannel){.bAdr=5,.aBank=0x7e,.aAdr=0x8800};
+ const uint8_t table[]={127,7,24,7,1,9,0};memcpy(ram+0x8800,table,sizeof(table));
+ const int map_rows=150;
+ g_ppu->bgXsc[2]=0x78;
+ const unsigned extents[]={4,5,6};
+ for(unsigned n=0;n<3;n++){
+  s.extent_quarters=extents[n];int w=0,h=0;IogWorldGeometry(1920,1080,&w,&h);
+  g_ppu->bgmode=9;IogWorldBeginRaster();CHECK(s.mode7_split==map_rows+1);
+  for(int y=0;y<=224;y++){
+   g_ppu->bgmode=y<=map_rows?7:9;
+   IogWorldCaptureLine(y);
+  }
+  IogWorldEndRaster(0,225,0);
+  CHECK(s.complete&&!strcmp(s.reason,"ready_mode7_destination_menu"));
+  for(int i=map_rows*256;i<224*256;i++){
+   uint32_t color=0;
+   memcpy(&color,source_field+4*i,3);
+   s.hud[i]=0xff000000|color;
+  }
+  int native_left=(w-256)/2,top=(h-224)/2,panel_top=top+map_rows;
+  int panel_width=256*h/224,panel_rows=(224-map_rows)*h/224;
+  int panel_left=(w-panel_width)/2;
+  size_t pitch=(size_t)w*4+16;uint8_t*dst=malloc(pitch*h);
+  CHECK(dst);memset(dst,0xa5,pitch*h);
+  CHECK(Mode7DestinationPanel(source_field,map_rows));
+  CHECK(IogWorldDraw(dst,pitch,source_field,w,h,1)==1);
+  for(int y=0;y<h;y++){
+   for(int x=0;x<w;x++){
+    const uint8_t*out=dst+y*pitch+4*x;
+    if(y>=panel_top && y<panel_top+panel_rows && x>=panel_left && x<panel_left+panel_width)
+     CHECK(!memcmp(out,source_field+4*((map_rows+(y-panel_top)*(224-map_rows)/panel_rows)*256+
+                    (x-panel_left)*256/panel_width),4));
+    else if(y>=top && y<panel_top && x>=native_left && x<native_left+256)
+     CHECK(!memcmp(out,source_field+4*((y-top)*256+x-native_left),4));
+    else if(y>=panel_top) CHECK(!out[0]&&!out[1]&&!out[2]&&!out[3]);
+    else CHECK(!memcmp(out,&s.output[y*w+x],4));
+   }
+   for(size_t b=(size_t)w*4;b<pitch;b++)CHECK(dst[y*pitch+b]==0xa5);
+  }
+  s.hud[map_rows*256]^=1;
+  CHECK(!Mode7DestinationPanel(source_field,map_rows));
+  CHECK(IogWorldDraw(dst,pitch,source_field,w,h,1)==1);
+  CHECK(!memcmp(dst+panel_top*pitch+native_left*4,source_field+map_rows*256*4,256*4));
+  free(dst);
+ }
+ g_snesrecomp_last_hdmaen=0;
+}
 static void ship_dream_mosaic(void){
  fixture();word(0x644,0x2A);word(0x692,256);word(0x696,1280);
  word(0x694,512);word(0x698,512);word(0x6ee,5);
@@ -1509,6 +1560,7 @@ static void mode7_lifecycle_and_packet(const char*base){
  south_cape_house_mosaic();
  mode7_angkor_neighbor_mosaic();
  mode7_menu_dismissal();
+ mode7_menu_panel_scale();
  mode7_fixture();memcpy(before_ram,ram,sizeof(ram));CpuState cpu=g_cpu;
  IogWorldBeginRaster();CHECK(s.mode7&&s.valid&&!s.active);before_ppu=*g_ppu;
  for(int line=0;line<=224;line++)IogWorldCaptureLine(line);

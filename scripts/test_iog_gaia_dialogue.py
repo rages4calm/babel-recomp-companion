@@ -485,6 +485,49 @@ static void CheckTimedBeats(void)
     free(output.t);
 }
 
+static void CheckStockPrompts(void)
+{
+    static uint8_t bytes[0x10000];
+    const uint8_t prompt[] = {0xd3, 0x40, CMD_FIN, 0x41, CMD_N,
+                              0xc3, 0, 0xac, 0x69, 0x84, 0xa3, CMD_N,
+                              0xac, 0x4d, 0x8e, 0xc3, 4, CMD_RET};
+    const uint8_t caller[] = {0x02, 0xbf, 0, 0xa0, 0x02, 0xbe, 2, 1, 0, 0x90};
+    const uint8_t branches[] = {0x10, 0x90, 0x20, 0x90, 0x30, 0x90};
+    memcpy(bytes + 0xa000, prompt, sizeof(prompt));
+    memcpy(bytes + 0x8010, caller, sizeof(caller));
+    memcpy(bytes + 0x9000, branches, sizeof(branches));
+    const Rom stock = {.rom = bytes, .size = sizeof(bytes)};
+    Toks source = {0}, output = {0};
+
+    CHECK(GaiaDialogue("A prelude.[FIN]Do you want to keep[N]going from here today?[N]Yes[N]No[RET]",
+                       &source));
+    CHECK(GaiaCompilePrompt(&stock, 0xa000, &output, &source));
+    CHECK(CountToken(&output, T_CMD, 0xd3, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, CMD_FIN, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc3, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc3, 4) == 1);
+    CHECK(CountToken(&output, T_CMD, CMD_RET, 0) == 1);
+    int last_page = output.n - 1;
+    while (last_page > 0 && output.t[last_page].code != CMD_FIN)
+        --last_page;
+    CHECK(last_page > 0);
+    const Toks final_page = {.t = output.t + last_page + 1, .n = output.n - last_page - 1};
+    CHECK(CountToken(&final_page, T_CMD, CMD_N, 0) == 2);
+
+    source.n = output.n = 0;
+    CHECK(GaiaDialogue("Prelude.[FIN]Continue?[N]No[N]Yes[RET]", &source));
+    CHECK(!GaiaCompilePrompt(&stock, 0xa000, &output, &source));
+    CHECK(output.n == 0);
+
+    source.n = 0;
+    memcpy(bytes + 0x8030, caller, sizeof(caller));
+    bytes[0x8037] = 2;
+    CHECK(GaiaDialogue("Prelude.[FIN]Continue?[N]Yes[N]No[RET]", &source));
+    CHECK(!GaiaCompilePrompt(&stock, 0xa000, &output, &source));
+    free(output.t);
+    free(source.t);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -527,6 +570,7 @@ int main(void)
     CheckPairedEntry();
     CheckStockReflow();
     CheckTimedBeats();
+    CheckStockPrompts();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }

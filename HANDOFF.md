@@ -192,6 +192,12 @@ behavior, and the linked 1.5× controller checks do not qualify a continuous
 campaign. Keep the owner playtest selector on the prior build until the
 remaining text and full campaign checks are complete.
 
+The follow-up Original v42 candidate adds 19 more chapter declarations
+for 982 of 1,138. Its validated callers preserve the Itory ability tutorial
+and the Native Village and Angkor choice branches. It also scales the
+original Mode 7 destination menu at 1.5×. See the batch 037
+`census/combined-v42-residual.json` for the 156 remaining declarations.
+
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
