@@ -204,6 +204,14 @@ There are 148 chapter declarations outstanding. Exact source, receipts and
 the `census/combined-v43-residual.json` remaining-entry list are under
 `visual-fullgame-037`.
 
+Batch 038's Original v44 candidate adds 28 chapter declarations, bringing
+coverage to 1,018 of 1,138, with all 124 menu entries and 64 named room
+titles installed. It fixes the first restored Watermia frame and small
+Mode 1 room-edge seams. Keep the owner playtest on hold while the 120
+remaining chapter declarations and continuous campaign verification are
+open. Exact remaining entries are recorded under
+`visual-fullgame-038/dialogue/v44-residual.json`.
+
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in

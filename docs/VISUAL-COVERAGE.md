@@ -33,6 +33,20 @@ does not establish that secondary scenery should stop at the floor boundary.
 Per-line HDMA camera derivatives also cannot be inferred from a global actor
 ratio. Deferred raster-camera paths remain explicit review work.
 
+## Watermia save-load and finite-room edges
+
+Original v44 keeps Watermia wide on the first restored frame by using the
+verified live camera position until the next composition arrives. The
+Diamond Mine elevator and Angel Village annex extend their original dark
+backdrops into the padded margins. Their authored room pixels retain the
+same composition.
+
+Paired virtual-controller replays checked Watermia through the stock map
+to Euro, the Mine elevator exit, and the annex through inventory and the
+neighboring room. Watermia changed only on its first restored frame. In
+the Mine and annex, changes were restricted to backdrop margins in the
+two verified room layouts. Sampled game state and PPU data matched.
+
 ## Save-resume framing across the campaign
 
 Original v41 keeps the first visible frame at square-pixel 1.5× when

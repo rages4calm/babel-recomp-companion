@@ -6,9 +6,9 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **990 of 1,138** chapter-dialogue declarations in the
+The import now covers **1,018 of 1,138** chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer supplies 1,108 candidates. The runtime keeps stock text when
+The importer supplies 1,109 candidates. The runtime keeps stock text when
 a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
 Castle dialogue and the Dao Snake Panic score response. New formatted
@@ -103,7 +103,19 @@ inherited replies keep the original speaker, input wait and return. Paired
 controller replays of Edward's reply reached identical follow-up pictures
 after the translated or stock response.
 
-148 chapter declarations still use stock behavior. Of these, 137 contain
+Original v44 adds 28 entries, including spoken replies, marker entry
+points, timed cards and jingles. The ability announcement prints the
+approved wording while the game continues to read the live ability name
+from the original bank. Paired controller replays earned Psycho Dash and
+exited Dark Space to Itory on the same frame. The Jeweler reward replay
+granted the Herb and set the same reward flag with both text paths.
+
+Two standalone timed boxes grow within the original display area. The
+script retains its stock pause operands. Paired epilogue replays advanced
+through the same scenes with the new boxes. All 1,191 prior patch payloads
+retain their bytes and addresses.
+
+120 chapter declarations still use stock behavior. Of these, 109 contain
 visible or dynamic text. Pending work includes dialogue boxes whose caller
 bounds are unknown, shared bank-relative targets, and timed sequences whose
 source and stock beats differ.

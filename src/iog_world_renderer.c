@@ -18,6 +18,7 @@
 #include "snes/dma.h"
 #include "snes/snes.h"
 #include "snes/ppu.h"
+#include "snes/ppu_brightness.h"
 #include "snes/interp_bridge.h"
 #include "sha256.h"
 #include "snesrecomp_rom_identity.h"
@@ -366,23 +367,36 @@ static bool StockActorFieldLayout(const Ppu *p,const uint8_t *ram)
     }
 }
 
-static bool ItoryRestoredCamera(const Ppu *p,const uint8_t *ram,int camera_x,int camera_y)
+static bool RestoredLiveCamera(const Ppu *p,const uint8_t *ram,int physical,
+                               int camera_x,int camera_y,int live_x,int live_y)
 {
-    /* A stock Itory departure checkpoint can retain the prior tile-column
-     * camera in the live raster while the next composition advances it.
-     * Frame the live field at that observed camera for this one restore. */
-    if(!s.restored_actor_field || s.epoch_count!=1 || Word(ram,0x644)!=0x15 ||
-       Word(ram,0x6EE)!=5 || Word(ram,0x692)!=1280 || Word(ram,0x694)!=512 ||
-       Word(ram,0x696)!=1024 || Word(ram,0x698)!=256 || p->bgmode!=9 || p->mosaic ||
-       p->bgXsc[0]!=0x11 || p->bgXsc[1]!=0x19 || p->screenEnabled[0]!=0x17 ||
-       p->screenEnabled[1]!=3 || p->cgwsel!=0x82 || p->cgadsub || g_snesrecomp_last_hdmaen!=2 ||
-       ScrollWorld(ram,0x68A,p->hScroll[0])!=camera_x-16 ||
-       ScrollWorld(ram,0x68E,p->vScroll[0])!=camera_y)
+    /* The saved raster can still be at the previous camera for the first
+     * restored frame. Use its position only for verified stock layouts
+     * with an unchanged camera throughout the raster. */
+    if(!s.restored_actor_field || s.epoch_count!=1 || Word(ram,0x692)!=1280 ||
+       Word(ram,0x696)!=1024 || p->bgmode!=9 || p->mosaic ||
+       p->screenEnabled[0]!=0x17 || p->cgwsel!=0x82)
         return false;
+    switch(Word(ram,0x644)) {
+    case 0x15: /* Itory departure, one tile column behind. */
+        if(Word(ram,0x6EE)!=5 || Word(ram,0x694)!=512 || Word(ram,0x698)!=256 ||
+           p->bgXsc[0]!=0x11 || p->bgXsc[1]!=0x19 || p->screenEnabled[1]!=3 ||
+           p->cgadsub || g_snesrecomp_last_hdmaen!=2 ||
+           live_x!=camera_x-16 || live_y!=camera_y) return false;
+        break;
+    case 0x78: /* Watermia's entrance camera is one row ahead. */
+        if(Word(ram,0x6EE)!=0x0085 || Word(ram,0x694)!=1280 || Word(ram,0x698)!=1024 ||
+           p->bgXsc[0]!=0x19 || p->bgXsc[1]!=0x11 || p->screenEnabled[1]!=0x12 ||
+           p->cgadsub!=0x41 || g_snesrecomp_last_hdmaen ||
+           live_x!=camera_x || live_y!=camera_y+1) return false;
+        break;
+    default:
+        return false;
+    }
     for(unsigned line=0;line<=224;line++) {
         const uint8_t *registers=s.lines[line].registers;
-        if((Word(registers,offsetof(Ppu,hScroll))&1023)!=(p->hScroll[0]&1023) ||
-           (Word(registers,offsetof(Ppu,vScroll))&1023)!=(p->vScroll[0]&1023))
+        if((Word(registers,offsetof(Ppu,hScroll)+physical*2)&1023)!=(p->hScroll[physical]&1023) ||
+           (Word(registers,offsetof(Ppu,vScroll)+physical*2)&1023)!=(p->vScroll[physical]&1023))
             return false;
     }
     return true;
@@ -1221,6 +1235,36 @@ static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
     return true;
 }
 
+static uint32_t FiniteRoomBackdrop(const PictureEpoch *e,const Ppu *p,unsigned scene,int line)
+{
+    const uint8_t *ram=e->ram;
+    /* These finite rooms use a flat, dark CGRAM 0 outside their visible
+     * scenery. Continue it through the padded pixels at the live brightness
+     * without exposing another map page or changing the stock field. */
+    if(Word(ram,0x644)!=scene || Word(ram,0x6EE)!=5 || p->bgmode!=9 ||
+       p->mosaic || p->windowsel || PPU_forcedBlank(p) || p->fixedColor ||
+       p->bgXsc[0]!=0x11 || p->bgXsc[1]!=0x19) return 0;
+    bool main=p->screenEnabled[0]==0x15 && !p->screenEnabled[1];
+    if(scene==0x47) {
+        if(!main || Word(ram,0x692)!=256 || Word(ram,0x694)!=256 ||
+           Word(ram,0x696)!=768 || Word(ram,0x698)!=256 ||
+           e->cgram[0]!=0x0842 || p->cgwsel!=0x80 || p->cgadsub!=0xA1) return 0;
+    } else {
+        /* The annex disables background layers for its last two lines.
+         * With the same blend settings they still show the backdrop. */
+        bool annex_tail=line>=223 && !p->screenEnabled[0] && !p->screenEnabled[1];
+        if((!main && !annex_tail) || Word(ram,0x692)!=768 || Word(ram,0x694)!=768 ||
+           Word(ram,0x696)!=256 || Word(ram,0x698)!=1024 ||
+           Word(ram,0x6D6) || Word(ram,0x6D8) ||
+           Word(ram,0x6DA)!=256 || Word(ram,0x6DE)!=256 ||
+           e->cgram[0]!=0x1062 || p->cgwsel || p->cgadsub!=0x21) return 0;
+    }
+    unsigned rgb=e->cgram[0],light=PPU_brightness(p);
+    return (uint32_t)ppu_brightness_level(rgb&31,light)<<16 |
+           (uint32_t)ppu_brightness_level((rgb>>5)&31,light)<<8 |
+           ppu_brightness_level((rgb>>10)&31,light);
+}
+
 static bool CastleMapMarker(const PictureEpoch *e)
 {
     const uint8_t *ram=e->ram;
@@ -1487,13 +1531,16 @@ static bool RenderWorld(void)
            !RoomPictureBounds(first,camera_x,camera_y,&bounds)) {
             s.reason="unsupported_room_window";return false;
         }
-    } else if(!village_heat && !transition_wave &&
-              (ScrollWorld(picture_ram,0x68A,p->hScroll[physical])!=camera_x ||
-               ScrollWorld(picture_ram,0x68E,p->vScroll[physical])!=camera_y)) {
-        if(!ItoryRestoredCamera(p,picture_ram,camera_x,camera_y)) {
-            s.reason="camera_publication_mismatch";return false;
+    } else if(!village_heat && !transition_wave) {
+        int live_x=ScrollWorld(picture_ram,0x68A,p->hScroll[physical]);
+        int live_y=ScrollWorld(picture_ram,0x68E,p->vScroll[physical]);
+        if(live_x!=camera_x || live_y!=camera_y) {
+            if(!RestoredLiveCamera(p,picture_ram,physical,camera_x,camera_y,live_x,live_y)) {
+                s.reason="camera_publication_mismatch";return false;
+            }
+            camera_x=live_x;
+            camera_y=live_y;
         }
-        camera_x=ScrollWorld(picture_ram,0x68A,p->hScroll[physical]);
     }
     if(!IogWorldViewCompute(camera_x,camera_y,Word(first->ram,0x692),
             Word(first->ram,0x696),(uint16_t)s.width,(uint16_t)s.height,&s.view)) {
@@ -1633,9 +1680,11 @@ static bool RenderWorld(void)
         if(blank[logical]<0) {s.reason="no_verified_transparent_character";return false;}
     }
     memset(s.output,0,(size_t)s.width*s.height*4);
+    bool finite_backdrop=scene==0x47 || scene==0x74;
     for(int row=0;row<s.height;row++) {
         int native_y=row-top;
-        PictureLine *line=&s.lines[Clamp(native_y,0,223)+1];
+        int scanline=Clamp(native_y,0,223)+1;
+        PictureLine *line=&s.lines[scanline];
         PictureEpoch *e=&s.epochs[line->epoch];
         PictureBounds bounds={0,0,0,0};
         if(bounded && ((source_plate && Word(e->ram,0x644)!=scene) ||
@@ -1644,6 +1693,11 @@ static bool RenderWorld(void)
         }
         if(authored && !AuthoredWindow(e,&bounds)) {
             s.reason="unsupported_authored_window";return false;
+        }
+        uint32_t padding=0;
+        if(finite_backdrop) {
+            memcpy(p,line->registers,PPU_SAVESTATE_REGS_SIZE);
+            padding=FiniteRoomBackdrop(e,p,scene,scanline);
         }
         /* The fixed-height Angel entrance ends at the stock aperture.
          * The allocation below it exposes only the green clear backdrop. */
@@ -1874,6 +1928,8 @@ static bool RenderWorld(void)
                     inside=false;
                 if(inside || backdrop_only || story_sky)
                     s.output[row*s.width+start+x]=backdrop_only&&inside?composite[x]:s.row[x+skip];
+                else if(padding)
+                    s.output[row*s.width+start+x]=padding;
             }
         }
     }

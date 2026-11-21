@@ -347,6 +347,13 @@ def convert_stock_jump(offset, source, names):
 
 
 def convert_extended(offset, source, names):
+    if offset == "08EB68":
+        # The runtime keeps the indexed name lookup in the original ROM bank.
+        body, separator, tail = source.partition("[ADR:&table_08EB8F,AAC]")
+        if (not separator or not body.startswith("[TPL:E][DLY:5]") or
+                not body.endswith("[N]") or tail != "![PAU:50][FIN]"):
+            raise ValueError("Unexpected ability-name announcement")
+        return "[LAY]" + convert_return(body, names, extended=True)
     try:
         return convert_return(source, names, extended=True)
     except ValueError:
