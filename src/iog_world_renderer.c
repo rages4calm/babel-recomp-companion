@@ -1245,10 +1245,11 @@ static uint32_t FiniteRoomBackdrop(const PictureEpoch *e,const Ppu *p,unsigned s
        p->mosaic || p->windowsel || PPU_forcedBlank(p) || p->fixedColor ||
        p->bgXsc[0]!=0x11 || p->bgXsc[1]!=0x19) return 0;
     bool main=p->screenEnabled[0]==0x15 && !p->screenEnabled[1];
+    bool subtract_zero=p->cgwsel==0x80 && p->cgadsub==0xA1;
     if(scene==0x47) {
         if(!main || Word(ram,0x692)!=256 || Word(ram,0x694)!=256 ||
            Word(ram,0x696)!=768 || Word(ram,0x698)!=256 ||
-           e->cgram[0]!=0x0842 || p->cgwsel!=0x80 || p->cgadsub!=0xA1) return 0;
+           e->cgram[0]!=0x0842 || !subtract_zero) return 0;
     } else {
         /* The annex disables background layers for its last two lines.
          * With the same blend settings they still show the backdrop. */
@@ -1257,7 +1258,7 @@ static uint32_t FiniteRoomBackdrop(const PictureEpoch *e,const Ppu *p,unsigned s
            Word(ram,0x696)!=256 || Word(ram,0x698)!=1024 ||
            Word(ram,0x6D6) || Word(ram,0x6D8) ||
            Word(ram,0x6DA)!=256 || Word(ram,0x6DE)!=256 ||
-           e->cgram[0]!=0x1062 || p->cgwsel || p->cgadsub!=0x21) return 0;
+           e->cgram[0]!=0x1062 || (!subtract_zero && (p->cgwsel || p->cgadsub!=0x21))) return 0;
     }
     unsigned rgb=e->cgram[0],light=PPU_brightness(p);
     return (uint32_t)ppu_brightness_level(rgb&31,light)<<16 |

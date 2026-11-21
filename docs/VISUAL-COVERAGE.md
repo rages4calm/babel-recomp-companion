@@ -46,6 +46,8 @@ to Euro, the Mine elevator exit, and the annex through inventory and the
 neighboring room. Watermia changed only on its first restored frame. In
 the Mine and annex, changes were restricted to backdrop margins in the
 two verified room layouts. Sampled game state and PPU data matched.
+The annex also passed the earlier portrait phase, which uses a different
+stock blend. The expanded margins retain the same navy across both phases.
 
 ## Save-resume framing across the campaign
 
