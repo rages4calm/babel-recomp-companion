@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import subprocess
 
-from import_gaialabs_dialogue import convert, convert_return
+from import_gaialabs_dialogue import convert, convert_extended, convert_return
 
 ROOT = Path(__file__).resolve().parents[1]
 HARNESS = r"""
@@ -598,6 +598,91 @@ static void CheckSelectorReplies(void)
     free(source.t);
 }
 
+static void CheckAbilityNotice(void)
+{
+    uint8_t *bytes = calloc(1, 0x090000);
+    CHECK(bytes);
+    const Rom stock = {.rom = bytes, .size = 0x090000};
+    uint8_t *notice = bytes + 0x08eb68;
+    const uint8_t opener[] = {0xd3, 0xd5, 9, CMD_ADR, 0x8f, 0xeb, 0xac, 0x0a, CMD_N};
+    memcpy(notice, opener, sizeof(opener));
+    const uint8_t ending[] = {0xc9, 0x78, CMD_FIN, CMD_RET};
+    memcpy(notice + 25, ending, sizeof(ending));
+    const uint8_t table[] = {0x9b, 0xeb, 0xa2, 0xeb, 0xab, 0xeb, 0xb2, 0xeb,
+                             0xba, 0xeb, 0xc7, 0xeb};
+    memcpy(bytes + 0x08eb8f, table, sizeof(table));
+    Toks source = {0}, result = {0};
+    CHECK(GaiaDialogue("[EXT]Example[N]Power[N][RET]", &source));
+    CHECK(GaiaCompileAbilityNotice(&stock, &result, &source));
+    CHECK(result.t[0].code == 0xd3 && result.t[1].code == 0xd5 &&
+          result.t[1].a[0] == 5 && result.t[result.n - 1].code == CMD_RET);
+    CHECK(CountToken(&result, T_CMD, CMD_N, 0) == 2);
+    CHECK(CountToken(&result, T_CMD, CMD_ADR, 0xeb8f) == 0);
+    result.n = 0;
+    bytes[0x08eb8f]++;
+    CHECK(!GaiaCompileAbilityNotice(&stock, &result, &source));
+    bytes[0x08eb8f]--;
+    notice[6]++;
+    CHECK(!GaiaCompileAbilityNotice(&stock, &result, &source));
+    notice[6]--;
+    notice[26]--;
+    CHECK(!GaiaCompileAbilityNotice(&stock, &result, &source));
+    free(source.t);
+    free(result.t);
+    free(bytes);
+}
+
+static void CheckClosedTimedLayout(void)
+{
+    uint8_t bytes[] = {0xc1,3,4,0xc7,13,1,0x40,0xc9,0x5a,0xc8,CMD_RET};
+    const Rom stock = {.rom = bytes, .size = sizeof(bytes)};
+    Toks source = {0}, output = {0};
+    CHECK(GaiaDialogue("[EXT]A fuller description of[N]the scene unfolds.[PAU:40][RET]", &source));
+    CHECK(GaiaCompileLegacyTiming(&stock, 0, &output, &source));
+    CHECK(output.t[0].code == 0xc1 && output.t[0].a[0] == 3 && output.t[0].a[1] == 4);
+    CHECK(output.t[1].code == 0xc7 && output.t[1].a[0] == 13 && output.t[1].a[1] == 2);
+    CHECK(CountToken(&output, T_CMD, 0xc9, 0x5a) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc8, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, CMD_RET, 0) == 1);
+    output.n = source.n = 0;
+    CHECK(GaiaDialogue("[EXT]A description[PAU:20][N]with one extra hold[PAU:40][RET]", &source));
+    CHECK(!GaiaCompileLegacyTiming(&stock, 0, &output, &source));
+    bytes[9] = CMD_RET;
+    output.n = source.n = 0;
+    CHECK(GaiaDialogue("[EXT]A fuller description of[N]the scene unfolds.[PAU:40][RET]", &source));
+    CHECK(!GaiaCompileLegacyTiming(&stock, 0, &output, &source));
+    free(output.t);
+    free(source.t);
+}
+
+static void CheckJingleNotice(void)
+{
+    static uint8_t bytes[0x0b0000];
+    const uint8_t before[] = {0x02,0xbf,0xb4,0xa7,0x02,0xd4};
+    const uint8_t call[] = {0x02,0x19,0x17,0xef,0xa7,0x8a};
+    const uint8_t lead[] = {0xd3,0x40,CMD_FIN,CMD_RET};
+    const uint8_t notice[] = {0xce,CMD_SFX,0,0xd5,9,0x41,0xc9,0xff,CMD_END};
+    memcpy(bytes + 0x0aa751, before, sizeof(before));
+    memcpy(bytes + 0x0aa760, call, sizeof(call));
+    memcpy(bytes + 0x0aa7b4, lead, sizeof(lead));
+    memcpy(bytes + 0x0aa7ef, notice, sizeof(notice));
+    const Rom rom = {.rom = bytes, .size = sizeof(bytes)};
+    Toks source = {0}, output = {0};
+    CHECK(GaiaDialogue("[EXT]You got a key.[PAU:D0][RET]", &source));
+    CHECK(GaiaCompileJingleNotice(&rom, 0x0aa7ef, &output, &source));
+    CHECK(CountToken(&output, T_CMD, CMD_SFX, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xd5, 9) == 1);
+    CHECK(CountToken(&output, T_CMD, 0xc9, 0xff) == 1);
+    CHECK(CountToken(&output, T_CMD, CMD_END, 0) == 1);
+    CHECK(CountToken(&output, T_CMD, CMD_RET, 0) == 0);
+    bytes[0x0aa7b6] = CMD_END;
+    output.n = 0;
+    CHECK(!GaiaCompileJingleNotice(&rom, 0x0aa7ef, &output, &source));
+    CHECK(output.n == 0);
+    free(output.t);
+    free(source.t);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -643,6 +728,9 @@ int main(void)
     CheckStockPrompts();
     CheckJewelerAmounts();
     CheckSelectorReplies();
+    CheckClosedTimedLayout();
+    CheckJingleNotice();
+    CheckAbilityNotice();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }
@@ -673,6 +761,14 @@ def main():
     assert convert_return("[PRT:@dialogstring_08DE96]Example[FIN]", (), extended=True) == (
         "[EXT][PRT:08DE96]Example[FIN][RET]"
     )
+    notice = "[TPL:E][DLY:5]Example[N]Power[N][ADR:&table_08EB8F,AAC]![PAU:50][FIN]"
+    assert convert_extended("08EB68", notice, ()) == "[LAY][EXT]Example[N]Power[N][RET]"
+    try:
+        convert_extended("08EB68", notice.replace("08EB8F", "08EBD3"), ())
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Unexpected ability name table was accepted")
     for invalid_call in ("[PRT:@dialogstring_08DE97]", "[PRT:@dialogstring_08DE96+M]"):
         try:
             convert_return(invalid_call + "Example[FIN]", (), extended=True)

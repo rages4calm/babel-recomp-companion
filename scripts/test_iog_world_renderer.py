@@ -1549,6 +1549,62 @@ static void itory_restore_camera(void){
  CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
  g_snesrecomp_last_hdmaen=0;
 }
+static void watermia_restore_camera(void){
+ fixture();word(0x644,0x78);word(0x6ee,0x0085);
+ word(0x68a,512);word(0x68e,778);word(0x692,1280);word(0x694,1280);
+ word(0x696,1024);word(0x698,1024);
+ g_ppu->bgmode=9;g_ppu->bgXsc[0]=0x19;g_ppu->bgXsc[1]=0x11;
+ g_ppu->screenEnabled[0]=0x17;g_ppu->screenEnabled[1]=0x12;
+ g_ppu->hScroll[1]=512;g_ppu->vScroll[1]=779;
+ g_ppu->cgwsel=0x82;g_ppu->cgadsub=0x41;
+ IogWorldReset();IogWorldCaptureAtCompose(&g_cpu,0x83c714);
+ IogWorldCaptureAfterCompose(&g_cpu,0x83c789);
+ IogWorldBeginRaster();CHECK(s.valid&&s.restored_actor_field);
+ for(int line=0;line<=224;line++) IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_restored_actor_field"));
+ CHECK(s.view.world_x+s.view.native_x==512&&s.view.world_y+s.view.native_y==779);
+ s.lines[120].registers[offsetof(Ppu,vScroll)+2]^=1;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ s.lines[120].registers[offsetof(Ppu,vScroll)+2]^=1;
+ s.lines[1].registers[offsetof(Ppu,cgadsub)]^=1;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+}
+static void finite_room_backdrop(void){
+ for(unsigned annex=0;annex<2;annex++){
+  fixture();
+  unsigned scene=annex?0x74:0x47, width=annex?768:256, height=annex?256:768;
+  word(0x644,scene);word(0x6ee,5);word(0x68a,0);word(0x68e,0);
+  word(0x692,width);word(0x694,width);word(0x696,height);word(0x698,annex?1024:256);
+  word(0x6da,256);word(0x6de,height);
+  g_ppu->bgmode=9;g_ppu->bgXsc[0]=0x11;g_ppu->bgXsc[1]=0x19;
+  g_ppu->hScroll[0]=g_ppu->hScroll[1]=g_ppu->vScroll[0]=g_ppu->vScroll[1]=0;
+  g_ppu->screenEnabled[0]=0x15;g_ppu->screenEnabled[1]=0;
+  g_ppu->cgwsel=annex?0:0x80;g_ppu->cgadsub=annex?0x21:0xa1;
+  g_ppu->inidisp=15;g_ppu->cgram[0]=annex?0x1062:0x0842;
+  publication();IogWorldBeginRaster();CHECK(s.valid);
+  for(int line=0;line<=224;line++) {
+   if(annex&&line==223) g_ppu->screenEnabled[0]=0;
+   IogWorldCaptureLine(line);
+  }
+  IogWorldEndRaster(0,225,0);CHECK(s.complete);
+  uint32_t full=annex?0x101821:0x101010;
+  CHECK(s.output[0]==full&&s.output[s.width-1]==full);
+  CHECK(s.output[(s.height-1)*s.width]==full);
+  CHECK(s.output[s.view.native_y*s.width+s.view.native_x]!=full);
+  if(annex) {
+   CHECK(!FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,222));
+   CHECK(FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,223)==full);
+   g_ppu->screenEnabled[0]=0x15;g_ppu->screenEnabled[1]=0;
+  }
+  g_ppu->inidisp=7;
+  CHECK(FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,1)==(annex?0x080810:0x080808));
+  g_ppu->inidisp=15;g_ppu->fixedColor=1;
+  CHECK(!FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,1));
+  g_ppu->fixedColor=0;g_ppu->windowsel=1;
+  CHECK(!FiniteRoomBackdrop(&s.epochs[0],g_ppu,scene,1));
+ }
+}
 static void mode7_lifecycle_and_packet(const char*base){
  ship_dream_mosaic();
  late_story_mosaics();
@@ -1556,6 +1612,8 @@ static void mode7_lifecycle_and_packet(const char*base){
  stock_actor_field_after_unpaired_upload();
  restored_actor_field_before_first_upload();
  itory_restore_camera();
+ watermia_restore_camera();
+ finite_room_backdrop();
  IogWorldReset();
  south_cape_house_mosaic();
  mode7_angkor_neighbor_mosaic();
