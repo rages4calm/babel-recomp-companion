@@ -51,6 +51,18 @@ the same scene boundaries as the prior ending replay and displayed END.
 These checks cover the sampled routes. Other story states and a continuous
 playthrough remain to be verified.
 
+## Original Mode 7 destination menu
+
+Original v42 draws the stock destination menu's text and cursor at
+square-pixel 1.5× while retaining the live Mode 7 map above it. The renderer
+checks the split and displayed menu layer before scaling. Other layouts keep
+the existing presentation.
+
+Paired controller replays selected South Cape from the Itory route and Euro
+from Watermia's four-option menu. The map pixels and travel and arrival
+frames matched the renderer-only control. The 1× and disabled-split runs
+also matched the control. The 1.25× run scaled the panel with the same map.
+
 ## Opening, diary and Dark Space save framing
 
 v40 presents the original logo, title, diary and two Mode 1 prologue cards

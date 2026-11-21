@@ -6,7 +6,7 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **963 of 1,138** chapter-dialogue declarations in the
+The import now covers **982 of 1,138** chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
 The importer supplies 1,108 candidates. The runtime keeps stock text when
 a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
@@ -87,9 +87,19 @@ score, preserved the correct jewel payout, and exited to Dao on controller
 input. All 1,002 v40 patches and its six overlay banks retain their bytes
 and addresses.
 
-175 chapter declarations still use stock behavior. Pending work includes
-inherited dialogue box bounds, shared bank-relative targets, and timed
-sequences whose source and stock beats differ.
+Original v42 adds 19 chapter translations. It validates the stock caller
+before extending ability and Dark Space dialogue and uses the original choice
+row layout and branch targets for nine further prompts. Linked controller
+replays walked from the world map to the Staring Man in Native Village and
+verified both replies. A paired Itory portal replay earned Psycho Dash,
+read the tutorial and exited back to Itory. Both runs set the same ability
+bit and departed on the same frame. The previous 1,164 patches and all 12
+overlay banks remain byte-identical.
+
+156 chapter declarations still use stock behavior. Of these, 145 contain
+visible or dynamic text. Pending work includes dialogue boxes whose caller
+bounds are unknown, shared bank-relative targets, and timed sequences whose
+source and stock beats differ.
 
 ### Inventory, room titles and map lettering
 
