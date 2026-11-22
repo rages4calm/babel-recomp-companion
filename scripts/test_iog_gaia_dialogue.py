@@ -720,6 +720,30 @@ static void CheckTimedStoryDeck(void)
     free(output.t);
 }
 
+static void CheckTimedChapterNotices(void)
+{
+    uint8_t lance[] = {0xc2, 0x0a, 0xc2, 4, 0x4b, CMD_N, 0x4e, 0xc3, 0,
+                       0xc9, 0x28, 0xc8, CMD_RET};
+    const Rom rom = {.rom = lance, .size = sizeof(lance)};
+    Toks stock = {0}, source = {0}, result = {0};
+    CHECK(Decode(&rom, 0, &stock, 0, 0));
+    CHECK(GaiaDialogue("[EXT][TPL:04]Lance: Oh![N]It moved![PAU:28][END]", &source));
+    CHECK(GaiaTimedNoticeRules(0x04b75d, &stock, &source, &result));
+    CHECK(CountToken(&result, T_CMD, 0xc9, 0x28) == 1);
+    CHECK(CountToken(&result, T_CMD, 0xc8, 0) == 1);
+    CHECK(result.t[result.n - 1].code == CMD_RET);
+    result.n = 0;
+    source.t[0].a[0] = 3;
+    CHECK(!GaiaTimedNoticeRules(0x04b75d, &stock, &source, &result));
+    result.n = 0;
+    source.t[0].a[0] = 4;
+    source.t[source.n - 2].a[0] = 0x29;
+    CHECK(!GaiaTimedNoticeRules(0x04b75d, &stock, &source, &result));
+    free(stock.t);
+    free(source.t);
+    free(result.t);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -768,6 +792,7 @@ int main(void)
     CheckTimedStoryDeck();
     CheckClosedTimedLayout();
     CheckJingleNotice();
+    CheckTimedChapterNotices();
     CheckAbilityNotice();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
@@ -807,6 +832,10 @@ def main():
         pass
     else:
         raise AssertionError("Unexpected ability name table was accepted")
+    comet = "[TPL:1][TPL:9]First card.[PAU:78][TPL:A]Second card.[PAU:B4][CLD]"
+    assert convert_extended("0BD558", comet, ()) == (
+        "[LATE][EXT][TPL:01]First card.[PAU:78][CLR]Second card.[PAU:B4][CLD][RET]"
+    )
     for invalid_call in ("[PRT:@dialogstring_08DE97]", "[PRT:@dialogstring_08DE96+M]"):
         try:
             convert_return(invalid_call + "Example[FIN]", (), extended=True)

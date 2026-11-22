@@ -3940,6 +3940,8 @@ static int GaiaCompileLateBeats(const Rom *stock, uint32_t off, Toks *out, const
 
 /* Run after interface allocation as well as the previous chapter passes.
  * A save can still hold any of their exact virtual pointers. */
+static int GaiaCompileTimedChapter(const Rom *rom, uint32_t offset, Toks *out, const Toks *source);
+
 static void GaiaLateChapter(FILE *file, const Rom *stock, const Structure *structure,
                             IogPack *pack, unsigned *fill, GaiaChapterCompiler compile)
 {
@@ -3954,6 +3956,11 @@ static void GaiaLateChapter(FILE *file, const Rom *stock, const Structure *struc
             continue;
         *text++ = 0;
         text[strcspn(text, "\r\n")] = 0;
+        if (!strncmp(text, "[LATE]", 6)) {
+            if (compile != GaiaCompileTimedChapter)
+                continue;
+            text += 6;
+        }
         if (!strncmp(text, "[LAY]", 5))
             text += 5;
         if (!strncmp(text, "[PAIR]", 6) || !strncmp(text, "[TAIL]", 6))
@@ -3996,8 +4003,10 @@ static void GaiaLateChapter(FILE *file, const Rom *stock, const Structure *struc
 #include "iog_static_chapter.inc"
 #include "iog_called_chapter.inc"
 #include "iog_returning_chapter.inc"
+#include "iog_branch_dialogue.inc"
 #include "iog_timed_window.inc"
 #include "iog_timed_story.inc"
+#include "iog_timed_chapter.inc"
 #include "iog_jingle_notice.inc"
 #include "iog_inherited_pair.inc"
 #include "iog_ability_notice.inc"
@@ -4105,6 +4114,8 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             const Label *label = &structure.l[li];
             last = label->off;
             pack->strings_total += !supplement;
+            if (label->off == 0x0bd558 && !strncmp(text, "[LATE][EXT]", 11))
+                continue;
             if (!strncmp(text, "[PAIR]", 6)) {
                 if (supplement == kGaiaPairedEntry)
                     pack->strings_translated += GaiaPairedEntry(&stock, &structure, li, pack,
@@ -4228,6 +4239,9 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
         GaiaApplyInheritedPair(file, &stock, &structure, pack, &called_fill);
         GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileManualChapter);
         GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileTimedStory);
+        GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileTimedChapter);
+        GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileBranchDialogue);
+        GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileJewelerCount);
     }
     fclose(file);
     if (!malformed)

@@ -33,6 +33,21 @@ does not establish that secondary scenery should stop at the floor boundary.
 Per-line HDMA camera derivatives also cannot be inferred from a global actor
 ratio. Deferred raster-camera paths remain explicit review work.
 
+## Dark Space, Adrift and Coast transitions
+
+Original v46 keeps the verified Dark Space entry and exit mosaics and the
+Adrift and Coast transitions at square-pixel 1.5×. Sky mosaic sampling
+stays within the authored sky rows. Paired controller replays corrected
+203 presentations across 7,250 frames. The other presented frames and
+126 sampled guest and PPU payloads matched the renderer-only control.
+Unrecognized layouts retain fallback.
+
+The v46 cold opening replay used 11,040 virtual-controller frames through
+both classroom exits and South Cape. The linked Dark Gaia replay used
+84,000 frames through New Babel, the credits and the END card. Neither
+route had a visible fallback frame. The ending started at a retained
+boss checkpoint.
+
 ## Watermia save-load and finite-room edges
 
 Original v44 keeps Watermia wide on the first restored frame by using the

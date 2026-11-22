@@ -347,6 +347,15 @@ def convert_stock_jump(offset, source, names):
 
 
 def convert_extended(offset, source, names):
+    if offset == "0BD558":
+        # Keep the stock clear between the two separately timed cards.
+        boundary = "[PAU:78][TPL:A]"
+        if source.count(boundary) != 1 or not source.endswith("[PAU:B4][CLD]"):
+            raise ValueError("Unexpected Comet opening timeline")
+        return "[LATE]" + convert_return(
+            source.replace(boundary, "[PAU:78][CLR][TPL:A]"),
+            names, extended=True, wrap_prose=True, timed=True,
+        )
     if offset == "08EB68":
         # The runtime keeps the indexed name lookup in the original ROM bank.
         body, separator, tail = source.partition("[ADR:&table_08EB8F,AAC]")

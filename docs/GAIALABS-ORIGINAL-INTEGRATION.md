@@ -6,9 +6,9 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **1,021 of 1,138** chapter-dialogue declarations in the
+The import now covers **1,032 of 1,138** chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer supplies 1,109 candidates. The runtime keeps stock text when
+The importer supplies 1,110 candidates. The runtime keeps stock text when
 a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
 Castle dialogue and the Dao Snake Panic score response. New formatted
@@ -120,7 +120,14 @@ stock pause operands and reached the credits. The dialogue boxes grow
 where the approved text needs more lines. The revised placement leaves
 the actors visible and keeps the lower card inside the stock viewport.
 
-117 chapter declarations still use stock behavior. Of these, 106 contain
+Original v46 adds 11 entries, including the Incan statue fanfares, the
+Comet opening and the New Babel narration. Gem's translated reply uses the
+original live jewel count. Paired controller replays confirmed the Incan
+Statue A and Herb rewards, the Babel statue ceremony, and the transitions
+into the ending. New Babel uses a taller narration box to fit the longer
+text. All 1,224 previous patch records retain their bytes and addresses.
+
+106 chapter declarations still use stock behavior. Of these, 95 contain
 visible or dynamic text. Pending work includes dialogue boxes whose caller
 bounds are unknown, shared bank-relative targets, and timed sequences whose
 source and stock beats differ.

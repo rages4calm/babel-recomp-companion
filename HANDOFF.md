@@ -219,6 +219,16 @@ same stock backdrop through its separate blend profile. The owner
 playtest remains on hold. The current list of 117 outstanding declarations
 is in `visual-fullgame-038/dialogue/v45-residual.json`.
 
+Batch 039's v46 adds 11 chapter declarations for 1,032 of 1,138 and fixes
+the verified Dark Space, Adrift and Coast mosaic transitions. The renderer
+comparison used 7,250 controller frames and retained the original fallback.
+The route evidence includes a cold opening, linked play to the Coastal Cave,
+six separate chapter connectors and the Dark Gaia-to-credits replay.
+Checkpoint-assisted segments remain labelled in the private route receipts.
+Continuous campaign qualification is still open. Keep the owner playtest
+selector on the previous build. The 106 remaining entries are listed in
+`visual-fullgame-039/dialogue/v46-residual.json`.
+
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in

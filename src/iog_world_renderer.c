@@ -288,6 +288,34 @@ static bool MansionAndSolidArmMosaic(const Ppu *p,const uint8_t *ram)
         Word(ram,0x694)==512 && Word(ram,0x698)==256;
 }
 
+static bool DarkSpaceMosaic(const Ppu *p,const uint8_t *ram)
+{
+    return Word(ram,0x644)==0xE6 && Word(ram,0x6EE)==0x0405 &&
+        Word(ram,0x692)==256 && Word(ram,0x694)==512 &&
+        Word(ram,0x696)==512 && Word(ram,0x698)==512 &&
+        p->bgmode==9 && (p->mosaic&15)==3 && !p->windowsel &&
+        p->bgXsc[0]==0x11 && p->bgXsc[1]==0x19 &&
+        p->screenEnabled[0]==0x15 && p->screenEnabled[1]==2 &&
+        p->cgwsel==2 && p->cgadsub==0x31 && g_snesrecomp_last_hdmaen==2;
+}
+
+static bool AdriftCoastMosaic(const Ppu *p,const uint8_t *ram)
+{
+    if(Word(ram,0x6EE)!=5 || Word(ram,0x692)!=256 || Word(ram,0x694)!=512 ||
+       Word(ram,0x696)!=256 || Word(ram,0x698)!=512 ||
+       p->bgmode!=9 || (p->mosaic&15)!=3 || p->windowsel ||
+       p->bgXsc[0]!=0x11 || p->bgXsc[1]!=0x19 ||
+       p->screenEnabled[0]!=0x17 || p->screenEnabled[1] || p->cgwsel!=0x80)
+        return false;
+    /* The outgoing raft keeps its ocean wave. The coast reveal uses the
+     * ordinary camera and a different stock blend in the same map layout. */
+    switch(Word(ram,0x644)) {
+    case 0x2F: return p->cgadsub==0x22 && g_snesrecomp_last_hdmaen==6;
+    case 0x31: return p->cgadsub==0xA3 && g_snesrecomp_last_hdmaen==2;
+    default: return false;
+    }
+}
+
 static bool StorySkyLayout(const uint8_t *ram)
 {
     return Word(ram,0x644)==0x58 && (ram[0x6EE]&0x80) &&
@@ -331,12 +359,7 @@ static bool RestoredActorFieldLayout(const Ppu *p,const uint8_t *ram)
         return false;
     if(!p->mosaic) return true;
     if(scene==0xE9) return MansionAndSolidArmMosaic(p,ram);
-    return scene==0xE6 && Word(ram,0x6EE)==0x0405 &&
-        Word(ram,0x692)==256 && Word(ram,0x694)==512 &&
-        Word(ram,0x696)==512 && Word(ram,0x698)==512 && p->mosaic==3 &&
-        p->bgXsc[0]==0x11 && p->bgXsc[1]==0x19 &&
-        p->screenEnabled[0]==0x15 && p->screenEnabled[1]==2 &&
-        p->cgwsel==2 && p->cgadsub==0x31 && g_snesrecomp_last_hdmaen==2;
+    return p->mosaic==3 && DarkSpaceMosaic(p,ram);
 }
 
 static bool StockActorFieldLayout(const Ppu *p,const uint8_t *ram)
@@ -467,7 +490,8 @@ static bool StockMosaicLayout(const Ppu *p,const uint8_t *ram)
 {
     return AngkorVisionMosaic(p,ram) || DaoVillageMosaic(p,ram) ||
         MansionAndSolidArmMosaic(p,ram) || BabelQueenMosaic(p,ram) ||
-        BabelLandingMosaic(p,ram) || ShipDreamMosaic(p,ram) || SouthCapeHouseMosaic(p,ram);
+        BabelLandingMosaic(p,ram) || ShipDreamMosaic(p,ram) || SouthCapeHouseMosaic(p,ram) ||
+        DarkSpaceMosaic(p,ram) || AdriftCoastMosaic(p,ram);
 }
 
 static int PositiveMod(int value,int divisor)
@@ -1822,10 +1846,12 @@ static bool RenderWorld(void)
                     unsigned scroll=Word(e->ram,transition_wave+2*phase);
                     wx+=ScrollWorld(e->ram,0x68A + logical*2,scroll)-camx;
                 }
-                if(logical==1 && adrift_ocean && native_y<0 && wy<0) wy=0;
                 bool mosaic_layer=mosaic>1 && PPU_mosaicEnabled(p,physical);
                 if(mosaic_layer)
                     wy-=PositiveMod(native_y+1-stock_mosaic_origin,mosaic);
+                /* Clamp after quantizing. Otherwise the expanded sky above
+                 * the raster can wrap to ocean tiles during the mosaic. */
+                if(logical==1 && adrift_ocean && native_y<0 && wy<0) wy=0;
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)(wy+(mosaic_layer?1:0))&1023;
                 if(star_plane) continue;
