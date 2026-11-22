@@ -229,6 +229,12 @@ Continuous campaign qualification is still open. Keep the owner playtest
 selector on the previous build. The 106 remaining entries are listed in
 `visual-fullgame-039/dialogue/v46-residual.json`.
 
+The v47 follow-up integrates both arrival narrations and the Kara and
+Neil branch replies. It covers 1,036 of 1,138 chapter declarations. The
+remaining 102 are listed in `visual-fullgame-039/dialogue/v47-residual.json`.
+The current candidate stays internal while the remaining localization
+and continuous campaign check are open.
+
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in

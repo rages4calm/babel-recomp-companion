@@ -356,6 +356,14 @@ def convert_extended(offset, source, names):
             source.replace(boundary, "[PAU:78][CLR][TPL:A]"),
             names, extended=True, wrap_prose=True, timed=True,
         )
+    near_reply_targets = {"04AA7D": "04AAAD", "05DF9F": "05DE46"}
+    if offset in near_reply_targets:
+        body, separator, target = source.rpartition("[JMP:")
+        if (not separator or not body.endswith("[FIN]") or
+                target != f"&dialogstring_{near_reply_targets[offset]}+M]"):
+            raise ValueError("Unexpected reply continuation")
+        # The in-ROM wrapper keeps the actual same-bank JMP operand.
+        return "[LAY]" + convert_return(body, names, extended=True, wrap_prose=True)
     if offset == "08EB68":
         # The runtime keeps the indexed name lookup in the original ROM bank.
         body, separator, tail = source.partition("[ADR:&table_08EB8F,AAC]")

@@ -6,9 +6,9 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **1,032 of 1,138** chapter-dialogue declarations in the
+The import now covers **1,036 of 1,138** chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer supplies 1,110 candidates. The runtime keeps stock text when
+The importer supplies 1,112 candidates. The runtime keeps stock text when
 a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
 Castle dialogue and the Dao Snake Panic score response. New formatted
@@ -127,7 +127,13 @@ Statue A and Herb rewards, the Babel statue ceremony, and the transitions
 into the ending. New Babel uses a taller narration box to fit the longer
 text. All 1,224 previous patch records retain their bytes and addresses.
 
-106 chapter declarations still use stock behavior. Of these, 95 contain
+Original v47 adds the Watermia and Euro arrival narration and two replies
+that return to an original same-bank branch. The arrival sequences keep
+the original waits while fitting the approved text in five visible rows.
+Controller checks exercise Kara's travel reply and Neil's No branch
+followed by Yes. All 1,235 v46 patches retain their bytes and addresses.
+
+102 chapter declarations still use stock behavior. Of these, 91 contain
 visible or dynamic text. Pending work includes dialogue boxes whose caller
 bounds are unknown, shared bank-relative targets, and timed sequences whose
 source and stock beats differ.

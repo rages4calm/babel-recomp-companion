@@ -4004,9 +4004,11 @@ static void GaiaLateChapter(FILE *file, const Rom *stock, const Structure *struc
 #include "iog_called_chapter.inc"
 #include "iog_returning_chapter.inc"
 #include "iog_branch_dialogue.inc"
+#include "iog_near_dialogue.inc"
 #include "iog_timed_window.inc"
 #include "iog_timed_story.inc"
 #include "iog_timed_chapter.inc"
+#include "iog_timed_town.inc"
 #include "iog_jingle_notice.inc"
 #include "iog_inherited_pair.inc"
 #include "iog_ability_notice.inc"
@@ -4242,6 +4244,8 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
         GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileTimedChapter);
         GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileBranchDialogue);
         GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileJewelerCount);
+        GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaTownArrival);
+        GaiaApplyNearReplies(file, &stock, &structure, pack, &called_fill);
     }
     fclose(file);
     if (!malformed)

@@ -744,6 +744,39 @@ static void CheckTimedChapterNotices(void)
     free(result.t);
 }
 
+static void CheckNearReplies(void)
+{
+    uint8_t *bytes = calloc(1, 0x060000);
+    CHECK(bytes);
+    const Rom stock = {.rom = bytes, .size = 0x060000};
+    const uint8_t call[] = {2, 0xbf, 0x20, 0xaa, 2, 0xbe, 2, 0, 0xf7, 0xa6,
+                            0x03, 0xa7, 0xfd, 0xa6, 0x03, 0xa7, 2, 0xbf, 0x7d, 0xaa};
+    const uint8_t reply[] = {0xce, 0xc2, 1, 0x01, CMD_FIN, CMD_JMP, 0xca, 0xaa};
+    memcpy(bytes + 0x04a6ed, call, sizeof(call));
+    bytes[0x04aa20] = 0xc2;
+    bytes[0x04aa21] = 0x0b;
+    memcpy(bytes + 0x04aa7d, reply, sizeof(reply));
+    Toks source = {0}, output = {0};
+    CHECK(GaiaDialogue("[EXT][TPL:01]Joy![FIN][RET]", &source));
+    CHECK(GaiaCompileNearReply(&stock, 0x04aa7d, &output, &source) == 0xaaca);
+    CHECK(output.t[0].code == 0xce && output.t[1].code == 0xc2 && output.t[1].a[0] == 1);
+    CHECK(output.t[output.n - 2].code == CMD_FIN && output.t[output.n - 1].code == CMD_RET);
+    for (int i = 0; i < output.n; ++i)
+        CHECK(output.t[i].code != CMD_JMP);
+    output.n = 0;
+    ++bytes[0x04aa84];
+    CHECK(!GaiaCompileNearReply(&stock, 0x04aa7d, &output, &source));
+    --bytes[0x04aa84];
+    ++bytes[0x04a6f9];
+    CHECK(!GaiaCompileNearReply(&stock, 0x04aa7d, &output, &source));
+    --bytes[0x04a6f9];
+    source.t[0].a[0] = 0;
+    CHECK(!GaiaCompileNearReply(&stock, 0x04aa7d, &output, &source));
+    free(source.t);
+    free(output.t);
+    free(bytes);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -794,6 +827,7 @@ int main(void)
     CheckJingleNotice();
     CheckTimedChapterNotices();
     CheckAbilityNotice();
+    CheckNearReplies();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }
@@ -824,6 +858,14 @@ def main():
     assert convert_return("[PRT:@dialogstring_08DE96]Example[FIN]", (), extended=True) == (
         "[EXT][PRT:08DE96]Example[FIN][RET]"
     )
+    reply = "[TPL:1]Joy![FIN][JMP:&dialogstring_04AAAD+M]"
+    assert convert_extended("04AA7D", reply, ()) == "[LAY][EXT][TPL:01]Joy![FIN][RET]"
+    try:
+        convert_extended("04AA7D", reply.replace("+M", ""), ())
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Unexpected branch destination was accepted")
     notice = "[TPL:E][DLY:5]Example[N]Power[N][ADR:&table_08EB8F,AAC]![PAU:50][FIN]"
     assert convert_extended("08EB68", notice, ()) == "[LAY][EXT]Example[N]Power[N][RET]"
     try:
