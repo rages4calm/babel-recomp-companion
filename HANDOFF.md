@@ -235,27 +235,27 @@ remaining 102 are listed in `visual-fullgame-039/dialogue/v47-residual.json`.
 The current candidate stays internal while the remaining localization
 and continuous campaign check are open.
 
-Batch 040 adds 76 chapter declarations for 1,112 of 1,138. It uses
-a new path: `scripts/gaia_authored_dialogue.py` transcribes the pages, rows
-and box sizes GaiaLabs authored and checks each string against a model of
-the stock renderer. `src/iog_authored_dialogue.inc` applies the rows after
-every earlier pass. [The method and its limits](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue)
-are in the integration notes. All 1,239 v47 patches and overlay bank bytes
-are unchanged. The second half of the batch covers choice prompts, strings
-that return to their script, and replies printed into the caller's box; the
-caller's box and the choice row come from the script bytes. The running
-last part covers strings with a second entry point and strings that end in
-a same-bank jump. The running game drew all 390 pages of the 84 streams
-with the expected boxes at 1.5×, each bound in turn to the Incan Statue A
-notice. The 76 scenes themselves have not been replayed, so entry points,
-jumps, choice cursors and the inferred caller boxes are unobserved, and
+Batch 040 added 76 chapter declarations with a new path:
+`scripts/gaia_authored_dialogue.py` transcribes the pages, rows and box
+sizes GaiaLabs authored and checks each string against a model of the
+stock renderer and its script, and `src/iog_authored_dialogue.inc` applies
+the rows after every earlier pass. Batch 041 replayed those 76 strings in
+their own scenes (61 confirmed; receipts in `visual-fullgame-041/group1`
+to `group4`), corrected the five defects the replays found, and moved 563
+earlier strings to the authored layout because the stock-window passes had
+paged them differently from the source. [The method, the defects and the
+limits](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue) are in
+the integration notes. 1,127 of 1,138 declarations are installed, which
+is every one that has text, and 667 rows are authored.
+
+v52 lays the overlay out again: virtual addresses are no longer those of
+v47, and a save state made with dialogue open on an older pack will not
+resume its text. All 667 authored rows passed the in-game page check
+(`visual-fullgame-040/dialogue/engine-pages.py`) on
+`visual-fullgame-040/cb-v58a` with `visual-fullgame-041/v59.tsv`. The 591
+rows new to batch 041 have not been replayed in their scenes, and
 continuous campaign qualification is still open. Keep the owner playtest
-selector on the previous build. The test executable is
-`visual-fullgame-040/cb-v50a` and the pack is
-`visual-fullgame-040/dialogue/v50.tsv`. The 26 remaining declarations are
-in `visual-fullgame-040/dialogue/v50-residual.json`; ten need no change
-and the integration notes say what blocks the other 16.
-`engine-pages.py` in the same folder is the page check.
+selector on the previous build until that is done.
 
 SNESRecomp main is 70 commits past the pin (`4348bdb`, November 24). A
 read-only inventory found 71 locally modified and 129 added vendor files.

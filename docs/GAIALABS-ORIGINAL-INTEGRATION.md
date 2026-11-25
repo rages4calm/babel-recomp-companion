@@ -6,9 +6,9 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **1,112 of 1,138** chapter-dialogue declarations in the
+The import now covers **1,127 of 1,138**, every one that has text chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer supplies 1,120 candidates. The runtime keeps stock text when
+The importer supplies 1,127 candidates. The runtime keeps stock text when
 a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
 Castle dialogue and the Dao Snake Panic score response. New formatted
@@ -221,29 +221,113 @@ A third pass adds 14 strings with control flow of their own:
   taken from the prompt whose choice table leads to the script site that
   prints it. This evidence has to agree with the string printed before.
 
-All 76 authored rows passed the in-game page check on one executable: 84
-streams with the entries, 390 pages. The same limits apply as above. The
-entries, jumps and choice cursors run only in their own scenes, which have
-not been replayed.
+### Batch 041: scene replays and authored layout for earlier strings
 
-26 chapter declarations still use stock behavior. Ten of them have nothing
-to translate: five are a lone box close that is identical in both versions,
-and five are stubs that open a box and jump to an entry point. One more
-only widens the Jeweler's list box, which the Jeweler's rows below need.
-The other 15 are:
+Four agents replayed the 76 batch-040 strings in their own scenes on the
+v50 pack. 61 were confirmed there with the expected boxes and rows, the
+dialogue closed and the script continuing. That covers every choice prompt
+(cursor on the option rows, each option reaching the stock outcome), the
+replies printed into a caller's box, both paths into the strings with a
+second entry point that were reached, and the jump tails. Six
+self-contained strings were skipped to limit cost; the rest were seen in
+part or without a stock comparison. Chapters 2-3 were played with the
+controller from the cave to the morning of the letter. Every other scene
+was reached by a staged warp with flag pokes. The receipts and pictures are
+in `visual-fullgame-041/group1` to `group4` (`RESULTS.md` in each).
 
-- the Jeweler's menu, deposit reply and list row (`08D0F1`, `08D20F`,
-  `08D621`), whose box and cursor belong to the Jeweler's own code;
-- three strings built from a table lookup or a shared print call
-  (`08EB85`, `08E4A4`, `08ED6D`) and one with raw tiles (`039E1A`);
-- three timed sequences where GaiaLabs changed the timeline: Lola's melody
-  (`049D29`), the plane jump (`0984B1`) and the epilogue card (`0BDC95`);
-- two replies whose calling box could not be proven (`06BE85`, `06BF0A`);
-- `0595B4`, whose four authored rows do not fit the three-row box its jump
-  target continues in; `07944D`, which changes typing speed inside a row
-  that needs wrapping; and `0583E7`, where GaiaLabs added a jump.
+The replays found these defects, all corrected in the v52 pack:
 
-The list is in `visual-fullgame-040/dialogue/v50-residual.json`.
+- **`;` is not in the stock font.** Tile `$8F` draws a stray mark. Both
+  importers now write a comma. 53 earlier rows and two authored rows used
+  it. A check that reads the text layer from memory cannot see this; it
+  was found in a picture.
+- **Gaia's parting reply (`08DE43`) printed one word per page.** An earlier
+  pass dropped the stock `[CLR]`, so the text started below the choice rows
+  of a full box. Confirmed corrected in the Dark Space scene.
+- **The Freejia slaver's reply (`05B9AF`) left an empty box open** and never
+  showed the Man's line. The paired-entry pass ended the first part with a
+  return, but the script prints the whole string in one call.
+- **An entry point reached through a jump lost its speaker's colours**
+  (`059DCD` after `059D91`). An entry part now selects the stock speaker
+  again when the authored text names none.
+- **Three choice questions broke in the middle of a clause.** A question
+  longer than the rows above the choices now gets a page of its own, whole,
+  and the choices follow alone.
+
+The agents also reported many earlier-pass strings with a word alone on a
+row or page. A survey of the installed overlay compared each earlier string
+with the pages GaiaLabs wrote: 564 of 1,021 had more pages than the source
+or a page of one or two orphaned words. The importer now uses the authored
+transcription for 547 of them, for every string with a second entry point
+that it can transcribe, and for two more replies whose calling box is found
+by following a chain of choice menus. Three more strings came in once page
+fitting could wrap a row that carries a pause or typing-speed command and
+could open a taller box over an inherited one: the glass-game line
+(`07944D`), Shira's reply before her jump (`0595B4`) and the epilogue card
+(`0BDC95`). The card is timed. Its pauses equal stock, its top box sits at
+the stock row 6 where the original used row 4, and it has not been seen in
+the ending.
+
+Four slips in the pinned source text are corrected per string in
+`CORRECTIONS` in the importer ("momoent", a doubled "you", "going on be",
+"gradually become quiet"). Each must match exactly, so a corrected upstream
+revision stops the import.
+
+This changes the overlay layout. Earlier batches kept every virtual address
+fixed; v52 lays the pack out again, so a save state made with a dialogue
+box open on an older pack will not resume its text. Every string that is
+not authored decodes to the same text as in v51, apart from the comma, and
+the menu, title and map entries are identical in content.
+
+The last strings each needed one more piece of the stock engine:
+
+- **The Jeweler.** His reward list is a box-only string followed by one
+  string per row. GaiaLabs widens the box by a column so the longer labels
+  fit; the importer takes that size and prints the seven rows into it with
+  their stock commands. His menu's greeting scrolls away above the question
+  as GaiaLabs wrote it, which leaves the three options on the rows the
+  script's cursor visits; the page model and the runtime allow a scroll
+  only for a row marked for it. His deposit reply prints into the menu
+  box. The script reaches it from the menu choice through code that counts
+  and removes the jewels without printing, so that box is declared in the
+  importer.
+- **Ability descriptions.** Gaia prints these through a lookup table and
+  then ends the dialogue. The importer finds the host string, uses its box,
+  and lets such a string return with text on the page.
+- **A shared print call.** The Aura Barrier explanation begins by printing
+  a stock string that leaves an empty box. The call is kept and the text
+  starts in that box.
+- **Raw tiles.** The hieroglyph row in Olman's diary is kept. A run of
+  tiles is accepted only when the stock string prints the same run.
+- **Timed strings.** Lola's melody and the plane jump follow the authored
+  timeline. No authored pause is longer than the longest stock pause in
+  the same string, and where neither version waits for the player the
+  pauses must be equal.
+- **A moved line.** GaiaLabs ends a crew member's cheer (`0583E7`) by
+  jumping to Will's aside in `058394`. The aside is printed in line.
+- **An over-tall page.** When wrapping makes a page taller than any box,
+  it continues on a second page after the last row that ends a sentence.
+
+667 rows are authored in all. 1,127 of 1,138 declarations are installed.
+The other 11 have nothing to translate: five are a lone box close that is
+identical in both versions, five are stubs that open a box and jump to an
+entry point, and one is the lookup call for the ability descriptions.
+
+All 667 authored rows passed the in-game page check, the same check as in
+batch 040. For a timed card the check reads the text at each long hold.
+Three things cannot be shown through the host dialogue and were checked
+only by decoding the installed bytes: the tile row itself, the shared
+print call, and the box-only string. The 591 rows new to this batch have
+not been replayed in their own scenes; two sweep agents are doing that.
+
+Two five-row authored pages hide the speakers in small rooms (Kara in the
+Native Village hut, `08963C`, and on the raft, `059DCD`). They are left as
+GaiaLabs laid them out; the alternative is a page break inside a sentence.
+
+21 earlier strings whose pages differ from the source keep their earlier
+layout, 11 of them because the box they print into could not be proven.
+Most of those are item-use messages printed by the inventory code.
+`visual-fullgame-041/breaks.json` lists them with the reason.
 
 ### Inventory, room titles and map lettering
 

@@ -30,8 +30,12 @@ static int GaiaAuthoredHex(const char **text, unsigned digits, char end, unsigne
 /* Parse the literal stream and follow the cursor as the stock renderer
  * would. Text must stay inside a box this string opened itself, or inside
  * the box a leading [BOX:x,y,w,h] says the calling script left open. The
- * stream has to end the way the stock string does. */
-static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal)
+ * stream has to end the way the stock string does. [SCR] in front lets a
+ * page scroll, as stock does when a row is printed below the last one.
+ * `textless` allows a string that only opens a box, and `shared` is the
+ * stock string's own leading print call, which the stream may repeat. */
+static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal, int textless,
+                              const uint8_t *shared, const uint8_t *stock, uint32_t span)
 {
     static const struct { const char *name; uint8_t code; } plain[] = {
         {"[N]", CMD_N}, {"[FIN]", CMD_FIN}, {"[WAI]", 0xd0}, {"[CLR]", 0xce},
@@ -42,6 +46,9 @@ static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal)
     };
     unsigned width = 0, height = 0, column = 0, row = 0, glyphs = 0;
     int placed = 0;
+    const int scroll = !strncmp(text, "[SCR]", 5);
+    if (scroll)
+        text += 5;
     if (!strncmp(text, "[BOX:", 5)) {
         unsigned x, y, w, h;
         text += 5;
@@ -51,6 +58,15 @@ static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal)
             return 0;
         width = 2 * w;
         height = h;
+    }
+    if (!strncmp(text, "[PRT:", 5)) {
+        unsigned address;
+        text += 5;
+        if (!shared || !width || !GaiaAuthoredHex(&text, 6, ']', &address) ||
+            address != (unsigned)(shared[0] | shared[1] << 8 | shared[2] << 16))
+            return 0;
+        Tok call = {.type = T_CMD, .code = CMD_PRT, .ref = -1, .a = {address}};
+        Push(out, &call);
     }
     while (*text) {
         Tok token = {.type = T_CMD, .ref = -1};
@@ -92,6 +108,29 @@ static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal)
             token.a[1] = b;
             matched = 1;
         }
+        if (!matched && !strncmp(text, "[ESC:", 5)) {
+            /* Raw tiles: only a run that the stock string prints itself. */
+            text += 5;
+            token.code = CMD_ESC;
+            while (*text != ']') {
+                unsigned tile;
+                const char separator = text[0] && text[1] ? text[2] : 0;
+                if (token.blen >= sizeof(token.bin) || !separator ||
+                    !GaiaAuthoredHex(&text, 2, separator, &tile) || !tile)
+                    return 0;
+                --text;         /* leave the cursor on the next pair or the bracket */
+                token.bin[token.blen++] = (uint8_t)tile;
+            }
+            ++text;
+            int present = 0;
+            for (uint32_t i = 0; stock && i + token.blen + 2 <= span; ++i)
+                present |= stock[i] == CMD_ESC && !memcmp(stock + i + 1, token.bin, token.blen) &&
+                           !stock[i + 1 + token.blen];
+            if (!present || !width || (column += token.blen) > width)
+                return 0;
+            ++glyphs;
+            matched = 1;
+        }
         if (!matched && !strncmp(text, "[BCD:", 5)) {
             text += 5;
             if (!GaiaAuthoredHex(&text, 1, ',', &a) || !GaiaAuthoredHex(&text, 4, ']', &b) ||
@@ -107,8 +146,10 @@ static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal)
             return 0;
         switch (token.code) {
         case CMD_N:
-            if (!width || ++row >= height)
+            if (!width || (++row >= height && !scroll))
                 return 0;
+            if (row >= height)
+                row = height - 1;
             column = 0;
             break;
         case CMD_FIN: case 0xce:
@@ -164,7 +205,7 @@ static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal)
             break;
         case CMD_END: case CMD_RET:
             Push(out, &token);
-            return !*text && !placed && glyphs && token.code == terminal;
+            return !*text && !placed && (glyphs || textless) && token.code == terminal;
         default:
             break;
         }
@@ -258,8 +299,17 @@ static void GaiaApplyAuthored(FILE *file, const Rom *stock, const Structure *str
                       !GaiaAuthoredClear(structure, pack, index, offset + label->marker, 5)))
             continue;
         Item whole = {0}, part = {0};
-        if ((prefix || GaiaAuthoredTokens(cursor, &whole.toks, terminal)) &&
-            (!entry || GaiaAuthoredTokens(second, &part.toks, terminal))) {
+        /* A stock string with no text only sets up a box for later strings. */
+        Toks original = {0};
+        int textless = terminal == CMD_RET && stock->rom[offset] == 0xc1 &&
+            Decode(stock, offset, &original, 0, 0);
+        for (int i = 0; i < original.n; ++i)
+            textless &= original.t[i].type != T_GLYPH;
+        free(original.t);
+        const uint8_t *shared = stock->rom[offset] == CMD_PRT && span > 4 ? stock->rom + offset + 1 : NULL;
+        if ((prefix || GaiaAuthoredTokens(cursor, &whole.toks, terminal, textless, shared,
+                                          stock->rom + offset, span)) &&
+            (!entry || GaiaAuthoredTokens(second, &part.toks, terminal, 0, NULL, stock->rom + offset, span))) {
             const uint32_t address = prefix ? 1 : GaiaAuthoredPlace(pack, fill, &whole);
             const uint32_t inner = address && entry ? GaiaAuthoredPlace(pack, fill, &part) : 0;
             if (address && (!entry || inner)) {

@@ -804,29 +804,29 @@ static void CheckAuthoredPages(void)
     };
     for (size_t i = 0; i < sizeof(accepted) / sizeof(accepted[0]); ++i) {
         Toks tokens = {0};
-        if (!GaiaAuthoredTokens(accepted[i], &tokens, CMD_END))
+        if (!GaiaAuthoredTokens(accepted[i], &tokens, CMD_END, 0, NULL, NULL, 0))
             fprintf(stderr, "refused %s\n", accepted[i]);
         CHECK(tokens.n && tokens.t[tokens.n - 1].code == CMD_END);
         free(tokens.t);
     }
     for (size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i) {
         Toks tokens = {0};
-        if (GaiaAuthoredTokens(refused[i], &tokens, CMD_END))
+        if (GaiaAuthoredTokens(refused[i], &tokens, CMD_END, 0, NULL, NULL, 0))
             fprintf(stderr, "accepted %s\n", refused[i]);
-        CHECK(!GaiaAuthoredTokens(refused[i], &tokens, CMD_END));
+        CHECK(!GaiaAuthoredTokens(refused[i], &tokens, CMD_END, 0, NULL, NULL, 0));
         free(tokens.t);
     }
     /* A returning string keeps its terminal, and may print into the box
      * its calling script left open. */
     Toks returning = {0};
-    CHECK(GaiaAuthoredTokens("[BOX:03,11,0D,04][CLR]Reply.[N] Yes[N] No[RET]", &returning, CMD_RET));
+    CHECK(GaiaAuthoredTokens("[BOX:03,11,0D,04][CLR]Reply.[N] Yes[N] No[RET]", &returning, CMD_RET, 0, NULL, NULL, 0));
     CHECK(returning.t[returning.n - 1].code == CMD_RET);
     returning.n = 0;
-    CHECK(!GaiaAuthoredTokens("[BOX:03,11,0D,04][CLR]Reply.[RET]", &returning, CMD_END));
+    CHECK(!GaiaAuthoredTokens("[BOX:03,11,0D,04][CLR]Reply.[RET]", &returning, CMD_END, 0, NULL, NULL, 0));
     returning.n = 0;
-    CHECK(!GaiaAuthoredTokens("[BOX:03,11,0D,02]A[N]B[N]C[RET]", &returning, CMD_RET));
+    CHECK(!GaiaAuthoredTokens("[BOX:03,11,0D,02]A[N]B[N]C[RET]", &returning, CMD_RET, 0, NULL, NULL, 0));
     returning.n = 0;
-    CHECK(!GaiaAuthoredTokens("[BOX:03,04,0D,02]Status rows.[RET]", &returning, CMD_RET));
+    CHECK(!GaiaAuthoredTokens("[BOX:03,04,0D,02]Status rows.[RET]", &returning, CMD_RET, 0, NULL, NULL, 0));
     free(returning.t);
     /* A jump tail is redirected as PRT + the original JMP; a second entry
      * point gets its own redirect. */
@@ -1043,8 +1043,15 @@ def check_script_boxes(names):
     ending = authored.decode_stock(rom, 0x8300)[0]
     assert authored.transcribe("[CLR]A[N]B[N]C[N]D[END]", ending, names, rom, 0x8300) == (
         "[BOX:03,11,0D,04][CLR]A[N]B[N]C[N]D[END]")
+    # A page taller than the caller's box opens the next box that covers it.
+    assert authored.transcribe("[CLR]A[N]B[N]C[N]D[N]E[END]", ending, names, rom, 0x8300) == (
+        "[BOX:03,11,0D,04][CLR][DLG:03,0F][SIZ:0D,05]A[N]B[N]C[N]D[N]E[END]")
+    # A row that needs wrapping keeps a pause or typing speed with its word.
+    assert authored.transcribe("[TPL:8]abcd abcd abcd abcd[PAU:1E] abc…!![END]",
+                               "[TPL:0A]A[PAU:1E][PAL:00][END]", names) == (
+        "[TPL:09]abcd abcd abcd abcd[PAU:1E][N]abc...!![PAL:00][END]")
     for source, stock, offset in (
-        ("[CLR]A[N]B[N]C[N]D[N]E[END]", ending, 0x8300),        # five rows in the caller's four-row box
+        ("[CLR]A[N]B[N]C[N]D[N]E[N]F[END]", ending, 0x8300),    # six rows fit no stock box
         ("[CLR]A[END]", ending, 0x8400),                          # no script prints this address
         ("[CLR][TPL:0]A[FIN][CLD]", reply, 0x8200),               # closes a box the script keeps
         ("[CLR][TPL:0]A[END]", reply, 0x8200),                    # ends a dialogue stock continues
