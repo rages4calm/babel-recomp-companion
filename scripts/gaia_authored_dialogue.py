@@ -31,10 +31,37 @@ DEFAULT_BOX = (3, 17, 13, 4)
 # top boxes start at tile row 4; stock keeps rows 0-4 for the status display,
 # so the tall top box starts at the stock row 6 and covers the stock top boxes.
 AUTHORED_TALL = {0x10: (3, 15, 13, 5), 0x12: (3, 6, 13, 5)}
-# GaiaLabs speaker themes. Stock has a counterpart for three recurring voices;
-# the place themes have none and use the plain narration colours.
+# Six-row boxes for timed cards (the epilogue) whose page nobody can advance:
+# internal numbers, never written to a stream.
+TIMED_TALL = {0x60: (3, 13, 13, 6), 0x61: (3, 6, 13, 6)}
+AUTHORED_TALL.update(TIMED_TALL)
+# GaiaLabs speaker themes $16-$24 do not exist in stock. A stock speaker
+# template is two text colours, a voice and a palette switch, and the same
+# four commands reproduce a theme's text colours and voice. `load_themes`
+# reads them from the pinned source; without them a theme falls back to the
+# stock voices it shares, or to the plain narration colours.
 THEMES = {theme: None for theme in range(0x16, 0x25)}
 THEMES.update({0x21: 0x02, 0x22: 0x01, 0x23: 0x04, 0x24: 0x04})
+THEME_COLOURS = {}
+
+
+def load_themes(table_source):
+    """Read each theme's text colours and voice from dialog_template_table.asm."""
+    names = re.search(r"dialog_template_table \[(.*?)\]", table_source, re.S)
+    order = re.findall(r"&(\w+)\s*;([0-9A-F]{2})", names[1]) if names else []
+    found = {}
+    for label, index in order:
+        body = re.search(rf"(?m)^{label} `([^`]*)`", table_source)
+        if int(index, 16) not in THEMES or body is None:
+            continue
+        colours = dict(re.findall(r"\[SEP:(11|12),([0-9A-F]{1,4})\]", body[1]))
+        voice = re.search(r"\[SFX:([0-9A-F]{1,2})\]", body[1])
+        if set(colours) == {"11", "12"} and "[PAL:4]" in body[1]:
+            found[int(index, 16)] = (int(colours["11"], 16), int(colours["12"], 16),
+                                     int(voice[1], 16) if voice else None)
+    THEME_COLOURS.clear()
+    THEME_COLOURS.update(found)
+    return found
 GLYPHS = frozenset(" 0123456789.,\":ABCDEFGHIJKLMNOPQRSTUVWXYZ!/*-()"
                    "abcdefghijklmnopqrstuvwxyz?'")
 # The stock font has no ellipsis, closing-quote, heart or semicolon tile.
@@ -59,11 +86,20 @@ def covers(new, old):
     return a[0] <= b[0] and a[1] <= b[1] and a[2] >= b[2] and a[3] >= b[3]
 
 
-def on_screen(box):
+TOP_ROW = 6        # stock top boxes; tile rows 0-4 hold the status display
+
+
+# Stock boxes that run to the edge of the picture: the ending's lesson card.
+# Only the string whose stock version opens one may open it.
+EDGE_BOXES = {(0, 0x17, 0x0F, 3)}
+
+
+def on_screen(box, top_row=TOP_ROW):
     left, top, right, bottom = box_rect(box)
     # One spare tile row below the border holds the continuation cursor.
-    # Tile rows 0-4 hold the status display; closing a box there would erase it.
-    return left >= 1 and top >= 5 and right <= 30 and bottom <= 26 and box[2] >= 2 and box[3] >= 1
+    # Closing a box over the status display would erase it; `top_row` is
+    # lower only for a scene whose stock string opens a box there itself.
+    return left >= 1 and top >= top_row - 1 and right <= 30 and bottom <= 26 and box[2] >= 2 and box[3] >= 1
 
 
 def tokens(text):
@@ -168,7 +204,7 @@ def simulate(stream, box=None, scroll=False):
                     raise Unsupported("box size without a position")
                 opened = position + pair(argument)
                 position = None
-            if not on_screen(opened):
+            if not on_screen(opened, min(TOP_ROW, opened[1])) and opened not in EDGE_BOXES:
                 raise Unsupported("box leaves the screen")
             if box is not None and not covers(opened, box):
                 raise Unsupported("box does not cover the open box")
@@ -186,6 +222,9 @@ def simulate(stream, box=None, scroll=False):
             summary["sfx"].add(number(argument))
         elif name in ("PAL", "DLY"):
             number(argument)
+        elif name == "SEP":
+            if not re.fullmatch(r"1[12],[0-9A-F]{4}", argument):
+                raise Unsupported("palette write outside the two text colours")
         elif name == "PRT" and previous is None and box is not None:
             pass        # a shared stock string printed first; `box` is what it leaves
         elif name in ("END", "RET"):
@@ -246,10 +285,10 @@ def stock_profile(stock):
 
 _FAMILY = {**{t: ("top", t - 0x07) for t in range(0x08, 0x0C)},
            **{t: ("bottom", t - 0x0B) for t in range(0x0C, 0x10)},
-           0x10: ("bottom", 5), 0x12: ("top", 5)}
+           0x10: ("bottom", 5), 0x12: ("top", 5), 0x60: ("bottom", 6), 0x61: ("top", 6)}
 _TEMPLATE = {("top", rows): 0x07 + rows for rows in range(1, 5)}
 _TEMPLATE.update({("bottom", rows): 0x0B + rows for rows in range(1, 5)})
-_TEMPLATE.update({("top", 5): 0x12, ("bottom", 5): 0x10})
+_TEMPLATE.update({("top", 5): 0x12, ("bottom", 5): 0x10, ("top", 6): 0x61, ("bottom", 6): 0x60})
 
 
 def fit_rows(source, names, inherited=None):
@@ -269,14 +308,18 @@ def fit_rows(source, names, inherited=None):
 
     source = re.sub(r"\[NAM:([0-9A-F]+)\]", name, source.translate(TYPOGRAPHY))
     parts = [part for part in TOKEN.split(source) if part]
+    # A card that only pauses cannot wait for a button in the middle of a
+    # sentence, so its box may grow to six rows instead.
+    tallest = 6 if "[PAU:" in source and "[FIN]" not in source and "[WAI]" not in source else 5
     out, page = [], []
     family = rows = None
+    columns = 2 * inherited[2] if inherited else COLUMNS
     for template, geometry in STOCK_BOXES.items():
         if geometry == inherited:
             family, rows = _FAMILY[template]
 
     def flush():
-        nonlocal family, rows
+        nonlocal family, rows, columns
         head = []
         body = list(page)
         page.clear()
@@ -291,11 +334,12 @@ def fit_rows(source, names, inherited=None):
             command, _, argument = tag[1:-1].partition(":")
             if command == "TPL" and int(argument, 16) in _FAMILY:
                 family, rows = _FAMILY[int(argument, 16)]
-                opener = index
+                opener, columns = index, COLUMNS
             elif command == "DEF":
-                family, rows, opener = "bottom", 4, index
+                family, rows, opener, columns = "bottom", 4, index, COLUMNS
             elif command == "SIZ":
                 family, rows, opener = None, pair(argument)[1], None
+                columns = 2 * pair(argument)[0]
         lines = [[]]
         for part in body:
             if part == "[N]":
@@ -312,11 +356,11 @@ def fit_rows(source, names, inherited=None):
                 elif not part.startswith("["):
                     total += len(part)
             return total
-        if rows is None or (all(width(line) <= COLUMNS for line in lines) and len(lines) <= rows):
+        if rows is None or (all(width(line) <= columns for line in lines) and len(lines) <= rows):
             out.extend(head + body + tail)
             return
         needed = lines
-        if any(width(line) > COLUMNS for line in lines):
+        if any(width(line) > columns for line in lines):
             # Words keep the commands written in front of them (a pause, a
             # typing speed), which take no room on the row.
             words, pending = [], []
@@ -348,9 +392,9 @@ def fit_rows(source, names, inherited=None):
             needed, used = [[]], 0
             for prefix, body_parts, _ in words:
                 size = width(body_parts)
-                if size > COLUMNS:
+                if size > columns:
                     raise Unsupported("word wider than the box")
-                if used and used + 1 + size > COLUMNS:
+                if used and used + 1 + size > columns:
                     needed.append([])
                     used = 0
                 if used:
@@ -362,7 +406,7 @@ def fit_rows(source, names, inherited=None):
             # A page no box can hold is left as it is: the choice layout
             # may still move rows to another page, and the renderer model
             # refuses the string otherwise.
-            if family is not None and len(needed) <= 5:
+            if family is not None and len(needed) <= tallest:
                 rows = len(needed)
                 template = f"[TPL:{_TEMPLATE[family, rows]:X}]"
                 if opener is None:
@@ -370,8 +414,8 @@ def fit_rows(source, names, inherited=None):
                 else:
                     head[opener] = template
         out.extend(head)
-        capacity = max(rows, 5) if family is not None else rows
-        if needed is not lines and len(needed) > capacity and not any(
+        capacity = max(rows, tallest) if family is not None else rows
+        if len(needed) > capacity and not any(
                 part.startswith("[") for line in needed for part in line):
             # Wrapping made the page taller than any box. It continues on a
             # second page, broken after the last row that ends a sentence.
@@ -567,6 +611,8 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
         # Stock closes its box and returns. An authored END does the same
         # after one more input wait.
         source = source[:-5] + "[WAI][CLD]"
+    elif mode == "page" and source.endswith("[END]") and source.count("[END]") == 1 and "[RET]" not in source:
+        source = source[:-5] + "[FIN][BOX]"     # the script closes the box itself
     elif "[END]" in source or "[RET]" in source:
         raise Unsupported("authored string ends a dialogue the stock string continues")
     elif mode == "closed":
@@ -585,6 +631,17 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
     if mode != "end":
         source += "[RET]"
 
+    # The ending and a few other scenes have no status display, and their
+    # stock strings open the top box two rows higher. Authored top boxes
+    # follow the stock row there.
+    stock_rows = [pair(a)[1] for n, a in tokens(re.sub(r"\[SEP:[^\]]*\]", "", STOCK_LOOKUP.sub("x", stock))) if n == "DLG"]
+    top_row = min([TOP_ROW] + [row for row in stock_rows if row < TOP_ROW])
+    constant = {}
+    for kind in ("DLY", "SFX"):
+        old = set(re.findall(r"\[%s:([0-9A-F]+)\]" % kind, stock))
+        new = set(re.findall(r"\[%s:([0-9A-F]+)\]" % kind, source))
+        if len(old) == 1 and len(new) == 1 and int(min(old), 16) == int(min(new), 16):
+            constant[kind] = int(min(old), 16)
     out = []
     box = inherited
     # An inherited box keeps the caller's colours until the string names a speaker.
@@ -601,6 +658,9 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
     position = None
     parts = list(tokens(source))
 
+    lead = re.match(r"\[DLG:([0-9A-F]+),([0-9A-F]+)\]\[SIZ:([0-9A-F]+),([0-9A-F]+)\]", stock)
+    stock_box = tuple(int(v, 16) for v in lead.groups()) if lead else None
+
     def open_box(opened, command):
         nonlocal box, active, page_text, delay, sound, shown_delay, shown_sound, speaker
         if page_text:
@@ -612,7 +672,12 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
                 out.pop()
             if out[-1] != "[WAI]":
                 raise Unsupported("box opened in the middle of a page")
-        if not on_screen(opened):
+        if opened[1] == TOP_ROW and top_row < TOP_ROW:
+            opened = (opened[0], top_row, opened[2], opened[3])
+            command = "[DLG:%02X,%02X][SIZ:%02X,%02X]" % opened
+        # A box the stock string opens itself is the scene's own layout, even
+        # where it runs to the edge of the picture (the ending's lesson card).
+        if not on_screen(opened, top_row) and opened != stock_box:
             raise Unsupported("box leaves the screen")
         if box is not None and not covers(opened, box):
             out.append("[CLD]")
@@ -625,7 +690,10 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
         # Opening a box restores the default colours, sound and typing speed.
         active = shown_delay = shown_sound = None
         if not fresh:
-            delay = sound = None
+            # A string that keeps one typing speed or sound throughout in
+            # both versions keeps it across the boxes it opens.
+            delay = constant.get("DLY") if delay is not None else None
+            sound = constant.get("SFX") if sound is not None else None
         page_text = False
 
     def select_speaker():
@@ -633,6 +701,10 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
         if speaker != active:
             if speaker is None:
                 out.append("[PAL:00][SFX:10]")
+            elif isinstance(speaker, tuple):
+                first, second, voice = speaker
+                out.append(f"[SEP:11,{first:04X}][SEP:12,{second:04X}]"
+                           + (f"[SFX:{voice:02X}]" if voice is not None else "") + "[PAL:04]")
             else:
                 out.append(f"[TPL:{speaker:02X}]")
             active = speaker
@@ -667,8 +739,8 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
         elif name == "TPL":
             template = number(argument)
             if template in STOCK_SPEAKERS or template in THEMES:
-                speaker = THEMES.get(template, template)
-                sound = None
+                speaker = THEME_COLOURS.get(template, THEMES.get(template, template))
+                sound = constant.get("SFX") if sound is not None else None
             elif template in STOCK_BOXES:
                 open_box(STOCK_BOXES[template], f"[TPL:{template:02X}]")
             elif template in AUTHORED_TALL:
@@ -687,6 +759,8 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
             width, height = pair(argument)
             x, y = position
             position = None
+            if y < top_row:
+                y = top_row     # GaiaLabs' top row is 4; stock keeps the status display there
             open_box((x, y, width, height), f"[DLG:{x:02X},{y:02X}][SIZ:{width:02X},{height:02X}]")
         elif name in ("BOR", "SEP"):
             continue
@@ -791,8 +865,11 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
         rows = result["rows"]
         if len(rows) != final["row"] + 1 or any(not row.startswith(" ") or not row.strip() for row in rows[skip:]):
             raise Unsupported("choices are not on the rows the script expects")
-    if mode == "closed" and not result["waits"] and not profile["waits"] and result["pauses"] != profile["pauses"]:
-        # Neither version waits for the player, so the pauses are the timeline.
+    if (mode == "closed" and not result["waits"] and not profile["waits"]
+            and abs(sum(result["pauses"]) - sum(profile["pauses"])) * 5 > sum(profile["pauses"])):
+        # Neither version waits for the player, so the pauses are the scene's
+        # timeline. GaiaLabs pages its cards differently; the card may hold
+        # for up to a fifth longer or shorter than the stock one in all.
         raise Unsupported("timed string changes its timeline")
     if inherited:
         stream = "[BOX:%02X,%02X,%02X,%02X]" % inherited + stream
@@ -804,9 +881,11 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
         stream = "[JMP]" + stream
     # END waits for input, so the pauses only pace a page the player dismisses.
     # A pause may not hold longer than the longest one stock uses here.
-    if any(value > max(profile["pauses"] + [0x40]) for value in result["pauses"]):
+    if any(value > max(profile["pauses"] + [0x78]) for value in result["pauses"]):
         raise Unsupported("long pause absent from the stock string")
-    if not result["sfx"] <= profile["sfx"] | {0x00, 0x10}:
+    # Explicit sounds come from the stock string; a speaker brings its voice,
+    # and themes use the voices of the stock speaker templates.
+    if not result["sfx"] <= profile["sfx"] | {0x00, 0x10, 0x19, 0x1A, 0x1B, 0x1C}:
         raise Unsupported("sound outside the stock string")
     return stream
 
@@ -861,6 +940,8 @@ def decode_stock(rom, offset, stop=None):
             out.append(f"[SIZ:{data[0]:02X},{data[1]:02X}]")
         elif byte == 0xC6:
             out.append(f"[BCD:{data[0]},{data[2] | data[3] << 8:04X}]")
+        elif byte == 0xD4:
+            out.append(f"[SEP:{data[0]:02X},{data[1] | data[2] << 8:04X}]")
         else:
             out.append(f"[{_NAMES[byte]}" + (":" + data[::-1].hex().upper() if data else "") + "]")
         if byte in (0xC0, 0xCA, 0xD1, 0xC4):

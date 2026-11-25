@@ -257,6 +257,14 @@ rows new to batch 041 have not been replayed in their scenes, and
 continuous campaign qualification is still open. Keep the owner playtest
 selector on the previous build until that is done.
 
+Pack v65 makes the authored layout the first choice for every declaration:
+1,087 of 1,133 rows are authored, with GaiaLabs' speaker colours, and the
+epilogue and ending cards were replayed in their own scenes
+(`visual-fullgame-041/ending`). About 166 stock strings have no GaiaLabs
+declaration and stay in the original English. The walkable world map has
+one "Enhanced world map" setting (launcher and in-game, on by default);
+off is the stock view.
+
 SNESRecomp main is 70 commits past the pin (`4348bdb`, November 24). A
 read-only inventory found 71 locally modified and 129 added vendor files.
 Of 35 files changed on both sides, 21 merge textually and 14 need a manual

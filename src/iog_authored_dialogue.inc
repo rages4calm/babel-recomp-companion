@@ -35,7 +35,7 @@ static int GaiaAuthoredHex(const char **text, unsigned digits, char end, unsigne
  * `textless` allows a string that only opens a box, and `shared` is the
  * stock string's own leading print call, which the stream may repeat. */
 static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal, int textless,
-                              const uint8_t *shared, const uint8_t *stock, uint32_t span)
+                              const uint8_t *shared, const uint8_t *stock, uint32_t span, unsigned top_row)
 {
     static const struct { const char *name; uint8_t code; } plain[] = {
         {"[N]", CMD_N}, {"[FIN]", CMD_FIN}, {"[WAI]", 0xd0}, {"[CLR]", 0xce},
@@ -46,6 +46,9 @@ static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal, int
     };
     unsigned width = 0, height = 0, column = 0, row = 0, glyphs = 0;
     int placed = 0;
+    /* A box the stock string opens first is the scene's own layout, even
+     * where it runs to the edge of the picture. */
+    const int own = stock && span > 6 && stock[0] == 0xc1 && stock[3] == 0xc7;
     const int scroll = !strncmp(text, "[SCR]", 5);
     if (scroll)
         text += 5;
@@ -54,7 +57,7 @@ static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal, int
         text += 5;
         if (!GaiaAuthoredHex(&text, 2, ',', &x) || !GaiaAuthoredHex(&text, 2, ',', &y) ||
             !GaiaAuthoredHex(&text, 2, ',', &w) || !GaiaAuthoredHex(&text, 2, ']', &h) ||
-            !x || y < 6 || w < 2 || !h || x + 2 * w > 30 || y + 2 * h > 26)
+            !x || y < top_row || w < 2 || !h || x + 2 * w > 30 || y + 2 * h > 26)
             return 0;
         width = 2 * w;
         height = h;
@@ -104,6 +107,17 @@ static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal, int
             text += 5;
             if (!GaiaAuthoredHex(&text, 2, ',', &a) || !GaiaAuthoredHex(&text, 2, ']', &b))
                 return 0;
+            token.a[0] = a;
+            token.a[1] = b;
+            matched = 1;
+        }
+        if (!matched && !strncmp(text, "[SEP:", 5)) {
+            /* A speaker's two text colours, as the stock speaker templates set them. */
+            text += 5;
+            if (!GaiaAuthoredHex(&text, 2, ',', &a) || !GaiaAuthoredHex(&text, 4, ']', &b) ||
+                (a != 0x11 && a != 0x12))
+                return 0;
+            token.code = 0xd4;
             token.a[0] = a;
             token.a[1] = b;
             matched = 1;
@@ -161,16 +175,21 @@ static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal, int
             width = height = column = row = 0;
             break;
         case 0xc1:
-            /* Tile rows 0-4 hold the status display. */
-            if (placed || !a || b < 6)
+            /* Tile rows 0-4 hold the status display; `top_row` is lower only
+             * when the stock string opens a box there itself. */
+            if (placed || ((!a || b < top_row) && !(own && a == stock[1] && b == stock[2])))
                 return 0;
             placed = 1;
             break;
         case 0xc7:
             /* Two tiles per column and row, one border tile on each side,
              * and a spare tile row for the continuation cursor. */
-            if (!placed || a < 2 || !b || out->t[out->n - 1].code != 0xc1 ||
-                out->t[out->n - 1].a[0] + 2 * a > 30 || out->t[out->n - 1].a[1] + 2 * b > 26)
+            if (!placed || a < 2 || !b || out->t[out->n - 1].code != 0xc1)
+                return 0;
+            if ((!out->t[out->n - 1].a[0] || out->t[out->n - 1].a[0] + 2 * a > 30 ||
+                 out->t[out->n - 1].a[1] + 2 * b > 26) &&
+                !(own && out->t[out->n - 1].a[0] == stock[1] && out->t[out->n - 1].a[1] == stock[2] &&
+                  a == stock[4] && b == stock[5]))
                 return 0;
             placed = 0;
             width = 2 * a;
@@ -301,15 +320,21 @@ static void GaiaApplyAuthored(FILE *file, const Rom *stock, const Structure *str
         Item whole = {0}, part = {0};
         /* A stock string with no text only sets up a box for later strings. */
         Toks original = {0};
-        int textless = terminal == CMD_RET && stock->rom[offset] == 0xc1 &&
-            Decode(stock, offset, &original, 0, 0);
-        for (int i = 0; i < original.n; ++i)
+        const int decoded = Decode(stock, offset, &original, 0, 0);
+        int textless = terminal == CMD_RET && stock->rom[offset] == 0xc1 && decoded;
+        unsigned top_row = 6;
+        for (int i = 0; i < original.n; ++i) {
             textless &= original.t[i].type != T_GLYPH;
+            if (original.t[i].type == T_CMD && original.t[i].code == 0xc1 &&
+                original.t[i].a[1] >= 2 && original.t[i].a[1] < top_row)
+                top_row = original.t[i].a[1];
+        }
         free(original.t);
         const uint8_t *shared = stock->rom[offset] == CMD_PRT && span > 4 ? stock->rom + offset + 1 : NULL;
         if ((prefix || GaiaAuthoredTokens(cursor, &whole.toks, terminal, textless, shared,
-                                          stock->rom + offset, span)) &&
-            (!entry || GaiaAuthoredTokens(second, &part.toks, terminal, 0, NULL, stock->rom + offset, span))) {
+                                          stock->rom + offset, span, top_row)) &&
+            (!entry || GaiaAuthoredTokens(second, &part.toks, terminal, 0, NULL, stock->rom + offset, span,
+                                          top_row))) {
             const uint32_t address = prefix ? 1 : GaiaAuthoredPlace(pack, fill, &whole);
             const uint32_t inner = address && entry ? GaiaAuthoredPlace(pack, fill, &part) : 0;
             if (address && (!entry || inner)) {

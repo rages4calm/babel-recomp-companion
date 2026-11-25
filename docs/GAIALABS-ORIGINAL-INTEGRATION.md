@@ -329,6 +329,49 @@ layout, 9 of them because the box they print into could not be proven.
 Most of those are item-use messages printed by the inventory code.
 `visual-fullgame-041/breaks.json` lists them with the reason.
 
+### Authored layout first (pack v65)
+
+The importer now tries the authored transcription for every declaration and
+keeps the earlier stock-window layout only when the converter refuses the
+string. 1,087 of the 1,133 rows are authored. The 46 others are listed with
+their reasons in the importer's summary (`authored_unsupported`); the
+largest group, 23, print into a box whose calling script could not be
+proven.
+
+- **Speaker colours.** GaiaLabs' speaker themes (templates `16`-`24`) are
+  written out as the stock colour commands, with the colours read from the
+  pinned `dialog_template_table.asm`.
+- **Copies.** A stock string that is byte-identical to a declared one (the
+  five lithograph notices and `03938F`) gets the same row.
+- **Scenes without the status display.** The ending opens its top boxes two
+  rows higher than the rest of the game. Authored top boxes follow the row
+  the stock string uses.
+- **The lesson card (`09DD10`).** Its stock box runs to the edge of the
+  picture. The string whose stock version opens that box may open it; no
+  other string may.
+- **An authored END where the stock script goes on.** The page waits and
+  clears as the stock page does, and the script continues unchanged.
+- **Timed cards.** A card that only pauses cannot wait for a button in the
+  middle of a sentence, so a six-row authored page gets a six-row box
+  instead of a second page. The summed pauses may differ from stock by up
+  to a fifth, because GaiaLabs pages the epilogue differently; a larger
+  difference keeps the earlier layout (two strings).
+
+Checks: 1,058 rows of pack v61 went through the in-game page check with
+seven known host limits (slow typing, BCD digits, the Jeweler's shared
+boxes). The 58 rows changed since were checked the same way where the host
+can show them. The epilogue and ending strings cannot be hosted, so scenes
+`E5` (both states), `90`, `F0` and `89` were replayed with no input: every
+card of `0BD5A0`, `0BD70E`, `0BD740`, `0BD9FA`, `0BDC95`, `0BDD34`,
+`0BDE02`, `0BDED4`, `09DD10` and `0BE075` was read in order and each scene
+went on to the next one. Receipts are in `visual-fullgame-041/recheck`,
+`recheck64` and `ending`.
+
+About 166 stock strings have no GaiaLabs declaration at all (item-use,
+system and save-menu messages among them) and stay in the original
+English. 26 item pickup lines that differ from stock only trivially are
+deliberately not imported.
+
 ### Inventory, room titles and map lettering
 
 Original v41 applies all 124 approved console menu entries and all 64 named
@@ -431,11 +474,26 @@ shows no prompt, and a save state made while walking restores position and
 heading. Not looked at: the South Cape, Itory, Freejia and Diamond Mine
 regions, an in-game save from the map, the scripted flights with the
 filter on, and play by a person. Known rough edges that remain: the
-camera sits close to the ground, about six seconds pass without control
-after leaving a town, the area above the horizon and past the map edge is
-black, only the nearest open destination is named, and collision follows
-whole 16-pixel cells. The review and pictures are in
+collision follows whole 16-pixel cells, and the sky is a plain band. The review and pictures are in
 `visual-fullgame-041/worldmap`.
+
+**Enhanced world map** (`iog.enhancements/world_map`, on by default) is
+one switch in the launcher's Cheats and Mods page and in the in-game
+settings. Off is the stock walking view, byte-identical at the same pose.
+On adds: the filtered plane above; a camera about twice as high (camera
+words 88/507 against 177/1019, same ratio, so the horizon stays put); a
+gold pin and name over every destination the current stage's stock menu
+lists, grey when the story still holds it shut; a small north-up minimap
+with the player's heading; control about 1.6 seconds sooner after leaving a
+town (the 93-tick tilt is skipped and the camera eases down while walking);
+the map's own sea colour past the map edge with haze at the horizon instead
+of black; and a bordered prompt plate with the pad's own button glyph in
+the chosen prompt style. `IOG_WORLD_MAP_ENHANCED=0/1` overrides the setting
+for tests. The seven walking trips give the same scene changes and final
+positions on and off, and the closed Mt. Temple and Itory gates still
+hold. Not looked at with the setting on: regions other than Watermia/Euro
+and Itory, the scripted flights, frame cost of the overlay, and play by a
+person.
 
 Build the collision data from a local checkout of the pinned GaiaLabs source.
 

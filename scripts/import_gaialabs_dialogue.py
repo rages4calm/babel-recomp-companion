@@ -40,83 +40,10 @@ TAIL_PREFIXES = {
     "09BE70": (4, "[TPL:2]"),
 }
 
-# These strings keep the authored pages, rows and box sizes. Most open their
-# own boxes; the others return to a script that continues in the same box,
-# or print into the box their calling script opened. gaia_authored_dialogue
-# checks each one against the stock renderer and its script. The list is
-# every string the stock-window passes below could not place, plus every
-# string they placed on more pages than GaiaLabs wrote or with a page of
-# one or two orphaned words, plus every string with a second entry point.
-# The paired-entry pass ended the first part with a return, so a script that
-# prints the whole string stopped there (05B9AF left an empty box open).
-AUTHORED = frozenset((
-    "00D7C2", "00D848", "038517", "03861F", "038772", "03893E", "038A46", "038C76", "038CDB", "038D17",
-    "038D85", "038DDA", "03926F", "03930B", "039514", "039696", "039925", "039984", "039A35", "039D0E",
-    "039E1A", "039F35", "039F6B", "0482D7", "04840F", "0484B7", "0485B6", "04871E", "0487BF", "0487F5",
-    "0488FB", "04899E", "048AE9", "048C01", "048CDB", "048D3A", "048E00", "048F9D", "048FEF", "04907B",
-    "049110", "049193", "0491ED", "04923D", "04941D", "0494B1", "04953E", "0495EB", "049685", "04977F",
-    "049828", "0499F1", "049ABB", "049B18", "049B82", "049BE5", "049D29", "049F09", "049F71", "049FBC",
-    "04A04C", "04A0D7", "04A15A", "04A3BB", "04A4CC", "04A746", "04A7E1", "04A81F", "04A945", "04AA20",
-    "04AAAD", "04AC77", "04AD69", "04ADCA", "04AE61", "04AEC1", "04B00F", "04B1CB", "04B23F", "04B3DF",
-    "04B612", "04B652", "04B77C", "04B7DE", "04B9F2", "04BA55", "04BB89", "04BD1B", "04BD5F", "04BD9B",
-    "04BE87", "04BF35", "04C067", "04C0AF", "04C115", "04C229", "04C271", "04C2C2", "04C379", "04C460",
-    "04C58D", "04C66F", "04C7BF", "04C818", "04CA0D", "04CA41", "04CAE1", "04CC96", "04CCE4", "04CDC0",
-    "04CE4A", "04CFDB", "04D012", "04D114", "04D141", "04D1BE", "04D37A", "04D42F", "04D4B1", "04D679",
-    "04D732", "04D78A", "04D87D", "04D8D2", "04DB62", "04DC5E", "04DCBD", "04DD20", "04DDC7", "04DE32",
-    "04DE81", "04DEC9", "04DF22", "04DF96", "04E033", "04E124", "04E1F6", "04E223", "04E3D5", "04E440",
-    "04E46F", "04E53C", "04E6E6", "04E9FF", "04EA77", "04EC76", "04ED19", "04EDF4", "04EFAE", "04EFDF",
-    "04F11E", "04F210", "04F277", "04F53C", "04F5EA", "04F68F", "04FA25", "058260", "0582CC", "05834D",
-    "058394", "0584BC", "0584FB", "0586CC", "05870A", "058759", "0587A4", "05883E", "058940", "0589DB",
-    "058A30", "058BD7", "058C21", "058DDA", "058E4A", "058F53", "05902D", "059157", "0593DA", "0594B8",
-    "0595B4", "0595E6", "0596C1", "059D15", "059D24", "059D33", "059D91", "059DCD", "059E6F", "059EE3",
-    "059F5A", "05A03C", "05A332", "05A405", "05A5AB", "05A5E3", "05A6EA", "05A723", "05A770", "05A853",
-    "05AADD", "05ABC6", "05AEA3", "05AF2F", "05B100", "05B14B", "05B16F", "05B225", "05B2DC", "05B60C",
-    "05B688", "05B6E8", "05B7E6", "05B8CD", "05B90C", "05B9AF", "05BA1D", "05BA62", "05BAC2", "05BB1C",
-    "05BB6F", "05BC00", "05BC6F", "05BD10", "05BDBE", "05BE24", "05BE6B", "05BF04", "05BFDE", "05C059",
-    "05C094", "05C2BE", "05C32F", "05C38B", "05C3BB", "05C40E", "05C4CD", "05C571", "05C67C", "05C70B",
-    "05C74D", "05CAEC", "05CB93", "05CBF7", "05CDBC", "05D0E3", "05D1AE", "05D2DA", "05D377", "05D40C",
-    "05D5AC", "05D6BE", "05D819", "05D9C1", "05DA04", "05DAC7", "05DB1C", "05DB9C", "05DD04", "05DDDF",
-    "05DE46", "05DFC3", "05DFDC", "05E0C1", "05E227", "05E2CE", "05E419", "05E4F9", "05E55C", "05E6C0",
-    "05E721", "05E753", "05E811", "05E8F7", "05E9F0", "05EA25", "05EB2E", "05EB94", "05EC5B", "05ED60",
-    "05EDA1", "05EE15", "05EE7C", "05EF2D", "05EF98", "05F0C8", "05F160", "05F1C3", "05F278", "05F371",
-    "05F46E", "05F9DE", "05FA59", "06805C", "068230", "06834A", "0683EB", "0684F5", "06856E", "0685D3",
-    "068721", "068765", "0688B6", "068A1B", "068B22", "068BB6", "068C33", "068CBD", "068CF6", "068D29",
-    "068D7A", "068DD0", "068E20", "068E67", "068F02", "068F53", "068FC0", "069167", "06930A", "0693B7",
-    "0696A5", "0696D5", "0697C9", "0698D2", "069CB7", "069F45", "069FBE", "06A0EC", "06A154", "06A19E",
-    "06A1C9", "06A26D", "06A38D", "06A57F", "06A7C7", "06AA4C", "06AA89", "06AB53", "06ACB9", "06AD22",
-    "06AD64", "06AF03", "06B069", "06B0BC", "06B10B", "06B195", "06B250", "06B3EC", "06B57D", "06B606",
-    "06B67B", "06B86E", "06BAFA", "06BB50", "06BC5C", "06BD1A", "06BD4A", "06BE1F", "06BE85", "06BF0A",
-    "06BF7C", "06BFBE", "06C0D2", "06C23C", "06C2BD", "06C2F8", "06C417", "06C568", "06C6A0", "06C714",
-    "06C799", "06C7EF", "06C845", "06C981", "06C9BF", "06CA5C", "06CB5E", "06CC22", "06CD9A", "06CDD4",
-    "06CEF2", "06CF5E", "06D063", "06D0C6", "06D278", "06D364", "06D5ED", "06D87B", "06DA14", "06DA6B",
-    "06DB4F", "06DC97", "078139", "0782BD", "07842C", "07846A", "0784CF", "0785C9", "078607", "078674",
-    "07879B", "0787DA", "07881B", "078881", "0788E0", "0789C7", "078ABA", "078AF8", "078B3B", "078B73",
-    "078C12", "078C59", "078CC5", "078D02", "078E01", "078E2D", "07927C", "0792F7", "0793B6", "079401",
-    "079422", "07944D", "079520", "0795B9", "079610", "0796A9", "079704", "0797E6", "07986C", "0798E8",
-    "079B30", "079C81", "07A0A7", "07A255", "07A2BE", "07A366", "07A475", "07A4C8", "07A506", "07A613",
-    "07A6AF", "07A811", "07A833", "07AA34", "07AAA3", "07ABC4", "07AC08", "07AD31", "07AD63", "07ADEA",
-    "07AEDE", "07AFA7", "07B0A2", "07B0E1", "07B108", "07B174", "07B277", "07B2E4", "07B329", "07B3C2",
-    "07B412", "07B550", "07B611", "07B731", "07B824", "07B8AD", "07B9B1", "07BA2E", "07BBB0", "07BC42",
-    "07BCAA", "07C011", "07C0F3", "07C160", "07C182", "07C1B6", "07C1DC", "07C337", "07C38F", "07C480",
-    "07C4AA", "07C4D0", "07C509", "07C56C", "07C60A", "07C63F", "07C6FE", "07C7BA", "07C970", "07C9DB",
-    "07C9FF", "07CAB0", "07CAE0", "07CB09", "07CBE3", "07CC0A", "07CC88", "07CD64", "07CE28", "07CE54",
-    "07CF1F", "07D0DC", "07D167", "07D196", "07D1D3", "07D207", "07D3F6", "07D43E", "07D479", "07D4A9",
-    "07D61E", "07D6C2", "07D764", "07D892", "07D8D2", "07DA00", "07DA3D", "07DAC1", "07DBE9", "07DC37",
-    "07DC63", "07DD70", "07DDD2", "07DF7A", "07E092", "07E10A", "07E259", "07E31B", "07E3B5", "07E4D3",
-    "07E531", "07E61D", "07E6AD", "07E72A", "07E77E", "088020", "0881E2", "08826B", "0882C7", "08830F",
-    "08839D", "0884FB", "0885DC", "08885C", "08890E", "088B32", "088BD8", "088D1F", "088E0F", "088F15",
-    "0891A2", "08942A", "0895C9", "08963C", "0896F9", "08971E", "089807", "089A65", "089C5B", "089E2E",
-    "08A096", "08A2EC", "08A4EF", "08A51E", "08A580", "08A700", "08A73C", "08A819", "08A8B7", "08A91E",
-    "08A99F", "08A9EE", "08AAAC", "08AB34", "08AB99", "08AC92", "08AD0C", "08AE0E", "08B34E", "08B3BC",
-    "08B4C3", "08B4F0", "08B51D", "08B54A", "08B70D", "08BA5A", "08BA7D", "08BC55", "08BCBC", "08BEA9",
-    "08BF8F", "08BFC7", "08C259", "08CCC4", "08CD0B", "08CDDA", "08CE60", "08D1E0", "08D267", "08DE43",
-    "08E4A4", "08E722", "08E853", "08EBDF", "08EC66", "08ED6D", "08F157", "08F4B1", "08FA31", "08FBC8",
-    "0981F4", "0984B1", "098CAA", "098EB8", "099068", "09923A", "0992EC", "09938D", "09943E", "0994E6",
-    "09974E", "099866", "099914", "099952", "099B8F", "099C95", "099D16", "099DE5", "099F2A", "09BC51",
-    "09BD58", "09C06C", "09C0A8", "09C226", "09C410", "09C5D5", "09C7AE", "09C8B3", "09CAE5", "09CCD0",
-    "09CE01", "09CF59", "09CFED", "09D04C", "09D1FC", "09D2D0", "09D30F", "09D4DC", "09D574", "0A89BF",
-    "0AA874", "0AA97D", "0ACF4A", "0AFB45", "0B80B5", "0BDC95",
-))
+# Every string is first transcribed with the pages, rows, box sizes and
+# speaker colours GaiaLabs wrote (gaia_authored_dialogue checks each one
+# against the stock renderer and its script). The stock-window conversions
+# below remain for the strings that transcription does not support.
 
 # Slips in the pinned source text, found while replaying the scenes. Each is
 # applied only to its own string and must match exactly, so a corrected
@@ -141,7 +68,7 @@ JEWELER_MENU = "08D0F1"
 JEWELER_MENU_HEAD = ("[TPL:16][TPL:F]", "[DEF][PAL:0][::][CLR]")
 # The reward checks run straight after that reply, so the Herb and Dark
 # Friar reward messages print into the same box.
-CALLER_BOXES = {offset: gaia_authored_dialogue.DEFAULT_BOX for offset in ("08D20F", "08D2D0", "08D4E3")}
+CALLER_BOXES = {offset: gaia_authored_dialogue.DEFAULT_BOX for offset in ("08D20F", "08D2D0", "08D4E3", "08D5AE")}
 
 # GaiaLabs ends this crew member's line by jumping to the second part of
 # 058394, Will's aside. A jump cannot leave an overlay bank, and the stock
@@ -552,6 +479,9 @@ def main():
     if rom is not None and len(rom) != 0x200000:
         parser.error("the ROM must be the unheadered 2 MiB USA image")
     authored = 0
+    unsupported = {}
+    if rom is not None:
+        gaia_authored_dialogue.load_themes(read_source(args.checkout, "modules/base/asm/dialog_template_table.asm"))
     jeweler = {}
     deferred = []
     # Strings another string prints through a lookup table and then ends on.
@@ -574,9 +504,31 @@ def main():
                 for member in hosted[call[1]]:
                     table_boxes[member] = box if table_boxes.get(member, box) == box else None
     sources = {}
+    declarations = []
     for chapter in sorted(set(chapters)):
-        source = read_source(args.checkout, f"{PATCHES}/chapter{chapter:02d}.patch.asm")
-        for line in source.splitlines():
+        declarations.extend(read_source(args.checkout, f"{PATCHES}/chapter{chapter:02d}.patch.asm").splitlines())
+    if rom is not None:
+        # The USA ROM sometimes holds one copy of a string per actor (the six
+        # Pyramid slates). GaiaLabs points them all at the first copy and
+        # declares only that one, so each byte-identical copy gets the same
+        # declaration here.
+        declared = {match[1]: line for line in declarations
+                    if line.startswith("dialogstring_") and (match := LABEL.fullmatch(line))}
+        copies = {}
+        for offset in entries:
+            try:
+                data = gaia_authored_dialogue.decode_stock(rom, int(offset, 16))[1]
+            except (gaia_authored_dialogue.Unsupported, ValueError):
+                continue
+            if len(data) >= 8:
+                copies.setdefault(data, []).append(offset)
+        for group in copies.values():
+            first = next((offset for offset in sorted(group) if offset in declared), None)
+            for offset in sorted(group):
+                if first is not None and offset not in declared:
+                    declarations.append(declared[first].replace(first, offset, 1))
+    for _ in (0,):
+        for line in declarations:
             if not line.startswith("dialogstring_"):
                 continue
             match = LABEL.fullmatch(line)
@@ -597,7 +549,7 @@ def main():
             if rom is not None and offset in JEWELER_ROWS + (JEWELER_FRAME,):
                 jeweler[offset] = content
                 continue
-            if offset in AUTHORED | {JEWELER_MENU} | set(CALLER_BOXES) and rom is not None and offset in entries:
+            if rom is not None and offset in entries:
                 label, marker = entries[offset]
                 try:
                     stock, data = gaia_authored_dialogue.decode_stock(rom, int(offset, 16))
@@ -619,7 +571,7 @@ def main():
                         stream = "[MRK]" + "|".join(gaia_authored_dialogue.transcribe_entry(
                             content, rom, int(offset, 16), marker, names))
                 except gaia_authored_dialogue.Unsupported as error:
-                    excluded[offset] = str(error)
+                    unsupported[offset] = str(error)
                 else:
                     signature = gaia_authored_dialogue.stock_signature(data)
                     rows.append((offset, label, f"[RAW:{signature:08X}]{stream}"))
@@ -690,6 +642,7 @@ def main():
             stream.write(f"{kind}_{address}\t{content}\n")
     print(json.dumps({"revision": REVISION, "source_rows": len(seen), "output_rows": len(rows),
                       "authored_rows": authored,
+                      "authored_unsupported": dict(Counter(unsupported.values())),
                       "interface": dict(Counter(kind for kind, _, _ in interface)),
                       "excluded": dict(Counter(excluded.values()))}, sort_keys=True))
 
