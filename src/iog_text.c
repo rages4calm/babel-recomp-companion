@@ -4014,6 +4014,7 @@ static void GaiaLateChapter(FILE *file, const Rom *stock, const Structure *struc
 #include "iog_ability_notice.inc"
 #include "iog_jeweler_chapter.inc"
 #include "iog_selector_reply.inc"
+#include "iog_authored_dialogue.inc"
 
 IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
                              const char *structure_path, const char *dialogue_path)
@@ -4118,6 +4119,8 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
             pack->strings_total += !supplement;
             if (label->off == 0x0bd558 && !strncmp(text, "[LATE][EXT]", 11))
                 continue;
+            if (!strncmp(text, "[RAW:", 5))
+                continue;       /* Applied by GaiaApplyAuthored. */
             if (!strncmp(text, "[PAIR]", 6)) {
                 if (supplement == kGaiaPairedEntry)
                     pack->strings_translated += GaiaPairedEntry(&stock, &structure, li, pack,
@@ -4246,6 +4249,7 @@ IogPack *IogTextBuildGaiaPack(const uint8_t *usa, size_t usa_size,
         GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaCompileJewelerCount);
         GaiaLateChapter(file, &stock, &structure, pack, &called_fill, GaiaTownArrival);
         GaiaApplyNearReplies(file, &stock, &structure, pack, &called_fill);
+        GaiaApplyAuthored(file, &stock, &structure, pack, &called_fill);
     }
     fclose(file);
     if (!malformed)

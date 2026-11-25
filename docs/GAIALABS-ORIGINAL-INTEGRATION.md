@@ -6,9 +6,9 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **1,036 of 1,138** chapter-dialogue declarations in the
+The import now covers **1,077 of 1,138** chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer supplies 1,112 candidates. The runtime keeps stock text when
+The importer supplies 1,117 candidates. The runtime keeps stock text when
 a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
 Castle dialogue and the Dao Snake Panic score response. New formatted
@@ -133,10 +133,60 @@ the original waits while fitting the approved text in five visible rows.
 Controller checks exercise Kara's travel reply and Neil's No branch
 followed by Yes. All 1,235 v46 patches retain their bytes and addresses.
 
-102 chapter declarations still use stock behavior. Of these, 91 contain
-visible or dynamic text. Pending work includes dialogue boxes whose caller
-bounds are unknown, shared bank-relative targets, and timed sequences whose
-source and stock beats differ.
+Original v48 adds 41 entries with a different method. Earlier passes fitted
+new prose into the stock string's own boxes one rule at a time. The remaining
+self-contained dialogues differ from stock mainly in their page breaks and
+box sizes, so `scripts/gaia_authored_dialogue.py` keeps the pages, rows and
+boxes GaiaLabs authored and transcribes them for the stock renderer:
+
+- Stock opens the box before it selects the speaker, because opening a box
+  resets the text colours and voice. The transcription reorders the two and
+  selects the speaker again after every box it opens.
+- Stock templates `$08`-`$0F` have the same row counts as the GaiaLabs ones.
+  The two five-row GaiaLabs templates become explicit boxes. The tall top
+  box starts at the stock tile row 6, because rows 0-4 hold the status
+  display and closing a box there would erase it.
+- Opening a box does not erase the previous one. A box that does not cover
+  the open box gets a close first.
+- GaiaLabs speaker themes above `$15` do not exist in stock. Olman, the
+  vampires and the glass-game player use their stock speaker; place themes
+  use the plain narration colours.
+- The stock font has no ellipsis tile. A row that passes 26 columns once
+  ellipses and names are spelled out is wrapped again, and its box grows by
+  the row it needs.
+
+The module carries a model of the stock renderer (box origin and size,
+cursor row and column, input waits). Every transcribed string must pass it:
+all text inside a box the string opened, no row past the box width, no page
+past the box height, and the dialogue ended by `[END]`. Only stock strings
+that open their own box and end the dialogue qualify. Strings with entry
+markers, jumps, shared print calls, table lookups or a returning terminal
+stay with the earlier passes.
+
+Each row carries a signature of the USA bytes it was derived from. The
+runtime pass (`src/iog_authored_dialogue.inc`) applies a row only when
+those bytes are present, and it follows the cursor again before patching.
+It runs after every earlier pass. All 1,239 v47 patches and the bytes of
+all 13 overlay banks are unchanged.
+
+The 41 strings were also shown by the running game. Each one was bound in
+turn to the Incan Statue A notice, which one button press reaches from a
+retained checkpoint, and the text layer was read back from memory while a
+virtual controller advanced the pages. All 223 pages appeared in order with
+the expected box rectangle and rows at square-pixel 1.5×, and the box was
+closed afterwards. That first run found the status-display overlap noted
+above. This check exercises the renderer with the exact installed bytes. It
+does not replay the 41 scenes themselves, so their surrounding scripts and
+actors have not been observed with the new text.
+
+61 chapter declarations still use stock behavior. Ten of them have nothing
+to translate: five are a lone box close that is identical in both versions,
+and five are jump stubs with no text. One more only widens the Jeweler's
+list box. The other 50 are returning fragments and choices, strings with a
+second entry point, jumps to shared text, and dialogue printed into a box
+the calling script opened. Their caller's box has to be identified before
+the same transcription can be used. The list is in
+`visual-fullgame-040/dialogue/v48-residual.json`.
 
 ### Inventory, room titles and map lettering
 

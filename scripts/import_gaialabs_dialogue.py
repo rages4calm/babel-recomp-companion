@@ -9,6 +9,8 @@ import re
 import subprocess
 import textwrap
 
+import gaia_authored_dialogue
+
 
 REVISION = "754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc"
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +38,17 @@ TAIL_PREFIXES = {
     "049B82": (2, "[PAU:40]"),
     "09BE70": (4, "[TPL:2]"),
 }
+
+# Strings that open their own boxes keep the authored pages, rows and box
+# sizes. gaia_authored_dialogue checks each one against the stock renderer.
+AUTHORED = frozenset((
+    "039D0E", "04953E", "049B18", "049BE5", "04A0D7", "04B00F", "04B652", "04BA55",
+    "04C115", "04D141", "04D732", "04D8D2", "05AADD", "05B225", "05EA25", "05F160",
+    "0698D2", "06A57F", "06AB53", "06B250", "06B67B", "06BB50", "079520", "07ADEA",
+    "07B0E1", "07B108", "07B9B1", "07BA2E", "07BBB0", "07BCAA", "07D6C2", "07DC63",
+    "07DDD2", "08830F", "089C5B", "08BFC7", "08F157", "0981F4", "098CAA", "09C7AE",
+    "0AFB45",
+))
 
 INTERFACE_FILES = (
     ("menu", "ItemStrings", r"^consolestring_([0-9A-F]{6})!\s+\|([^|]*)\|"),
@@ -413,6 +426,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("checkout", type=Path, help="local IOGRetranslation git checkout")
     parser.add_argument("output", type=Path, help="new TSV path under the project's .local directory")
+    parser.add_argument("--rom", type=Path, default=ROOT / "Illusion of Gaia (USA).sfc",
+                        help="verified USA ROM; authored pages are omitted when it is absent")
     parser.add_argument("--chapters", nargs="+", type=int,
                         help="import only the selected chapters and omit interface text")
     args = parser.parse_args()
@@ -429,6 +444,10 @@ def main():
     tails = stock_tail_labels(structure)
     pairs = stock_pair_labels(structure)
     rows, excluded, seen = [], {}, set()
+    rom = args.rom.read_bytes() if args.rom.is_file() else None
+    if rom is not None and len(rom) != 0x200000:
+        parser.error("the ROM must be the unheadered 2 MiB USA image")
+    authored = 0
     for chapter in sorted(set(chapters)):
         source = read_source(args.checkout, f"{PATCHES}/chapter{chapter:02d}.patch.asm")
         for line in source.splitlines():
@@ -441,6 +460,17 @@ def main():
             if offset in seen:
                 raise ValueError(f"Duplicate replacement at {offset}")
             seen.add(offset)
+            if offset in AUTHORED and rom is not None and offset in labels:
+                try:
+                    stock, data = gaia_authored_dialogue.decode_stock(rom, int(offset, 16))
+                    stream = gaia_authored_dialogue.transcribe(content, stock, names)
+                except gaia_authored_dialogue.Unsupported as error:
+                    excluded[offset] = str(error)
+                else:
+                    signature = gaia_authored_dialogue.stock_signature(data)
+                    rows.append((offset, labels[offset], f"[RAW:{signature:08X}]{stream}"))
+                    authored += 1
+                    continue
             if offset not in labels:
                 if offset in tails:
                     try:
@@ -477,6 +507,7 @@ def main():
         for kind, address, content in interface:
             stream.write(f"{kind}_{address}\t{content}\n")
     print(json.dumps({"revision": REVISION, "source_rows": len(seen), "output_rows": len(rows),
+                      "authored_rows": authored,
                       "interface": dict(Counter(kind for kind, _, _ in interface)),
                       "excluded": dict(Counter(excluded.values()))}, sort_keys=True))
 

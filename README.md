@@ -20,7 +20,7 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
   [Visual coverage and renderer direction](docs/VISUAL-COVERAGE.md)
 - **World travel and local maps** combine GaiaLabs' walkable world map
   with Companion's scenery-based area map, explored terrain, discovered
-  markers and radar. Locally prepared packs also supply 1,036 retranslated
+  markers and radar. Locally prepared packs also supply 1,077 retranslated
   chapter entries, all 124 approved menu strings, and all 64 named room
   titles.
   [GaiaLabs integration](docs/GAIALABS-ORIGINAL-INTEGRATION.md) ·

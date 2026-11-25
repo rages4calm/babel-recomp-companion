@@ -1,6 +1,6 @@
 # Illusion of Gaia Companion — handoff
 
-Updated November 20, 2026. Development version `0.1.0-dev.1`.
+Updated November 25, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
 Owner priority changed November 13: fix presentation across EVERY zone before
@@ -234,6 +234,32 @@ Neil branch replies. It covers 1,036 of 1,138 chapter declarations. The
 remaining 102 are listed in `visual-fullgame-039/dialogue/v47-residual.json`.
 The current candidate stays internal while the remaining localization
 and continuous campaign check are open.
+
+Batch 040's v48 adds 41 chapter declarations for 1,077 of 1,138. It uses
+a new path: `scripts/gaia_authored_dialogue.py` transcribes the pages, rows
+and box sizes GaiaLabs authored and checks each string against a model of
+the stock renderer. `src/iog_authored_dialogue.inc` applies the rows after
+every earlier pass. [The method and its limits](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue)
+are in the integration notes. All 1,239 v47 patches and overlay bank bytes
+are unchanged. The running game drew all 223 pages of the 41 strings with
+the expected boxes at 1.5×, each bound in turn to the Incan Statue A
+notice. The 41 scenes themselves have not been replayed, and continuous
+campaign qualification is still open. Keep the owner playtest selector on
+the previous build. The test executable is `visual-fullgame-040/cb-v48b`
+and the pack is `visual-fullgame-040/dialogue/v48.tsv`. The 61 remaining
+declarations are in `visual-fullgame-040/dialogue/v48-residual.json`; ten
+of them need no change. `engine-pages.py` in the same folder is the page
+check, and it works for any self-contained string.
+
+SNESRecomp main is 70 commits past the pin (`4348bdb`, November 24). A
+read-only inventory found 71 locally modified and 129 added vendor files.
+Of 35 files changed on both sides, 21 merge textually and 14 need a manual
+merge, `runner/src/desktop/host_main.c` most of all. The range fixes
+SNESRecomp #293 and carries the upstream mosaic fix for #292, which the
+maintainer asked this project to confirm. It also moves save states to
+version 12 and makes `runner.cmake` refuse generated dispatch files without
+`g_aot_resume_count`, so the private native graphs must be regenerated.
+The pin has not been moved.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.

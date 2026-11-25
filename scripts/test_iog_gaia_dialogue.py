@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import subprocess
 
+import gaia_authored_dialogue as authored
 from import_gaialabs_dialogue import convert, convert_extended, convert_return
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -777,6 +778,52 @@ static void CheckNearReplies(void)
     free(bytes);
 }
 
+static void CheckAuthoredPages(void)
+{
+    static const char *accepted[] = {
+        "[TPL:0A][TPL:01]Kara: Hello.[N]Second row.[FIN]Next page.[PAL:00][END]",
+        "[TPL:08]One row.[WAI][TPL:0A]Three[N]rows[N]here.[END]",
+        "[DLG:03,0F][SIZ:0D,05]1[N]2[N]3[N]4[N]5[FIN][CLD][PAU:0F][DEF][TPL:13][DLY:02]Total [BCD:2,0AB0].[END]",
+        "[TPL:0C]12345678901234567890123456[END]",
+    };
+    static const char *refused[] = {
+        "No box.[END]",
+        "[TPL:0C]One[N]two.[END]",                       /* second row in a one-row box */
+        "[TPL:0C]123456789012345678901234567[END]",       /* 27 columns */
+        "[TPL:0A]Closed.[FIN][CLD]Text after close.[END]",
+        "[TPL:10]Stock has no tall template.[END]",
+        "[TPL:12]Not a stock speaker.[END]",
+        "[DLG:03,14][SIZ:0D,05]Leaves the screen.[END]",
+        "[DLG:03,04][SIZ:0D,05]Covers the status display.[END]",
+        "[SIZ:0D,03]No position.[END]",
+        "[TPL:0A]No terminal.",
+        "[TPL:0A]Returns.[RET]",
+        "[TPL:0A]Jumps.[JMP:1234]",
+        "[TPL:0A][END]",
+        "[TPL:0A]Text.[END]trailing",
+    };
+    for (size_t i = 0; i < sizeof(accepted) / sizeof(accepted[0]); ++i) {
+        Toks tokens = {0};
+        if (!GaiaAuthoredTokens(accepted[i], &tokens))
+            fprintf(stderr, "refused %s\n", accepted[i]);
+        CHECK(tokens.n && tokens.t[tokens.n - 1].code == CMD_END);
+        free(tokens.t);
+    }
+    for (size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i) {
+        Toks tokens = {0};
+        if (GaiaAuthoredTokens(refused[i], &tokens))
+            fprintf(stderr, "accepted %s\n", refused[i]);
+        CHECK(!GaiaAuthoredTokens(refused[i], &tokens));
+        free(tokens.t);
+    }
+    /* The signature binds a row to the exact stock bytes it was made for. */
+    static const uint8_t stock_bytes[] = {0xd3, 0x40, 0xcf, 0x41, 0xc0};
+    const Rom stock = {.rom = stock_bytes, .size = sizeof(stock_bytes)};
+    CHECK(StringSpan(&stock, 0) == sizeof(stock_bytes));
+    CHECK(GaiaStockSignature(&stock, 0, sizeof(stock_bytes)) == AUTHORED_SIGNATURE);
+    CHECK(GaiaStockSignature(&stock, 0, sizeof(stock_bytes) - 1) != AUTHORED_SIGNATURE);
+}
+
 int main(void)
 {
     const uint8_t plain[] = {0xc2, 9, 0x40, CMD_END};
@@ -828,10 +875,76 @@ int main(void)
     CheckTimedChapterNotices();
     CheckAbilityNotice();
     CheckNearReplies();
+    CheckAuthoredPages();
     puts("Passed Gaia stock-window and speaker checks");
     return 0;
 }
 """
+
+
+def check_authored_pages():
+    names = ["Will", "Kara", "Lilly"]
+    rom = bytes((0xC2, 0x0A, 0xC2, 0x01, 0x40, 0xCB, 0x41, 0xCF, 0xC1, 0x03, 0x06, 0xC7, 0x0D, 0x03,
+                 0xC6, 0x02, 0x00, 0xB0, 0x0A, 0xC9, 0x1E, 0xC3, 0x00, 0xC0))
+    stock, data = authored.decode_stock(rom, 0)
+    assert stock == "[TPL:0A][TPL:01]A[N]B[FIN][DLG:03,06][SIZ:0D,03][BCD:2,0AB0][PAU:1E][PAL:00][END]"
+    assert data == rom
+    # Stock opens the box first: opening resets the speaker's colours and voice.
+    assert authored.transcribe("[TPL:1][TPL:9][NAM:1]: Hi.[N]Row.[END]", stock, names) == (
+        "[TPL:09][TPL:01]Kara: Hi.[N]Row.[PAL:00][END]")
+    # A larger box at the same origin covers the old one; a smaller one needs a close.
+    assert authored.transcribe("[TPL:1][TPL:9]A[FIN][TPL:B]B[FIN][TPL:8]C[END]", stock, names) == (
+        "[TPL:09][TPL:01]A[FIN][TPL:0B][TPL:01]B[FIN][CLD][TPL:08][TPL:01]C[PAL:00][END]")
+    # Narration after an authored close names no speaker; place themes are plain.
+    assert authored.transcribe("[TPL:1][TPL:9]A[FIN][CLD][TPL:19][TPL:9]B[END]", stock, names) == (
+        "[TPL:09][TPL:01]A[FIN][CLD][TPL:09]B[PAL:00][END]")
+    assert authored.transcribe("[TPL:1][TPL:9]A[FIN][TPL:19]B[END]", stock, names) == (
+        "[TPL:09][TPL:01]A[FIN][PAL:00][SFX:10]B[PAL:00][END]")
+    # A typing speed requested before the box survives opening it.
+    assert authored.transcribe("[DLY:2][TPL:2][TPL:C]A[END]", stock, names) == (
+        "[TPL:0C][TPL:02][DLY:02]A[PAL:00][END]")
+    # An inner END closes the box and the scene continues.
+    assert authored.transcribe("[TPL:9]A[END][TPL:9]B[END]", stock, names) == (
+        "[TPL:09]A[WAI][CLD][TPL:09]B[PAL:00][END]")
+    assert authored.transcribe("[TPL:12]1[N]2[N]3[N]4[N]5[END]", stock, names) == (
+        "[DLG:03,06][SIZ:0D,05]1[N]2[N]3[N]4[N]5[PAL:00][END]")
+    # A box opened after an input wait starts the page again.
+    assert authored.transcribe("[TPL:8]One.[WAI][N][TPL:A]A[N]B[N]C[END]", stock, names) == (
+        "[TPL:08]One.[WAI][TPL:0A]A[N]B[N]C[PAL:00][END]")
+    # Five authored rows use an explicit box; stock has no five-row template.
+    assert authored.transcribe("[TPL:10]1[N]2[N]3[N]4[N]5[END]", stock, names) == (
+        "[DLG:03,0F][SIZ:0D,05]1[N]2[N]3[N]4[N]5[PAL:00][END]")
+    # The ellipsis has no stock tile. A row it pushes past 26 columns is
+    # wrapped again and the box grows by the row it needs.
+    wide = "[TPL:8]" + "abcd " * 4 + "abc\u2026!![END]"
+    assert authored.transcribe(wide, stock, names) == (
+        "[TPL:09]abcd abcd abcd abcd[N]abc...!![PAL:00][END]")
+    for refused in (
+        "[TPL:9]A[RET]",                      # the dialogue must end
+        "A[END]",                             # text before any box
+        "[TPL:9]A[N]B[N]C[N]D[N]E[N]F[END]",  # six rows have no stock box
+        "[TPL:9][ADR:&table,AAC][END]",       # references stay with their own passes
+        "[TPL:9]A[::]B[END]",
+        "[TPL:9]\u00e9[END]",
+        "[TPL:9]A[PAU:F0][END]",              # a long hold the stock string lacks
+    ):
+        try:
+            authored.transcribe(refused, stock, names)
+        except authored.Unsupported:
+            continue
+        raise AssertionError(f"Accepted authored dialogue {refused!r}")
+    for inherited in ("A[END]", "[CLR]A[END]", "[TPL:0A]A[RET]", "[TPL:0A]A[::]B[END]"):
+        try:
+            authored.transcribe("[TPL:9]A[END]", inherited, names)
+        except authored.Unsupported:
+            continue
+        raise AssertionError(f"Accepted stock context {inherited!r}")
+    for stream in ("[TPL:0C]A[N]B[END]", "[TPL:0A]A[FIN][TPL:08]B[END]", "[TPL:0C]" + "A" * 27 + "[END]"):
+        try:
+            authored.simulate(stream)
+        except authored.Unsupported:
+            continue
+        raise AssertionError(f"Renderer model accepted {stream!r}")
 
 
 def main():
@@ -894,8 +1007,10 @@ def main():
         except ValueError:
             continue
         raise AssertionError(f"Accepted malformed dialogue {invalid!r}")
+    check_authored_pages()
+    signature = authored.stock_signature(bytes((0xD3, 0x40, 0xCF, 0x41, 0xC0)))
     source = out / "test.c"
-    source.write_text(HARNESS, encoding="ascii")
+    source.write_text(f"#define AUTHORED_SIGNATURE 0x{signature:08x}u\n" + HARNESS, encoding="ascii")
     binary = out / "test.exe"
     subprocess.run([args.compiler, "-std=c11", "-I", str(ROOT / "src"),
                     str(source), "-o", str(binary)], check=True)
