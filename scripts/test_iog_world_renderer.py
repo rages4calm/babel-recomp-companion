@@ -556,7 +556,7 @@ static void signed_camera_shake(void){
  CHECK(s.output[0]==0);
  CHECK(s.output[223*s.width+s.view.native_x]==(0xff000000u|256u|(223u<<10)));
  CHECK(!s.view.padding_left&&!s.view.padding_right);
- fixture();word(0x68e,0xffef);g_ppu->vScroll[0]=1007;
+ fixture();word(0x68e,0xff7f);g_ppu->vScroll[0]=895;
  publication();IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
  IogWorldEndRaster(0x828051,225,0);CHECK(!s.complete&&!strcmp(s.reason,"invalid_world_view"));
 }
@@ -1118,7 +1118,13 @@ static void bounded_rooftop_and_hieroglyph(void){
  word(0x694,256);word(0x698,256);
  publication();IogWorldBeginRaster();IogWorldCaptureLine(1);
  CHECK(RoomPictureBounds(&s.epochs[0],0,0,&bounds)&&bounds.right==256&&bounds.bottom==224);
+ /* A stale second-map size only matters while BG2 is shown. */
  s.epochs[0].ram[0x699]=2;
+ s.base.screenEnabled[0]|=2;
+ CHECK(!RoomPictureBounds(&s.epochs[0],0,0,&bounds));
+ s.base.screenEnabled[0]&=(uint8_t)~2;s.base.screenEnabled[1]&=(uint8_t)~2;
+ CHECK(RoomPictureBounds(&s.epochs[0],0,0,&bounds)&&bounds.right==256&&bounds.bottom==224);
+ s.base.screenEnabled[1]|=2;
  CHECK(!RoomPictureBounds(&s.epochs[0],0,0,&bounds));
 }
 static void pyramid_puzzle_storage_tail(void){
@@ -1158,8 +1164,9 @@ static void angel_entrance_storage_tail(void){
   CHECK(s.complete&&s.view.native_y==40&&s.view.native_x==342);
   CHECK(AngelEntranceHasStorageTail(&s.epochs[0])==matching);
   CHECK(s.output[263*598+s.view.native_x]&&s.output[263*598]);
+  /* Row 295 would fetch the row after the map; it is padding. */
   for(int y=264;y<296;y++)for(int x=0;x<598;x++)
-   CHECK(!!s.output[y*598+x]==!matching);
+   CHECK(!!s.output[y*598+x]==(!matching&&y<295));
  }
 }
 static void generic_authored_window(void){

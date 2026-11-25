@@ -4,9 +4,13 @@
 #include <stdint.h>
 
 /* Camera shake can move the original field a small distance outside the
- * authored map. This is a finite presentation budget, not additional map
- * data or permission to sample outside the validated map buffers. */
-enum { kIogWorldCameraExcursion = 16 };
+ * authored map, and a scripted pan can begin from an unclamped camera: the
+ * Euro arrival starts 88 pixels past the right edge and shows the hardware
+ * ring there. This is a finite presentation budget of half a field, not
+ * additional map data or permission to sample outside the validated map
+ * buffers: the original field keeps its uploaded cells and everything else
+ * past the edge stays padding. */
+enum { kIogWorldCameraExcursion = 128 };
 
 typedef struct IogWorldView {
     int32_t world_x, world_y;

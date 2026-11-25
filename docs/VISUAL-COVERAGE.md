@@ -965,6 +965,54 @@ The pause menu's status page now uses the same scale as the Items page. It
 shows the map with BG1's tilemap register at $00 where Items has $04, and
 the modal plate accepted only $04.
 
+### Whole-game entry survey, story-phase fallbacks and wide-view faults (batch 042)
+
+`visual-fullgame-041/wsurvey/survey.py` warps into each of the 198 scenes
+that has an incoming warp, walks right, down, left and up, and records how
+every frame was presented. On plain entry and walking every scene holds the
+wide view; the refused frames are black room changes. The one lit fallback
+it showed, Watermia's arrival narration, was a staging artifact: the intro
+pans a fixed distance from the entry point, and the survey entered at a
+house door. From the original entry (Neil's flight, `250,370`) the
+narration holds the wide view. The survey gives identical segments and end
+states before and after the changes below.
+
+Two real lit fallbacks were corrected. The Euro arrival starts with the
+scripted camera up to 88 pixels past the right map edge; the camera
+excursion budget is now 128 pixels, the original field keeps its uploaded
+ring cells and the rest stays padding (110 lit frames to 0). Advancing a
+dialogue box in the Watermia glass game and the Native Village feast
+re-uploaded the previous frame's OAM while the next composition was
+pending, which dropped four single frames to the small field; an upload
+identical to the last paired one now keeps that composition. A field that
+is one flat colour under its text (the blue screen of the prison entry)
+fills the view; that phase is still a fallback in the audit. The final
+school scene accepts a stale second-map size while BG2 is hidden (staged
+entry only).
+
+A picture review of 110 Mode 1 scenes and six Mode 7 sequences
+(`visual-fullgame-041/wsreview`) found 104 Mode 1 scenes and the Mode 7
+sequences without fault, and these, now corrected: the prologue ocean
+shows black past its horizon instead of an unused backdrop colour; actors
+standing on another floor of the same map are not drawn outside the
+original field (`6D`, `70`); the last row of a map that ends inside the
+view is padding (`6F`, `79`, `EA`); a backdrop with its own camera and a
+flat first row continues upward in that colour (`2B`). Refusals now name
+their cause in the audit and write a `refused` row with the display state.
+
+Left open: the status display, title cards and dialogue boxes are scaled
+1.5 times by nearest pixel, which draws every other column twice and makes
+one-pixel strokes uneven on bright skies (Great Wall, Dao). Exact-area
+resampling was tried and reverted because it softens all dialogue text;
+the intended fix is to draw that layer at the output resolution. Also
+open: single lit frames in `58`, `06`, `68` and `FE`; sideways streaks on
+the walkable map with the enhancement off and a two-pixel line at world
+x 438 in the Diamond Mine, neither settled against a stock field; black
+corners beside the wrap strip for about 110 frames of the Euro arrival.
+About 20 reviewed scenes were judged at the entry camera only, 50 captured
+scenes were not looked at and 38 were not captured. All of this is
+headless software output at 598x336; the GPU path was not checked.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

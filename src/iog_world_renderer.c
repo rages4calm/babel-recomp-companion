@@ -51,6 +51,11 @@ static struct {
     uint64_t compose_sequence, publish_sequence;
     uint32_t nmi_oam_writes;
     uint8_t pending_ram[131072], active_ram[131072], staging[544];
+    /* The last paired upload. A lagging frame can send it again while the
+     * next composition is still being built. */
+    uint8_t published[544];
+    bool published_valid, repeated;
+    struct { uint16_t staging, previous; uint8_t composed, pending; } unpaired;
     Ppu base, detached, mode7_source;
     bool mode7_filtered;
     uint32_t mode7_exact[256*224];
@@ -599,6 +604,7 @@ void IogWorldInitialize(void)
 void IogWorldReset(void)
 {
     s.pending=s.composed=s.active=s.complete=s.valid=false;
+    s.published_valid=s.repeated=false;
     s.fixed_plate=false;
     s.awaiting_restore=true;
     s.publish_sequence=0;
@@ -683,9 +689,27 @@ void IogWorldAfterNmi(void)
     if(match) match=!memcmp(g_ppu->highOam,s.staging+512,32);
     if(match) {
         memcpy(s.active_ram,s.pending_ram,sizeof(s.active_ram));
+        memcpy(s.published,s.staging,sizeof(s.published));
+        s.published_valid=true; s.repeated=false;
         s.active=true; s.publish_sequence=s.compose_sequence;
     } else {
+        /* The same objects as the last paired frame are on screen again:
+         * active_ram still describes exactly what was uploaded. */
+        s.repeated=s.published_valid && (s.active || s.repeated);
+        for(unsigned i=0;i<256 && s.repeated;i++)
+            s.repeated=g_ppu->oam[i]==Word(s.published,i*2);
+        if(s.repeated) s.repeated=!memcmp(g_ppu->highOam,s.published+512,32);
+        if(!s.repeated) s.published_valid=false;
         s.active=false; s.reason="unpaired_oam_upload";
+        if(s.audit) {
+            unsigned staging=0,previous=0;
+            for(unsigned i=0;i<256;i++) {
+                staging+=g_ppu->oam[i]!=Word(s.staging,i*2);
+                previous+=g_ppu->oam[i]!=Word(s.published,i*2);
+            }
+            s.unpaired.staging=(uint16_t)staging;s.unpaired.previous=(uint16_t)previous;
+            s.unpaired.composed=s.composed;s.unpaired.pending=s.pending;
+        }
     }
 }
 
@@ -736,19 +760,40 @@ void IogWorldBeginRaster(void)
     bool actor_field=!s.active && s.publish_sequence && StockActorFieldLayout(g_ppu,g_snes->ram);
     bool restored_field=awaiting_restore && !s.publish_sequence && s.composed &&
         RestoredActorFieldLayout(g_ppu,g_snes->ram);
-    if(!s.active && !sky_field && !actor_field && !restored_field) return;
+    /* The refusals below name their own cause in the audit. */
+    /* A repeated upload keeps the composition it was paired with. The
+     * rooms above keep their own live-field handling. */
+    bool repeated=!s.active && s.repeated && !sky_field && !actor_field && !restored_field;
+    if(!s.active && !repeated && !sky_field && !actor_field && !restored_field) {
+        s.reason="unpaired_object_publication";return;
+    }
     IogSceneViewSource source;
     IogSceneViewReadWorldSource(g_snes->ram,131072,g_ppu,false,&source);
-    if(source.gate!=kIogSceneViewReady ||
-       source.scene!=Word(restored_field?s.pending_ram:s.active_ram,0x644)) return;
-    if(PPU_objInterlace(g_ppu) || g_ppu->frameInterlace ||
-       ((g_ppu->mosaic>>4)!=0 && !StockMosaicLayout(g_ppu,g_snes->ram)) ||
-       (ActiveWorldWindow(g_ppu) && !KnownWorldWindow(g_ppu,g_snes->ram))) return;
+    if(source.gate!=kIogSceneViewReady) {
+        s.reason=source.gate==kIogSceneViewUnsupportedScene?"unsupported_scene":
+            "unsupported_map_layout";
+        return;
+    }
+    if(source.scene!=Word(restored_field?s.pending_ram:s.active_ram,0x644)) {
+        s.reason="scene_ahead_of_publication";return;
+    }
+    if(PPU_objInterlace(g_ppu) || g_ppu->frameInterlace) {
+        s.reason="unsupported_interlace";return;
+    }
+    if((g_ppu->mosaic>>4)!=0 && !StockMosaicLayout(g_ppu,g_snes->ram)) {
+        s.reason="unsupported_mosaic";return;
+    }
+    if(ActiveWorldWindow(g_ppu) && !KnownWorldWindow(g_ppu,g_snes->ram)) {
+        s.reason="unsupported_window";return;
+    }
     s.base=*g_ppu;
     s.sky_field=sky_field;
     s.stock_actor_field=actor_field || restored_field;
     s.restored_actor_field=restored_field;
-    if(restored_field) memcpy(s.active_ram,s.pending_ram,sizeof(s.active_ram));
+    if(restored_field) {
+        memcpy(s.active_ram,s.pending_ram,sizeof(s.active_ram));
+        s.published_valid=s.repeated=false;
+    }
     s.absent_secondary=source.absent_secondary;
     s.valid=true; s.reason="awaiting_picture";
 }
@@ -833,6 +878,32 @@ static bool HorizonFlatTail(const PictureEpoch *e,const Ppu *p)
         unsigned px=x&7,py=7;
         if(tile&0x4000)px=7-px;
         if(tile&0x8000)py=0;
+        unsigned at=(PPU_bgTileAdr(p,physical)+(tile&1023)*16+py)&32767;
+        unsigned a=e->vram[at],b=e->vram[(at+8)&32767],bit=7-px;
+        unsigned index=((a>>bit)&1)|(((a>>(bit+8))&1)<<1)|
+            (((b>>bit)&1)<<2)|(((b>>(bit+8))&1)<<3);
+        if(!index)return false;
+        unsigned color=e->cgram[((tile>>10)&7)*16+index]&32767;
+        if(x&&color!=expected)return false;
+        expected=color;
+    }
+    return true;
+}
+
+/* The same for the first row of a backdrop that keeps its own camera: a
+ * sky that starts as one opaque colour may continue upward in that colour.
+ * A top row with any detail or transparency keeps the plane's finite edge. */
+static bool BackdropFlatHead(const PictureEpoch *e,const Ppu *p)
+{
+    unsigned physical=1u^((e->ram[0x6EE]>>7)&1u),expected=0;
+    unsigned width=Word(e->ram,0x694);
+    if(width<256 || Word(e->ram,0x698)<256) return false;
+    for(unsigned x=0;x<width;x++) {
+        unsigned tile=MapTile(e,1,(int)x,0,false);
+        if(tile==0xffffffffu)return false;
+        unsigned px=x&7,py=0;
+        if(tile&0x4000)px=7-px;
+        if(tile&0x8000)py=7;
         unsigned at=(PPU_bgTileAdr(p,physical)+(tile&1023)*16+py)&32767;
         unsigned a=e->vram[at],b=e->vram[(at+8)&32767],bit=7-px;
         unsigned index=((a>>bit)&1)|(((a>>(bit+8))&1)<<1)|
@@ -1398,7 +1469,10 @@ static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
             return false;
         /* The final school scene has a single composed street view and
          * moving cutscene actors. Its BG3 dialogue can use the host frame. */
-        if(scene==0xF0 && (Word(ram,0x694)!=256 || Word(ram,0x698)!=256))
+        /* The scene loads no second map, so those two words keep the last
+         * room's size. They describe nothing while BG2 is on neither screen. */
+        if(scene==0xF0 && (Word(ram,0x694)!=256 || Word(ram,0x698)!=256) &&
+           ((ram[0x6EE]&0x80) || ((s.base.screenEnabled[0]|s.base.screenEnabled[1])&2)))
             return false;
         /* The dream stores separate rooms in one tall map. Preserve its
          * original aperture and never expose adjacent floors. */
@@ -1660,6 +1734,7 @@ static bool RenderMode7Plane(void)
     }
     uint8_t prior_registers[PPU_SAVESTATE_REGS_SIZE];
     memset(prior_registers,0,sizeof(prior_registers));
+    int backdrop_shown=-1;
     for(int row=0;row<s.height;row++) {
         int y=row-top+1;
         /* Extend only a validated camera above the stock menu. Its
@@ -1716,7 +1791,19 @@ static bool RenderMode7Plane(void)
             IogMode7PerspectiveStatus status=IogMode7PerspectiveSample(
                 &s.mode7_parameters,index,source->m7matrix);
             if(status!=kIogMode7PerspectiveMatrix) {
-                uint32_t color=status==kIogMode7PerspectiveSky?colors[0]:0;
+                /* The backdrop colour is this scene's sky only where the
+                 * original field shows it. A plane that fills every stock
+                 * row (the prologue ocean) leaves that palette entry unused,
+                 * and the rows past its horizon are padding. */
+                if(backdrop_shown<0) {
+                    backdrop_shown=0;
+                    for(int line=1;line<=map_end && !backdrop_shown;line++) {
+                        memcpy(source,s.lines[line].registers,PPU_SAVESTATE_REGS_SIZE);
+                        for(int x=0;x<256;x++)
+                            if(!IogMode7PlaneIndex(source,x,line)) {backdrop_shown=1;break;}
+                    }
+                }
+                uint32_t color=status==kIogMode7PerspectiveSky && backdrop_shown?colors[0]:0;
                 for(int x=0;x<s.width;x++)s.output[row*s.width+x]=color;
                 continue;
             }
@@ -1980,6 +2067,15 @@ static bool RenderWorld(void)
     }
     memset(s.output,0,(size_t)s.width*s.height*4);
     bool finite_backdrop=scene==0x47 || scene==0x74;
+    /* A plain finite backdrop with its own camera (the ship deck's sky)
+     * has no model above its first row. */
+    bool flat_head=layers==2 && s.epoch_count==1 && mosaic<=1 && !bounded && !classroom &&
+        !tracked_effect && !deferred_raster_effect && !EffectPlaneScene(scene) &&
+        !horizon && !wall_bands && !babel_stars && !story_sky && !adrift_ocean &&
+        !underside_backdrop && !village_heat && !transition_wave && !water_wave &&
+        (Word(first->ram,0x68C)!=Word(first->ram,0x68A) ||
+         Word(first->ram,0x690)!=Word(first->ram,0x68E)) &&
+        BackdropFlatHead(first,p);
     for(int row=0;row<s.height;row++) {
         int native_y=row-top;
         int scanline=Clamp(native_y,0,223)+1;
@@ -2017,9 +2113,24 @@ static bool RenderWorld(void)
              * the last displayed row. Keep that row clear in the stock
              * aperture while continuing to draw the part in the margins. */
             const bool culled_at_stock_edge = stock_bottom_edge && py == 0 && !part->manual;
+            /* An actor that stands on another floor of the same map can
+             * reach over the edge of this floor's window (bats hanging
+             * from the ceiling of the floor below). The stock camera never
+             * shows those rows; outside the original field they stay out. */
+            bool other_floor=false;
+            if(authored && !authored_window_pan && !part->manual && !part->player &&
+               part->actor>=0x1000 && part->actor<0x1FC0) {
+                int ax=(int16_t)Word(s.active_ram,part->actor+0x14);
+                int ay=(int16_t)Word(s.active_ram,part->actor+0x16);
+                other_floor=ax<bounds.left || ax>=bounds.right ||
+                    ay<bounds.top || ay>=bounds.bottom;
+            }
+            const bool native_row=native_y>=0 && native_y<224;
             for(int x=0;x<part->width;x++) {
                 unsigned index=part->indices[py*part->width+x];
                 if(culled_at_stock_edge && part->x+x>=left && part->x+x<left+256)
+                    index=0;
+                if(other_floor && !(native_row && part->x+x>=left && part->x+x<left+256))
                     index=0;
                 pixels[x]=index?(uint16_t)(0x8000|e->cgram[index]):0;
             }
@@ -2127,6 +2238,7 @@ static bool RenderWorld(void)
                 /* Clamp after quantizing. Otherwise the expanded sky above
                  * the raster can wrap to ocean tiles during the mosaic. */
                 if(logical==1 && adrift_ocean && native_y<0 && wy<0) wy=0;
+                if(logical==1 && flat_head && native_y<0 && wy<-1) wy=-1;
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)(wy+(mosaic_layer?1:0))&1023;
                 if(star_plane) continue;
@@ -2221,11 +2333,15 @@ static bool RenderWorld(void)
                 /* The map fetch samples the following row. A final authored
                  * row at the edge must not expose the next page's tiles. */
                 int picture_bottom=bounds.bottom-(authored?1:0);
+                /* The same holds for a whole map that ends inside the view:
+                 * its last row would fetch the row after the map and show
+                 * the backdrop colour as a line above the padding. */
+                int map_bottom=(int)Word(e->ram,0x696)-(s.view.padding_bottom?1:0);
                 bool inside=(bounded||authored)?(native_pixel || (!authored_window_pan && worldx>=bounds.left && worldx<bounds.right &&
                    worldy>=bounds.top && worldy<picture_bottom)):
                    classroom?OriginalClassroomPixel(e,worldx,worldy):
                    (native_pixel||(worldx>=0&&worldx<(int)Word(e->ram,0x692)&&
-                   worldy>=0&&worldy<(int)Word(e->ram,0x696)));
+                   worldy>=0&&worldy<map_bottom));
                 if(castle_marker && !native_pixel && worldx>=480 && worldy>=735)
                     inside=false;
                 if(inside || backdrop_only || story_sky)
@@ -2296,6 +2412,24 @@ void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count
             s.view.world_x,s.view.world_y,s.view.width,s.view.height,
             s.view.native_x,s.view.native_y,s.view.padding_left,
             s.view.padding_right,s.view.padding_top,s.view.padding_bottom);
+        /* A refused frame records the display state its profile would need. */
+        if(s.enabled && !s.complete && g_ppu && g_snes) {
+            const Ppu *p=g_ppu;const uint8_t *ram=g_snes->ram;
+            fprintf(s.audit,"{\"kind\":\"refused\",\"frame\":%u,\"scene\":%u,\"pending\":%u,\"layout\":%u,"
+                "\"size\":[%u,%u,%u,%u],\"camera\":[%d,%d],\"bgmode\":%u,\"mosaic\":%u,\"windowsel\":%u,"
+                "\"windowed\":[%u,%u],\"maps\":[%u,%u,%u],\"main\":%u,\"sub\":%u,\"cgwsel\":%u,"
+                "\"cgadsub\":%u,\"hdma\":%u,\"blank\":%u,\"brightness\":%u,"
+                "\"oam_differs\":[%u,%u,%u,%u],\"objects\":[%u,%u,%u]}\n",
+                s.frame,Word(ram,0x644),Word(ram,0x642),Word(ram,0x6EE),
+                Word(ram,0x692),Word(ram,0x696),Word(ram,0x694),Word(ram,0x698),
+                (int16_t)Word(ram,0x68A),(int16_t)Word(ram,0x68E),p->bgmode,p->mosaic,
+                (unsigned)p->windowsel,p->screenWindowed[0],p->screenWindowed[1],
+                p->bgXsc[0],p->bgXsc[1],p->bgXsc[2],p->screenEnabled[0],p->screenEnabled[1],
+                p->cgwsel,p->cgadsub,(unsigned)g_snesrecomp_last_hdmaen,
+                PPU_forcedBlank(p)?1u:0u,(unsigned)p->inidisp&15u,
+                s.unpaired.staging,s.unpaired.previous,s.unpaired.composed,s.unpaired.pending,
+                (unsigned)s.visual.status,(unsigned)s.visual.actor_count,(unsigned)s.visual.hidden_actors);
+        }
         fflush(s.audit);
     }
 }
@@ -2430,6 +2564,22 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
         }
     } else {
         for(int y=0;y<height;y++) memset(dst+y*pitch,0,width*4);
+        /* A field that is one flat colour under its text (the blue screen
+         * of the prison entry, a white flash) has no picture to frame.
+         * Continue that colour over the whole view instead of showing a
+         * coloured box; the field itself is still drawn unchanged below. */
+        {
+            const uint8_t *wash=NULL;bool flat=true;int plain=0;
+            for(int i=0;i<256*224 && flat;i++) {
+                if(s.hud[i]>>24) continue;
+                if(!wash) wash=field+i*4;
+                else flat=!memcmp(wash,field+i*4,3);
+                plain++;
+            }
+            if(flat && wash && plain>=256*224/2 && (wash[0]|wash[1]|wash[2]))
+                for(int y=0;y<height;y++) for(int x=0;x<width;x++)
+                    memcpy(dst+y*pitch+x*4,wash,4);
+        }
         /* Keep the same world-pixel scale across supported rooms, menus and
          * fallback effects. Filling the taller host frame magnifies the old
          * field and makes every unsupported doorway produce a zoom jump. */

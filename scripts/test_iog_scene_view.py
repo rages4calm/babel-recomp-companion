@@ -95,12 +95,12 @@ static void gates(void) {
     fixture();word(0x68e,0xffff);
     CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewReady);
     s=source();CHECK(s.gate==kIogSceneViewUnsupportedLayout);
-    const unsigned good[]={0xfff0,0xffff,0,1,512,528};
+    const unsigned good[]={0xff80,0xfff0,0xffff,0,1,512,528,640};
     for(unsigned i=0;i<sizeof(good)/sizeof(good[0]);i++){
         fixture();word(0x68a,good[i]);
         CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewReady);
     }
-    const unsigned bad[]={0xffef,529,0x7fff,0x8000};
+    const unsigned bad[]={0xff7f,641,0x7fff,0x8000};
     for(unsigned i=0;i<sizeof(bad)/sizeof(bad[0]);i++){
         fixture();word(0x68a,bad[i]);
         CHECK(IogSceneViewReadWorldSource(ram,sizeof(ram),&ppu,false,&s)&&s.gate==kIogSceneViewUnsupportedLayout);
