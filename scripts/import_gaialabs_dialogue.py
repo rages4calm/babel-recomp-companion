@@ -53,6 +53,10 @@ CORRECTIONS = {
     "04A3BB": (("bring[N]you you back home", "bring[N]you back home"),),
     "04D8D2": (("going on be", "going to be"), ("gradually become quiet", "gradually became quiet")),
     "04FA25": (("can't ive you", "can't give you"),),
+    "04EA77": (("Putting in briefly", "Putting it briefly"),),
+    # A three-row box whose last row grows past the box once the ellipsis
+    # is spelled out: one more row instead of a page holding one word.
+    "04A4CC": (("[DLG:3,B][SIZ:D,3]That night", "[DLG:3,B][SIZ:D,4]That night"),),
     "08E428": (("too sleep to climb", "too steep to climb"),),
     "08E540": (("won't able to move", "won't be able to move"),),
     "088F15": (("like man is", "like the man is"),),

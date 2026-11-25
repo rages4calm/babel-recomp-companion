@@ -380,6 +380,34 @@ system and save-menu messages among them) and stay in the original
 English. 26 item pickup lines that differ from stock only trivially are
 deliberately not imported.
 
+### Round-3 scene sweep (pack v65, fixes through v71)
+
+Five agents replayed the 772 authored rows that had not been seen in their
+own scenes, by ROM bank, each with one pass per scene: 364 were read in
+scene from WRAM (bank 04: 80 of 195; 05: 102 of 182; 06/0A/0B/00: 52 of
+113; 07/09: 35 of 139; 08/03: 95 of 143). The others sit behind story
+flags, item checks or multi-step sequences and have only the page check.
+Receipts are in `visual-fullgame-041/sweep3A` to `sweep3E`.
+
+- One real defect: `03925F` after the Purification Stone (see Item scripts
+  above), fixed and confirmed in Dao.
+- A five-row page that opens its own box lost the speaker's colour between
+  coloured pages (`06C8F7`, `08AF16`): the page now uses the speaker the
+  authored string names later.
+- Six rows with no sentence end to turn the page at get a six-row box
+  instead of a second page holding one word (`078A26`, `0989A2`,
+  `098E17`); `04A4CC` gets a fourth row.
+- Source wording corrected locally and reported upstream (Azarem/
+  IOGRetranslation#35): `049BE5`, `04A3BB`, `04D8D2`, `04FA25`, `08E428`,
+  `08E540`, `088F15`. `04EA77` ("Putting in briefly") was found later and
+  is corrected locally only.
+- Not defects: Lance's "tha" is his dialect; "Tearpot" is the item's name
+  in the retranslation; an A press while a page is still typing skips its
+  last character (not compared with stock); boxes that grow to five rows
+  stay that size for the rest of the string.
+- Not looked at: the dialogue layer filling with non-text cells during the
+  prison entry cutscene (scene 0B), seen once without a stock control.
+
 ### Inventory, room titles and map lettering
 
 Original v41 applies all 124 approved console menu entries and all 64 named

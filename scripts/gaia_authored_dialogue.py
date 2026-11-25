@@ -406,7 +406,13 @@ def fit_rows(source, names, inherited=None):
             # A page no box can hold is left as it is: the choice layout
             # may still move rows to another page, and the renderer model
             # refuses the string otherwise.
-            if family is not None and len(needed) <= tallest:
+            # Six rows with no sentence end to turn the page at would leave
+            # a word or two alone on a second page; they get a six-row box.
+            limit = tallest
+            if len(needed) == 6 and not any("".join(line).rstrip().endswith((".", "!", "?", '"'))
+                                            for line in needed[:5]):
+                limit = 6
+            if family is not None and len(needed) <= limit:
                 rows = len(needed)
                 template = f"[TPL:{_TEMPLATE[family, rows]:X}]"
                 if opener is None:
@@ -415,6 +421,8 @@ def fit_rows(source, names, inherited=None):
                     head[opener] = template
         out.extend(head)
         capacity = max(rows, tallest) if family is not None else rows
+        if family is not None and rows == 6:
+            capacity = 6
         if len(needed) > capacity and not any(
                 part.startswith("[") for line in needed for part in line):
             # Wrapping made the page taller than any box. It continues on a
