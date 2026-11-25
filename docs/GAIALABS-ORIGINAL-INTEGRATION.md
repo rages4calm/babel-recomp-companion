@@ -474,20 +474,25 @@ shows no prompt, and a save state made while walking restores position and
 heading. Not looked at: the South Cape, Itory, Freejia and Diamond Mine
 regions, an in-game save from the map, the scripted flights with the
 filter on, and play by a person. Known rough edges that remain: the
-collision follows whole 16-pixel cells, and the sky is a plain band. The review and pictures are in
+collision follows whole 16-pixel cells. The review and pictures are in
 `visual-fullgame-041/worldmap`.
 
 **Enhanced world map** (`iog.enhancements/world_map`, on by default) is
 one switch in the launcher's Cheats and Mods page and in the in-game
 settings. Off is the stock walking view, byte-identical at the same pose.
-On adds: the filtered plane above; a camera about twice as high (camera
-words 88/507 against 177/1019, same ratio, so the horizon stays put); a
+On adds: the filtered plane above; a camera about twice as high and
+pitched to show a band of sky (camera words 25/650 against 177/1019: the
+same ground scale under the player as 88/507, with the horizon 46 rows
+below the top of the 336-row picture); the owner's sky painting above the
+horizon (`res/worldmap/sky.webp`, built into `src/iog_world_sky.inc` by
+`scripts/make_world_sky.py`), mirrored into a circle that one full turn
+crosses once and dimmed with the screen; a
 gold pin and name over every destination the current stage's stock menu
 lists, grey when the story still holds it shut; a small north-up minimap
 with the player's heading; control about 1.6 seconds sooner after leaving a
 town (the 93-tick tilt is skipped and the camera eases down while walking);
-the map's own sea colour past the map edge with haze at the horizon instead
-of black; and a bordered prompt plate with the pad's own button glyph in
+the map's own sea colour past the map edge, hazing into the sky's glow at
+the horizon; and a bordered prompt plate with the pad's own button glyph in
 the chosen prompt style. `IOG_WORLD_MAP_ENHANCED=0/1` overrides the setting
 for tests. The seven walking trips give the same scene changes and final
 positions on and off, and the closed Mt. Temple and Itory gates still

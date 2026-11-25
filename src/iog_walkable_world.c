@@ -52,8 +52,8 @@ enum {
     kCameraIncrement = 0xB6,
     kStockDivisor = 177,
     kStockIncrement = 1019,
-    kHighDivisor = 88,
-    kHighIncrement = 507,
+    kHighDivisor = 25,
+    kHighIncrement = 650,
 };
 int IogWorldMapEnhancedGet(void); /* iog_mods.c */
 int IogHostPadLabel(uint32_t snes_bit,char label[8],uint32_t *color); /* iog_settings.c */

@@ -1558,6 +1558,21 @@ static uint32_t Mode7Mix(uint32_t from,uint32_t to,unsigned part)
     return out;
 }
 
+#include "iog_world_sky.inc"
+/* The owner's sky painting above the walking map's horizon. The picture is
+ * mirrored into a circle that one full turn of the camera crosses once, and
+ * dims with the screen like the map under it. `above` counts rows up from
+ * the horizon; row 0 is the glow the haze below fades into. */
+static uint32_t WorldSkyPixel(int column,int above,unsigned light)
+{
+    int u=column%(2*kWorldSkyWidth);
+    if(u<0) u+=2*kWorldSkyWidth;
+    if(u>=kWorldSkyWidth) u=2*kWorldSkyWidth-1-u;
+    int v=kWorldSkyHeight-1-above;
+    uint32_t rgb=kWorldSkyPalette[kWorldSky[(v<0?0:v)*kWorldSkyWidth+u]];
+    return light>=15?rgb:Mode7Mix(0,rgb,light*256u/15u);
+}
+
 static bool RenderMode7Plane(void)
 {
     s.mode7_filtered=false;
@@ -1627,8 +1642,8 @@ static bool RenderMode7Plane(void)
     /* The map's own commonest texel is open sea. Use it, under each row's
      * palette, for what lies past the map edge and for the haze at the
      * horizon, so neither is a flat black cut. */
-    enum { HazeRows=14, SkyRows=40 };
-    unsigned sea=0;bool edge_is_sea=false;int horizon=1-top;
+    enum { HazeRows=14 };
+    unsigned sea=0;bool edge_is_sea=false;int horizon=1-top,sky_turn=0;
     if(filtered) {
         unsigned counts[256]={0};
         const uint16_t *map=s.epochs[s.lines[1].epoch].vram;
@@ -1636,6 +1651,9 @@ static bool RenderMode7Plane(void)
             counts[SnesMode7HdFetchInt(0,map,u,v,-1)]++;
         for(unsigned index=1;index<256;index++) if(counts[index]>counts[sea]) sea=index;
         edge_is_sea=sea!=0;
+        /* One turn of the camera is one trip round the mirrored picture. */
+        sky_turn=(int)lround(atan2((double)s.mode7_parameters.sine,(double)s.mode7_parameters.cosine)*
+                             kWorldSkyWidth/3.14159265358979);
         int32_t probe[4];
         while(horizon<1 && IogMode7PerspectiveSmooth(&s.mode7_parameters,horizon,0,probe)!=
               kIogMode7PerspectiveMatrix) horizon++;
@@ -1675,19 +1693,21 @@ static bool RenderMode7Plane(void)
                 s.mode7_exact[(y-1)*256+x]=colors[IogMode7PlaneIndex(source,x,y)];
             uint32_t backdrop=colors[0],haze=edge_is_sea?colors[sea]:colors[0];
             uint32_t *out=s.output+row*s.width;
+            unsigned light=PPU_brightness(source);
             if(status==kIogMode7PerspectiveMatrix) {
                 if(IogMode7PerspectiveSmooth(&s.mode7_parameters,y+1,0,to)!=
                    kIogMode7PerspectiveMatrix) memcpy(to,from,sizeof(to));
                 IogMode7PlaneFilteredRowEdge(source,from,to,y,-left,s.width,colors,haze,out);
                 if(edge_is_sea && y-horizon<HazeRows) {
                     unsigned part=(unsigned)(HazeRows-(y-horizon))*208u/HazeRows;
-                    for(int x=0;x<s.width;x++) out[x]=Mode7Mix(out[x],haze,part);
+                    for(int x=0;x<s.width;x++)
+                        out[x]=Mode7Mix(out[x],WorldSkyPixel(x+sky_turn,0,light),part);
                 }
             } else {
-                /* Above the horizon the haze thins into the dark. */
+                /* Above the horizon: the sky painting. */
                 int above=horizon-y;
-                uint32_t sky=Mode7Mix(haze,0,above>=SkyRows?216u:(unsigned)above*216u/SkyRows);
-                for(int x=0;x<s.width;x++) out[x]=edge_is_sea?sky:backdrop;
+                for(int x=0;x<s.width;x++)
+                    out[x]=edge_is_sea?WorldSkyPixel(x+sky_turn,above<0?0:above,light):backdrop;
             }
             continue;
         }
