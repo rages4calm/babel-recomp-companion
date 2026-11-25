@@ -969,7 +969,7 @@ def check_authored_pages():
     for refused in (
         "[TPL:9]A[RET]",                      # the dialogue must end
         "A[END]",                             # text before any box
-        "[TPL:9]A[N]B[N]C[N]D[N]E[N]F[END]",  # six rows have no stock box
+        "[TPL:9]A[N]B[N]C[N]D[N]E[N]F[N]G[END]",  # seven rows have no box
         "[TPL:9][ADR:&table,AAC][END]",       # references stay with their own passes
         "[TPL:9]A[::]B[END]",
         "[TPL:9]\u00e9[END]",
@@ -1060,7 +1060,7 @@ def check_script_boxes(names):
                                "[TPL:0A]A[PAU:1E][PAL:00][END]", names) == (
         "[TPL:09]abcd abcd abcd abcd[PAU:1E][N]abc...!![PAL:00][END]")
     for source, stock, offset in (
-        ("[CLR]A[N]B[N]C[N]D[N]E[N]F[END]", ending, 0x8300),    # six rows fit no stock box
+        ("[CLR]A[N]B[N]C[N]D[N]E[N]F[N]G[END]", ending, 0x8300),    # seven rows fit no box
         ("[CLR]A[END]", ending, 0x8400),                          # no script prints this address
         ("[CLR][TPL:0]A[FIN][CLD]", reply, 0x8200),               # closes a box the script keeps
     ):
