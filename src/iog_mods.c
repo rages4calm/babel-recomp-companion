@@ -307,6 +307,22 @@ void IogHoldAdvanceSet(int v)
     g_advance_period = kPeriods[v & 3];
 }
 
+/* ---- Enhanced world map ---------------------------------------------------- */
+
+/* One switch for everything added to the walkable world map: the filtered
+ * plane, the higher camera, destination markers, the minimap, the horizon and
+ * the prompt plate. Off is the stock walking view. iog_walkable_world.c reads
+ * it every frame, so the in-game settings can change it mid-session. */
+static int g_world_map_enhanced;
+
+static void ActivateWorldMap(void) { g_world_map_enhanced = 1; }
+int IogWorldMapEnhancedGet(void) { return g_world_map_enhanced; }
+void IogWorldMapEnhancedSet(int on)
+{
+    g_world_map_enhanced = on != 0;
+    snes_mod_runtime_persist_feature_c("iog.enhancements", "world_map", on != 0, NULL, NULL);
+}
+
 /* ---- HD scaling (presentation only) -------------------------------------- */
 
 /* How the picture is scaled up to the screen: crisp square pixels, or the
@@ -324,6 +340,7 @@ static void ResetHd(void)
     /* The filter is always installed; it does nothing while the period is 0,
      * so the in-game settings can turn it on mid-session. */
     g_advance_period = 0;
+    g_world_map_enhanced = 0;
     snes_mod_register_input_filter(HoldAdvanceFilter);
     g_cheat_hp = g_cheat_dp = g_cheat_stats = 0;
     g_room_reward_multiplier=1;
@@ -344,6 +361,7 @@ SNES_MOD_CONSTRUCTOR(register_iog_mods)
     snes_mod_register_activation_plugin("iog.run", ActivateRun);
     snes_mod_register_activation_plugin("iog.hold_advance", ActivateHoldAdvance);
     snes_mod_register_activation_plugin("iog.hotswap", ActivateSwap);
+    snes_mod_register_activation_plugin("iog.world_map", ActivateWorldMap);
     snes_mod_register_activation_plugin("iog.cheat.hp", ActivateInfiniteHp);
     snes_mod_register_activation_plugin("iog.cheat.dp", ActivateDp);
     snes_mod_register_activation_plugin("iog.cheat.stats", ActivateStats);

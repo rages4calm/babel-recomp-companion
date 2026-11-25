@@ -204,7 +204,11 @@ static void run_suite(void)
 }
 int main(int argc,char**argv)
 {
-    CHECK(argc==2);register_iog_mods();CHECK(plugin_count==8);
+    CHECK(argc==2);register_iog_mods();CHECK(plugin_count==9);
+    /* Enhanced world map: off until its feature activates, cleared by reset. */
+    {extern int IogWorldMapEnhancedGet(void);
+     CHECK(!IogWorldMapEnhancedGet());activate("iog.world_map");CHECK(IogWorldMapEnhancedGet()==1);
+     CHECK(reset_callback!=NULL);reset_callback();CHECK(!IogWorldMapEnhancedGet());}
     if(!strcmp(argv[1],"rewards"))reward_suite();
     else if(!strcmp(argv[1],"live-cheats"))live_cheat_suite();
     else if(!strcmp(argv[1],"run"))run_suite();

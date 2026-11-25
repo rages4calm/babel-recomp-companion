@@ -150,6 +150,12 @@ static void AdvanceSet(void *ud, int v)
                                        v ? "speed" : NULL, kAdvanceIds[v & 3]);
 }
 
+/* ---- enhanced world map (iog.enhancements/world_map) --------------------- */
+int IogWorldMapEnhancedGet(void);
+void IogWorldMapEnhancedSet(int on); /* persists the feature itself */
+static int WorldMapGet(void *ud) { (void)ud; return IogWorldMapEnhancedGet(); }
+static void WorldMapSet(void *ud, int v) { (void)ud; IogWorldMapEnhancedSet(v != 0); }
+
 /* ---- language (iog.languages/language) ------------------------------------ */
 static const char *const kLangNames[] = {"ENGLISH", "ESPAÑOL", "FRANÇAIS", "DEUTSCH"};
 static const char *const kLangCodes[] = {"original", "es", "fr", "de"};
@@ -333,6 +339,9 @@ void IogSettingsInstall(void)
         it.get=MapControlGet;it.set=MapControlSet;it.ud=(void*)(intptr_t)action;
         snes_settings_menu_add(&it);
     }
+
+    memset(&it,0,sizeof it);it.kind=kSnesSetting_Toggle;it.label="ENHANCED WORLD MAP";
+    it.get=WorldMapGet;it.set=WorldMapSet;snes_settings_menu_add(&it);
 
     memset(&it,0,sizeof it);it.kind=kSnesSetting_Choice;it.label="BUTTON PROMPTS";
     it.choices=kPromptStyles;it.count=3;it.get=PromptStyleGet;it.set=PromptStyleSet;

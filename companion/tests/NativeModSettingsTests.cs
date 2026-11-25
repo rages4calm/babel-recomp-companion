@@ -24,6 +24,7 @@ internal static class NativeModSettingsTests
             Check(first.Values["cheat.room-rewards"].GetString() == "1", "disabled multiplier reports effective original rate");
             Check(first.Values["cheat.strength"].GetInt32() == 10, "native feature.values reads established stats");
             Check(first.Values["mod.run"].GetBoolean(), "launcher reads the existing native run selection");
+            Check(first.Values["mod.world-map"].GetBoolean() && !first.Values["mod.stacking"].GetBoolean(), "a feature the state never named reads its manifest default");
             first.Values["cheat.hp"] = OptionValue.From(true); first.Values["cheat.dp"] = OptionValue.From(true); first.Values["cheat.dp-min"] = OptionValue.From(250);
             first.Values["cheat.room-rewards"] = OptionValue.From("3"); first.Values["mod.stacking"] = OptionValue.From(true);
             NativeModSettings.Apply(root, first.Values, first.Revision);

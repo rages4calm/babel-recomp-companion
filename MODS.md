@@ -253,6 +253,14 @@ game marks a choice menu in RAM ($065C) and nothing is pressed for you then.
 It works on the controller input only (the button is let go for one frame at
 a steady rhythm), so it behaves the same with run-ahead and netplay.
 
+## Enhanced world map
+
+**Convenience -> Enhanced world map** (on by default, also in the in-game
+settings) changes the walkable world map: a higher camera, smoother ground,
+pins with names over the places you can travel to, a small minimap, a
+clearer "Enter" prompt and control a little sooner after leaving a town.
+Turn it off for the original walking view.
+
 ## RetroAchievements
 
 Settings -> **RetroAchievements**: tick the box and log in with your

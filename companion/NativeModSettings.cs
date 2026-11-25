@@ -13,8 +13,8 @@ public sealed record NativeModSnapshot(Dictionary<string, JsonElement> Values, s
 /// <summary>Game-specific projection of Babel's authoritative native mod state.</summary>
 public static class NativeModSettings
 {
-    private static NativeModField Toggle(string id, string section, string label, string package, string feature, string help) =>
-        new(package, feature, null, new(id, section, label, OptionKind.Boolean, OptionValue.From(false), help));
+    private static NativeModField Toggle(string id, string section, string label, string package, string feature, string help, bool fallback = false) =>
+        new(package, feature, null, new(id, section, label, OptionKind.Boolean, OptionValue.From(fallback), help));
     private static NativeModField Number(string id, string label, string feature, string value, int fallback, int min, int max, string help = "") =>
         new("iog.cheats", feature, value, new(id, "Cheats", label, OptionKind.Integer, OptionValue.From(fallback), help, min, max));
     public static readonly IReadOnlyList<NativeModField> Fields = new NativeModField[] {
@@ -32,7 +32,8 @@ public static class NativeModSettings
         Toggle("mod.stacking", "Convenience", "Stack common items", "iog.enhancements", "stacking", "Red Jewels, Herbs and Crystals each share one inventory slot, with a counter."),
         Toggle("mod.equipped", "Convenience", "Mark the equipped item", "iog.enhancements", "equipped", "Draw the equipped-item frame in the original inventory."),
         Toggle("mod.hotswap", "Convenience", "Quick item selection", "iog.enhancements", "hotswap", "Hold the configured modifier and press L/R. Existing modifier mapping is preserved (default X)."),
-        Toggle("mod.advance", "Convenience", "Hold to advance dialogue", "iog.enhancements", "hold_advance", "Hold a confirm button through dialogue. Questions still require a fresh press; existing speed choice is preserved.")
+        Toggle("mod.advance", "Convenience", "Hold to advance dialogue", "iog.enhancements", "hold_advance", "Hold a confirm button through dialogue. Questions still require a fresh press; existing speed choice is preserved."),
+        Toggle("mod.world-map", "Convenience", "Enhanced world map", "iog.enhancements", "world_map", "On the walkable world map: smoother map picture, higher camera, markers over the places you can visit, a small map and a clearer entry prompt. Off shows the plain walking view.", true)
     };
     private static readonly GameDefinition ValidationDefinition = new("gaia-mod-options", "Gaia mods", "", Fields.Select(x => x.Option).ToArray());
     private static readonly Regex Tables = new(@"(?m)^[ \t]*\[\[([\w.-]+)\]\][ \t]*(?:#.*)?\r?$", RegexOptions.Compiled);
@@ -97,7 +98,8 @@ public static class NativeModSettings
             if (Available(engineDirectory, field)) available.Add(field.Option.Id);
             var feature = Find(text, "feature", FeatureKey(field));
             JsonElement value;
-            if (field.ValueKey == null) value = OptionValue.From(Enabled(feature));
+            // A feature the state file has never named keeps its manifest default.
+            if (field.ValueKey == null) value = feature == null ? field.Option.DefaultValue.Clone() : OptionValue.From(Enabled(feature));
             else {
                 var raw = feature == null ? null : Value(SplitValues(feature.Body).Values, field.ValueKey);
                 value = raw == null ? field.Option.DefaultValue.Clone() : field.Option.Kind == OptionKind.Integer && int.TryParse(raw, out var number) ? OptionValue.From(number) : OptionValue.From(raw);

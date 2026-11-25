@@ -159,6 +159,17 @@ label = "Fast"
 feature = "hold_advance"
 id = "iog.hold_advance"
 
+[[feature]]
+id = "world_map"
+name = "Enhanced world map"
+description = "On the walkable world map: a smoother map picture with a hazed horizon, a higher camera that shows more of the land, markers over the places you can visit, a small map with your position, and a clearer entry prompt. You also get control sooner after leaving a town. Off: the plain walking view."
+group = "Presentation"
+default_enabled = true
+
+[[plugin]]
+feature = "world_map"
+id = "iog.world_map"
+
 # Title-owned presentation controls. Physical controller remapping remains in
 # the shared launcher's Controller page; these names are SNES logical buttons.
 [[feature]]

@@ -261,7 +261,9 @@ static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
     if(drawn) {
         IogMapHostDrawRadar(dst,pitch,width,height);
         IogAchievementUiToast(dst,pitch,width,height);
-        if(IogWalkableWorldActive()) {
+        if(IogWalkableWorldActive() && IogWalkableWorldEnhanced()) {
+            IogWalkableWorldDrawOverlay(dst,pitch,width,height);
+        } else if(IogWalkableWorldActive()) {
             const char *location=IogWalkableWorldLocation();
             char direction[64];
             if(location) {

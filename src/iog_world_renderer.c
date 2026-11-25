@@ -1534,7 +1534,10 @@ static void Detach(Ppu *p)
  * inventing perspective/HDMA rows. OBJ and interface pixels remain the real
  * original field, overlaid at identical world-pixel scale during presentation.
  * Other Mode7 compositions retain the same-scale reference fallback. */
-/* IOG_WORLD_MAP_FILTER=0 keeps the point-sampled hardware picture. */
+/* The setting chooses; IOG_WORLD_MAP_FILTER=0 still forces the point-sampled
+ * hardware picture for tests. */
+static bool map_enhanced;
+void IogWorldSetMapEnhanced(bool enhanced){map_enhanced=enhanced;}
 static bool Mode7FilterWanted(void)
 {
     static int wanted=-1;
@@ -1542,7 +1545,17 @@ static bool Mode7FilterWanted(void)
         const char *value=getenv("IOG_WORLD_MAP_FILTER");
         wanted=!(value && !strcmp(value,"0"));
     }
-    return wanted!=0;
+    return map_enhanced && wanted!=0;
+}
+static uint32_t Mode7Mix(uint32_t from,uint32_t to,unsigned part)
+{
+    /* part is 0..256 of `to`, per channel. */
+    uint32_t out=0;
+    for(unsigned shift=0;shift<24;shift+=8) {
+        unsigned a=(from>>shift)&255,b=(to>>shift)&255;
+        out|=((a*(256-part)+b*part+128)>>8)<<shift;
+    }
+    return out;
 }
 
 static bool RenderMode7Plane(void)
@@ -1611,6 +1624,22 @@ static bool RenderMode7Plane(void)
     /* A validated full-screen camera is drawn from its producer at sub-row
      * precision and box-filtered. Objects are restored at presentation. */
     bool filtered=s.mode7_perspective && !s.mode7_split && Mode7FilterWanted();
+    /* The map's own commonest texel is open sea. Use it, under each row's
+     * palette, for what lies past the map edge and for the haze at the
+     * horizon, so neither is a flat black cut. */
+    enum { HazeRows=14, SkyRows=40 };
+    unsigned sea=0;bool edge_is_sea=false;int horizon=1-top;
+    if(filtered) {
+        unsigned counts[256]={0};
+        const uint16_t *map=s.epochs[s.lines[1].epoch].vram;
+        for(int v=8;v<1024;v+=16) for(int u=8;u<1024;u+=16)
+            counts[SnesMode7HdFetchInt(0,map,u,v,-1)]++;
+        for(unsigned index=1;index<256;index++) if(counts[index]>counts[sea]) sea=index;
+        edge_is_sea=sea!=0;
+        int32_t probe[4];
+        while(horizon<1 && IogMode7PerspectiveSmooth(&s.mode7_parameters,horizon,0,probe)!=
+              kIogMode7PerspectiveMatrix) horizon++;
+    }
     uint8_t prior_registers[PPU_SAVESTATE_REGS_SIZE];
     memset(prior_registers,0,sizeof(prior_registers));
     for(int row=0;row<s.height;row++) {
@@ -1644,12 +1673,22 @@ static bool RenderMode7Plane(void)
                 &s.mode7_parameters,y,0,from);
             if(y>=1 && y<=224) for(int x=0;x<256;x++)
                 s.mode7_exact[(y-1)*256+x]=colors[IogMode7PlaneIndex(source,x,y)];
+            uint32_t backdrop=colors[0],haze=edge_is_sea?colors[sea]:colors[0];
+            uint32_t *out=s.output+row*s.width;
             if(status==kIogMode7PerspectiveMatrix) {
                 if(IogMode7PerspectiveSmooth(&s.mode7_parameters,y+1,0,to)!=
                    kIogMode7PerspectiveMatrix) memcpy(to,from,sizeof(to));
-                IogMode7PlaneFilteredRow(source,from,to,y,-left,s.width,colors,
-                    s.output+row*s.width);
-            } else for(int x=0;x<s.width;x++) s.output[row*s.width+x]=colors[0];
+                IogMode7PlaneFilteredRowEdge(source,from,to,y,-left,s.width,colors,haze,out);
+                if(edge_is_sea && y-horizon<HazeRows) {
+                    unsigned part=(unsigned)(HazeRows-(y-horizon))*208u/HazeRows;
+                    for(int x=0;x<s.width;x++) out[x]=Mode7Mix(out[x],haze,part);
+                }
+            } else {
+                /* Above the horizon the haze thins into the dark. */
+                int above=horizon-y;
+                uint32_t sky=Mode7Mix(haze,0,above>=SkyRows?216u:(unsigned)above*216u/SkyRows);
+                for(int x=0;x<s.width;x++) out[x]=edge_is_sea?sky:backdrop;
+            }
             continue;
         }
         if(s.mode7_perspective && (y<1 || y>224)) {

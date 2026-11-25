@@ -8,6 +8,9 @@ void IogWorldInitialize(void);
 bool IogWorldEnabled(void);
 bool IogWorldStockVerified(void);
 void IogWorldReset(void);
+/* The player-facing "Enhanced world map" setting: filtered Mode 7 plane, open
+ * sea past the map edge and a hazed horizon. Off is the point-sampled picture. */
+void IogWorldSetMapEnhanced(bool enhanced);
 void IogWorldSimulationTick(void);
 void IogWorldGeometry(int drawable_w, int drawable_h, int *width, int *height);
 void IogWorldCaptureAtCompose(const struct CpuState *cpu, uint32_t pc);

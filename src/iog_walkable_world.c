@@ -11,10 +11,13 @@
 #include "common_cpu_infra.h"
 #include "cpu_state.h"
 #include "iog_randomizer.h"
+#include "iog_map_ui.h"
 #include "iog_world_renderer.h"
 #include "sha256.h"
 #include "snes/cart.h"
 #include "snes/interp_bridge.h"
+#include "snes/mode7_hd.h"
+#include "snes/ppu.h"
 #include "snes/snes.h"
 #include "snes_overlay_draw.h"
 
@@ -42,7 +45,18 @@ enum {
     kLeaderAnimate = 0xA497,
     kCheckRoute = 0xA4BA,
     kContinueAnimation = 0xA4BF,
+    /* Stock camera words (divisor at the top line, growth per line) and the
+     * pair the tilt leaves them at. The enhanced view keeps the same ratio,
+     * so the horizon stays where it was while the camera sits twice as high. */
+    kCameraDivisor = 0xB8,
+    kCameraIncrement = 0xB6,
+    kStockDivisor = 177,
+    kStockIncrement = 1019,
+    kHighDivisor = 88,
+    kHighIncrement = 507,
 };
+int IogWorldMapEnhancedGet(void); /* iog_mods.c */
+int IogHostPadLabel(uint32_t snes_bit,char label[8],uint32_t *color); /* iog_settings.c */
 typedef struct WorldDestination {
     uint16_t x, y;
     uint16_t original_operands;
@@ -154,6 +168,28 @@ static void SyncView(uint8_t *ram)
     Put(ram,0x6be,x); Put(ram,0x6c2,y);
     Put(ram,0x6c6,0x8000|x); Put(ram,0x6ca,0x8000|y);
 }
+bool IogWalkableWorldEnhanced(void)
+{
+    /* IOG_WORLD_MAP_ENHANCED=0/1 overrides the setting for tests. */
+    static int forced=-2;
+    if(forced==-2) {
+        const char *value=getenv("IOG_WORLD_MAP_ENHANCED");
+        forced=value && *value?strcmp(value,"0")!=0:-1;
+    }
+    return forced>=0?forced!=0:IogWorldMapEnhancedGet()!=0;
+}
+static unsigned help_ticks; /* frames walked since arriving on the map */
+static void BeginWalking(uint8_t *ram,unsigned slot)
+{
+    help_ticks=0;
+    Put(ram,kLeader,slot);
+    Put(ram,slot+0x10,Word(ram,slot+0x10)&~0x2000);
+    Put(ram,slot+0x24,0x7080);
+    Put(ram,slot+0x28,Word(ram,0x0d60));
+    Put(ram,0xda,0);
+    Put(ram,kWalking,1);
+    SyncView(ram);
+}
 static void ObserveActors(CpuState *cpu,uint32_t pc)
 {
     uint8_t *ram=cpu->ram;
@@ -175,18 +211,21 @@ static void ObserveActors(CpuState *cpu,uint32_t pc)
         interp_bridge_pre_opcode_redirect(bank|kIdleReturn);
     } else if(Marked(ram) && site==kCheckForMenu) {
         Put(ram,kLeader,slot);
+        if(IogWalkableWorldEnhanced()) {
+            /* The stock tilt holds the player for 93 ticks. Start walking
+             * now and let the tick ease the camera down instead; the tilt
+             * loop's per-tick delta is cleared as its own exit does. */
+            Put(ram,0x1002e + slot,0);
+            BeginWalking(ram,slot);
+            interp_bridge_pre_opcode_redirect(bank|kLeaderAnimate);
+            return;
+        }
         /* Bypass the Mode 1 menu and the automatic route's name actor.
          * Retain the original 93-tick tilt and original sprite. */
         interp_bridge_pre_opcode_redirect(bank|kTiltWithoutTitle);
     } else if(Marked(ram) && Word(ram,kLeader) && !Word(ram,kWalking) &&
               site==kAfterTilt) {
-        Put(ram,kLeader,slot);
-        Put(ram,slot+0x10,Word(ram,slot+0x10)&~0x2000);
-        Put(ram,slot+0x24,0x7080);
-        Put(ram,slot+0x28,Word(ram,0x0d60));
-        Put(ram,0xda,0);
-        Put(ram,kWalking,1);
-        SyncView(ram);
+        BeginWalking(ram,slot);
         interp_bridge_pre_opcode_redirect(bank|kLeaderAnimate);
     } else if(Marked(ram) && Word(ram,kWalking) && slot==Word(ram,kLeader) &&
               site==kCheckRoute) {
@@ -364,8 +403,26 @@ bool IogWalkableWorldDirection(char *text,size_t capacity)
     int written=snprintf(text,capacity,"%s: %s",target->name,direction);
     return written>=0 && (size_t)written<capacity;
 }
+static int CameraStep(int delta)
+{
+    int step=delta/8;
+    return step?step:(delta>0)-(delta<0);
+}
+static void EaseCamera(uint8_t *ram)
+{
+    /* With the setting off the tilt already ended on the stock pair and
+     * nothing is written. A save made with the other setting eases across. */
+    bool high=IogWalkableWorldEnhanced();
+    int divisor=(int)Word(ram,kCameraDivisor),increment=(int)Word(ram,kCameraIncrement);
+    int want_divisor=high?kHighDivisor:kStockDivisor;
+    int want_increment=high?kHighIncrement:kStockIncrement;
+    if(divisor==want_divisor && increment==want_increment)return;
+    Put(ram,kCameraDivisor,(unsigned)(divisor+CameraStep(want_divisor-divisor)));
+    Put(ram,kCameraIncrement,(unsigned)(increment+CameraStep(want_increment-increment)));
+}
 void IogWalkableWorldTick(void)
 {
+    IogWorldSetMapEnhanced(IogWalkableWorldEnhanced());
     uint8_t *ram=LiveCart()?g_snes->ram:NULL;
     if(!ram || !Marked(ram))return;
     if(Word(ram,0x644)!=kWorldScene)return;
@@ -378,11 +435,172 @@ void IogWalkableWorldTick(void)
     if(input&SNES_PAD_LEFT)angle=(angle+4)&511;
     if(input&SNES_PAD_RIGHT)angle=(angle+508)&511;
     Put(ram,kCameraAngle,angle);
+    EaseCamera(ram);
+    if(help_ticks<0xffff)help_ticks++;
     if(input&SNES_PAD_UP)Move(ram,angle,1);
     if(input&SNES_PAD_DOWN)Move(ram,angle,-1);
     SyncView(ram);
     if(input&SNES_PAD_B) {
         const WorldDestination *destination=Nearby(ram);
         if(destination)Enter(ram,destination);
+    }
+}
+
+/* ---- Enhanced view: markers, minimap and prompt plate --------------------
+ * Host presentation only. Drawn in the widescreen frame with the overlay
+ * font and plain shapes, in the cream-on-umber of the game's own boxes. */
+enum {
+    kInk = 0xff1c140a, kCream = 0xfff2dda4, kGold = 0xffffc64a,
+    kShut = 0xff8f8672, kPlate = 0x241a0e, kMini = 56
+};
+static void Shade(uint32_t *dst,int stride,int width,int height,
+    int x0,int y0,int w,int h,uint32_t rgb,unsigned part)
+{
+    for(int y=y0<0?0:y0;y<y0+h && y<height;y++)
+        for(int x=x0<0?0:x0;x<x0+w && x<width;x++) {
+            uint32_t under=dst[y*stride+x],out=0xff000000u;
+            for(unsigned shift=0;shift<24;shift+=8) {
+                unsigned a=(under>>shift)&255,b=(rgb>>shift)&255;
+                out|=((a*(256-part)+b*part)>>8)<<shift;
+            }
+            dst[y*stride+x]=out;
+        }
+}
+static void Label(uint32_t *dst,int stride,int height,int x,int y,
+    const char *text,uint32_t color,int scale)
+{
+    for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
+        if(dx||dy)snes_ovl_draw_text(dst,stride,height,x+dx*scale,y+dy*scale,text,kInk,scale);
+    snes_ovl_draw_text(dst,stride,height,x,y,text,color,scale);
+}
+/* Where a map point lands in the native 256x224 field under the current
+ * camera: the inverse of the perspective producer about its pivot (128,112). */
+static bool Project(const uint8_t *ram,int map_x,int map_y,double *x,double *y)
+{
+    unsigned angle=Word(ram,kCameraAngle)&511;
+    double c=(int16_t)Word(world.rom,0x1c695+angle*2)/32768.0;
+    double s=(int16_t)Word(world.rom,0x1c595+angle*2)/32768.0;
+    double u=map_x-(int)Word(ram,kMapX),w=map_y-(int)Word(ram,kMapY);
+    double across=c*u-s*w,down=s*u+c*w;
+    double divisor=Word(ram,kCameraDivisor),increment=Word(ram,kCameraIncrement);
+    double reach=128.0-down*increment/256.0;
+    if(reach<8.0)return false; /* at or past the horizon */
+    *y=(down*divisor+14336.0)/reach;
+    double scale=128.0/(divisor+increment**y/256.0);
+    if(scale<=0)return false;
+    *x=128.0+across/scale;
+    return true;
+}
+static void Marker(uint32_t *dst,int stride,int height,int x,int y,
+    const char *name,bool open)
+{
+    uint32_t color=open?kGold:kShut;
+    /* A pin: stem from the ground point, diamond head, name above. */
+    snes_ovl_fill_rect(dst,stride,height,x-1,y-13,3,13,kInk);
+    snes_ovl_fill_rect(dst,stride,height,x,y-12,1,12,color);
+    for(int r=-5;r<=5;r++) {
+        int half=5-abs(r);
+        snes_ovl_fill_rect(dst,stride,height,x-half,y-18+r,half*2+1,1,kInk);
+    }
+    for(int r=-3;r<=3;r++) {
+        int half=3-abs(r);
+        snes_ovl_fill_rect(dst,stride,height,x-half,y-18+r,half*2+1,1,color);
+    }
+    Label(dst,stride,height,x-4*snes_ovl_text_len(name),y-35,name,open?kCream:kShut,1);
+}
+static void Minimap(uint32_t *dst,int stride,int width,int height,const uint8_t *ram)
+{
+    static uint32_t picture[kMini*kMini];
+    static unsigned age;
+    const Ppu *ppu=g_snes->ppu;
+    if(!ppu)return;
+    if(age++%60==0) {
+        /* The flat map itself, four texels averaged per pixel. */
+        for(int j=0;j<kMini;j++)for(int i=0;i<kMini;i++) {
+            unsigned red=0,green=0,blue=0;
+            for(int n=0;n<4;n++) {
+                int u=(i*2+(n&1))*1024/(kMini*2)+4,v=(j*2+(n>>1))*1024/(kMini*2)+4;
+                unsigned color=ppu->cgram[SnesMode7HdFetchInt(0,ppu->vram,u,v,-1)];
+                red+=color&31;green+=(color>>5)&31;blue+=(color>>10)&31;
+            }
+            picture[j*kMini+i]=0xff000000u|(red*2+red/16)<<16|(green*2+green/16)<<8|(blue*2+blue/16);
+        }
+    }
+    int x0=width-kMini-14,y0=14;
+    snes_ovl_fill_rect(dst,stride,height,x0-3,y0-3,kMini+6,kMini+6,kInk);
+    snes_ovl_stroke_rect(dst,stride,height,x0-2,y0-2,kMini+4,kMini+4,kCream);
+    for(int j=0;j<kMini;j++)for(int i=0;i<kMini;i++)dst[(y0+j)*stride+x0+i]=picture[j*kMini+i];
+    unsigned choice=Word(ram,kMapChoice);
+    for(unsigned i=0;i<sizeof(destinations)/sizeof(destinations[0]);i++) {
+        if(!(allowed[choice]&(1u<<i)))continue;
+        int x=x0+destinations[i].x*kMini/1024,y=y0+destinations[i].y*kMini/1024;
+        snes_ovl_fill_rect(dst,stride,height,x-2,y-2,5,5,kInk);
+        snes_ovl_fill_rect(dst,stride,height,x-1,y-1,3,3,
+            DestinationAllowed(ram,choice,i)?kGold:kShut);
+    }
+    /* The player: a dot with a tail pointing the way the camera faces. */
+    unsigned angle=Word(ram,kCameraAngle)&511;
+    int x=x0+(int)Word(ram,kMapX)*kMini/1024,y=y0+(int)Word(ram,kMapY)*kMini/1024;
+    int vx=Velocity(0x1c595,angle),vy=Velocity(0x1c695,angle);
+    for(int n=2;n<=6;n++) {
+        int px=x+vx*n/512,py=y+vy*n/512;
+        if(px>=x0 && px<x0+kMini && py>=y0 && py<y0+kMini)
+            snes_ovl_fill_rect(dst,stride,height,px,py,1,1,0xffffffffu);
+    }
+    snes_ovl_fill_rect(dst,stride,height,x-2,y-2,5,5,kInk);
+    snes_ovl_fill_rect(dst,stride,height,x-1,y-1,3,3,0xffff5a3cu);
+}
+void IogWalkableWorldDrawOverlay(uint8_t *pixels,size_t pitch,int width,int height)
+{
+    if(!pixels || width<256 || height<224 || pitch<(size_t)width*4 ||
+       !IogWalkableWorldActive())return;
+    const uint8_t *ram=g_snes->ram;
+    uint32_t *dst=(uint32_t *)pixels;
+    int stride=(int)(pitch/sizeof(uint32_t));
+    int left=(width-256)/2,top=(height-224)/2;
+    unsigned choice=Word(ram,kMapChoice);
+    const WorldDestination *here=Nearby(ram);
+    for(unsigned i=0;i<sizeof(destinations)/sizeof(destinations[0]);i++) {
+        /* Every place this stage's stock menu lists. One the story still
+         * holds shut (the road to South Cape from Itory) is drawn dim. */
+        if(!(allowed[choice]&(1u<<i)) || &destinations[i]==here)continue;
+        double x,y;
+        if(!Project(ram,destinations[i].x,destinations[i].y,&x,&y))continue;
+        int sx=left+(int)x,sy=top+(int)y-1;
+        if(sx<40 || sx>=width-40 || sy<44 || sy>=height-40)continue;
+        /* Never over the player, who stands at the pivot. */
+        if(abs(sx-(left+128))<28 && sy>top+84 && sy<top+150)continue;
+        /* Nor under the minimap in the top right corner. */
+        if(sx>width-kMini-70 && sy<kMini+60)continue;
+        Marker(dst,stride,height,sx,sy,destinations[i].name,
+            DestinationAllowed(ram,choice,i));
+    }
+    Minimap(dst,stride,width,height,ram);
+    /* Prompt plate along the bottom, clear of the player. */
+    char text[72],label[8]={0};
+    uint32_t tint=0;
+    int glyph=0,scale=1;
+    if(here) {
+        /* The pad's own name for the button, in the chosen prompt style. */
+        if(!IogHostPadLabel(SNES_PAD_B,label,&tint) || !label[0]) {
+            label[0]='B';label[1]=0;tint=SNES_OVL_COL_B;
+        }
+        glyph=IogMapUiGlyphWidth(label,tint,1)+6;scale=2;
+        snprintf(text,sizeof(text),"Enter %s",here->name);
+    } else if(!IogWalkableWorldDirection(text,sizeof(text))) text[0]=0;
+    int text_width=8*scale*snes_ovl_text_len(text);
+    int plate_width=text_width+glyph+20,plate_height=scale==2?28:18;
+    int x=(width-plate_width)/2,y=height-plate_height-12;
+    if(text[0]) {
+        Shade(dst,stride,width,height,x,y,plate_width,plate_height,kPlate,200);
+        snes_ovl_stroke_rect(dst,stride,height,x,y,plate_width,plate_height,kCream);
+        if(glyph)IogMapUiGlyphDraw(dst,stride,height,x+8,y+(plate_height-IOG_MAP_UI_GLYPH_HEIGHT)/2,label,tint,1);
+        Label(dst,stride,height,x+10+glyph,y+(plate_height-8*scale)/2+1,text,kCream,scale);
+    }
+    /* The controls, for the first few seconds of each visit to the map. */
+    if(help_ticks<300) {
+        const char *help="Up/Down: Walk  Left/Right: Turn";
+        int help_width=8*snes_ovl_text_len(help);
+        Label(dst,stride,height,(width-help_width)/2,y-14,help,kCream,1);
     }
 }

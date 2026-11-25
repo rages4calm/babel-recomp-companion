@@ -11,6 +11,8 @@ BODY=r'''
 #define IogMode7PlaneTexel WrongFlipTexel
 #define IogMode7PlaneSamples WrongFlipSamples
 #define IogMode7PlaneFilteredRow WrongFlipFilteredRow
+#define IogMode7PlaneFilteredRowEdge WrongFlipFilteredRowEdge
+#define IogMode7PlaneColor WrongFlipColor
 #include "wrong-flip.h"
 #undef IogMode7PlanePixel
 #undef IogMode7PlaneIndex
@@ -18,6 +20,8 @@ BODY=r'''
 #undef IogMode7PlaneTexel
 #undef IogMode7PlaneSamples
 #undef IogMode7PlaneFilteredRow
+#undef IogMode7PlaneFilteredRowEdge
+#undef IogMode7PlaneColor
 #undef IOG_MODE7_PLANE_H
 #define IogMode7PlanePixel WrongTruncation
 #define IogMode7PlaneIndex WrongTruncationIndex
@@ -25,6 +29,8 @@ BODY=r'''
 #define IogMode7PlaneTexel WrongTruncationTexel
 #define IogMode7PlaneSamples WrongTruncationSamples
 #define IogMode7PlaneFilteredRow WrongTruncationFilteredRow
+#define IogMode7PlaneFilteredRowEdge WrongTruncationFilteredRowEdge
+#define IogMode7PlaneColor WrongTruncationColor
 #include "wrong-truncation.h"
 #undef IogMode7PlanePixel
 #undef IogMode7PlaneIndex
@@ -32,6 +38,8 @@ BODY=r'''
 #undef IogMode7PlaneTexel
 #undef IogMode7PlaneSamples
 #undef IogMode7PlaneFilteredRow
+#undef IogMode7PlaneFilteredRowEdge
+#undef IogMode7PlaneColor
 static uint32_t expanded_reference(Ppu*p,int x,int y){
  if(PPU_forcedBlank(p))return 0;
  int cx=SnesMode7HdSign13(p->m7matrix[4]),cy=SnesMode7HdSign13(p->m7matrix[5]);
@@ -115,6 +123,20 @@ int main(void){
   IogMode7PlaneFilteredRow(&source,from,to,0,0,0,colors,&guard);IogMode7PlaneFilteredRow(&source,from,to,513,0,1,colors,&guard);
   IogMode7PlaneFilteredRow(&source,from,to,0,2049,1,colors,&guard);IogMode7PlaneFilteredRow(&source,from,to,0,0,1,NULL,&guard);
   CHECK(guard==0x12345678u);
+ }
+ /* The caller's edge color shows only past a non-repeating map, and the
+  * plain form is the same call with palette entry 0. */
+ for(unsigned n=0;n<32;n++){
+  memset(&source,0,sizeof(source));ppu_reset(&source);source.bgmode=7;source.inidisp=15;source.screenEnabled[0]=1;source.m7sel=(uint8_t)((n&3)*64);
+  for(unsigned i=0;i<32768;i++)source.vram[i]=(uint16_t)next();
+  uint32_t colors[256],plain[300],edged[300];for(unsigned i=0;i<256;i++)colors[i]=(uint32_t)next()&0xffffffu;
+  source.m7matrix[0]=source.m7matrix[3]=256;int32_t m[4]={65536,0,0,65536};
+  IogMode7PlaneFilteredRow(&source,m,m,(int)n,-40,300,colors,plain);
+  IogMode7PlaneFilteredRowEdge(&source,m,m,(int)n,-40,300,colors,colors[0],edged);CHECK(!memcmp(plain,edged,sizeof(plain)));
+  IogMode7PlaneFilteredRowEdge(&source,m,m,(int)n,-40,300,colors,0x123456u,edged);
+  for(int i=0;i<300;i++){int x=i-40;
+   if(source.m7sel==0x80&&x<0){CHECK(edged[i]==0x123456u);}
+   else if(x>=0){CHECK(edged[i]==plain[i]);}}
  }
  CHECK(IogMode7PlaneSamples(1)==3&&IogMode7PlaneSamples(65536)==3&&IogMode7PlaneSamples(65537)==4&&IogMode7PlaneSamples(131072)==4);
  CHECK(IogMode7PlaneSamples(131073)==6&&IogMode7PlaneSamples(1<<20)==8&&IogMode7PlaneTexel(-1)==-1&&IogMode7PlaneTexel(16777216)==1);

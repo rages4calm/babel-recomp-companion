@@ -72,9 +72,20 @@ static inline unsigned IogMode7PlaneSamples(int64_t footprint_q16)
  * caller's composed palette for this line. Unlike IogMode7PlaneIndex this
  * deliberately has no six-bit truncation and is not a hardware reference; an
  * integer positive axis-aligned scale reproduces the point sample exactly. */
-static inline void IogMode7PlaneFilteredRow(const Ppu *p,const int32_t from[4],
+static inline uint32_t IogMode7PlaneColor(const Ppu *p,const uint32_t colors[256],
+    uint32_t outside,int u,int w)
+{
+    /* The one case where the fetch reports the backdrop for a texel that is
+     * not on the map at all. */
+    if(((unsigned)u>=1024 || (unsigned)w>=1024) && (p->m7sel&0xC0)==0x80)return outside;
+    return colors[SnesMode7HdFetchInt(p->m7sel,p->vram,u,w,-1)];
+}
+
+/* As IogMode7PlaneFilteredRow, with the color shown past the edge of a
+ * non-repeating map chosen by the caller instead of palette entry 0. */
+static inline void IogMode7PlaneFilteredRowEdge(const Ppu *p,const int32_t from[4],
     const int32_t to[4],int screen_y,int first_x,int count,
-    const uint32_t colors[256],uint32_t *out)
+    const uint32_t colors[256],uint32_t outside,uint32_t *out)
 {
     if(!p || !from || !to || !colors || !out || count<1 || count>4096 ||
        first_x < -2048 || first_x+count > 2049 ||
@@ -135,7 +146,7 @@ static inline void IogMode7PlaneFilteredRow(const Ppu *p,const int32_t from[4],
             if(u==IogMode7PlaneTexel(edge_u[0]+from[0]*x1) && w==IogMode7PlaneTexel(edge_w[0]+from[2]*x1) &&
                u==IogMode7PlaneTexel(edge_u[1]+to[0]*x0) && w==IogMode7PlaneTexel(edge_w[1]+to[2]*x0) &&
                u==IogMode7PlaneTexel(edge_u[1]+to[0]*x1) && w==IogMode7PlaneTexel(edge_w[1]+to[2]*x1)) {
-                out[i]=colors[SnesMode7HdFetchInt(p->m7sel,p->vram,u,w,-1)]&0xffffffu;
+                out[i]=IogMode7PlaneColor(p,colors,outside,u,w)&0xffffffu;
                 continue;
             }
         }
@@ -144,9 +155,9 @@ static inline void IogMode7PlaneFilteredRow(const Ppu *p,const int32_t from[4],
             int64_t x=left+offset[k];
             if(flip_x)x=255*256-x;
             for(unsigned j=0;j<ny;j++) {
-                uint32_t color=colors[SnesMode7HdFetchInt(p->m7sel,p->vram,
+                uint32_t color=IogMode7PlaneColor(p,colors,outside,
                     IogMode7PlaneTexel(base_u[j]+a[j]*x),
-                    IogMode7PlaneTexel(base_w[j]+c[j]*x),-1)];
+                    IogMode7PlaneTexel(base_w[j]+c[j]*x));
                 red_blue+=color&0xff00ffu;green+=color&0xff00u;
             }
         }
@@ -154,5 +165,12 @@ static inline void IogMode7PlaneFilteredRow(const Ppu *p,const int32_t from[4],
             ((((green>>8)*reciprocal+32768u)>>16)<<8) |
             (((red_blue&0xffffu)*reciprocal+32768u)>>16);
     }
+}
+
+static inline void IogMode7PlaneFilteredRow(const Ppu *p,const int32_t from[4],
+    const int32_t to[4],int screen_y,int first_x,int count,
+    const uint32_t colors[256],uint32_t *out)
+{
+    if(colors)IogMode7PlaneFilteredRowEdge(p,from,to,screen_y,first_x,count,colors,colors[0],out);
 }
 #endif
