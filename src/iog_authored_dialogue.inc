@@ -28,18 +28,30 @@ static int GaiaAuthoredHex(const char **text, unsigned digits, char end, unsigne
 }
 
 /* Parse the literal stream and follow the cursor as the stock renderer
- * would. Text must stay inside a box this string opened itself. */
-static int GaiaAuthoredTokens(const char *text, Toks *out)
+ * would. Text must stay inside a box this string opened itself, or inside
+ * the box a leading [BOX:x,y,w,h] says the calling script left open. The
+ * stream has to end the way the stock string does. */
+static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal)
 {
     static const struct { const char *name; uint8_t code; } plain[] = {
         {"[N]", CMD_N}, {"[FIN]", CMD_FIN}, {"[WAI]", 0xd0}, {"[CLR]", 0xce},
-        {"[CLD]", 0xc8}, {"[DEF]", 0xd3}, {"[END]", CMD_END},
+        {"[CLD]", 0xc8}, {"[DEF]", 0xd3}, {"[END]", CMD_END}, {"[RET]", CMD_RET},
     };
     static const struct { const char *name; uint8_t code; } operand[] = {
         {"[TPL:", 0xc2}, {"[PAL:", 0xc3}, {"[PAU:", 0xc9}, {"[SFX:", CMD_SFX}, {"[DLY:", 0xd5},
     };
     unsigned width = 0, height = 0, column = 0, row = 0, glyphs = 0;
     int placed = 0;
+    if (!strncmp(text, "[BOX:", 5)) {
+        unsigned x, y, w, h;
+        text += 5;
+        if (!GaiaAuthoredHex(&text, 2, ',', &x) || !GaiaAuthoredHex(&text, 2, ',', &y) ||
+            !GaiaAuthoredHex(&text, 2, ',', &w) || !GaiaAuthoredHex(&text, 2, ']', &h) ||
+            !x || y < 6 || w < 2 || !h || x + 2 * w > 30 || y + 2 * h > 26)
+            return 0;
+        width = 2 * w;
+        height = h;
+    }
     while (*text) {
         Tok token = {.type = T_CMD, .ref = -1};
         unsigned a = 0, b = 0;
@@ -150,9 +162,9 @@ static int GaiaAuthoredTokens(const char *text, Toks *out)
             if (a > 9)
                 return 0;
             break;
-        case CMD_END:
+        case CMD_END: case CMD_RET:
             Push(out, &token);
-            return !*text && !placed && glyphs;
+            return !*text && !placed && glyphs && token.code == terminal;
         default:
             break;
         }
@@ -184,7 +196,7 @@ static void GaiaApplyAuthored(FILE *file, const Rom *stock, const Structure *str
         const uint32_t offset = label->off;
         const uint32_t span = StringSpan(stock, offset);
         if (label->has_marker || label->unk16 || span < 5 ||
-            stock->rom[offset + span - 1] != CMD_END ||
+            (stock->rom[offset + span - 1] != CMD_END && stock->rom[offset + span - 1] != CMD_RET) ||
             GaiaStockSignature(stock, offset, span) != signature ||
             !GaiaPatchDisjoint(pack, offset, 5))
             continue;
@@ -198,7 +210,7 @@ static void GaiaApplyAuthored(FILE *file, const Rom *stock, const Structure *str
         if (!disjoint)
             continue;
         Item item = {0};
-        if (GaiaAuthoredTokens(cursor, &item.toks)) {
+        if (GaiaAuthoredTokens(cursor, &item.toks, stock->rom[offset + span - 1])) {
             const unsigned size = (unsigned)Encode(NULL, &item, NULL);
             const uint32_t address = GaiaUiAddress(pack, fill, size);
             if (address) {

@@ -39,15 +39,19 @@ TAIL_PREFIXES = {
     "09BE70": (4, "[TPL:2]"),
 }
 
-# Strings that open their own boxes keep the authored pages, rows and box
-# sizes. gaia_authored_dialogue checks each one against the stock renderer.
+# These strings keep the authored pages, rows and box sizes. Most open their
+# own boxes; the others return to a script that continues in the same box,
+# or print into the box their calling script opened. gaia_authored_dialogue
+# checks each one against the stock renderer and its script.
 AUTHORED = frozenset((
-    "039D0E", "04953E", "049B18", "049BE5", "04A0D7", "04B00F", "04B652", "04BA55",
-    "04C115", "04D141", "04D732", "04D8D2", "05AADD", "05B225", "05EA25", "05F160",
-    "0698D2", "06A57F", "06AB53", "06B250", "06B67B", "06BB50", "079520", "07ADEA",
-    "07B0E1", "07B108", "07B9B1", "07BA2E", "07BBB0", "07BCAA", "07D6C2", "07DC63",
-    "07DDD2", "08830F", "089C5B", "08BFC7", "08F157", "0981F4", "098CAA", "09C7AE",
-    "0AFB45",
+    "039D0E", "04953E", "049B18", "049BE5", "04A0D7", "04AA20", "04B00F", "04B652",
+    "04BA55", "04C115", "04C271", "04C460", "04D141", "04D732", "04D78A", "04D8D2",
+    "04F5EA", "04F68F", "0594B8", "05AADD", "05B225", "05B8CD", "05EA25", "05EB94",
+    "05F160", "0698D2", "06A57F", "06AB53", "06B250", "06B67B", "06BB50", "06BC5C",
+    "06BD1A", "06BD4A", "079520", "0796A9", "07ADEA", "07B0E1", "07B108", "07B9B1",
+    "07BA2E", "07BBB0", "07BCAA", "07CE28", "07D6C2", "07DC63", "07DDD2", "08830F",
+    "08963C", "089C5B", "08A096", "08B70D", "08BFC7", "08CDDA", "08E722", "08E853",
+    "08F157", "0981F4", "098CAA", "09C7AE", "09D1FC", "0AFB45",
 ))
 
 INTERFACE_FILES = (
@@ -463,7 +467,7 @@ def main():
             if offset in AUTHORED and rom is not None and offset in labels:
                 try:
                     stock, data = gaia_authored_dialogue.decode_stock(rom, int(offset, 16))
-                    stream = gaia_authored_dialogue.transcribe(content, stock, names)
+                    stream = gaia_authored_dialogue.transcribe(content, stock, names, rom, int(offset, 16))
                 except gaia_authored_dialogue.Unsupported as error:
                     excluded[offset] = str(error)
                 else:

@@ -90,15 +90,17 @@ def pair(argument):
     return number(first), number(second)
 
 
-def simulate(stream):
+def simulate(stream, box=None):
     """Run a stock-engine command stream. Returns a summary of what it did.
+
+    `box` is the box the calling script left open, if any.
 
     Raises Unsupported when text would leave its box, when a box is opened
     over one it does not cover, or when text is printed with no known box.
     """
-    box = None
     column = row = 0
     position = None
+    rows = [""]
     summary = {"waits": 0, "pauses": [], "boxes": [], "sfx": set(), "terminal": None,
                "glyphs": 0, "trailing_palette": False, "opens_first": None}
     previous = None
@@ -111,6 +113,7 @@ def simulate(stream):
             if box is None:
                 raise Unsupported("text outside a known box")
             column += 1
+            rows[-1] += argument
             if column > 2 * box[2]:
                 raise Unsupported("row exceeds its box")
             summary["glyphs"] += 1
@@ -127,17 +130,21 @@ def simulate(stream):
                 raise Unsupported("line break outside a known box")
             row += 1
             column = 0
+            rows.append("")
             if row >= box[3]:
                 raise Unsupported("page exceeds its box")
         elif name in ("FIN", "WAI"):
             summary["waits"] += 1
             if name == "FIN":
                 column = row = 0
+                rows = [""]
         elif name == "CLR":
             column = row = 0
+            rows = [""]
         elif name == "CLD":
             box = None
             column = row = 0
+            rows = [""]
         elif name in ("TPL", "DEF", "SIZ"):
             if name == "TPL":
                 template = number(argument)
@@ -162,6 +169,7 @@ def simulate(stream):
                 summary["opens_first"] = True
             box = opened
             column = row = 0
+            rows = [""]
             summary["boxes"].append(opened)
         elif name == "DLG":
             position = pair(argument)
@@ -181,6 +189,7 @@ def simulate(stream):
         previous = (name, argument)
     if position is not None:
         raise Unsupported("box position without a size")
+    summary.update(box=box, rows=rows, after_wait=previous == ("FIN", ""))
     return summary
 
 
@@ -343,27 +352,143 @@ def fit_rows(source, names):
     return "".join(out)
 
 
-def transcribe(source, stock, names):
+_INHERIT = object()
+
+
+def _opener(box):
+    """GaiaLabs-notation tag that opens a stock box geometry in `transcribe`."""
+    for template, geometry in STOCK_BOXES.items():
+        if geometry == box:
+            return f"[TPL:{template:X}]"
+    return f"[DLG:{box[0]:X},{box[1]:X}][SIZ:{box[2]:X},{box[3]:X}]"
+
+
+def _wrap(text):
+    rows = []
+    for word in text.split():
+        if rows and len(rows[-1]) + 1 + len(word) <= COLUMNS:
+            rows[-1] += " " + word
+        else:
+            rows.append(word)
+    if any(len(row) > COLUMNS for row in rows):
+        raise Unsupported("word wider than the box")
+    return rows
+
+
+def _choice_page(source, options, skip, final_box, stock_rows, plain):
+    """Rebuild the last page so the choices start on the row the script expects.
+
+    COP $BE places its cursor `skip` rows below the box origin and GaiaLabs
+    scripts may use another row. The question keeps the sentences that fit
+    in those rows; earlier sentences get a page of their own.
+    """
+    cut = max(source.rfind(tag) + len(tag) if tag in source else 0 for tag in ("[FIN]", "[CLD]", "[CLR]"))
+    before, page = source[:cut], source[cut:]
+    parts = [part for part in TOKEN.split(page) if part]
+    head = []
+    while parts and parts[0].startswith("[") and parts[0] != "[N]" and not parts[0].startswith("[PAL"):
+        head.append(parts.pop(0))
+    rows = [""]
+    for part in parts:
+        if part == "[N]":
+            rows.append("")
+        elif part.startswith("[PAL") or part == "[WAI]":
+            continue        # Stock choices use the box's plain colours and no extra wait.
+        elif part.startswith("["):
+            raise Unsupported("commands inside the choice page")
+        else:
+            rows[-1] += part
+    first = len(rows)
+    while first and rows[first - 1].startswith(" ") and rows[first - 1].strip():
+        first -= 1
+    choices, text = rows[first:], [row for row in rows[:first] if row.strip()]
+    # An option may continue on a second row, as in stock. The script's
+    # cursor only visits `options` rows, so the row count has to match stock.
+    if len(choices) < options or len(choices) != stock_rows:
+        raise Unsupported("choice rows differ from the stock page")
+    if plain:
+        choices[0] = "[PAL:0]" + choices[0]
+    if final_box[3] < skip + len(choices):
+        raise Unsupported("stock box is smaller than the choice page")
+    speaker = [tag for tag in head if tag.startswith("[TPL:") and int(tag[5:-1], 16) not in _FAMILY]
+    presentation = [tag for tag in head if tag.startswith(("[DLY", "[SFX", "[PAU"))]
+    early = []
+    if len(text) > skip:
+        sentences = re.split(r'(?<=[.!?"])\s+', " ".join(text))
+        keep = []
+        while sentences and len(_wrap(" ".join(sentences[-1:] + keep))) <= skip:
+            keep.insert(0, sentences.pop())
+        if keep or not skip:
+            early, text = _wrap(" ".join(sentences)), _wrap(" ".join(keep)) if keep else []
+        else:
+            early, text = text[:len(text) - skip], text[len(text) - skip:]
+    out = before
+    family = "top" if final_box[1] < 12 else "bottom"
+    while early:
+        shown, early = early[:4], early[4:]
+        out += f"[TPL:{_TEMPLATE[family, len(shown)]:X}]" + "".join(speaker + presentation) + "[N]".join(shown) + "[FIN]"
+        presentation = []
+    text += [""] * (skip - len(text))
+    return out + "[BOX]" + "".join(speaker + presentation) + "[N]".join(text + choices)
+
+
+def transcribe(source, stock, names, rom=None, offset=None):
     """Return the stock-engine stream for one authored string.
 
     `source` is the GaiaLabs declaration body, `stock` the decoded USA string
-    in the same notation. Raises Unsupported when the result cannot be shown
-    to keep the stock string's behaviour.
+    in the same notation. With `rom` and `offset`, strings that share a box
+    with their calling script are supported as well. The result starts with
+    a `[BOX:x,y,w,h]` tag when the string prints into an inherited box.
+    Raises Unsupported when the result cannot be shown to keep the stock
+    string's behaviour.
     """
     profile = stock_profile(stock)
-    if profile["terminal"] != "END" or not profile["opens_first"]:
-        raise Unsupported("stock string does not open its own box and end the dialogue")
+    inherited = None
+    if not profile["opens_first"]:
+        inherited = caller_box(rom, offset) if rom is not None else None
+        if inherited is None or not stock_state(stock, inherited)["fits"]:
+            raise Unsupported("the calling script's box is not known")
+    final = stock_state(stock, inherited)
+    contract = prompt_contract(rom, offset) if rom is not None and profile["terminal"] == "RET" else None
+    if profile["terminal"] == "END":
+        mode = "end"
+    elif profile["terminal"] != "RET":
+        raise Unsupported("stock string does not end or return")
+    elif contract:
+        mode = "choice"
+    elif final["box"] is None and profile["opens_first"]:
+        mode = "closed"
+    elif final["after_wait"] and final["box"] is not None:
+        mode = "page"
+    else:
+        raise Unsupported("stock string returns in the middle of a page")
     source = fit_rows(source, names)
-    # A close after the final END never runs: END already closes the box.
-    source = re.sub(r"\[END\](?:\[CLD\])+$", "[END]", source)
-    if not source.endswith("[END]"):
-        raise Unsupported("authored string does not end the dialogue")
     if "[::]" in source:
         raise Unsupported("authored entry point")
+    if mode == "end":
+        # A close after the final END never runs: END already closes the box.
+        source = re.sub(r"\[END\](?:\[CLD\])+$", "[END]", source)
+        if not source.endswith("[END]"):
+            raise Unsupported("authored string does not end the dialogue")
+    elif "[END]" in source or "[RET]" in source:
+        raise Unsupported("authored string ends a dialogue the stock string continues")
+    elif mode == "closed":
+        if not source.endswith("[CLD]"):
+            raise Unsupported("authored string leaves its box open")
+    elif mode == "page":
+        if not source.endswith("[FIN]"):
+            raise Unsupported("authored string returns in the middle of a page")
+        source += "[BOX]"
+    else:
+        source = _choice_page(source, contract[0], contract[1], final["box"], final["row"] + 1 - contract[1],
+                              "[PAL:00]" in stock[stock.rfind("[FIN]") + 1:])
+    if mode != "end":
+        source += "[RET]"
 
     out = []
-    box = None
-    speaker = active = None       # requested speaker, speaker the engine currently shows
+    box = inherited
+    # An inherited box keeps the caller's colours until the string names a speaker.
+    speaker = active = _INHERIT if inherited else None
     delay = sound = None          # requested typing delay and per-character sound
     shown_delay = shown_sound = None
     fresh = False                 # a delay or sound was requested since the last text
@@ -372,7 +497,7 @@ def transcribe(source, stock, names):
     parts = list(tokens(source))
 
     def open_box(opened, command):
-        nonlocal box, active, page_text, delay, sound, shown_delay, shown_sound
+        nonlocal box, active, page_text, delay, sound, shown_delay, shown_sound, speaker
         if page_text:
             # GaiaLabs may open the next box after an input wait on the same
             # page. Stock redraws the body, which starts the page again.
@@ -387,6 +512,8 @@ def transcribe(source, stock, names):
         if box is not None and not covers(opened, box):
             out.append("[CLD]")
         out.append(command)
+        if speaker is _INHERIT:
+            speaker = None
         box = opened
         # Opening a box restores the default colours, sound and typing speed.
         active = shown_delay = shown_sound = None
@@ -456,6 +583,19 @@ def transcribe(source, stock, names):
             open_box((x, y, width, height), f"[DLG:{x:02X},{y:02X}][SIZ:{width:02X},{height:02X}]")
         elif name in ("BOR", "SEP"):
             continue
+        elif name == "BOX":
+            # The script continues in the box the stock string leaves open.
+            if box != final["box"]:
+                x, y, width, height = final["box"]
+                tag = _opener(final["box"])
+                open_box(final["box"], f"[TPL:{int(tag[5:-1], 16):02X}]" if tag.startswith("[TPL")
+                         else f"[DLG:{x:02X},{y:02X}][SIZ:{width:02X},{height:02X}]")
+            if mode == "page":
+                if speaker is not _INHERIT:
+                    speaker = final["speaker"]
+                    select_speaker()
+        elif name == "RET" and last:
+            out.append("[RET]")
         elif name == "N":
             out.append("[N]")
         elif name == "FIN":
@@ -473,6 +613,8 @@ def transcribe(source, stock, names):
                 out.append("[CLD]")
             # Authored narration after a closed box names no speaker.
             box = speaker = active = None
+            if last and mode != "closed":
+                raise Unsupported("authored string closes a box the script keeps")
             page_text = False
         elif name == "PAU":
             value = number(argument)
@@ -522,9 +664,21 @@ def transcribe(source, stock, names):
         raise Unsupported("box position without a size")
 
     stream = "".join(out)
-    result = simulate(stream)
-    if result["terminal"] != "END" or not result["glyphs"] or not result["opens_first"]:
+    result = simulate(stream, inherited)
+    if result["terminal"] != profile["terminal"] or not result["glyphs"]:
         raise Unsupported("transcription lost its terminal or text")
+    if (mode == "end" and inherited is None and not result["opens_first"]) or result["box"] != \
+            (final["box"] if mode in ("page", "choice") else None if mode == "closed" else result["box"]):
+        raise Unsupported("transcription leaves a different box")
+    if mode == "choice":
+        options, skip = contract
+        rows = result["rows"]
+        if len(rows) != final["row"] + 1 or any(not row.startswith(" ") or not row.strip() for row in rows[skip:]):
+            raise Unsupported("choices are not on the rows the script expects")
+    if mode == "closed" and not result["waits"] and result["pauses"] != profile["pauses"]:
+        raise Unsupported("timed string changes its timeline")
+    if inherited:
+        stream = "[BOX:%02X,%02X,%02X,%02X]" % inherited + stream
     # END waits for input, so the pauses only pace a page the player dismisses.
     if any(value not in profile["pauses"] and value > 0x40 for value in result["pauses"]):
         raise Unsupported("long pause absent from the stock string")
@@ -590,3 +744,116 @@ def stock_signature(data):
     for byte in data:
         value = ((value ^ byte) * 0x01000193) & 0xFFFFFFFF
     return value
+
+
+# ---- strings that share a box with their calling script ---------------------
+
+def stock_state(stock, box=None):
+    """Follow a stock string and report the state it leaves behind.
+
+    `box` is the box the calling script left open, or None. Stock rows may
+    scroll, so only a row wider than its box makes the string unusable as
+    evidence for a guessed caller box.
+    """
+    plain = re.sub(r"\[SEP:[^\]]*\]", "", STOCK_LOOKUP.sub("x", stock))
+    column = row = 0
+    position = speaker = None
+    state = {"terminal": None, "fits": True, "after_wait": False, "text": False}
+    for name, argument in tokens(plain):
+        if name in ("glyph", "BCD"):
+            column += int(argument[0]) if name == "BCD" else 1
+            state["text"] = True
+            state["after_wait"] = False
+            if box is None or column > 2 * box[2]:
+                state["fits"] = False
+        elif name == "N":
+            row += 1
+            column = 0
+            state["after_wait"] = False
+        elif name in ("FIN", "CLR"):
+            column = row = 0
+            state["after_wait"] = name == "FIN"
+        elif name == "CLD":
+            box = speaker = None
+            column = row = 0
+        elif name == "DLG":
+            position = pair(argument)
+        elif name == "SIZ" and position is not None:
+            box, position, speaker = position + pair(argument), None, None
+            column = row = 0
+        elif name == "DEF":
+            box, speaker = DEFAULT_BOX, None
+            column = row = 0
+        elif name == "TPL":
+            template = number(argument)
+            if template in STOCK_BOXES or template == 0x10:
+                box, speaker = STOCK_BOXES.get(template, DEFAULT_BOX), None
+                column = row = 0
+            elif template in STOCK_SPEAKERS or template == 0x12:
+                speaker = template
+        elif name in ("END", "RET", "JMP", "HLT"):
+            state["terminal"] = name
+        elif name in ("PRT", "ADR", "ESC", "::"):
+            state["fits"] = False
+    state.update(box=box, speaker=speaker, row=row)
+    return state
+
+
+def print_sites(rom, offset):
+    """ROM offsets of the script commands (COP $BF) that print the string."""
+    bank = offset & 0xFF0000
+    needle = bytes((0x02, 0xBF, offset & 0xFF, offset >> 8 & 0xFF))
+    sites, at = [], rom.find(needle, bank, bank + 0x10000)
+    while at >= 0:
+        sites.append(at)
+        at = rom.find(needle, at + 1, bank + 0x10000)
+    return sites
+
+
+def prompt_contract(rom, offset):
+    """(options, skipped rows) of the choice the script runs after the string."""
+    found = None
+    for site in print_sites(rom, offset):
+        if rom[site + 4:site + 6] != b"\x02\xBE":
+            continue
+        contract = rom[site + 6], rom[site + 7]
+        if contract[0] < 2 or sum(contract) > 7 or found not in (None, contract):
+            raise Unsupported("choice command differs between callers")
+        found = contract
+    return found
+
+
+def caller_box(rom, offset, depth=0):
+    """Box left open by the script before it prints the string, if provable.
+
+    Every script site that prints the string must be preceded, in the same
+    script, by a string that returns with the same box open, and the stock
+    text has to fit that box.
+    """
+    sites = print_sites(rom, offset)
+    if not sites or depth > 3:
+        return None
+    bank = offset & 0xFF0000
+    found = None
+    for site in sites:
+        box = None
+        at = rom.rfind(b"\x02\xBF", max(bank + 0x8000, site - 0x300), site)
+        while at >= 0 and box is None:
+            target = bank | rom[at + 2] | rom[at + 3] << 8
+            try:
+                earlier = decode_stock(rom, target)[0] if target & 0x8000 and target != offset else None
+            except (Unsupported, ValueError):
+                earlier = None
+            if earlier is not None:
+                state = stock_state(earlier)
+                if state["terminal"] != "RET":
+                    break       # The previous dialogue ended; nothing is open.
+                box = state["box"]
+                if box is None:
+                    box = caller_box(rom, target, depth + 1)
+                break
+            at = rom.rfind(b"\x02\xBF", max(bank + 0x8000, site - 0x300), at)
+        if box is None or found not in (None, box):
+            return None
+        found = box
+    return found

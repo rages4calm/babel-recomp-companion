@@ -6,7 +6,7 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **1,077 of 1,138** chapter-dialogue declarations in the
+The import now covers **1,098 of 1,138** chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
 The importer supplies 1,117 candidates. The runtime keeps stock text when
 a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
@@ -179,14 +179,41 @@ above. This check exercises the renderer with the exact installed bytes. It
 does not replay the 41 scenes themselves, so their surrounding scripts and
 actors have not been observed with the new text.
 
-61 chapter declarations still use stock behavior. Ten of them have nothing
+The same batch extends the transcription to 21 strings that share a box
+with the script that prints them:
+
+- **Choice prompts.** The script's choice command (COP `$BE`) puts its
+  cursor a fixed number of rows below the box origin, and the importer
+  reads that number from each call site. GaiaLabs scripts sometimes use a
+  different row. The last page is rebuilt so the choices start on the stock
+  row: the question keeps the sentences that fit above them, a short
+  question leaves a blank row, and earlier sentences get a page of their
+  own. An option that continues on a second row keeps the stock row count.
+- **Strings that return after a page wait.** The script continues in the box
+  the stock string leaves open, so a page shown in another box is followed
+  by that stock box and its speaker.
+- **Replies printed into the caller's box.** The importer finds the script
+  commands (COP `$BF`) that print the string and the string each script
+  printed before it. The box is used only when every call site agrees and
+  the stock text fits it. The pack row records that box, and text may only
+  use its rows or a box that covers it.
+
+Six of the 21 use an inherited box. That box is inferred from the script
+bytes; it has not been observed in the scenes. All 62 authored strings
+(308 pages) passed the in-game page check on one executable, with a
+returning string ended and an inherited box opened for the test. The
+choice cursor itself only runs in the real scenes, which have not been
+replayed. Adding rows moved the virtual addresses of the 41 strings from
+earlier in this batch; the 1,239 v47 patches and their bank bytes are
+unchanged.
+
+40 chapter declarations still use stock behavior. Ten of them have nothing
 to translate: five are a lone box close that is identical in both versions,
 and five are jump stubs with no text. One more only widens the Jeweler's
-list box. The other 50 are returning fragments and choices, strings with a
-second entry point, jumps to shared text, and dialogue printed into a box
-the calling script opened. Their caller's box has to be identified before
-the same transcription can be used. The list is in
-`visual-fullgame-040/dialogue/v48-residual.json`.
+list box. The other 29 are strings with a second entry point, jumps into
+shared text, table lookups, replies whose calling box could not be proven,
+and three timed sequences whose authored timeline differs from stock. The
+list is in `visual-fullgame-040/dialogue/v49-residual.json`.
 
 ### Inventory, room titles and map lettering
 

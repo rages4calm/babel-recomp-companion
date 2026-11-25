@@ -235,21 +235,24 @@ remaining 102 are listed in `visual-fullgame-039/dialogue/v47-residual.json`.
 The current candidate stays internal while the remaining localization
 and continuous campaign check are open.
 
-Batch 040's v48 adds 41 chapter declarations for 1,077 of 1,138. It uses
+Batch 040 adds 62 chapter declarations for 1,098 of 1,138. It uses
 a new path: `scripts/gaia_authored_dialogue.py` transcribes the pages, rows
 and box sizes GaiaLabs authored and checks each string against a model of
 the stock renderer. `src/iog_authored_dialogue.inc` applies the rows after
 every earlier pass. [The method and its limits](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue)
 are in the integration notes. All 1,239 v47 patches and overlay bank bytes
-are unchanged. The running game drew all 223 pages of the 41 strings with
-the expected boxes at 1.5×, each bound in turn to the Incan Statue A
-notice. The 41 scenes themselves have not been replayed, and continuous
-campaign qualification is still open. Keep the owner playtest selector on
-the previous build. The test executable is `visual-fullgame-040/cb-v48b`
-and the pack is `visual-fullgame-040/dialogue/v48.tsv`. The 61 remaining
-declarations are in `visual-fullgame-040/dialogue/v48-residual.json`; ten
-of them need no change. `engine-pages.py` in the same folder is the page
-check, and it works for any self-contained string.
+are unchanged. The second half of the batch covers choice prompts, strings
+that return to their script, and replies printed into the caller's box; the
+caller's box and the choice row come from the script bytes. The running
+game drew all 308 pages of the 62 strings with the expected boxes at 1.5×,
+each bound in turn to the Incan Statue A notice. The 62 scenes themselves
+have not been replayed, so choice cursors and the six inferred caller
+boxes are unobserved, and continuous campaign qualification is still open.
+Keep the owner playtest selector on the previous build. The test
+executable is `visual-fullgame-040/cb-v49a` and the pack is
+`visual-fullgame-040/dialogue/v49.tsv`. The 40 remaining declarations are
+in `visual-fullgame-040/dialogue/v49-residual.json`; ten of them need no
+change. `engine-pages.py` in the same folder is the page check.
 
 SNESRecomp main is 70 commits past the pin (`4348bdb`, November 24). A
 read-only inventory found 71 locally modified and 129 added vendor files.

@@ -804,18 +804,30 @@ static void CheckAuthoredPages(void)
     };
     for (size_t i = 0; i < sizeof(accepted) / sizeof(accepted[0]); ++i) {
         Toks tokens = {0};
-        if (!GaiaAuthoredTokens(accepted[i], &tokens))
+        if (!GaiaAuthoredTokens(accepted[i], &tokens, CMD_END))
             fprintf(stderr, "refused %s\n", accepted[i]);
         CHECK(tokens.n && tokens.t[tokens.n - 1].code == CMD_END);
         free(tokens.t);
     }
     for (size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i) {
         Toks tokens = {0};
-        if (GaiaAuthoredTokens(refused[i], &tokens))
+        if (GaiaAuthoredTokens(refused[i], &tokens, CMD_END))
             fprintf(stderr, "accepted %s\n", refused[i]);
-        CHECK(!GaiaAuthoredTokens(refused[i], &tokens));
+        CHECK(!GaiaAuthoredTokens(refused[i], &tokens, CMD_END));
         free(tokens.t);
     }
+    /* A returning string keeps its terminal, and may print into the box
+     * its calling script left open. */
+    Toks returning = {0};
+    CHECK(GaiaAuthoredTokens("[BOX:03,11,0D,04][CLR]Reply.[N] Yes[N] No[RET]", &returning, CMD_RET));
+    CHECK(returning.t[returning.n - 1].code == CMD_RET);
+    returning.n = 0;
+    CHECK(!GaiaAuthoredTokens("[BOX:03,11,0D,04][CLR]Reply.[RET]", &returning, CMD_END));
+    returning.n = 0;
+    CHECK(!GaiaAuthoredTokens("[BOX:03,11,0D,02]A[N]B[N]C[RET]", &returning, CMD_RET));
+    returning.n = 0;
+    CHECK(!GaiaAuthoredTokens("[BOX:03,04,0D,02]Status rows.[RET]", &returning, CMD_RET));
+    free(returning.t);
     /* The signature binds a row to the exact stock bytes it was made for. */
     static const uint8_t stock_bytes[] = {0xd3, 0x40, 0xcf, 0x41, 0xc0};
     const Rom stock = {.rom = stock_bytes, .size = sizeof(stock_bytes)};
@@ -939,12 +951,85 @@ def check_authored_pages():
         except authored.Unsupported:
             continue
         raise AssertionError(f"Accepted stock context {inherited!r}")
+    check_script_boxes(names)
     for stream in ("[TPL:0C]A[N]B[END]", "[TPL:0A]A[FIN][TPL:08]B[END]", "[TPL:0C]" + "A" * 27 + "[END]"):
         try:
             authored.simulate(stream)
         except authored.Unsupported:
             continue
         raise AssertionError(f"Renderer model accepted {stream!r}")
+
+
+def check_script_boxes(names):
+    """Strings that share a box with the script that prints them."""
+    rom = bytearray(0x10000)
+    def put(at, *data):
+        rom[at:at + len(data)] = bytes(data)
+    text = lambda word: [0x80 + ord(ch) - ord("a") for ch in word]
+    # $8100: a prompt in the default box, two rows of text, then two choices.
+    put(0x8100, 0xD3, 0xC2, 0x01, *text("ab"), 0xCB, *text("cd"), 0xCB, 0xAC, *text("ok"), 0xCB, 0xAC, *text("no"), 0xCA)
+    # $8200: its reply clears that box and returns after a page wait.
+    put(0x8200, 0xCE, 0xC2, 0x00, *text("ef"), 0xCF, 0xCA)
+    # $8300: a reply that ends the dialogue in the same box.
+    put(0x8300, 0xCE, *text("gh"), 0xC0)
+    # Script: print the prompt, run a two-way choice below two rows, then the replies.
+    put(0x9000, 0x02, 0xBF, 0x00, 0x81, 0x02, 0xBE, 0x02, 0x02, 0x00, 0x91,
+        0x02, 0xBF, 0x00, 0x82, 0x02, 0xBF, 0x00, 0x83)
+    rom = bytes(rom)
+    assert authored.print_sites(rom, 0x8100) == [0x9000]
+    assert authored.prompt_contract(rom, 0x8100) == (2, 2)
+    assert authored.caller_box(rom, 0x8200) == authored.DEFAULT_BOX
+    assert authored.caller_box(rom, 0x8300) == authored.DEFAULT_BOX
+    assert authored.caller_box(rom, 0x8100) is None
+    prompt = authored.decode_stock(rom, 0x8100)[0]
+    # The choices stay on the rows the script's cursor visits. A question that
+    # fits above them is kept; an earlier sentence gets its own page.
+    assert authored.transcribe("[TPL:1][TPL:F]One.[N]Two?[N][PAL:0] Yes[N] No[PAL:4]", prompt, names, rom, 0x8100) == (
+        "[TPL:0F][TPL:01]One.[N]Two?[N] Yes[N] No[RET]")
+    assert authored.transcribe("[TPL:1][TPL:10]First sentence here.[N]Second one is here.[N]Third?[WAI][N] Yes[N] No",
+                               prompt, names, rom, 0x8100) == (
+        "[TPL:0F][TPL:01]First sentence here.[N]Second one is here. Third?[N] Yes[N] No[RET]")
+    assert authored.transcribe("[TPL:1][TPL:10]The first sentence is big.[N]The second one is as big.[N]Third?[WAI][N] Yes[N] No",
+                               prompt, names, rom, 0x8100) == (
+        "[TPL:0C][TPL:01]The first sentence is big.[FIN]"
+        "[TPL:0F][TPL:01]The second one is as big.[N]Third?[N] Yes[N] No[RET]")
+    # A short question leaves a blank row so the choices stay in place.
+    assert authored.transcribe("[TPL:1][TPL:10]The first one is big, and[N]it runs to a second row.[N]Third?[WAI][N] Yes[N] No",
+                               prompt, names, rom, 0x8100) == (
+        "[TPL:0D][TPL:01]The first one is big, and[N]it runs to a second row.[FIN]"
+        "[TPL:0F][TPL:01]Third?[N][N] Yes[N] No[RET]")
+    for refused in ("[TPL:F]One.[N]Two?[N] Yes", "[TPL:F]One.[N]Two?[N] Yes[N] No[N] Maybe", "[TPL:F]One.[N] Yes[N] No[END]"):
+        try:
+            authored.transcribe(refused, prompt, names, rom, 0x8100)
+        except authored.Unsupported:
+            continue
+        raise AssertionError(f"Accepted choice page {refused!r}")
+    reply = authored.decode_stock(rom, 0x8200)[0]
+    # The script continues in the stock box, so a page in another box restores it.
+    assert authored.transcribe("[CLR][TPL:0][TPL:E]Short.[FIN]", reply, names, rom, 0x8200) == (
+        "[BOX:03,11,0D,04][CLR][CLD][TPL:0E][TPL:00]Short.[FIN][TPL:0F][TPL:00][RET]")
+    assert authored.transcribe("[CLR][TPL:0]Kept in the open box.[FIN]", reply, names, rom, 0x8200) == (
+        "[BOX:03,11,0D,04][CLR][TPL:00]Kept in the open box.[FIN][RET]")
+    ending = authored.decode_stock(rom, 0x8300)[0]
+    assert authored.transcribe("[CLR]A[N]B[N]C[N]D[END]", ending, names, rom, 0x8300) == (
+        "[BOX:03,11,0D,04][CLR]A[N]B[N]C[N]D[END]")
+    for source, stock, offset in (
+        ("[CLR]A[N]B[N]C[N]D[N]E[END]", ending, 0x8300),        # five rows in the caller's four-row box
+        ("[CLR]A[END]", ending, 0x8400),                          # no script prints this address
+        ("[CLR][TPL:0]A[FIN][CLD]", reply, 0x8200),               # closes a box the script keeps
+        ("[CLR][TPL:0]A[END]", reply, 0x8200),                    # ends a dialogue stock continues
+    ):
+        try:
+            authored.transcribe(source, stock, names, rom, offset)
+        except authored.Unsupported:
+            continue
+        raise AssertionError(f"Accepted shared-box dialogue {source!r}")
+    try:
+        authored.transcribe("[CLR]A[END]", ending, names)
+    except authored.Unsupported:
+        pass
+    else:
+        raise AssertionError("Accepted an inherited box without its script")
 
 
 def main():
