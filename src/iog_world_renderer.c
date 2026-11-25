@@ -109,8 +109,10 @@ static bool StockModalPlate(const Ppu *p,const uint8_t *ram)
        p->bgXsc[1]!=0x0C || p->bgXsc[2]!=0x78) return false;
     /* Both layouts switch to dedicated source art and a screen-space UI.
      * Reframe the live plate, including its objects and color effects. */
+    /* A room that was revealed through a mosaic leaves its two layer bits
+     * set with a block size of one pixel, which draws nothing. */
     if(scene==0xFF)
-        return !p->mosaic && p->bgXsc[0]==0x04 && p->screenEnabled[0]==0x17 &&
+        return (!p->mosaic || p->mosaic==3) && p->bgXsc[0]==0x04 && p->screenEnabled[0]==0x17 &&
             !p->screenEnabled[1] && p->cgwsel==0x80 && !p->cgadsub &&
             g_snesrecomp_last_hdmaen==6;
     /* The ceremony's exit mosaics both scenery backgrounds before return. */
@@ -331,6 +333,18 @@ static bool StorySkyFieldLayout(const Ppu *p,const uint8_t *ram)
         !Word(ram,0x68A) && !Word(ram,0x68E) && p->bgmode==9 &&
         p->screenEnabled[0]==21 && p->screenEnabled[1]==17 &&
         !p->windowsel && !p->cgwsel && !p->cgadsub;
+}
+
+/* Neil's flight to the Great Wall holds its camera on one 256x224 sky.
+ * The 256-pixel window below it ends in rows the stock picture never shows. */
+static bool NeilFlightField(const uint8_t *ram)
+{
+    return Word(ram,0x644)==0xDC && Word(ram,0x6EE)==0x0085 &&
+        Word(ram,0x692)==512 && Word(ram,0x694)==512 &&
+        Word(ram,0x696)==512 && Word(ram,0x698)==512 &&
+        !Word(ram,0x6D6) && !Word(ram,0x6D8) &&
+        Word(ram,0x6DA)==256 && Word(ram,0x6DE)==256 &&
+        !Word(ram,0x68A) && !Word(ram,0x68E);
 }
 
 static bool SameActorFieldRoom(const uint8_t *ram,const uint8_t *compose)
@@ -1693,6 +1707,9 @@ static bool RenderWorld(void)
         (authored_bounds.left || authored_bounds.top ||
          authored_bounds.right!=(int)Word(first->ram,0x692) ||
          authored_bounds.bottom!=(int)Word(first->ram,0x696));
+    bool flight_field=authored && s.epoch_count==1 && !camera_x && !camera_y &&
+        NeilFlightField(first->ram);
+    if(flight_field) authored_bounds.bottom=224;
     EffectCamera effect_camera;
     bool tracked_effect=!s.sky_field && ReadEffectCamera(s.active_ram,&effect_camera);
     IogRasterParallax horizon_model={0};
@@ -1839,6 +1856,7 @@ static bool RenderWorld(void)
         if(authored && !AuthoredWindow(e,&bounds)) {
             s.reason="unsupported_authored_window";return false;
         }
+        if(flight_field) bounds.bottom=224;
         uint32_t padding=0;
         if(finite_backdrop) {
             memcpy(p,line->registers,PPU_SAVESTATE_REGS_SIZE);

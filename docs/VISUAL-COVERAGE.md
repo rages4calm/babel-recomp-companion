@@ -895,6 +895,36 @@ pixel padding beside the 512-pixel-wide rooms `97 AC BF`, and one-screen
 rooms. Probes, receipts and pictures are in
 `visual-fullgame-041/widescreen-fix`.
 
+### Second pass: inventory after a mosaic and Neil's flight
+
+A second pass replayed 114 retained routes on the build above (237,464
+frames, 97 scene IDs, 135 directed scene pairs) and staged a Castoth
+fight. Boss rooms, the Babel rematches, the ending, the world map and
+Mode 7 flights, Dark Space entry with the change to Freedan and the save
+prompt, and 82 room-to-room routes held the wide view. Two gaps were
+found and corrected:
+
+- **Inventory opened as the small field from Luke's house (`79`).** A room
+  revealed by a mosaic leaves the mosaic register at 3, which draws
+  nothing, and the modal plate required 0. It now accepts both. Lit
+  fallback went from 440 frames to 1 on the same probe; the remaining
+  frame is the first after loading the state. Other mosaic-revealed rooms
+  are covered by inference, not by a run.
+- **Neil's flight (`DC`) showed 32 grey rows under the sky.** Rows 224-255
+  of its window are never shown by the original. With the stock layout and
+  the camera at the origin the picture now ends at row 224 and is centred.
+  Extending the cloud planes across the view was tried and rejected: the
+  plane parks just outside the original field and would sit frozen in the
+  margin.
+
+End state matched the previous build on both probes, 20 ordinary routes
+kept identical frame hashes, and 16 connected routes had no lit fallback.
+Not covered: kills of Castoth, the Vampires and Sand Fanger from an
+authentic camera window, Shadow's transformation, Watermia's first-visit
+pan from the world map, story scenes no retained route reaches, and the
+GPU path. The report and pictures are in
+`visual-fullgame-041/widescreen-pass2`.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's
