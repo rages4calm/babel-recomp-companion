@@ -52,6 +52,8 @@ static struct {
     uint32_t nmi_oam_writes;
     uint8_t pending_ram[131072], active_ram[131072], staging[544];
     Ppu base, detached, mode7_source;
+    bool mode7_filtered;
+    uint32_t mode7_exact[256*224];
     PictureEpoch epochs[Epochs];
     PictureLine lines[225];
     IogVisualFrame visual;
@@ -1532,8 +1534,20 @@ static void Detach(Ppu *p)
  * inventing perspective/HDMA rows. OBJ and interface pixels remain the real
  * original field, overlaid at identical world-pixel scale during presentation.
  * Other Mode7 compositions retain the same-scale reference fallback. */
+/* IOG_WORLD_MAP_FILTER=0 keeps the point-sampled hardware picture. */
+static bool Mode7FilterWanted(void)
+{
+    static int wanted=-1;
+    if(wanted<0) {
+        const char *value=getenv("IOG_WORLD_MAP_FILTER");
+        wanted=!(value && !strcmp(value,"0"));
+    }
+    return wanted!=0;
+}
+
 static bool RenderMode7Plane(void)
 {
+    s.mode7_filtered=false;
     if(!s.valid || !s.epoch_count) return false;
     /* Mode7 observes its own raster epochs, not the prior Mode1 OAM pair. */
     s.visual.part_count=0;
@@ -1594,6 +1608,9 @@ static bool RenderMode7Plane(void)
     s.view.world_x=-left;s.view.world_y=-top;
     s.view.native_x=(uint16_t)left;s.view.native_y=(uint16_t)top;
     uint32_t colors[256];int prior_epoch=-1;
+    /* A validated full-screen camera is drawn from its producer at sub-row
+     * precision and box-filtered. Objects are restored at presentation. */
+    bool filtered=s.mode7_perspective && !s.mode7_split && Mode7FilterWanted();
     uint8_t prior_registers[PPU_SAVESTATE_REGS_SIZE];
     memset(prior_registers,0,sizeof(prior_registers));
     for(int row=0;row<s.height;row++) {
@@ -1621,6 +1638,20 @@ static bool RenderMode7Plane(void)
             memcpy(prior_registers,line->registers,sizeof(prior_registers));
             prior_epoch=line->epoch;
         }
+        if(filtered) {
+            int32_t from[4],to[4];
+            IogMode7PerspectiveStatus status=IogMode7PerspectiveSmooth(
+                &s.mode7_parameters,y,0,from);
+            if(y>=1 && y<=224) for(int x=0;x<256;x++)
+                s.mode7_exact[(y-1)*256+x]=colors[IogMode7PlaneIndex(source,x,y)];
+            if(status==kIogMode7PerspectiveMatrix) {
+                if(IogMode7PerspectiveSmooth(&s.mode7_parameters,y+1,0,to)!=
+                   kIogMode7PerspectiveMatrix) memcpy(to,from,sizeof(to));
+                IogMode7PlaneFilteredRow(source,from,to,y,-left,s.width,colors,
+                    s.output+row*s.width);
+            } else for(int x=0;x<s.width;x++) s.output[row*s.width+x]=colors[0];
+            continue;
+        }
         if(s.mode7_perspective && (y<1 || y>224)) {
             int index=y>224?y-1:y;
             IogMode7PerspectiveStatus status=IogMode7PerspectiveSample(
@@ -1634,6 +1665,7 @@ static bool RenderMode7Plane(void)
         for(int x=0;x<s.width;x++)
             s.output[row*s.width+x]=colors[IogMode7PlaneIndex(source,x-left,y)];
     }
+    s.mode7_filtered=filtered;
     s.reason=s.mode7_split?"ready_mode7_destination_menu":
         s.mode7_perspective?"ready_mode7_perspective":
         uniform?"ready_mode7_plane":"ready_mode7_raster_band";return true;
@@ -2323,6 +2355,15 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
             bool scale_panel=panel_width<=width && panel_top+panel_rows<=height &&
                 Mode7DestinationPanel(field,map_rows);
             int source_rows=scale_panel?map_rows:224;
+            if(s.mode7_filtered && !scale_panel) {
+                /* The filtered plane already covers the field. Restore only
+                 * what the point-sampled plane does not explain: objects. */
+                for(int y=0;y<224;y++) for(int x=0;x<256;x++) {
+                    int index=y*256+x;
+                    if(memcmp(field+index*4,&s.mode7_exact[index],3))
+                        memcpy(dst+(y+top)*pitch+(x+left)*4,field+index*4,4);
+                }
+            } else
             for(int y=0;y<source_rows;y++) memcpy(dst+(y+top)*pitch+left*4,field+y*256*4,256*4);
             if(scale_panel)
                 DrawCenteredField(dst+panel_top*pitch,pitch,field+map_rows*256*4,width,

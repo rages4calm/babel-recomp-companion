@@ -411,6 +411,32 @@ shows the entry button once within range. SNES B is the bottom face button
 on the default controller layout. Turbo defaults to keyboard Tab. The
 L2+R2 controller chord is available for an explicit custom binding.
 
+The walking view samples the map plane with a filter. The stock raster
+steps its matrix in whole numbers, which leaves a sawtooth on every texel
+edge at 1080p and a speckle near the horizon that changes each frame while
+turning. `IogMode7PerspectiveSmooth` evaluates the stock camera between its
+whole-number steps and `IogMode7PlaneFilteredRow` averages each output
+pixel over the texels it covers. The zoom, the tilt and walking use it;
+the destination menu and the sprites keep the stock picture.
+`IOG_WORLD_MAP_FILTER=0` restores point sampling. Seven walking trips,
+including a closed story gate, give the same scene changes, final position
+and recorded fields with the filter as without. It costs about 4.7 ms per
+frame on the test machine. The direction hint now names eight directions
+("Ahead left", "Behind right").
+
+Tested on the Watermia/Euro continent and the Dao/Pyramid desert: turning
+is even at 128 frames per circle, coast collision holds on all four sides,
+trips arrive, the map can be left and re-entered, a closed destination
+shows no prompt, and a save state made while walking restores position and
+heading. Not looked at: the South Cape, Itory, Freejia and Diamond Mine
+regions, an in-game save from the map, the scripted flights with the
+filter on, and play by a person. Known rough edges that remain: the
+camera sits close to the ground, about six seconds pass without control
+after leaving a town, the area above the horizon and past the map edge is
+black, only the nearest open destination is named, and collision follows
+whole 16-pixel cells. The review and pictures are in
+`visual-fullgame-041/worldmap`.
+
 Build the collision data from a local checkout of the pinned GaiaLabs source.
 
 ```powershell

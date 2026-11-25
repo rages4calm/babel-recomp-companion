@@ -26,6 +26,14 @@ int main(int argc,char**argv){
   if(IogMode7PerspectiveMatchesPrefix(&p,captured,114))return 7;
   if(IogMode7PerspectiveMatchesPrefix(&p,captured,0))return 8;
   if(IogMode7PerspectiveMatchesPrefix(&p,captured,225))return 9;
+  for(int row=-56;row<=280;row++)for(unsigned part=0;part<256;part+=85){
+   int32_t m[4];int st=IogMode7PerspectiveSmooth(&p,row,part,m);
+   printf("S %u %d %u %d %d %d %d %d\n",n,row,part,st,m[0],m[1],m[2],m[3]);
+  }
+  {int32_t m[4]={7,7,7,7};
+   if(IogMode7PerspectiveSmooth(&p,-57,0,m)||IogMode7PerspectiveSmooth(&p,281,0,m)||
+      IogMode7PerspectiveSmooth(&p,0,256,m)||IogMode7PerspectiveSmooth(NULL,0,0,m)||
+      IogMode7PerspectiveSmooth(&p,0,0,NULL)||m[0]!=7)return 10;}
   n++;
  }
  fclose(f);return 0;
@@ -75,7 +83,7 @@ def main():
  cmd=[a.compiler,'-std=c11','-O2','-Wall','-Wextra','-Werror','-I'+str(R/'src'),'-I'+str(R/'snesrecomp/runner/src'),str(source),'-o',str(exe)]
  b=subprocess.run(cmd,capture_output=True,text=True);(out/'build.log').write_text(b.stdout+b.stderr);b.check_returncode()
  res=subprocess.run([str(exe),str(inp)],capture_output=True,text=True,timeout=60);(out/'run.log').write_text(res.stdout+res.stderr);res.check_returncode()
- lines=res.stdout.splitlines();offset=int(lines[0].split()[1]);observed={};checks=0
+ every=res.stdout.splitlines();lines=[x for x in every if not x.startswith('S ')];offset=int(lines[0].split()[1]);observed={};checks=0
  for line in lines[1:]:
   n,row,status,*matrix=map(int,line.split());par=cases[n]
   if row<0:
@@ -96,6 +104,27 @@ def main():
    if n not in observed:observed[n]=reference(par)
    assert status==1 and matrix==observed[n][max(row,0)],(n,row,matrix,observed[n][max(row,0)])
   checks+=1
+ # Sub-row continuation for host filtering: an independent exact-integer
+ # evaluation, ordered depth, and agreement with the stock words where the
+ # eight-bit recurrence still has precision (the visible rows of a level camera).
+ smooth_checks=0;near=0;last={}
+ for line in every:
+  if not line.startswith('S '):continue
+  n,row,part,status,*matrix=map(int,line.split()[1:]);div,inc,co,si=cases[n];nc,ns=abs(co),abs(si)
+  while div>=256:div//=2;inc//=2;nc//=2;ns//=2
+  depth=div*65536+inc*(row*256+part)
+  if depth<65536:assert status==2 and matrix==[0]*4,(n,row,part,matrix)
+  else:
+   c=(nc<<24)//depth;s=(ns<<24)//depth;aa=-c if co<0 else c;bb=-s if si<0 else s
+   assert status==1 and matrix==[aa,bb,-bb,aa],(n,row,part,matrix)
+   if n in last:assert abs(matrix[0])<=last[n],(n,row,part)
+   last[n]=abs(matrix[0])
+   if part==0 and 0<=row<224 and cases[n][:2]==(177,1019):
+    if n not in observed:observed[n]=reference(cases[n])
+    for got,want in zip(matrix,observed[n][row]):assert abs(got/256-want)<=1,(n,row,matrix,observed[n][row])
+    near+=1
+  smooth_checks+=1
+ assert smooth_checks==len(cases)*337*4 and near>=224
  if calibration:
   actual=[list(struct.unpack_from('<4h',bytes.fromhex(x['regs']),offset))for x in packet['lines'][:224]]
   expected=observed[0][:224];mismatches=[i for i,(x,y)in enumerate(zip(actual,expected))if x!=y]
@@ -113,10 +142,10 @@ def main():
  mb=subprocess.run(mutant_cmd,capture_output=True,text=True);(out/'mutant-build.log').write_text(mb.stdout+mb.stderr);mb.check_returncode()
  mr=subprocess.run([mutant_cmd[-1],str(inp)],capture_output=True,text=True,timeout=60);(out/'mutant-run.log').write_text(mr.stdout+mr.stderr);mr.check_returncode()
  fault_rows=0
- for line in mr.stdout.splitlines()[1:]:
+ for line in [x for x in mr.stdout.splitlines()[1:] if not x.startswith('S ')]:
   n,row,status,*matrix=map(int,line.split())
   if row>=0 and status==1:fault_rows+=matrix!=observed[n][row]
  assert fault_rows>0
  receipt={'passed':True,'cases':len(cases),'row_checks':checks,'single_changed_native_matrix_rejected_in_each_case':True,'fraction_shift_fault_rows_detected':fault_rows,'upper_positive_depth_status':'Matrix from normalized initialized-camera prefix; exact no-carry reconnection checked for every tested upper row','upper_integer_divisor_zero_status':'Sky when packed depth<256; explicit host horizon policy; native divide-zero preserved','calibration':calibration,'command':cmd,'sources':{str(x.relative_to(R)):hashlib.sha256(x.read_bytes()).hexdigest()for x in [R/'src/iog_mode7_perspective.h',Path(__file__)]},'scope':'Forward integer recurrence, initialized-camera upper extension and admission predicate; no full game/GPU/campaign qualification.'}
- (out/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print('PASS',checks,'row checks;',len(cases),'parameter cases; actual224-row calibration',bool(calibration))
+ (out/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print('PASS',checks,'row checks;',smooth_checks,'sub-row checks;',len(cases),'parameter cases; actual224-row calibration',bool(calibration))
 if __name__=='__main__':main()

@@ -69,6 +69,30 @@ static inline IogMode7PerspectiveStatus IogMode7PerspectiveSample(
     return kIogMode7PerspectiveUnknown;
 }
 
+/* Host presentation only: the same normalized producer evaluated between and
+ * beyond its integer steps. The result is in 1/256 of a hardware matrix unit
+ * and `part` is 256ths of a row below `row`. The stock recurrence keeps an
+ * eight-bit divisor, so its words are the truncated form of these values on
+ * the visible rows and become much coarser toward the horizon. This is not a
+ * raster reference: callers validate the producer with Matches first. */
+static inline IogMode7PerspectiveStatus IogMode7PerspectiveSmooth(
+    const IogMode7PerspectiveParameters *p,int row,unsigned part,int32_t matrix[4])
+{
+    if(!p || !matrix || row < -56 || row > 280 || part > 255)return kIogMode7PerspectiveUnknown;
+    for(unsigned i=0;i<4;i++)matrix[i]=0;
+    unsigned divisor=p->initial_divisor,increment=p->increment;
+    unsigned cosine=p->cosine<0?(unsigned)(-(int)p->cosine):(unsigned)p->cosine;
+    unsigned sine=p->sine<0?(unsigned)(-(int)p->sine):(unsigned)p->sine;
+    while(divisor&0xff00u){divisor>>=1;increment>>=1;cosine>>=1;sine>>=1;}
+    int64_t depth=(int64_t)divisor*65536+(int64_t)increment*(row*256+(int)part);
+    if(depth<65536)return kIogMode7PerspectiveSky;
+    int64_t c=(int64_t)cosine*16777216/depth,s=(int64_t)sine*16777216/depth;
+    matrix[0]=matrix[3]=(int32_t)(p->cosine<0?-c:c);
+    matrix[1]=(int32_t)(p->sine<0?-s:s);
+    matrix[2]=(int32_t)(p->sine<0?s:-s);
+    return kIogMode7PerspectiveMatrix;
+}
+
 static inline bool IogMode7PerspectiveMatchesPrefix(const IogMode7PerspectiveParameters *p,
     const int16_t captured[224][4],int row_count)
 {

@@ -353,9 +353,14 @@ bool IogWalkableWorldDirection(char *text,size_t capacity)
     int vx=Velocity(0x1c595,angle),vy=Velocity(0x1c695,angle);
     int dx=(int)target->x-x,dy=(int)target->y-y;
     int forward=vx*dx+vy*dy,left=vy*dx-vx*dy;
-    const char *direction=abs(forward)>=abs(left)
-        ?(forward>=0?"Ahead":"Behind")
-        :(left>=0?"Left":"Right");
+    /* Eight 45-degree sectors: 53/128 is the tangent of 22.5 degrees. A
+     * four-way hint kept saying Ahead while the road ran 45 degrees off. */
+    static const char *const sectors[3][3]={
+        {"Behind left","Behind","Behind right"},
+        {"Left","Ahead","Right"},
+        {"Ahead left","Ahead","Ahead right"}};
+    int along=abs(left)*128<=abs(forward)*53,across=abs(forward)*128<=abs(left)*53;
+    const char *direction=sectors[across?1:forward>=0?2:0][along?1:left>=0?0:2];
     int written=snprintf(text,capacity,"%s: %s",target->name,direction);
     return written>=0 && (size_t)written<capacity;
 }

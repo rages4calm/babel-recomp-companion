@@ -1852,7 +1852,12 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
-int main(int argc,char**argv){CHECK(argc==2);phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+int main(int argc,char**argv){CHECK(argc==2);
+ /* These fixtures are the point-sampled hardware reference. The filtered
+  * world-map presentation is covered by test_iog_mode7_plane.py and
+  * test_iog_mode7_perspective.py. */
+ putenv("IOG_WORLD_MAP_FILTER=0");
+ phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 
