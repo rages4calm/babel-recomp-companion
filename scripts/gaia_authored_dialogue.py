@@ -661,6 +661,13 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
     lead = re.match(r"\[DLG:([0-9A-F]+),([0-9A-F]+)\]\[SIZ:([0-9A-F]+),([0-9A-F]+)\]", stock)
     stock_box = tuple(int(v, 16) for v in lead.groups()) if lead else None
 
+    later_speaker = None
+    for part_name, part_argument in tokens(source):
+        if part_name == "TPL" and (number(part_argument) in STOCK_SPEAKERS or number(part_argument) in THEMES):
+            later_speaker = THEME_COLOURS.get(number(part_argument), THEMES.get(number(part_argument),
+                                                                              number(part_argument)))
+            break
+
     def open_box(opened, command):
         nonlocal box, active, page_text, delay, sound, shown_delay, shown_sound, speaker
         if page_text:
@@ -686,6 +693,11 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
             # Opening a box drops the caller's colours. Stock names its
             # speaker itself in that case; an authored string may not.
             speaker = profile["first_speaker"]
+            if speaker is None:
+                # Neither version names the speaker here: the conversation's
+                # first string did. When the authored string names one on a
+                # later page, the same character is still talking.
+                speaker = later_speaker
         box = opened
         # Opening a box restores the default colours, sound and typing speed.
         active = shown_delay = shown_sound = None
