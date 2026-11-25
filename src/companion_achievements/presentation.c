@@ -198,9 +198,9 @@ bool IogAchievementUiImage(const uint32_t **pixels, int *width, int *height) {
         Rectangle(&s, 356, 282, (int)((uint64_t)244 * selected_state.progress / def->target), 5, jade);
     }
     Text(&s, 20, 70, 294, 10, status ? status : "Local progress", dim);
-    Text(&s, 20, 332, 472, 12, "D-PAD / ARROWS: BROWSE", dim);
+    Text(&s, 20, 332, 472, 12, "UP/DOWN: SELECT   LEFT/RIGHT: PAGE", dim);
     Rectangle(&s, 504, 324, 116, 22, card);
-    Text(&s, 514, 332, 104, 10, "B / ESC: BACK", fg);
+    Text(&s, 510, 332, 104, 10, "B / ESC: BACK", fg);   /* 104 px centred in 116 */
     *pixels = browser;
     *width = s.width;
     *height = s.height;

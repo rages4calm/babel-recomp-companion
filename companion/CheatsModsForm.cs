@@ -83,6 +83,11 @@ internal sealed class CheatsModsForm : Form
         Color ink = SystemInformation.HighContrast ? (selected ? SystemColors.HighlightText : SystemColors.ControlText) : selected ? Background : TextColor;
         using var background = new SolidBrush(SystemInformation.HighContrast ? SystemColors.Control : Background);
         e.Graphics.FillRectangle(background, e.Bounds);
+        if (e.Index == tabs.TabCount - 1) {
+            // The strip beside the last tab is otherwise the system's light control colour.
+            var last = tabs.GetTabRect(e.Index);
+            e.Graphics.FillRectangle(background, last.Right, 0, tabs.Width - last.Right, last.Bottom + 2);
+        }
         var bounds = Rectangle.Inflate(e.Bounds, -4, -4);
         using var brush = new SolidBrush(fill);
         using var border = new Pen(SystemInformation.HighContrast ? SystemColors.ControlText : selected ? Accent : Muted);

@@ -125,7 +125,11 @@ static const char *const kEs[][2] = {
     {"QUIT GAME", "SALIR DEL JUEGO"}, {"HD SCALING", "ESCALADO HD"}, {"ORIGINAL", "ORIGINAL"},
     {"SHARP PIXELS", "PÍXELES NÍTIDOS"}, {"SMOOTH (XBR)", "SUAVE (XBR)"}, {"LANGUAGE", "IDIOMA"},
     {"HOLD TO ADVANCE TEXT", "MANTENER PARA AVANZAR"}, {"SLOW", "LENTO"}, {"NORMAL", "NORMAL"},
-    {"FAST", "RÁPIDO"}, {"MSU-1 SOUNDTRACK", "BANDA SONORA MSU-1"},
+    {"FAST", "RÁPIDO"}, {"MSU-1 MUSIC (NEXT LAUNCH)", "MÚSICA MSU-1 (AL REINICIAR)"},
+    {"MAP / RADAR (SNES BUTTONS)", "MAPA / RADAR (BOTONES SNES)"}, {"RADAR", "RADAR"},
+    {"MAP ZOOM IN", "MAPA: ACERCAR"}, {"MAP ZOOM OUT", "MAPA: ALEJAR"}, {"MAP CENTER", "MAPA: CENTRAR"},
+    {"MAP RADAR TOGGLE", "MAPA: RADAR"}, {"MAP BACK", "MAPA: VOLVER"},
+    {"HP REFILL", "RECARGAR VIDA"}, {"MINIMUM DP", "DP MÍNIMO"}, {"MINIMUM STATS", "ESTADÍSTICAS MÍNIMAS"},
     {"CHEATS (ACHIEVEMENTS OFF)", "TRUCOS (SIN LOGROS)"}, {"INFINITE HP", "VIDA INFINITA"},
     {"DP 99", "DP 99"}, {"STATS BOOST", "MEJORA DE ESTADÍSTICAS"}, {"ALL 50 RED JEWELS", "LAS 50 JOYAS ROJAS"}, {"GAME COMPLETED", "JUEGO COMPLETADO"},
     {"ROOM-CLEAR REWARDS", "PREMIOS POR SALA"}, {"ORIGINAL (1X)", "ORIGINAL (1X)"},
@@ -206,10 +210,11 @@ void IogSettingsInstall(void)
     if (msu1_available()) {
         memset(&it, 0, sizeof(it));
         it.kind = kSnesSetting_Toggle;
-        it.label = "MSU-1 SOUNDTRACK";
+        /* The shared menu draws its "applies on the next launch" note over
+         * the last visible row (here MAP ZOOM IN), so the label says it. */
+        it.label = "MSU-1 MUSIC (NEXT LAUNCH)";
         it.get = MsuGet;
         it.set = MsuSet;
-        it.restart = 1;
         snes_settings_menu_add(&it);
     }
 

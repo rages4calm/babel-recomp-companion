@@ -28,6 +28,13 @@ static char stored[IOG_MAP_CONTROL_COUNT+1][16];
 bool RtlSpeculativeFrame(void){return speculative;}
 int snes_mod_runtime_feature_enabled_c(const char*p,const char*f){C(!strcmp(p,"iog.enhancements")&&!strcmp(f,"map_controls"));return custom_enabled;}
 int IogInventoryPageShown(void){return 0;}
+void IogAchievementUiOpen(uint32_t held){(void)held;}
+void IogAchievementUiClose(void){}
+bool IogAchievementUiIsOpen(void){return false;}
+void IogAchievementUiNav(uint32_t buttons,uint32_t ticks){(void)buttons;(void)ticks;}
+void IogAchievementUiKey(int key){(void)key;}
+void IogAchievementUiPointer(int x,int y,int pressed){(void)x;(void)y;(void)pressed;}
+bool IogAchievementUiImage(const uint32_t **pixels,int *width,int *height){(void)pixels;(void)width;(void)height;return false;}
 int IogCompletionPercent(void){return 0;}
 const char *IogI18nLanguage(void){return "original";}
 int snes_frame_counter;
@@ -190,6 +197,12 @@ int main(void){
  speculative=false;human=0;IogCompanionInput(&human);
  putenv("IOG_ORIGINAL_AREA_MAP=1");human=SNES_PAD_START;
  C(!IogCompanionInput(&human)&&human==SNES_PAD_START);putenv("IOG_ORIGINAL_AREA_MAP=0");
+ /* Every page-list row, the last one ("Map") included, lies inside the
+  * list box's interior (rows 159..209 of the 151..215 box), and a press on
+  * the last row selects that page. */
+ C(kPageRowY>=159&&kPageRowY+(kPageCount-1)*kPageRowPitch+8<=210&&kPageRowPitch>=9);
+ g_open=1;g_page=kPageItems;IogCompanionPointer(2*40,2*(kPageRowY+(kPageCount-1)*kPageRowPitch+4),1);
+ C(g_page==kPageMap);IogCompanionPointer(0,0,0);Close();
  g_snes=NULL;human=0;IogCompanionInput(&human);
  IogMapHostShutdown();printf("%u map controller assertions passed; %u preference writes\n",checks,persisted);return 0;
 }

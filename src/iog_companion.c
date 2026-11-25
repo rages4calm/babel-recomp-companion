@@ -319,6 +319,7 @@ static const char *T(const char *en)
         {"Slot %02d", "Ranura %02d"}, {"Empty", "Vacía"}, {"A again: LOAD", "A otra vez: CARGAR"},
         {"X again: SAVE", "X otra vez: GUARDAR"}, {"A: Load", "A: Cargar"}, {"X: Save", "X: Guardar"},
         {"A: Open settings", "A: Abrir ajustes"}, {"Completed", "Completado"},
+        {"Map", "Mapa"}, {"A: Achievements", "A: Logros"}, {"No area map here", "Sin mapa aquí"},
     };
     if (!en || strcmp(IogI18nLanguage(), "es")) return en;
     for (size_t i = 0; i < sizeof(kEs) / sizeof(kEs[0]); i++)
@@ -343,13 +344,18 @@ static void Frame(int x, int y, int w, int h, uint32_t c)
 
 enum { kText = 0xFFFFFF, kHi = 0xFFE890, kGold = 0xF8D050, kTeal = 0x73E6CE };
 
+/* Five rows inside the box's 51-pixel interior (159..209): a 10-pixel pitch
+ * keeps the last row, "Map", off the frame; 12 put it across the border.
+ * Text starts at 20 so a seven-letter Spanish name clears the right edge. */
+enum { kPageRowY = 160, kPageRowPitch = 10 };
+
 static void PageList(void)
 {
     Box(8, 151, 74, 65);
     for (int p = 0; p < kPageCount; p++) {
-        const int y = 160 + p * 12;
-        if (p == g_page) Cursor(14, y, kHi);
-        Text(22, y, T(kPageNames[p]), p == g_page ? kHi : kText);
+        const int y = kPageRowY + p * kPageRowPitch;
+        if (p == g_page) Cursor(13, y, kHi);
+        Text(20, y, T(kPageNames[p]), p == g_page ? kHi : kText);
     }
 }
 
@@ -475,8 +481,11 @@ static void Compose(void)
     case kPageStatus: DrawStatus(); break;
     case kPageSaves: DrawSaves(); break;
     case kPageMap:
-        Fill(0,0,kW,kH,0x152131);PageList();
-        Hint("Map unavailable here", "L/R: Pages", "B: Back");break;
+        /* The hint box holds 18 characters; its last line already names
+         * the page and back buttons. */
+        if (g_have_inv) Blit(g_inv, g_inv_w); else Fill(0,0,kW,kH,0x152131);
+        PageList();
+        Hint("No area map here", NULL, NULL);break;
     default: DrawSettings(); break;
     }
     for (int y = 0; y < kH; y++)
@@ -649,8 +658,8 @@ void IogCompanionPointer(int px, int py, int down)
     g_ptr_down = down;
     if (!down || was) return;            /* act on the press */
     /* Page list. */
-    if (x >= 10 && x < 80 && y >= 156 && y < 156 + 12 * kPageCount) {
-        const int p = (y - 156) / 12;
+    if (x >= 10 && x < 80 && y >= kPageRowY - 1 && y < kPageRowY - 1 + kPageRowPitch * kPageCount) {
+        const int p = (y - (kPageRowY - 1)) / kPageRowPitch;
         if (p == g_page && p == kPageSettings) Activate();
         else SetPage(p);
         return;
