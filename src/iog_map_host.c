@@ -389,6 +389,22 @@ static size_t StockChestMarkers(const uint8_t *ram,const Cart *cart,
 }
 #endif
 
+#ifndef IOG_RECEIVED_REFERENCE
+/* Exits and unopened chests of the loaded scene, with their legend colours. */
+static void StockMarkers(IogMapViewSource *source,
+    IogMapViewMarker markers[StockDoorwayLimit+StockChestLimit],IogMapUiMetadata *metadata)
+{
+    if(!g_snes) return;
+    size_t exits=StockDoorwayMarkers(g_snes->ram,g_snes->cart,source->discovery,markers);
+    size_t chests=StockChestMarkers(g_snes->ram,g_snes->cart,source->discovery,markers+exits);
+    source->marker_count=exits+chests;
+    if(!(exits+chests)) return;
+    source->markers=markers;
+    if(exits) metadata->exit_legend=ExitMarkerColor;
+    if(chests) metadata->chest_legend=ChestMarkerColor;
+}
+#endif
+
 static bool Draw(uint8_t *dst,size_t bytes,size_t pitch,int w,int h)
 {
     IogMapViewSource source;
@@ -398,16 +414,7 @@ static bool Draw(uint8_t *dst,size_t bytes,size_t pitch,int w,int h)
     IogMapUiMetadata metadata={.valid=true,.gamepad=gamepad};
 #ifndef IOG_RECEIVED_REFERENCE
     IogMapViewMarker markers[StockDoorwayLimit+StockChestLimit];
-    if(ui.full && g_snes) {
-        size_t exits=StockDoorwayMarkers(g_snes->ram,g_snes->cart,source.discovery,markers);
-        size_t chests=StockChestMarkers(g_snes->ram,g_snes->cart,source.discovery,markers+exits);
-        source.marker_count=exits+chests;
-        if(exits+chests) {
-            source.markers=markers;
-            if(exits) metadata.exit_legend=ExitMarkerColor;
-            if(chests) metadata.chest_legend=ChestMarkerColor;
-        }
-    }
+    if(ui.full) StockMarkers(&source,markers,&metadata);
 #endif
     char hint[96],back[24];
     snprintf(hint,sizeof(hint),"SNES: Pad Move  %s/%s Zoom  %s Center  %s Radar %s  Select Controls",
@@ -440,6 +447,21 @@ void IogMapHostDrawRadar(uint8_t *dst,size_t pitch,int w,int h)
     if(w>=256&&h>=160){frame_w=w;frame_h=h;}
     if(opened||ui.full||!ui.radar||w<256||h<160||pitch>SIZE_MAX/(size_t)h)return;
     (void)Draw(dst,pitch*(size_t)h,pitch,w,h);
+}
+int IogMapHostDrawLive(uint32_t *dst,int stride,int w,int h,int cell_pixels)
+{
+    IogMapViewSource source;IogMapUiMetadata metadata={.valid=true};
+    if(!dst||w<=0||h<=0||stride<w||cell_pixels<=0||!IogMapHostAvailable()||
+        !IogMapRuntimeGetViewSource(runtime,&source))return 0;
+#ifndef IOG_RECEIVED_REFERENCE
+    IogMapViewMarker markers[StockDoorwayLimit+StockChestLimit];
+    StockMarkers(&source,markers,&metadata);
+#endif
+    const size_t pitch=(size_t)stride*4;
+    if(!IogMapUiDrawView((uint8_t*)dst,pitch*(size_t)(h-1)+(size_t)w*4,pitch,
+        (unsigned)w,(unsigned)h,&source,(unsigned)cell_pixels))return 0;
+    return IOG_MAP_LIVE_DRAWN|(metadata.exit_legend.a?IOG_MAP_LIVE_EXITS:0)|
+        (metadata.chest_legend.a?IOG_MAP_LIVE_CHESTS:0);
 }
 int IogMapHostOpen(void)
 {

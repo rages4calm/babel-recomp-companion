@@ -23,6 +23,12 @@ int IogMapHostControlGet(int action);
 void IogMapHostControlSet(int action,int button);
 const char *IogMapHostControlName(int button);
 void IogMapHostDrawRadar(uint8_t *dst,size_t pitch,int width,int height);
+/* The area map's artwork around the player with the full map's markers, no
+ * chrome: for a page drawn beside the running game. cell_pixels is pixels per
+ * map cell. Returns 0 when there is no map to draw (pixels unchanged), else
+ * IOG_MAP_LIVE_DRAWN with the marker kinds that exist here. */
+enum { IOG_MAP_LIVE_DRAWN=1, IOG_MAP_LIVE_EXITS=2, IOG_MAP_LIVE_CHESTS=4 };
+int IogMapHostDrawLive(uint32_t *dst,int stride,int width,int height,int cell_pixels);
 int IogMapHostOpen(void);
 /* Received-profile local-human input adapter. Source/hash guarded; never
  * intercepts world travel, original pause/debug modes or unknown profiles. */

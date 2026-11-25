@@ -244,6 +244,14 @@ changes, which causes a short pause right after you pick something up. The
 setting is saved as `[General] CompanionLayout` (`normal`, `dual`, `flip`,
 `flip_r`).
 
+**Live map (Dual and Flip Grip).** With the Companion panel beside the
+running game, the page list is Items, Status, Map, Saves and Config. The Map
+page shows the current area's map around the player and updates as you
+move, with the same artwork, fog and exit/chest markers as the paused area
+map; a legend names the markers present. Tap R3 (or touch the map) to
+switch between the close view and a wider one. Areas without an area map
+show "No area map here".
+
 ## Hold to advance dialogue
 
 With **Hold to advance dialogue** on, keeping the confirm button (A, B or Y)

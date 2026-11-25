@@ -306,6 +306,60 @@ static bool SourceAliases(const IogMapViewSource *s, const void *out,
          (s->marker_count <= 256 &&
           Overlap(out, n, s->markers, s->marker_count * sizeof(*s->markers)));
 }
+/* One map viewport in the map's colours: MapView at a q8 cell origin, then
+ * RGBA -> BGRA. Shared by the framed map, the radar and the bare view. */
+static bool RenderView(uint8_t *map, size_t bytes, size_t pitch, int mw, int mh,
+                       const IogMapViewSource *source, bool scenery,
+                       int origin_x_q8, int origin_y_q8, unsigned scale,
+                       int player_radius) {
+  IogMapViewSettings settings;
+  memset(&settings, 0, sizeof(settings));
+  settings.mode = scenery ? kIogMapViewScenery : kIogMapViewRadar;
+  settings.transform =
+      (IogMapViewTransform){Clamp(origin_x_q8, -65536, 65536),
+                            Clamp(origin_y_q8, -65536, 65536),
+                            256, (uint16_t)scale, 1};
+  settings.fog = (IogMapViewColor){10, 17, 26, 255};
+  settings.floor = (IogMapViewColor){124, 145, 147, 255};
+  settings.wall = (IogMapViewColor){38, 54, 67, 255};
+  settings.player = (IogMapViewColor){232, 225, 200, 255};
+  settings.player_radius_pixels = (uint8_t)player_radius;
+  if (!IogMapViewRender(map, bytes, pitch, (unsigned)mw, (unsigned)mh, source,
+                        &settings))
+    return false;
+  /* MapView is RGBA; the game frame is BGRA. Conversion is confined to the
+   * successfully validated map viewport, never a second atlas or game copy. */
+  for (int y = 0; y < mh; y++)
+    for (int x = 0; x < mw; x++) {
+      uint8_t *p = map + (size_t)y * pitch + x * 4;
+      uint8_t r = p[0];
+      p[0] = p[2];
+      p[2] = r;
+    }
+  return true;
+}
+bool IogMapUiDrawView(uint8_t *dst, size_t bytes, size_t pitch, unsigned w,
+                      unsigned h, const IogMapViewSource *source,
+                      unsigned cell_pixels) {
+  if (!dst || !source || !source->discovery || !w || !h || w > 2048 ||
+      h > 2048 || cell_pixels < 2 || cell_pixels > 32 || pitch % 4 ||
+      !IogMapDiscoveryEncodedSize(source->discovery))
+    return false;
+  const IogMapDiscovery *d = source->discovery;
+  /* Per axis, in q8 cells: follow the player, but a view at the map's edge
+   * shows map, not the void beyond it. */
+  int origin[2];
+  for (int axis = 0; axis < 2; axis++) {
+    const int cells = (int)(axis ? d->height : d->width) * 256;
+    const int view = (int)(axis ? h : w) * 256 / (int)cell_pixels;
+    const int player = (axis ? source->player_y : source->player_x) * 256 + 128;
+    origin[axis] = view >= cells || !source->player_present
+                       ? (cells - view) / 2
+                       : Clamp(player - view / 2, 0, cells - view);
+  }
+  return RenderView(dst, bytes, pitch, (int)w, (int)h, source, true, origin[0],
+                    origin[1], cell_pixels, 2);
+}
 bool IogMapUiDraw(IogMapUi *ui, uint8_t *dst, size_t bytes, size_t pitch,
                   unsigned w, unsigned h, const IogMapViewSource *source,
                   const IogMapUiMetadata *meta) {
@@ -423,32 +477,12 @@ bool IogMapUiDraw(IogMapUi *ui, uint8_t *dst, size_t bytes, size_t pitch,
   }
   int cx = ui->center_x_q8, cy = ui->center_y_q8;
   /* Denominator256 retains subcell pan and exact cell-center positioning. */
-  IogMapViewSettings settings;
-  memset(&settings, 0, sizeof(settings));
-  settings.mode = ui->full ? kIogMapViewScenery : kIogMapViewRadar;
-  settings.transform =
-      (IogMapViewTransform){Clamp(cx - (mw * 128) / (int)scale, -65536, 65536),
-                            Clamp(cy - (mh * 128) / (int)scale, -65536, 65536),
-                            256, (uint16_t)scale, 1};
-  settings.fog = (IogMapViewColor){10, 17, 26, 255};
-  settings.floor = (IogMapViewColor){124, 145, 147, 255};
-  settings.wall = (IogMapViewColor){38, 54, 67, 255};
-  settings.player = (IogMapViewColor){232, 225, 200, 255};
-  settings.player_radius_pixels = ui->full ? 2 * s : 1;
   uint8_t *map = dst + (size_t)my * pitch + (unsigned)mx * 4;
   size_t mapbytes = bytes - ((size_t)my * pitch + (unsigned)mx * 4);
-  if (!IogMapViewRender(map, mapbytes, pitch, (unsigned)mw, (unsigned)mh,
-                        source, &settings))
+  if (!RenderView(map, mapbytes, pitch, mw, mh, source, ui->full,
+                  cx - (mw * 128) / (int)scale, cy - (mh * 128) / (int)scale,
+                  scale, ui->full ? 2 * s : 1))
     return false;
-  /* MapView is RGBA; the game frame is BGRA. Conversion is confined to the
-   * successfully validated map viewport, never a second atlas or game copy. */
-  for (int y = 0; y < mh; y++)
-    for (int x = 0; x < mw; x++) {
-      uint8_t *p = map + (size_t)y * pitch + x * 4;
-      uint8_t r = p[0];
-      p[0] = p[2];
-      p[2] = r;
-    }
   uint32_t *p = (uint32_t *)dst;
   int stride = (int)(pitch / 4);
   if (ui->full) {

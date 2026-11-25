@@ -9,9 +9,10 @@
  * and the boxes of every page are cut from the menu's box art. Nothing of
  * the art is shipped: it is the player's ROM, drawn by the game.
  *
- * Pages: ITEMS (equip by pad or touch), STATUS, SAVES (the framework's
- * save-state slots), SETTINGS (hands over to the settings menu). Composed
- * at the game's 256x224 and presented at 2x.
+ * Paused pages: SAVES (the framework's save-state slots), MAP, ACHIEVEMENTS,
+ * SETTINGS (hands over to the settings menu). Beside the running game (Dual /
+ * Flip Grip): ITEMS (equip by pad or touch), STATUS, MAP (the area around the
+ * player, live), SAVES, SETTINGS. Composed at the game's 256x224.
  */
 
 #include <stdint.h>
@@ -42,12 +43,14 @@ enum { kPadSelect = 0x004 };
 /* The paused Companion screen has the pages only it provides. The game's own
  * pause menu (Select) is the one Items and Status screen; the two live pages
  * below exist only for the Dual / Flip Grip second screen, which sits beside
- * the running game where that menu is not on view. */
+ * the running game where that menu is not on view. Map is on both lists: the
+ * paused one hands over to the full map, the live one draws the area around
+ * the player in its own box, every frame. */
 enum { kPageSaves, kPageMap, kPageAchievements, kPageSettings, kPageCount,
-       kLiveItems = kPageCount, kLiveStatus, kPageKinds };
+       kLiveItems = kPageCount, kLiveStatus, kPageKinds, kLiveCount = 5 };
 static const char *const kPageNames[kPageKinds] = {"Saves", "Map", "Achievements", "Config", "Items", "Status"};
 static const int kModalPages[kPageCount] = {kPageSaves, kPageMap, kPageAchievements, kPageSettings};
-static const int kLivePages[kPageCount] = {kLiveItems, kLiveStatus, kPageSaves, kPageSettings};
+static const int kLivePages[kLiveCount] = {kLiveItems, kLiveStatus, kPageMap, kPageSaves, kPageSettings};
 
 static uint32_t g_inv[kCapW * kCapH];
 static int g_inv_w, g_have_inv;
@@ -57,7 +60,7 @@ static int g_scale = 2;
 
 static int g_open, g_page = kPageSaves, g_live_page = kLiveItems, g_slot, g_save_slot, g_confirm = -1;
 /* Live (Dual / Flip Grip): drawn beside the running game every frame. */
-static int g_live, g_live_seen;
+static int g_live, g_live_seen, g_live_far;   /* far: the live map's wider view */
 static uint8_t g_inv_items[16];   /* the inventory the capture shows */
 static uint32_t g_prev_nav;
 static int g_ptr_down;
@@ -67,9 +70,10 @@ int IogHostPadLabel(uint32_t snes_bit, char label[8], uint32_t *color);
 static int PadPresent(void) { char l[8]; uint32_t c; return IogHostPadLabel(SNES_PAD_B, l, &c) != 0; }
 static int Page(void) { return g_live ? g_live_page : g_page; }
 static const int *Pages(void) { return g_live ? kLivePages : kModalPages; }
+static int PageTotal(void) { return g_live ? kLiveCount : kPageCount; }
 static int PageIndex(void)
 {
-    for (int i = 0; i < kPageCount; i++) if (Pages()[i] == Page()) return i;
+    for (int i = 0; i < PageTotal(); i++) if (Pages()[i] == Page()) return i;
     return 0;
 }
 
@@ -338,6 +342,7 @@ static const char *T(const char *en)
         {"Map and radar buttons", "Botones de mapa y radar"}, {"Cheats", "Trucos"},
         {"Save states, reset, quit", "Estados, reiniciar, salir"},
         {"No area map here", "Sin mapa aquí"}, {"Achievements unavailable", "Logros no disponibles"},
+        {"A: Zoom", "A: Zoom"}, {"Exit", "Salida"}, {"Chest", "Cofre"},
         {"A again: LOAD", "A otra vez: CARGAR"}, {"X again: SAVE", "X otra vez: GUARDAR"},
         {"A: Load", "A: Cargar"}, {"X: Save", "X: Guardar"}, {"A: Settings", "A: Ajustes"},
     };
@@ -372,9 +377,11 @@ static void Frame(int x, int y, int w, int h, uint32_t c)
 
 enum { kText = 0xFFFFFF, kHi = 0xFFE890, kGold = 0xF8D050, kTeal = 0x73E6CE, kDim = 0x8C8CA5 };
 
-/* Four rows in the list box's interior (159..209). The paused screen's box
- * is wide enough for "Achievements"; the live one keeps the narrow box. */
-enum { kPageRowY = 160, kPageRowPitch = 12, kHintRows = 4 };
+/* The page rows in the list box's interior (159..209): four on the paused
+ * screen, five closer together on the live one. The paused screen's box is
+ * wide enough for "Achievements"; the live one keeps the narrow box. */
+enum { kPageRowY = 160, kHintRows = 4 };
+static int PageRowPitch(void) { return g_live ? 10 : 12; }
 static const int kHintY[kHintRows] = {160, 173, 186, 200};
 static int ListW(void) { return g_live ? 74 : 120; }
 static int HintX(void) { return 8 + ListW() + 9; }
@@ -387,8 +394,8 @@ static void Backdrop(void)
 static void PageList(void)
 {
     Box(8, 151, ListW(), 65);
-    for (int i = 0; i < kPageCount; i++) {
-        const int y = kPageRowY + i * kPageRowPitch, p = Pages()[i];
+    for (int i = 0; i < PageTotal(); i++) {
+        const int y = kPageRowY + i * PageRowPitch(), p = Pages()[i];
         if (p == Page()) Cursor(14, y, kHi);
         Text(22, y, T(kPageNames[p]), p == Page() ? kHi : kText);
     }
@@ -500,6 +507,31 @@ static void DrawStatus(void)
     LiveHint(NULL, NULL);
 }
 
+/* Live only: the area around the player in the content box's interior, drawn
+ * by the map's own renderer each frame. A is the wider view and back. */
+enum { kMapX = 13, kMapY = 16, kMapW = 230, kMapH = 128 };
+static void Notice(const char *l1, const char *l2, const char *l3);
+static void DrawLiveMap(void)
+{
+    Backdrop();
+    Box(8, 8, 242, 142);
+    const int map = IogMapHostDrawLive(g_canvas + kMapY * kW + kMapX, kW, kMapW, kMapH, g_live_far ? 4 : 8);
+    if (!map) Notice("Map", "No area map here", NULL);
+    PageList();
+    LiveHint(map ? "A: Zoom" : NULL, NULL);
+    /* The markers on view, in the map's colours (iog_map_host.c). */
+    int x = HintX() + 1;
+    if (map & IOG_MAP_LIVE_EXITS) {
+        Fill(x, 173, 5, 5, 0x69D9D3);
+        Text(x + 8, 172, T("Exit"), kText);
+        x += 8 * (TextLen(T("Exit")) + 2);
+    }
+    if (map & IOG_MAP_LIVE_CHESTS) {
+        Fill(x, 173, 5, 5, 0xFFBE60);
+        Text(x + 8, 172, T("Chest"), kText);
+    }
+}
+
 static uint32_t g_thumb[SNES_SAVESTATE_THUMB_W * SNES_SAVESTATE_THUMB_H];
 
 static void DrawSaves(void)
@@ -593,7 +625,8 @@ static void Compose(void)
     case kLiveItems: DrawItems(); break;
     case kLiveStatus: DrawStatus(); break;
     case kPageSaves: DrawSaves(); break;
-    case kPageMap:           /* only when this area has no map: else the map itself */
+    case kPageMap:           /* paused, only when this area has no map: else the map itself */
+        if (g_live) { DrawLiveMap(); break; }
         Notice("Map", "No area map here", NULL);
         PageList(); HintBox(); PageBackPrompts(); break;
     case kPageAchievements:  /* only when the browser could not open */
@@ -637,7 +670,7 @@ static void SetPage(int p)
     if (!IogMapHostIsOpen() && !IogAchievementUiIsOpen() && !g_have_inv) IogCompanionCaptureInventory();
 }
 
-static void StepPage(int d) { SetPage(Pages()[(PageIndex() + d + kPageCount) % kPageCount]); }
+static void StepPage(int d) { SetPage(Pages()[(PageIndex() + d + PageTotal()) % PageTotal()]); }
 
 static void Equip(int slot)
 {
@@ -664,6 +697,9 @@ static void Activate(void)
     case kPageSettings:
         Close();
         snes_settings_menu_open();
+        break;
+    case kPageMap:
+        if (g_live && IogMapHostAvailable()) g_live_far = !g_live_far;
         break;
     default:
         break;
@@ -808,8 +844,9 @@ void IogCompanionPointer(int px, int py, int down)
     g_ptr_down = down;
     if (!down || was) return;            /* act on the press */
     /* Page list. */
-    if (x >= 10 && x < 8 + ListW() - 6 && y >= kPageRowY - 2 && y < kPageRowY - 2 + kPageRowPitch * kPageCount) {
-        const int p = Pages()[(y - (kPageRowY - 2)) / kPageRowPitch];
+    const int row0 = kPageRowY - (PageRowPitch() - 8) / 2;   /* a row's band is centred on its text */
+    if (x >= 10 && x < 8 + ListW() - 6 && y >= row0 && y < row0 + PageRowPitch() * PageTotal()) {
+        const int p = Pages()[(y - row0) / PageRowPitch()];
         if (p == Page() && p == kPageSettings) Activate();
         else SetPage(p);
         return;
@@ -852,6 +889,8 @@ void IogCompanionPointer(int px, int py, int down)
         }
     } else if (g_live && Page() == kPageSettings && y >= 156 && x >= 90) {
         Activate();
+    } else if (g_live && Page() == kPageMap && (y >= 156 ? x >= 90 : y >= kMapY && y < kMapY + kMapH)) {
+        Activate();                                   /* the map or its hint box: zoom */
     }
 }
 
@@ -919,6 +958,30 @@ void IogCompanionAfterFrame(void)
             } else {
                 g_have_inv = before;
                 fails++;
+            }
+        }
+    }
+    /* IOG_COMPANION_LIVE_NAV=<steps>: test only. One step every half second
+     * on the live panel, through the pad and touch paths: R L pages, A, X,
+     * U D < > the cursor, 0-4 a touch on that row of the page list, T a touch
+     * on the content box; anything else waits. "RRA" is the Map page, zoomed. */
+    if (g_live_seen && !g_open && g_snes && Rd(0x09AA)) {
+        static const char *nav;
+        static int tick = -1;
+        if (tick < 0) nav = getenv("IOG_COMPANION_LIVE_NAV");
+        if (++tick % 30 == 29 && nav && *nav) {
+            static const char keys[] = "RLAXUD<>";
+            static const uint32_t bits[] = {SNES_PAD_R, SNES_PAD_L, SNES_PAD_A, SNES_PAD_X,
+                                            SNES_PAD_UP, SNES_PAD_DOWN, SNES_PAD_LEFT, SNES_PAD_RIGHT};
+            const char c = *nav++, *k = strchr(keys, c);
+            g_prev_nav = 0;
+            g_live = 1;
+            if (k) {
+                IogCompanionNav(bits[k - keys], 0);
+            } else if (c == 'T' || (c >= '0' && c <= '4')) {   /* panel pixels are 2x */
+                const int x = c == 'T' ? 128 : 40, y = c == 'T' ? 80 : kPageRowY + (c - '0') * PageRowPitch() + 4;
+                IogCompanionPointer(x * 2, y * 2, 1);
+                IogCompanionPointer(x * 2, y * 2, 0);
             }
         }
     }

@@ -93,4 +93,12 @@ bool IogMapUiDraw(IogMapUi *ui, uint8_t *bgra, size_t bytes, size_t pitch,
                   unsigned width, unsigned height,
                   const IogMapViewSource *source,
                   const IogMapUiMetadata *metadata);
+/* The full map's artwork alone, for a host page that has its own frame: no
+ * chrome, no state, any size MapView accepts. cell_pixels is destination
+ * pixels per map cell. The view follows the player but stops at the map's
+ * edges; a map smaller than the view is centred. Same colours, fog and markers
+ * as the full map, BGRA. False leaves the pixels unchanged. */
+bool IogMapUiDrawView(uint8_t *bgra, size_t bytes, size_t pitch, unsigned width,
+                      unsigned height, const IogMapViewSource *source,
+                      unsigned cell_pixels);
 #endif
