@@ -836,6 +836,65 @@ the classroom through both the roof and the east hallway, with no
 save-state load or game-state edits. The sampled full pictures and
 guest-state fields agree with the prior build.
 
+## Scripted transitions, Dark Space and room bounds (batch 041)
+
+A census of all 256 scene IDs on the batch-040 build found that ordinary
+rooms hold the 1.5× view. The remaining drops to the original field were
+scripted wave and mosaic transitions without a renderer profile. The
+inventory, pictures and per-scene table are in
+`visual-fullgame-040/widescreen/INVENTORY.md`.
+
+The renderer now keeps the world view through these transitions. Counts are
+lit fallback frames before and after on the same probe.
+
+| Transition | Scenes | Before | After |
+|---|---|---:|---:|
+| Pyramid portal wave out and in | `CC CF D1 D3 D4 D5 D7 D8 DB DD` | 239-243 | 0 |
+| Jeweler's Mansion trip mosaic | `01 32 6B 7B 9B` | 70 | 0 |
+| Story mosaics | `79 5A 7D` | 70 | 0 |
+| Mu altar wave | `66` | 235 | 0 |
+| Watermia glass-game wave, then `7D` | `78` | 190 | 0 |
+| Dark Sand Fanger victory flashes | `F5` | 3 | 0 |
+
+`RoomTransitionWave` and `RoomTransitionMosaic` hold one measured layout
+per room and feed the existing wave and mosaic paths. A room outside the
+tables still falls back. In every probe the scene, player position, sampled
+fields and full WRAM hash matched the previous build, and the original
+256×224 region of each captured transition frame equals the old fallback
+picture outside the status display. One Watermia frame differs by 15
+pixels on its last row: that room's camera bobs during the wave and the
+raster is allowed one row ahead of the composed camera.
+
+Rooms `06 16 17 18` showed storage tiles under the floor. They now end at
+the original 224-row field when the window is one page and the camera
+rests on its top.
+
+Dark Space (`E6`) continues its star layer across the view. The stars come
+from the same repeating background ring and wave the Babel rematches use.
+Only that layer is extended. The floor, statues, actors and gameplay field
+keep their size and position, and the original field is unchanged in the
+24 captured frames (standing, walking on both axes, Gaia's dialogue, the
+mosaic out and in). The other source-plate rooms are unchanged.
+
+Limits:
+
+- Except `79` on a retained route and the Sand Fanger route, each
+  transition was started by poking the stock transition word at the
+  script's actor position, so the story context is staged.
+- The Sand Fanger setup frame is admitted only when the second background
+  holds one value for the whole picture. Another player position may still
+  flash for a frame.
+- Dark Space was not seen with vertical camera movement, the save prompt,
+  the transformation scene or its other variants.
+- All of this is headless software output at 598×336. The GPU path was not
+  checked.
+
+Left as they are: the Great Wall bars (the towers run off the top of the
+map in `85 87 88 8B`, so a sky fill would cap sliced buildings), the 43
+pixel padding beside the 512-pixel-wide rooms `97 AC BF`, and one-screen
+rooms. Probes, receipts and pictures are in
+`visual-fullgame-041/widescreen-fix`.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

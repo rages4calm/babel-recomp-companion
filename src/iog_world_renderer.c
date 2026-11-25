@@ -486,12 +486,46 @@ static bool ShipDreamMosaic(const Ppu *p,const uint8_t *ram)
         g_snesrecomp_last_hdmaen==0x1E;
 }
 
+/* The trip to the Jeweler's Mansion leaves each Gem room through a mosaic,
+ * and three story arrivals reveal an ordinary room the same way. Both run
+ * over the room's regular picture. Each row is one measured stock layout;
+ * any other room or display state keeps the fallback. */
+static bool RoomTransitionMosaic(const Ppu *p,const uint8_t *ram)
+{
+    static const struct {
+        uint8_t scene,maps[2],main,sub,cgwsel,cgadsub,hdma;
+        uint16_t layout,width,height,bg_width,bg_height;
+    } rooms[]={
+        {0x01,{0x11,0x19},0x17,0x02,0x82,0x01,0x00,0x0005,768,1024,768,1024},
+        {0x32,{0x18,0x11},0x17,0x16,0x82,0x01,0x02,0x0484,1280,1024,256,256},
+        {0x5A,{0x11,0x19},0x17,0x00,0x80,0xA2,0x06,0x0005,1024,1536,768,512},
+        {0x6B,{0x19,0x11},0x17,0x12,0x82,0x01,0x02,0x0085,1024,1024,1024,768},
+        {0x79,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256},
+        {0x7B,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,512,256,512,256},
+        {0x7D,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256},
+        {0x9B,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256},
+    };
+    if(p->bgmode!=9 || (p->mosaic&15)!=3 || p->windowsel) return false;
+    for(unsigned i=0;i<sizeof(rooms)/sizeof(rooms[0]);i++) {
+        if(Word(ram,0x644)!=rooms[i].scene) continue;
+        return Word(ram,0x6EE)==rooms[i].layout &&
+            Word(ram,0x692)==rooms[i].width && Word(ram,0x696)==rooms[i].height &&
+            Word(ram,0x694)==rooms[i].bg_width && Word(ram,0x698)==rooms[i].bg_height &&
+            p->bgXsc[0]==rooms[i].maps[0] && p->bgXsc[1]==rooms[i].maps[1] &&
+            p->screenEnabled[0]==rooms[i].main && p->screenEnabled[1]==rooms[i].sub &&
+            p->cgwsel==rooms[i].cgwsel && p->cgadsub==rooms[i].cgadsub &&
+            g_snesrecomp_last_hdmaen==rooms[i].hdma;
+    }
+    return false;
+}
+
 static bool StockMosaicLayout(const Ppu *p,const uint8_t *ram)
 {
     return AngkorVisionMosaic(p,ram) || DaoVillageMosaic(p,ram) ||
         MansionAndSolidArmMosaic(p,ram) || BabelQueenMosaic(p,ram) ||
         BabelLandingMosaic(p,ram) || ShipDreamMosaic(p,ram) || SouthCapeHouseMosaic(p,ram) ||
-        DarkSpaceMosaic(p,ram) || AdriftCoastMosaic(p,ram);
+        DarkSpaceMosaic(p,ram) || AdriftCoastMosaic(p,ram) ||
+        RoomTransitionMosaic(p,ram);
 }
 
 static int PositiveMod(int value,int divisor)
@@ -925,6 +959,23 @@ static bool BabelStarfieldLayout(const PictureEpoch *e,const Ppu *p)
        p->cgwsel==0x02 && p->cgadsub==0x31;
 }
 
+/* Dark Space draws its stars from the same uploaded, repeating BG2 ring and
+ * 64-line wave as the Babel rematches. Only that ring may continue past the
+ * room. The floor, portal and actors keep their original field. */
+static bool DarkSpaceStarfield(const PictureEpoch *e,const Ppu *p)
+{
+    const uint8_t *ram=e->ram;
+    return Word(ram,0x644)==0xE6 && Word(ram,0x6EE)==0x0405 &&
+        Word(ram,0x692)==256 && Word(ram,0x696)==512 &&
+        Word(ram,0x694)==512 && Word(ram,0x698)==512 &&
+        p->bgmode==9 && !p->windowsel &&
+        p->bgXsc[0]==0x11 && p->bgXsc[1]==0x19 &&
+        !PPU_bigTiles(p,1) && PPU_bgTilemapWider(p,1) && !PPU_bgTilemapHigher(p,1) &&
+        p->screenEnabled[0]==0x15 && p->screenEnabled[1]==2 &&
+        p->cgwsel==0x02 && p->cgadsub==0x31 && g_snesrecomp_last_hdmaen==2 &&
+        CapturedHorizontalWave(p,1,RingWavePeriod,true);
+}
+
 enum { WaterWavePeriod = 8 };
 enum { VillageHeatPeriod = 32 };
 enum { StockWaveTable = 0x8800, StockWaveRing = 0x8900, StockWavePeriod = 128,
@@ -972,7 +1023,11 @@ static bool BabelVictorySetup(const PictureEpoch *e)
             return false;
 
     bool held=c->aAdr==BabelAlternateTable;
-    if(held) {
+    /* Sand Fanger's alternate descriptor is already covered by the new ring.
+     * Admit that frame only when it leaves BG2 at one scroll value for the
+     * whole picture, so the rows outside the field continue the same value. */
+    bool fanger_hold=held && scene==0xF5 && ram[BabelAlternateTable]!=0xC0;
+    if(held && !fanger_hold) {
         const uint8_t *table=ram+BabelAlternateTable;
         if(scene!=0xF3 || table[0]!=0x5A || Word(table,1)!=0x5A00 || table[3])
             return false;
@@ -983,7 +1038,8 @@ static bool BabelVictorySetup(const PictureEpoch *e)
     for(int line=0;line<=224;line++) {
         const uint8_t *regs=s.lines[line].registers;
         const unsigned sample=held?0u:(unsigned)Clamp(line,0,StockWaveLastLine);
-        if((Word(regs,h)&1023)!=(Word(ram,origin+2*sample)&1023) ||
+        const unsigned expected=fanger_hold?Word(base,h):Word(ram,origin+2*sample);
+        if((Word(regs,h)&1023)!=(expected&1023) ||
            memcmp(regs,base,h) ||
            memcmp(regs+h+2,base+h+2,PPU_SAVESTATE_REGS_SIZE-h-2))
             return false;
@@ -1015,12 +1071,12 @@ static unsigned StockHorizontalWave(const PictureEpoch *e,const Ppu *p,int camer
     if(!origin) return 0;
     bool varied=false,periodic=true;
     const size_t h=offsetof(Ppu,hScroll),v=offsetof(Ppu,vScroll);
-    /* The higher channels end together. Sand Fanger's alternating
-     * channel-1 source can write zero to BG2 for the final two lines. */
-    const bool bg2_zero_tail=hdma_mask==0xC2 && Word(ram,0x644)==0xF5 &&
-        g_snes->dma->channel[1].aAdr==BabelAlternateTable &&
-        !(Word(s.lines[223].registers,h+2)&1023) &&
-        !(Word(s.lines[224].registers,h+2)&1023);
+    /* The higher channels end together after sample 222. Sand Fanger's
+     * alternating channel-1 source then supplies its own BG2 values for the
+     * final two lines. Those rows keep their captured scroll in the field,
+     * and the rows below the field continue the wave table instead. */
+    const bool bg2_free_tail=hdma_mask==0xC2 && Word(ram,0x644)==0xF5 &&
+        g_snes->dma->channel[1].aAdr==BabelAlternateTable;
     for(int line=0;line<=224;line++) {
         const uint8_t *regs=s.lines[line].registers;
         unsigned sample=(unsigned)Clamp(line,0,StockWaveLastLine);
@@ -1031,7 +1087,7 @@ static unsigned StockHorizontalWave(const PictureEpoch *e,const Ppu *p,int camer
          * the actual wave table. */
         if((hdma_mask==0xC0 && (distance < -64 || distance > 64)) ||
            (Word(regs,h)&1023)!=shift ||
-           (Word(regs,h+2)&1023)!=((bg2_zero_tail && line>StockWaveLastLine)?0u:shift) ||
+           ((Word(regs,h+2)&1023)!=shift && !(bg2_free_tail && line>StockWaveLastLine)) ||
            (Word(regs,v)&1023)!=(p->vScroll[0]&1023) ||
            (Word(regs,v+2)&1023)!=(p->vScroll[1]&1023) ||
            regs[offsetof(Ppu,bgXsc)]!=p->bgXsc[0] ||
@@ -1063,6 +1119,54 @@ static bool ArrivalWaveLayout(unsigned scene,const PictureEpoch *e,const Ppu *p,
         Word(ram,0x6D6)==256 && !Word(ram,0x6D8) &&
         Word(ram,0x6DA)==512 && Word(ram,0x6DE)==256 &&
         !Word(ram,0x68C) && !Word(ram,0x690) && camera_x==256 && camera_y==0;
+}
+
+/* The Pyramid portals, the Mu altar and the Watermia glass game run the
+ * same stock wave over the room's ordinary picture. The producer writes the
+ * terrain scroll to both registers. Most of these rooms show only their
+ * terrain background. Those that show a second plane are admitted only
+ * while both cameras share the same horizontal position. Each row is one
+ * measured stock layout; any other room or display state keeps the fallback.
+ * Watermia keeps bobbing during the wave, and its raster can be one row
+ * ahead of the composed camera. The caller then uses the raster's row. */
+static bool RoomTransitionWave(unsigned scene,const PictureEpoch *e,const Ppu *p,
+                               int camera_x,int camera_y)
+{
+    static const struct {
+        uint8_t scene,layout,main,sub,cgwsel,cgadsub;
+        uint16_t width,height;
+    } rooms[]={
+        {0x66,0x05,0x15,0x00,0x80,0xA1,768,512},
+        {0x78,0x85,0x17,0x12,0x82,0x41,1280,1024},
+        {0xCC,0x05,0x15,0x00,0x80,0xA1,1024,1024},
+        {0xCF,0x05,0x15,0x00,0x80,0xA1,1536,1024},
+        {0xD1,0x05,0x15,0x00,0x80,0xA1,1280,1536},
+        {0xD3,0x05,0x15,0x00,0x80,0xA1,2048,768},
+        {0xD4,0x05,0x15,0x00,0x80,0xA1,1280,1280},
+        {0xD5,0x05,0x15,0x00,0x80,0xA1,1280,1280},
+        {0xD7,0x05,0x17,0x00,0x80,0xA3,1024,1536},
+        {0xD8,0x05,0x15,0x00,0x80,0xA1,1280,1280},
+        {0xDB,0x85,0x17,0x00,0x80,0xA3,2048,512},
+        {0xDD,0x05,0x15,0x00,0x80,0xA1,512,512},
+    };
+    const uint8_t *ram=e->ram;
+    if(Word(ram,0x644)!=scene || p->bgmode!=9 || p->mosaic || p->windowsel ||
+       (int16_t)Word(ram,0x68A)!=camera_x)
+        return false;
+    for(unsigned i=0;i<sizeof(rooms)/sizeof(rooms[0]);i++) {
+        if(scene!=rooms[i].scene) continue;
+        unsigned physical=rooms[i].layout>>7;
+        bool second_plane=((rooms[i].main|rooms[i].sub)&2)!=0;
+        int ahead=ScrollWorld(ram,0x68E,p->vScroll[physical])-camera_y;
+        if(ahead && (scene!=0x78 || ahead < -1 || ahead > 1)) return false;
+        return Word(ram,0x6EE)==rooms[i].layout &&
+            Word(ram,0x692)==rooms[i].width && Word(ram,0x696)==rooms[i].height &&
+            p->bgXsc[physical]==0x11 && p->bgXsc[physical^1]==0x19 &&
+            p->screenEnabled[0]==rooms[i].main && p->screenEnabled[1]==rooms[i].sub &&
+            p->cgwsel==rooms[i].cgwsel && p->cgadsub==rooms[i].cgadsub &&
+            (!second_plane || Word(ram,0x68C)==Word(ram,0x68A));
+    }
+    return false;
 }
 
 /* Scene AC binds one 32-line heat table to both vertical scroll registers.
@@ -1186,7 +1290,8 @@ static bool SourcePlateScene(unsigned scene)
 static bool BoundedRoomScene(unsigned scene)
 {
     switch(scene) {
-    case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x31:
+    case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x16:
+    case 0x17: case 0x18: case 0x31:
     case 0x49: case 0x85: case 0xCD: case 0xDA: return true;
     default: return SourcePlateScene(scene);
     }
@@ -1255,6 +1360,14 @@ static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
          * Hieroglyph panel and Neil's cottage use one original-height view. */
         if(out->right-out->left!=256 || out->bottom-out->top!=256) return false;
         out->bottom=out->top+224;
+    }
+    if(scene==0x06 || (scene>=0x16 && scene<=0x18)) {
+        /* Will's house and the Itory houses keep storage tiles in the last
+         * row of a one-screen floor. The stock camera rests on the top of
+         * that page and never shows them. Other floors keep their window. */
+        if(out->right-out->left==256 && out->bottom-out->top==256 &&
+           !camera_x && camera_y==out->top && Word(ram,0x6EE)==5)
+            out->bottom=out->top+224;
     }
     return true;
 }
@@ -1537,10 +1650,13 @@ static bool RenderWorld(void)
     bool village_heat=scene==0xAC && VillageHeat(first,p);
     bool babel_starfield_layout=s.epoch_count==1 && BabelStarfieldLayout(first,p);
     bool transition_wave_repeats=false;
-    unsigned transition_wave=(scene==0x0B || scene==0xDE) &&
-        ArrivalWaveLayout(scene,first,p,camera_x,camera_y)?
+    bool room_wave=RoomTransitionWave(scene,first,p,camera_x,camera_y);
+    unsigned transition_wave=(((scene==0x0B || scene==0xDE) &&
+        ArrivalWaveLayout(scene,first,p,camera_x,camera_y)) || room_wave)?
             StockHorizontalWave(first,p,camera_x,0xC0,&transition_wave_repeats):0;
     if(!transition_wave_repeats) transition_wave=0;
+    room_wave=room_wave && transition_wave;
+    if(room_wave) camera_y=ScrollWorld(picture_ram,0x68E,p->vScroll[physical]);
     if(babel_starfield_layout && scene<=0xF5 && Word(first->ram,0x6EE)==0x0405)
         transition_wave=StockHorizontalWave(first,p,camera_x,0xC2,&transition_wave_repeats);
     bool babel_victory_wave=transition_wave && babel_starfield_layout;
@@ -1602,7 +1718,8 @@ static bool RenderWorld(void)
         FreejiaRingWave(first,p,&effect_camera);
     bool larai_mist=tracked_effect && s.epoch_count==1 && LaraiMist(first,p,&effect_camera);
     bool mansion_fog=tracked_effect && s.epoch_count==1 && MansionFog(first,p,&effect_camera);
-    bool babel_stars=babel_victory_wave || babel_victory_setup ||
+    bool dark_space_stars=scene==0xE6 && s.epoch_count==1 && DarkSpaceStarfield(first,p);
+    bool babel_stars=babel_victory_wave || babel_victory_setup || dark_space_stars ||
         (babel_starfield_layout && CapturedHorizontalWave(p,1,RingWavePeriod,true));
     bool water_wave = WaterWave(first,p);
     bool dao_heat=DaoHeatWave(first,p);
@@ -1617,7 +1734,10 @@ static bool RenderWorld(void)
         s.reason="unsupported_babel_starfield";return false;
     }
     bool deferred_raster_effect=false;
-    if(tracked_effect && !horizon && !wall_bands && !freejia_wave && !mansion_fog && !babel_stars) {
+    /* A room transition wave moves both planes together. Keep the room's
+     * ordinary camera projection so the margins do not shift as it begins. */
+    if(tracked_effect && !horizon && !wall_bands && !freejia_wave && !mansion_fog && !babel_stars &&
+       !room_wave) {
         /* A camera actor does not describe per-band HDMA derivatives.
          * Keep those on their prior sampling policy until their actual
          * raster producer is bound; a global ratio would be misleading. */
@@ -1976,6 +2096,7 @@ static bool RenderWorld(void)
         transition_wave?"ready_stock_transition_wave":
         babel_victory_setup?"ready_babel_victory_setup":
         mansion_fog?"ready_mansion_fog":
+        dark_space_stars?"ready_dark_space_starfield":
         babel_stars?"ready_babel_starfield":
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;
 }

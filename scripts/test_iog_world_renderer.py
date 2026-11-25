@@ -739,8 +739,19 @@ static void babel_starfield(void){
  memset(s.lines[223].registers+bg2_hofs,0,2);
  memset(s.lines[224].registers+bg2_hofs,0,2);
  CHECK(RenderWorld()&&!strcmp(s.reason,"ready_stock_transition_wave"));
+ /* Sand Fanger's channel-1 source can leave any value on the final two
+  * lines. Only that scene and source may differ, and only after sample 222. */
  s.lines[224].registers[bg2_hofs]=1;
+ CHECK(RenderWorld()&&!strcmp(s.reason,"ready_stock_transition_wave"));
+ victory_dma.channel[1].aAdr=0x8800;
  CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ victory_dma.channel[1].aAdr=0x8a00;
+ s.active_ram[0x644]=s.epochs[0].ram[0x644]=0xf4;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ s.active_ram[0x644]=s.epochs[0].ram[0x644]=0xf5;
+ s.lines[222].registers[bg2_hofs]^=1;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ s.lines[222].registers[bg2_hofs]^=1;
  g_snesrecomp_last_hdmaen=0;g_snes->dma=NULL;
 
  /* The channel-1 handover keeps BG1 fixed. F3 can instead hold its
