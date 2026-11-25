@@ -246,13 +246,13 @@ earlier strings to the authored layout because the stock-window passes had
 paged them differently from the source. [The method, the defects and the
 limits](docs/GAIALABS-ORIGINAL-INTEGRATION.md#retranslated-dialogue) are in
 the integration notes. 1,127 of 1,138 declarations are installed, which
-is every one that has text, and 667 rows are authored.
+is every one that has text, and 669 rows are authored.
 
 v52 lays the overlay out again: virtual addresses are no longer those of
 v47, and a save state made with dialogue open on an older pack will not
-resume its text. All 667 authored rows passed the in-game page check
+resume its text. All 669 authored rows passed the in-game page check
 (`visual-fullgame-040/dialogue/engine-pages.py`) on
-`visual-fullgame-040/cb-v58a` with `visual-fullgame-041/v59.tsv`. The 591
+`visual-fullgame-040/cb-v58a` with `visual-fullgame-041/v60.tsv`. The 593
 rows new to batch 041 have not been replayed in their scenes, and
 continuous campaign qualification is still open. Keep the owner playtest
 selector on the previous build until that is done.

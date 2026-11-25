@@ -139,7 +139,9 @@ JEWELER_FRAME = "08D617"
 JEWELER_ROWS = ("08D621", "08D636", "08D64A", "08D65E", "08D672", "08D67D", "08D68A")
 JEWELER_MENU = "08D0F1"
 JEWELER_MENU_HEAD = ("[TPL:16][TPL:F]", "[DEF][PAL:0][::][CLR]")
-CALLER_BOXES = {"08D20F": gaia_authored_dialogue.DEFAULT_BOX}
+# The reward checks run straight after that reply, so the Herb and Dark
+# Friar reward messages print into the same box.
+CALLER_BOXES = {offset: gaia_authored_dialogue.DEFAULT_BOX for offset in ("08D20F", "08D2D0", "08D4E3")}
 
 # GaiaLabs ends this crew member's line by jumping to the second part of
 # 058394, Will's aside. A jump cannot leave an overlay bank, and the stock

@@ -308,24 +308,24 @@ The last strings each needed one more piece of the stock engine:
 - **An over-tall page.** When wrapping makes a page taller than any box,
   it continues on a second page after the last row that ends a sentence.
 
-667 rows are authored in all. 1,127 of 1,138 declarations are installed.
+669 rows are authored in all. 1,127 of 1,138 declarations are installed.
 The other 11 have nothing to translate: five are a lone box close that is
 identical in both versions, five are stubs that open a box and jump to an
 entry point, and one is the lookup call for the ability descriptions.
 
-All 667 authored rows passed the in-game page check, the same check as in
+All 669 authored rows passed the in-game page check, the same check as in
 batch 040. For a timed card the check reads the text at each long hold.
 Three things cannot be shown through the host dialogue and were checked
 only by decoding the installed bytes: the tile row itself, the shared
-print call, and the box-only string. The 591 rows new to this batch have
+print call, and the box-only string. The 593 rows new to this batch have
 not been replayed in their own scenes; two sweep agents are doing that.
 
 Two five-row authored pages hide the speakers in small rooms (Kara in the
 Native Village hut, `08963C`, and on the raft, `059DCD`). They are left as
 GaiaLabs laid them out; the alternative is a page break inside a sentence.
 
-21 earlier strings whose pages differ from the source keep their earlier
-layout, 11 of them because the box they print into could not be proven.
+19 earlier strings whose pages differ from the source keep their earlier
+layout, 9 of them because the box they print into could not be proven.
 Most of those are item-use messages printed by the inventory code.
 `visual-fullgame-041/breaks.json` lists them with the reason.
 
