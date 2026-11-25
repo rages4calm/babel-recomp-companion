@@ -28,4 +28,12 @@ typedef struct IogWorldView {
 bool IogWorldViewCompute(int32_t camera_x,int32_t camera_y,
     uint32_t map_width,uint32_t map_height,uint16_t width,uint16_t height,
     IogWorldView *out);
+
+/* The original depth sort's on-screen test for one axis, with the window as
+ * parameters: the actor's left/top edge (position - origin) lies inside
+ * [window, window+span), or it lies before the window and position + extent
+ * reaches into it. window = camera and span = 256 (224 vertically) is exactly
+ * the stock rule, including its 16-bit wrap. */
+bool IogWorldViewAxisOnscreen(uint16_t position,uint16_t origin,uint16_t extent,
+    int32_t window,uint16_t span);
 #endif

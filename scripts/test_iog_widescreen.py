@@ -35,6 +35,7 @@ void *IogTestCalloc(size_t count, size_t size) {
     return fail_shadow_alloc ? NULL : calloc(count,size);
 }
 bool IogRandomizerActive(void) { return randomizer; }
+bool IogWorldEnabled(void) { return false; }
 void PpuSetExtraSideSpace(Ppu *p, int left, int right, int bottom) {
     (void)bottom; p->extraLeftCur=left; p->extraRightCur=right;
 }

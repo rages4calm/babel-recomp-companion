@@ -925,6 +925,46 @@ pan from the world map, story scenes no retained route reaches, and the
 GPU path. The report and pictures are in
 `visual-fullgame-041/widescreen-pass2`.
 
+### Enemies in the wide view are awake
+
+The original marks an actor off screen when its box is outside the 256×224
+camera window (`SortActorsByDepth`, actor+$10 bit $4000). Sixty-one actor
+scripts wait on that bit and about 45 test it directly, so enemies drawn
+in the margins of the wide view stood still until the player walked
+closer. Batch 016 kept that rule so fights matched 4:3; the owner has
+chosen the opposite for the wide view.
+
+After the game's own sort, the renderer now clears the bit for actors
+inside the part of the completed wide picture that shows real map. It only
+ever clears, and the draw list, the cull operands and every other guest
+byte stay stock. Frames that fall back to the original field use the stock
+rule. Boss lairs keep stock activation (scenes `29 55 67 8A DD E8 EA` and
+`F0` upward). `IOG_WORLD_STOCK_ACTIVATION=1` restores the original rule
+for comparison. The 16:9 view at extent 1 is 398×224, so its side strips
+wake too; only a true 256×224 view is stock.
+
+In the Aqueduct, Mountain Temple and Sky Garden the margin enemies that
+held one position on the previous build now move, and actors that leave
+the wide view get the bit back. With the switch on, end state equals the
+previous build at 1.5× and 1×. Twenty-four retained routes, including five
+bosses, the ending and two off-screen scripted waits, kept the same scene
+sequence, flags and kills; fifteen kept identical memory. A fight killed
+an enemy first seen in the margin. Two crowded rooms ran 9,000 frames of
+random play without an error.
+
+What differs from the original by design: enemies engage from as far as
+they are visible, enemy positions and random numbers differ from a 4:3
+playthrough, shots that end off screen fly to the edge of the wide view,
+and doors, torches and a few town characters that idle off screen animate
+as soon as they are visible. Not verified: a full room clear with drops,
+every scripted off-screen wait, the Babel rematches and Solid Arm (excluded
+by scene like the bosses that were run), the interpreter tier and 21:9.
+Evidence is in `visual-fullgame-041/enemy-ai`.
+
+The pause menu's status page now uses the same scale as the Items page. It
+shows the map with BG1's tilemap register at $00 where Items has $04, and
+the modal plate accepted only $04.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

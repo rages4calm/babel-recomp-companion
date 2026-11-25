@@ -56,6 +56,10 @@ static struct {
     PictureLine lines[225];
     IogVisualFrame visual;
     IogWorldView view;
+    /* Part of the last completed wide picture that shows real map, relative
+     * to the simulation camera. Zero spans: the stock 256x224 rule applies. */
+    struct { int16_t left, top; uint16_t width, height; } wake;
+    bool stock_wake;
     PpuExtraObject objects[kIogVisualMaxParts];
     uint16_t object_rows[kIogVisualMaxParts][16];
     uint32_t output[MaxWidth*MaxHeight], row[256], hud[256*224];
@@ -111,8 +115,11 @@ static bool StockModalPlate(const Ppu *p,const uint8_t *ram)
      * Reframe the live plate, including its objects and color effects. */
     /* A room that was revealed through a mosaic leaves its two layer bits
      * set with a block size of one pixel, which draws nothing. */
+    /* The item page keeps its BG1 map at $0400; the status ("Cond.") page
+     * shows the map at $0000 with every other register unchanged. */
     if(scene==0xFF)
-        return (!p->mosaic || p->mosaic==3) && p->bgXsc[0]==0x04 && p->screenEnabled[0]==0x17 &&
+        return (!p->mosaic || p->mosaic==3) && (p->bgXsc[0]==0x04 || !p->bgXsc[0]) &&
+            p->screenEnabled[0]==0x17 &&
             !p->screenEnabled[1] && p->cgwsel==0x80 && !p->cgadsub &&
             g_snesrecomp_last_hdmaen==6;
     /* The ceremony's exit mosaics both scenery backgrounds before return. */
@@ -564,6 +571,8 @@ bool IogWorldEnabled(void)
         else if(extent && !strcmp(extent,"1.25")) s.extent_quarters=5;
         const char *path=getenv("IOG_RENDERER_AUDIT");
         if(path && *path) s.audit=fopen(path,"wb");
+        const char *wake=getenv("IOG_WORLD_STOCK_ACTIVATION");
+        s.stock_wake=wake && !strcmp(wake,"1");
     }
     return s.enabled;
 }
@@ -592,6 +601,7 @@ void IogWorldReset(void)
     s.awaiting_restore=true;
     s.publish_sequence=0;
     s.reason="reset_or_unpaired_upload";
+    memset(&s.wake,0,sizeof(s.wake));
     s.epoch_count=0;
     memset(&s.view,0,sizeof(s.view));
 }
@@ -617,12 +627,48 @@ void IogWorldCaptureAtCompose(const CpuState *cpu,uint32_t pc)
     s.pending=true; s.composed=false;
     ++s.compose_sequence;
 }
+/* Boss lairs (and their Babel rematches) keep the original 256x224 actor
+ * activation: their scripts time attacks and phases on the off-screen flag. */
+static bool StockWakeScene(unsigned scene)
+{
+    return scene==0x29 || scene==0x55 || scene==0x67 || scene==0x8A ||
+        scene==0xDD || scene==0xE8 || scene==0xEA || scene>=0xF0;
+}
+
+/* The original depth sort has just set or cleared every actor's off-screen
+ * flag (actor+$10 bit $4000) from its 256x224 window; scripts read it on
+ * their next tick to wake, keep moving or retire. While the wide picture is
+ * what the player sees, an actor inside that picture counts as on screen by
+ * the same edge test. The wide window always contains the original one, so
+ * this only ever clears the flag; the sort's draw list, OAM and every other
+ * guest byte stay stock, and the wide picture's own object list is built
+ * from actor positions, not from this flag. */
+static void WakeVisibleActors(uint8_t *ram)
+{
+    if(s.stock_wake || !s.wake.width || !s.wake.height ||
+       StockWakeScene(Word(ram,0x644))) return;
+    int32_t left=(int16_t)Word(ram,0x68A)-s.wake.left;
+    int32_t top=(int16_t)Word(ram,0x68E)-s.wake.top;
+    unsigned actor=Word(ram,0x56),count=0;
+    while(actor>=0x1000 && actor<0x1FC0 && !((actor-0x1000)%0x30) &&
+          count++<kIogVisualMaxActors) {
+        if((ram[actor+0x11]&0x40) &&
+           IogWorldViewAxisOnscreen((uint16_t)Word(ram,actor+0x14),(uint16_t)Word(ram,actor+0x18),
+               (uint16_t)Word(ram,actor+0x1C),left,s.wake.width) &&
+           IogWorldViewAxisOnscreen((uint16_t)Word(ram,actor+0x16),(uint16_t)Word(ram,actor+0x1A),
+               (uint16_t)Word(ram,actor+0x1E),top,s.wake.height))
+            ram[actor+0x11]&=(uint8_t)~0x40;
+        actor=Word(ram,actor+6);
+    }
+}
+
 void IogWorldCaptureAfterCompose(const CpuState *cpu,uint32_t pc)
 {
     (void)pc;
     if(!s.enabled || !s.pending || !cpu || !cpu->ram) return;
     memcpy(s.staging,cpu->ram+0x422,sizeof(s.staging));
     s.composed=true;
+    WakeVisibleActors(cpu->ram);
 }
 void IogWorldBeforeNmi(void)
 { if(s.enabled && g_ppu) s.nmi_oam_writes=g_ppu->oamWriteCount; }
@@ -2123,6 +2169,20 @@ void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count
 {
     if(!s.enabled && !s.audit) return;
     ++s.frame;s.complete=s.enabled && (s.fixed_plate || RenderWorld());
+    memset(&s.wake,0,sizeof(s.wake));
+    if(s.complete && !s.fixed_plate && !s.mode7 && !s.sky_field && !s.stock_actor_field &&
+       s.view.width==s.width && s.view.height==s.height &&
+       s.view.padding_left<=s.view.native_x && s.view.padding_top<=s.view.native_y &&
+       s.view.padding_left+s.view.padding_right+256<=s.view.width &&
+       s.view.padding_top+s.view.padding_bottom+224<=s.view.height) {
+        /* Padding is outside the map: nothing there is shown as terrain. */
+        s.wake.left=(int16_t)(s.view.native_x-s.view.padding_left);
+        s.wake.top=(int16_t)(s.view.native_y-s.view.padding_top);
+        s.wake.width=(uint16_t)(s.view.width-s.view.padding_left-s.view.padding_right);
+        s.wake.height=(uint16_t)(s.view.height-s.view.padding_top-s.view.padding_bottom);
+        if(s.wake.left+256>s.wake.width || s.wake.top+224>s.wake.height)
+            memset(&s.wake,0,sizeof(s.wake));
+    }
     if(!s.enabled) {s.reason="reference_renderer";s.width=256;s.height=224;}
     if(s.audit) {
         const CpuState *c=&g_cpu;

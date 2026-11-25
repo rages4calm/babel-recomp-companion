@@ -68,6 +68,20 @@ int main(void){
   memset(&v,0xA5,sizeof(v));CHECK(!IogWorldViewCompute(invalid[n][0],invalid[n][1],invalid[n][2],invalid[n][3],invalid[n][4],invalid[n][5],&v));CHECK(!memcmp(&v,&zero,sizeof(v)));
  }
  CHECK(!IogWorldViewCompute(0,0,768,768,598,336,NULL));
+ /* The original depth-sort edge test with the window as parameters: the
+  * stock 256/224 spans, then a wide span that contains the original one. */
+ CHECK(IogWorldViewAxisOnscreen(100,0,16,100,256));CHECK(IogWorldViewAxisOnscreen(355,0,16,100,256));
+ CHECK(!IogWorldViewAxisOnscreen(356,0,16,100,256));CHECK(IogWorldViewAxisOnscreen(363,8,16,100,256));
+ CHECK(IogWorldViewAxisOnscreen(90,8,16,100,256));CHECK(IogWorldViewAxisOnscreen(84,8,16,100,256));CHECK(!IogWorldViewAxisOnscreen(83,8,16,100,256));
+ CHECK(!IogWorldViewAxisOnscreen(84,8,0,100,256));CHECK(IogWorldViewAxisOnscreen(3,8,16,0,256));
+ CHECK(!IogWorldViewAxisOnscreen(500,0,16,100,256));CHECK(IogWorldViewAxisOnscreen(500,0,16,-71,598));
+ CHECK(!IogWorldViewAxisOnscreen(527,0,16,-71,598));CHECK(IogWorldViewAxisOnscreen(526,0,16,-71,598));
+ for(int cam=0;cam<2048;cam+=37)for(int pos=cam-400;pos<cam+700;pos+=3)for(int org=0;org<48;org+=15)for(int ext=0;ext<64;ext+=21){
+  bool narrow=IogWorldViewAxisOnscreen((uint16_t)pos,(uint16_t)org,(uint16_t)ext,cam,256);
+  bool wide=IogWorldViewAxisOnscreen((uint16_t)pos,(uint16_t)org,(uint16_t)ext,cam-171,598);
+  int edge=pos-org-cam;bool model=(edge>=0&&edge<256)||(edge<0&&pos+ext-cam>=0&&pos+ext-cam<256);
+  CHECK(narrow==model);CHECK(!narrow||wide);
+ }
  printf("%u world-view assertions passed\n",checks);return 0;
 }
 '''

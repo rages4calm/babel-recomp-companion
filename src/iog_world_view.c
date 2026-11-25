@@ -44,3 +44,12 @@ bool IogWorldViewCompute(int32_t camera_x,int32_t camera_y,
         out->padding_bottom=(uint16_t)(out->world_y+height-map_height);
     return true;
 }
+
+bool IogWorldViewAxisOnscreen(uint16_t position,uint16_t origin,uint16_t extent,
+    int32_t window,uint16_t span)
+{
+    uint16_t edge=(uint16_t)(position-origin-(uint16_t)window);
+    if(edge<span) return true;
+    if(!(edge&0x8000)) return false;
+    return (uint16_t)(position+extent-(uint16_t)window)<span;
+}
