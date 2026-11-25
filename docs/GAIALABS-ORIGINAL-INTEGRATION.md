@@ -6,9 +6,9 @@ serves as a reference when a feature needs comparison.
 
 ## Retranslated dialogue
 
-The import now covers **1,098 of 1,138** chapter-dialogue declarations in the
+The import now covers **1,112 of 1,138** chapter-dialogue declarations in the
 pinned [GaiaLabs IOGRetranslation source](https://github.com/Azarem/IOGRetranslation/tree/754d3bfbb0f4452fb33ac0a1c3eb8304ebb0e2cc).
-The importer supplies 1,117 candidates. The runtime keeps stock text when
+The importer supplies 1,120 candidates. The runtime keeps stock text when
 a candidate cannot safely preserve its original script. Batch 031 added 28 replacements,
 including returning dialogue, Adrift day titles, part of the Edward's
 Castle dialogue and the Dao Snake Panic score response. New formatted
@@ -207,13 +207,43 @@ replayed. Adding rows moved the virtual addresses of the 41 strings from
 earlier in this batch; the 1,239 v47 patches and their bank bytes are
 unchanged.
 
-40 chapter declarations still use stock behavior. Ten of them have nothing
+A third pass adds 14 strings with control flow of their own:
+
+- **A second entry point (9).** Scripts start these strings at the
+  beginning or part-way in. The whole string and the entry are transcribed
+  separately and each gets its own redirect; the entry starts in the box the
+  first part leaves open. Lola's dinner line has only a pause in front of
+  its entry, shorter than a redirect, so that pause stays in the ROM.
+- **A final same-bank jump (3).** A jump cannot run from an overlay bank.
+  The text returns after its last page with the stock box and speaker
+  restored, and the original jump then runs from the ROM bank.
+- **Replies reached through a choice (2).** A reply's calling box is also
+  taken from the prompt whose choice table leads to the script site that
+  prints it. This evidence has to agree with the string printed before.
+
+All 76 authored rows passed the in-game page check on one executable: 84
+streams with the entries, 390 pages. The same limits apply as above. The
+entries, jumps and choice cursors run only in their own scenes, which have
+not been replayed.
+
+26 chapter declarations still use stock behavior. Ten of them have nothing
 to translate: five are a lone box close that is identical in both versions,
-and five are jump stubs with no text. One more only widens the Jeweler's
-list box. The other 29 are strings with a second entry point, jumps into
-shared text, table lookups, replies whose calling box could not be proven,
-and three timed sequences whose authored timeline differs from stock. The
-list is in `visual-fullgame-040/dialogue/v49-residual.json`.
+and five are stubs that open a box and jump to an entry point. One more
+only widens the Jeweler's list box, which the Jeweler's rows below need.
+The other 15 are:
+
+- the Jeweler's menu, deposit reply and list row (`08D0F1`, `08D20F`,
+  `08D621`), whose box and cursor belong to the Jeweler's own code;
+- three strings built from a table lookup or a shared print call
+  (`08EB85`, `08E4A4`, `08ED6D`) and one with raw tiles (`039E1A`);
+- three timed sequences where GaiaLabs changed the timeline: Lola's melody
+  (`049D29`), the plane jump (`0984B1`) and the epilogue card (`0BDC95`);
+- two replies whose calling box could not be proven (`06BE85`, `06BF0A`);
+- `0595B4`, whose four authored rows do not fit the three-row box its jump
+  target continues in; `07944D`, which changes typing speed inside a row
+  that needs wrapping; and `0583E7`, where GaiaLabs added a jump.
+
+The list is in `visual-fullgame-040/dialogue/v50-residual.json`.
 
 ### Inventory, room titles and map lettering
 

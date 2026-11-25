@@ -828,6 +828,36 @@ static void CheckAuthoredPages(void)
     returning.n = 0;
     CHECK(!GaiaAuthoredTokens("[BOX:03,04,0D,02]Status rows.[RET]", &returning, CMD_RET));
     free(returning.t);
+    /* A jump tail is redirected as PRT + the original JMP; a second entry
+     * point gets its own redirect. */
+    static const uint8_t scripted[] = {
+        0xce, 0x80, 0x81, 0xcf, 0xd1, 0x34, 0x12,                 /* 0: text, wait, jump */
+        0xd3, 0x80, 0x81, 0x82, 0x83, 0xcf, 0x84, 0x85, 0x86, 0x87, 0x88, 0xc0, /* 7: entry at +6 */
+    };
+    const Rom script_rom = {.rom = scripted, .size = sizeof(scripted)};
+    Structure layout = {0};
+    Label labels[2] = {{.name = "widestring_000000", .off = 0},
+                       {.name = "widestring_000007", .off = 7, .marker = 6, .has_marker = 1}};
+    layout.l = labels;
+    layout.nl = 2;
+    char rows[512];
+    snprintf(rows, sizeof(rows),
+             "widestring_000000\t[RAW:%08X][JMP][BOX:03,11,0D,04][CLR]Reply.[FIN][RET]\n"
+             "widestring_000007\t[RAW:%08X][MRK][DEF]First.[FIN]Second.[END]|[BOX:03,11,0D,04]Second.[END]\n",
+             GaiaStockSignature(&script_rom, 0, 7), GaiaStockSignature(&script_rom, 7, 12));
+    FILE *pack_file = tmpfile();
+    CHECK(pack_file && fputs(rows, pack_file) >= 0);
+    IogPack *authored_pack = calloc(1, sizeof(*authored_pack));
+    unsigned authored_fill = kIogVirtualBankSize;
+    GaiaApplyAuthored(pack_file, &script_rom, &layout, authored_pack, &authored_fill);
+    fclose(pack_file);
+    CHECK(authored_pack->npatches == 3 && authored_pack->strings_translated == 2);
+    CHECK(authored_pack->patches[0].offset == 0 && authored_pack->patches[0].len == 7);
+    CHECK(authored_pack->patches[0].data[0] == CMD_PRT && authored_pack->patches[0].data[4] == CMD_JMP &&
+          authored_pack->patches[0].data[5] == 0x34 && authored_pack->patches[0].data[6] == 0x12);
+    CHECK(authored_pack->patches[1].offset == 7 && authored_pack->patches[1].data[4] == CMD_RET);
+    CHECK(authored_pack->patches[2].offset == 13 && authored_pack->patches[2].data[4] == CMD_RET);
+    IogTextFreePack(authored_pack);
     /* The signature binds a row to the exact stock bytes it was made for. */
     static const uint8_t stock_bytes[] = {0xd3, 0x40, 0xcf, 0x41, 0xc0};
     const Rom stock = {.rom = stock_bytes, .size = sizeof(stock_bytes)};
@@ -1024,6 +1054,37 @@ def check_script_boxes(names):
         except authored.Unsupported:
             continue
         raise AssertionError(f"Accepted shared-box dialogue {source!r}")
+    # A final same-bank jump stays in the ROM; the text returns to it with
+    # the stock box and speaker restored for the string it continues in.
+    put2 = bytearray(rom)
+    put2[0x8400:0x8408] = bytes((0xD3, 0xC2, 0x00, 0x80, 0xCF, 0xD1, 0x00, 0x83))
+    jump_rom = bytes(put2)
+    jumping = authored.decode_stock(jump_rom, 0x8400)[0]
+    assert jumping == "[DEF][TPL:00]a[FIN][JMP:8300]"
+    assert authored.transcribe("[TPL:0][TPL:E]Reply.[FIN][CLD][JMP:&dialogstring_008300]", jumping, names,
+                               jump_rom, 0x8400) == (
+        "[JMP][TPL:0E][TPL:00]Reply.[FIN][TPL:0F][TPL:00][RET]")
+    try:
+        authored.transcribe("[TPL:0][TPL:E]Reply.[FIN]", jumping, names, jump_rom, 0x8400)
+    except authored.Unsupported:
+        pass
+    else:
+        raise AssertionError("Accepted a reply that drops the stock jump")
+    # A second entry point gets its own stream, starting in the box the
+    # first part leaves open.
+    entry_rom = bytearray(0x10000)
+    entry_rom[0x8100:0x8112] = bytes((0xC2, 0x0A, 0xC2, 0x01, 0x80, 0x81, 0xCF, 0x82, 0x83, 0xC0))  + bytes(8)
+    entry_rom[0x9000:0x9004] = bytes((0x02, 0xBF, 0x00, 0x81))
+    full, entry = authored.transcribe_entry("[TPL:1][TPL:9]First.[FIN][::][TPL:1][TPL:B]Second.[END]",
+                                            bytes(entry_rom), 0x8100, 7, names)
+    assert full == "[TPL:09][TPL:01]First.[FIN][TPL:0B][TPL:01]Second.[END]"
+    assert entry == "[BOX:03,06,0D,03][TPL:0B][TPL:01]Second.[END]"
+    try:
+        authored.transcribe_entry("[TPL:1][TPL:9]First.[FIN]Second.[END]", bytes(entry_rom), 0x8100, 7, names)
+    except authored.Unsupported:
+        pass
+    else:
+        raise AssertionError("Accepted a string that lost its entry point")
     try:
         authored.transcribe("[CLR]A[END]", ending, names)
     except authored.Unsupported:

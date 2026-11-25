@@ -196,11 +196,13 @@ def simulate(stream, box=None):
 def stock_profile(stock):
     """Commands of the stock string that a replacement has to respect."""
     plain = STOCK_LOOKUP.sub("x", stock)
+    # A final same-bank jump continues in another stock string.
+    plain = re.sub(r"\[JMP:[0-9A-F]{4}\]$", "[JMP]", plain)
     if "[::]" in plain or "[JMP:" in plain or "[PRT:" in plain or "[ADR:" in plain or "[ESC:" in plain:
         raise Unsupported("stock string has entry points or references")
     plain = re.sub(r"\[SEP:[^\]]*\]", "", plain)
     # Stock rows can scroll and reuse an open box; only its commands matter.
-    profile = {"pauses": [], "sfx": set(), "speakers": [], "waits": 0, "opens_first": None,
+    profile = {"first_speaker": None, "pauses": [], "sfx": set(), "speakers": [], "waits": 0, "opens_first": None,
                "trailing_palette": False, "terminal": None}
     previous = None
     for name, argument in tokens(plain):
@@ -211,6 +213,8 @@ def stock_profile(stock):
                 profile["opens_first"] = True
         elif name == "TPL" and number(argument) in STOCK_SPEAKERS:
             speaker = number(argument)
+            if profile["opens_first"] is not False and not profile["speakers"]:
+                profile["first_speaker"] = speaker
             if not profile["speakers"] or profile["speakers"][-1] != speaker:
                 profile["speakers"].append(speaker)
         elif name == "PAU":
@@ -219,7 +223,7 @@ def stock_profile(stock):
             profile["sfx"].add(number(argument))
         elif name in ("FIN", "WAI"):
             profile["waits"] += 1
-        elif name in ("END", "RET"):
+        elif name in ("END", "RET", "JMP"):
             profile["terminal"] = name
             profile["trailing_palette"] = previous in (("PAL", "00"), ("PAL", "0"))
         if name != "glyph":
@@ -432,26 +436,38 @@ def _choice_page(source, options, skip, final_box, stock_rows, plain):
     return out + "[BOX]" + "".join(speaker + presentation) + "[N]".join(text + choices)
 
 
-def transcribe(source, stock, names, rom=None, offset=None):
+def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, contract=None):
     """Return the stock-engine stream for one authored string.
 
     `source` is the GaiaLabs declaration body, `stock` the decoded USA string
     in the same notation. With `rom` and `offset`, strings that share a box
     with their calling script are supported as well. The result starts with
     a `[BOX:x,y,w,h]` tag when the string prints into an inherited box.
+    `entry_box` and `contract` supply the open box and the script's choice
+    command for a second entry point, which has no script site of its own.
     Raises Unsupported when the result cannot be shown to keep the stock
     string's behaviour.
     """
     profile = stock_profile(stock)
     inherited = None
     if not profile["opens_first"]:
-        inherited = caller_box(rom, offset) if rom is not None else None
+        inherited = entry_box or (caller_box(rom, offset) if rom is not None else None)
         if inherited is None or not stock_state(stock, inherited)["fits"]:
             raise Unsupported("the calling script's box is not known")
     final = stock_state(stock, inherited)
-    contract = prompt_contract(rom, offset) if rom is not None and profile["terminal"] == "RET" else None
+    if contract is None and rom is not None and profile["terminal"] == "RET":
+        contract = prompt_contract(rom, offset)
     if profile["terminal"] == "END":
         mode = "end"
+    elif profile["terminal"] == "JMP":
+        # The jump stays in the ROM bank; the text returns to it. The target
+        # string continues in the box this one leaves open.
+        if not final["after_wait"] or final["box"] is None:
+            raise Unsupported("stock string jumps in the middle of a page")
+        mode = "page"
+        source, jumps = re.subn(r"(?:\[CLD\])*\[JMP:[^\]]*\]$", "", source)
+        if jumps != 1:
+            raise Unsupported("authored string does not jump where stock does")
     elif profile["terminal"] != "RET":
         raise Unsupported("stock string does not end or return")
     elif contract:
@@ -513,7 +529,9 @@ def transcribe(source, stock, names, rom=None, offset=None):
             out.append("[CLD]")
         out.append(command)
         if speaker is _INHERIT:
-            speaker = None
+            # Opening a box drops the caller's colours. Stock names its
+            # speaker itself in that case; an authored string may not.
+            speaker = profile["first_speaker"]
         box = opened
         # Opening a box restores the default colours, sound and typing speed.
         active = shown_delay = shown_sound = None
@@ -665,7 +683,7 @@ def transcribe(source, stock, names, rom=None, offset=None):
 
     stream = "".join(out)
     result = simulate(stream, inherited)
-    if result["terminal"] != profile["terminal"] or not result["glyphs"]:
+    if result["terminal"] != ("RET" if profile["terminal"] == "JMP" else profile["terminal"]) or not result["glyphs"]:
         raise Unsupported("transcription lost its terminal or text")
     if (mode == "end" and inherited is None and not result["opens_first"]) or result["box"] != \
             (final["box"] if mode in ("page", "choice") else None if mode == "closed" else result["box"]):
@@ -679,6 +697,8 @@ def transcribe(source, stock, names, rom=None, offset=None):
         raise Unsupported("timed string changes its timeline")
     if inherited:
         stream = "[BOX:%02X,%02X,%02X,%02X]" % inherited + stream
+    if profile["terminal"] == "JMP":
+        stream = "[JMP]" + stream
     # END waits for input, so the pauses only pace a page the player dismisses.
     if any(value not in profile["pauses"] and value > 0x40 for value in result["pauses"]):
         raise Unsupported("long pause absent from the stock string")
@@ -704,11 +724,17 @@ _FONT.update({0x80 + i: c for i, c in enumerate("abcdefghijklmno")})
 _FONT.update({0xA0 + i: c for i, c in enumerate("pqrstuvwxyz")})
 
 
-def decode_stock(rom, offset):
-    """Return (notation, bytes) of the USA string at a ROM file offset."""
+def decode_stock(rom, offset, stop=None):
+    """Return (notation, bytes) of the USA string at a ROM file offset.
+
+    With `stop`, decode only the commands before that offset: the part of a
+    string in front of its second entry point, which has no terminal.
+    """
     start = offset
     out = []
     while offset < len(rom) and offset - start < 4096:
+        if offset == stop:
+            return "".join(out), bytes(rom[start:offset])
         byte = rom[offset]
         offset += 1
         if byte < 0xC0:
@@ -857,3 +883,75 @@ def caller_box(rom, offset, depth=0):
             return None
         found = box
     return found
+
+
+def _choice_caller(rom, offset):
+    """Box left by the prompt whose choice table leads to the string's script site."""
+    bank = offset & 0xFF0000
+    found = None
+    at = rom.find(b"\x02\xBE", bank + 0x8000, bank + 0x10000)
+    while at >= 0:
+        if rom[at - 4:at - 2] == b"\x02\xBF" and 2 <= rom[at + 2] <= 7:
+            table = bank | rom[at + 4] | rom[at + 5] << 8
+            targets = {bank | rom[table + 2 * i] | rom[table + 2 * i + 1] << 8 for i in range(rom[at + 2] + 1)}
+            if any(0 <= site - target < 32 and b"\x02\xBF" not in rom[target:site]
+                   for site in print_sites(rom, offset) for target in targets):
+                prompt = bank | rom[at - 2] | rom[at - 1] << 8
+                try:
+                    state = stock_state(decode_stock(rom, prompt)[0])
+                except (Unsupported, ValueError):
+                    return None
+                box = state["box"] or caller_box(rom, prompt, 3)
+                if state["terminal"] != "RET" or box is None or found not in (None, box):
+                    return None
+                found = box
+        at = rom.find(b"\x02\xBE", at + 1, bank + 0x10000)
+    return found
+
+
+_linear_caller_box = caller_box
+
+
+def caller_box(rom, offset, depth=0):
+    """Box the calling script left open: the string printed just before, or
+    the prompt whose choice leads here. Both kinds of evidence must agree."""
+    linear = _linear_caller_box(rom, offset, depth)
+    choice = _choice_caller(rom, offset) if depth < 3 else None
+    if linear and choice and linear != choice:
+        return None
+    return linear or choice
+
+
+def transcribe_entry(source, rom, offset, marker, names):
+    """Transcribe a stock string that has a second entry point.
+
+    Scripts start such a string either at its beginning or `marker` bytes
+    in. Returns the stream for the whole string and the stream for the
+    entry, which begins in the box the first part leaves open.
+    """
+    if source.count("[::]") != 1:
+        raise Unsupported("authored entry point differs")
+    first, second = source.split("[::]")
+    head = decode_stock(rom, offset, offset + marker)[0]
+    tail = decode_stock(rom, offset + marker)[0]
+    whole = decode_stock(rom, offset)[0]
+    if head + tail != whole:
+        raise Unsupported("entry point is not on a command boundary")
+    opened = stock_state(STOCK_LOOKUP.sub("x", head) + "[RET]",
+                         None if stock_profile(whole)["opens_first"] else caller_box(rom, offset))
+    contract = None
+    if whole.endswith("[RET]"):
+        contracts = {c for c in (prompt_contract(rom, offset), prompt_contract(rom, offset + marker)) if c}
+        if len(contracts) > 1:
+            raise Unsupported("choice command differs between entries")
+        contract = contracts.pop() if contracts else None
+    if marker < 5:
+        # A redirect needs five bytes. A shorter first part stays in the ROM
+        # when it is only commands that the authored string repeats.
+        same = [(n, int(a, 16)) for n, a in tokens(first)] == [(n, int(a, 16)) for n, a in tokens(head)]             if all(a and n != "glyph" for n, a in list(tokens(first)) + list(tokens(head))) else False
+        if not same:
+            raise Unsupported("first part is too short to redirect")
+        return "", transcribe(second, tail, names, rom, offset + marker, entry_box=opened["box"], contract=contract)
+    full = transcribe(first + second, whole, names, rom, offset, contract=contract)
+    entry = transcribe(second, tail, names, rom, offset + marker, entry_box=opened["box"], contract=contract)
+    return full, entry

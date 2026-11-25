@@ -44,14 +44,16 @@ TAIL_PREFIXES = {
 # or print into the box their calling script opened. gaia_authored_dialogue
 # checks each one against the stock renderer and its script.
 AUTHORED = frozenset((
-    "039D0E", "04953E", "049B18", "049BE5", "04A0D7", "04AA20", "04B00F", "04B652",
-    "04BA55", "04C115", "04C271", "04C460", "04D141", "04D732", "04D78A", "04D8D2",
-    "04F5EA", "04F68F", "0594B8", "05AADD", "05B225", "05B8CD", "05EA25", "05EB94",
-    "05F160", "0698D2", "06A57F", "06AB53", "06B250", "06B67B", "06BB50", "06BC5C",
-    "06BD1A", "06BD4A", "079520", "0796A9", "07ADEA", "07B0E1", "07B108", "07B9B1",
-    "07BA2E", "07BBB0", "07BCAA", "07CE28", "07D6C2", "07DC63", "07DDD2", "08830F",
-    "08963C", "089C5B", "08A096", "08B70D", "08BFC7", "08CDDA", "08E722", "08E853",
-    "08F157", "0981F4", "098CAA", "09C7AE", "09D1FC", "0AFB45",
+    "039D0E", "04953E", "049B18", "049B82", "049BE5", "04A04C", "04A0D7", "04AA20",
+    "04B00F", "04B652", "04BA55", "04C115", "04C271", "04C460", "04CDC0", "04D141",
+    "04D732", "04D78A", "04D8D2", "04EDF4", "04F5EA", "04F68F", "0594B8", "059D91",
+    "059DCD", "05AADD", "05ABC6", "05B225", "05B8CD", "05B90C", "05DE46", "05EA25",
+    "05EB2E", "05EB94", "05F160", "0698D2", "06A57F", "06AB53", "06B250", "06B67B",
+    "06BB50", "06BC5C", "06BD1A", "06BD4A", "06BE1F", "079520", "0796A9", "079704",
+    "07ADEA", "07B0E1", "07B108", "07B8AD", "07B9B1", "07BA2E", "07BBB0", "07BCAA",
+    "07CE28", "07D6C2", "07DC63", "07DDD2", "08830F", "08963C", "089C5B", "08A096",
+    "08B70D", "08BFC7", "08CDDA", "08E722", "08E853", "08F157", "0981F4", "098CAA",
+    "09BD58", "09C7AE", "09D1FC", "0AFB45",
 ))
 
 INTERFACE_FILES = (
@@ -448,6 +450,12 @@ def main():
     tails = stock_tail_labels(structure)
     pairs = stock_pair_labels(structure)
     rows, excluded, seen = [], {}, set()
+    # Every dialogue label with its second entry point, if it has one.
+    entries = {}
+    for line in structure.read_text(encoding="utf-8").splitlines():
+        fields = line.split()
+        if len(fields) in (4, 5) and fields[0] == "S" and fields[2] == "widestring":
+            entries[fields[3].upper()] = (fields[1], int(fields[4], 16) if len(fields) == 5 else None)
     rom = args.rom.read_bytes() if args.rom.is_file() else None
     if rom is not None and len(rom) != 0x200000:
         parser.error("the ROM must be the unheadered 2 MiB USA image")
@@ -464,15 +472,20 @@ def main():
             if offset in seen:
                 raise ValueError(f"Duplicate replacement at {offset}")
             seen.add(offset)
-            if offset in AUTHORED and rom is not None and offset in labels:
+            if offset in AUTHORED and rom is not None and offset in entries:
+                label, marker = entries[offset]
                 try:
                     stock, data = gaia_authored_dialogue.decode_stock(rom, int(offset, 16))
-                    stream = gaia_authored_dialogue.transcribe(content, stock, names, rom, int(offset, 16))
+                    if marker is None:
+                        stream = gaia_authored_dialogue.transcribe(content, stock, names, rom, int(offset, 16))
+                    else:
+                        stream = "[MRK]" + "|".join(gaia_authored_dialogue.transcribe_entry(
+                            content, rom, int(offset, 16), marker, names))
                 except gaia_authored_dialogue.Unsupported as error:
                     excluded[offset] = str(error)
                 else:
                     signature = gaia_authored_dialogue.stock_signature(data)
-                    rows.append((offset, labels[offset], f"[RAW:{signature:08X}]{stream}"))
+                    rows.append((offset, label, f"[RAW:{signature:08X}]{stream}"))
                     authored += 1
                     continue
             if offset not in labels:

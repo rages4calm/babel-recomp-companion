@@ -173,12 +173,48 @@ static int GaiaAuthoredTokens(const char *text, Toks *out, uint8_t terminal)
     return 0;
 }
 
+/* No other label or entry point may begin inside the bytes a patch replaces. */
+static int GaiaAuthoredClear(const Structure *structure, const IogPack *pack, int index,
+                             uint32_t at, unsigned length)
+{
+    if (!GaiaPatchDisjoint(pack, at, length))
+        return 0;
+    for (int i = 0; i < structure->nl; ++i) {
+        const Label *other = &structure->l[i];
+        if (i != index && other->off - at < length)
+            return 0;
+        if (other->has_marker && other->off + other->marker != at &&
+            other->off + other->marker - at < length)
+            return 0;
+    }
+    return 1;
+}
+
+static uint32_t GaiaAuthoredPlace(IogPack *pack, unsigned *fill, const Item *item)
+{
+    const unsigned size = (unsigned)Encode(NULL, item, NULL);
+    const uint32_t address = GaiaUiAddress(pack, fill, size);
+    if (address) {
+        Encode(NULL, item, pack->banks[pack->nbanks - 1] + *fill);
+        *fill += size;
+    }
+    return address;
+}
+
+/* Row forms after the signature:
+ *   stream            the string ends or returns as stock does
+ *   [JMP]stream       stock ends in a same-bank jump: the text returns and
+ *                     the original jump runs from the ROM bank
+ *   [MRK]full|entry   stock has a second entry point: `full` replaces the
+ *                     string and `entry` the part scripts enter directly.
+ *                     `full` is empty when the first part is shorter than
+ *                     a redirect; those commands then stay in the ROM. */
 static void GaiaApplyAuthored(FILE *file, const Rom *stock, const Structure *structure,
                               IogPack *pack, unsigned *fill)
 {
     if (fseek(file, 0, SEEK_SET))
         return;
-    char line[4096];
+    char line[8192];
     while (fgets(line, sizeof(line), file)) {
         char *text = strchr(line, '\t');
         if (!text || strncmp(line, "widestring_", 11) || strncmp(text + 1, "[RAW:", 5))
@@ -189,37 +225,60 @@ static void GaiaApplyAuthored(FILE *file, const Rom *stock, const Structure *str
         if (!GaiaAuthoredHex(&cursor, 8, ']', &signature))
             continue;
         text[1 + strcspn(text + 1, "\r\n")] = 0;
+        const int jump = !strncmp(cursor, "[JMP]", 5);
+        const int entry = !strncmp(cursor, "[MRK]", 5);
+        if (jump || entry)
+            cursor += 5;
+        char *second = entry ? strchr(cursor, '|') : NULL;
+        if (entry && !second)
+            continue;
+        if (second)
+            *second++ = 0;
         const int index = FindLabel(structure, line);
         if (index < 0)
             continue;
         const Label *label = &structure->l[index];
         const uint32_t offset = label->off;
         const uint32_t span = StringSpan(stock, offset);
-        if (label->has_marker || label->unk16 || span < 5 ||
-            (stock->rom[offset + span - 1] != CMD_END && stock->rom[offset + span - 1] != CMD_RET) ||
+        const unsigned length = jump ? 7 : 5;
+        const int prefix = entry && !*cursor;       /* only the entry is redirected */
+        if (label->unk16 || span < length || !label->has_marker != !entry ||
             GaiaStockSignature(stock, offset, span) != signature ||
-            !GaiaPatchDisjoint(pack, offset, 5))
+            (!prefix && !GaiaAuthoredClear(structure, pack, index, offset, length)))
             continue;
-        int disjoint = 1;
-        for (int i = 0; disjoint && i < structure->nl; ++i) {
-            const Label *other = &structure->l[i];
-            if (i != index)
-                disjoint = other->off - offset >= 5 &&
-                    (!other->has_marker || other->off + other->marker - offset >= 5);
+        uint8_t terminal = stock->rom[offset + span - 1];
+        if (jump) {
+            if (stock->rom[offset + span - 3] != CMD_JMP)
+                continue;
+            terminal = CMD_RET;
+        } else if (terminal != CMD_END && terminal != CMD_RET) {
+            continue;
         }
-        if (!disjoint)
+        if (entry && ((label->marker < 5) != prefix || label->marker + 5 > span ||
+                      !GaiaAuthoredClear(structure, pack, index, offset + label->marker, 5)))
             continue;
-        Item item = {0};
-        if (GaiaAuthoredTokens(cursor, &item.toks, stock->rom[offset + span - 1])) {
-            const unsigned size = (unsigned)Encode(NULL, &item, NULL);
-            const uint32_t address = GaiaUiAddress(pack, fill, size);
-            if (address) {
-                Encode(NULL, &item, pack->banks[pack->nbanks - 1] + *fill);
-                AddRedirect(pack, offset, CMD_PRT, address, CMD_RET);
-                *fill += size;
+        Item whole = {0}, part = {0};
+        if ((prefix || GaiaAuthoredTokens(cursor, &whole.toks, terminal)) &&
+            (!entry || GaiaAuthoredTokens(second, &part.toks, terminal))) {
+            const uint32_t address = prefix ? 1 : GaiaAuthoredPlace(pack, fill, &whole);
+            const uint32_t inner = address && entry ? GaiaAuthoredPlace(pack, fill, &part) : 0;
+            if (address && (!entry || inner)) {
+                if (prefix) {
+                    /* The first part runs from the ROM and falls into the entry. */
+                } else if (jump) {
+                    const uint8_t patch[7] = {CMD_PRT, (uint8_t)address, (uint8_t)(address >> 8),
+                                              (uint8_t)(address >> 16), CMD_JMP,
+                                              stock->rom[offset + span - 2], stock->rom[offset + span - 1]};
+                    AddPatch(pack, offset, patch, sizeof(patch));
+                } else {
+                    AddRedirect(pack, offset, CMD_PRT, address, CMD_RET);
+                }
+                if (entry)
+                    AddRedirect(pack, offset + label->marker, CMD_PRT, inner, CMD_RET);
                 ++pack->strings_translated;
             }
         }
-        free(item.toks.t);
+        free(whole.toks.t);
+        free(part.toks.t);
     }
 }
