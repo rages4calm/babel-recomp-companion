@@ -1034,6 +1034,37 @@ def prompt_contract(rom, offset):
     return found
 
 
+def _branched_past(rom, at, site):
+    """True when the print at `at` is the other arm of a branch that leads to `site`.
+
+    Item scripts print what the player did, test where they stand, and then
+    print either a failure line and return, or the result. The arm before
+    `site`'s block must end with a return or an unconditional branch, and a
+    branch or script command after the routine's earlier print must name
+    that block as its target.
+    """
+    if rom[site - 1] == 0x60 or rom[site - 2] == 0x80:
+        block = site            # the arm before it returned or branched away
+    elif rom[at + 4] == 0x60 and at + 5 <= site and b"\x02\xBF" not in rom[at + 5:site]:
+        block = at + 5
+    else:
+        return False
+    before = rom.rfind(b"\x02\xBF", max((at & 0xFF0000) + 0x8000, at - 0x100), at)
+    if before < 0:
+        return False
+    # The branch sits before this print, which it skips, or after it when
+    # this print's arm has already returned.
+    spans = [range(before + 4, at)] + ([range(at + 5, block - 1)] if rom[at + 4] == 0x60 else [])
+    for position in (position for span in spans for position in span):
+        if rom[position] | rom[position + 1] << 8 == block & 0xFFFF:
+            return True         # a script command's target operand
+        if rom[position] in (0x10, 0x30, 0x80, 0x90, 0xB0, 0xD0, 0xF0):
+            reach = rom[position + 1]
+            if position + 2 + (reach - 256 if reach & 0x80 else reach) == block:
+                return True     # a relative branch
+    return False
+
+
 def caller_box(rom, offset, depth=0):
     """Box left open by the script before it prints the string, if provable.
 
@@ -1055,6 +1086,8 @@ def caller_box(rom, offset, depth=0):
                 earlier = decode_stock(rom, target)[0] if target & 0x8000 and target != offset else None
             except (Unsupported, ValueError):
                 earlier = None
+            if earlier is not None and _branched_past(rom, at, site):
+                earlier = None          # the other arm of a branch; look further back
             if earlier is not None:
                 state = stock_state(earlier)
                 if state["terminal"] != "RET":

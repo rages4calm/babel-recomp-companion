@@ -334,11 +334,18 @@ Most of those are item-use messages printed by the inventory code.
 
 The importer now tries the authored transcription for every declaration and
 keeps the earlier stock-window layout only when the converter refuses the
-string. 1,090 of the 1,133 rows are authored. The 43 others are listed with
+string. 1,098 of the 1,133 rows are authored. The 35 others are listed with
 their reasons in the importer's summary (`authored_unsupported`); the
-largest group, 23, print into a box whose calling script could not be
+largest group, 15, print into a box whose calling script could not be
 proven.
 
+- **Item scripts.** An item script prints what the player did, tests where
+  they stand, and prints either a failure line and returns, or the result.
+  The result's box is the one the first line left open: a print that is
+  the other arm of a branch is skipped when the routine names the block as
+  a branch target (`_branched_past`). This fixed "However, nothing
+  happened!" (`03925F`) appearing one row at a time after the Purification
+  Stone, found by the round-3 sweep in Dao.
 - **Speaker colours.** GaiaLabs' speaker themes (templates `16`-`24`) are
   written out as the stock colour commands, with the colours read from the
   pinned `dialog_template_table.asm`.

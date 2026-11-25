@@ -258,7 +258,7 @@ continuous campaign qualification is still open. Keep the owner playtest
 selector on the previous build until that is done.
 
 Pack v65 makes the authored layout the first choice for every declaration:
-1,090 of 1,133 rows are authored, with GaiaLabs' speaker colours, and the
+1,098 of 1,133 rows are authored, with GaiaLabs' speaker colours, and the
 epilogue and ending cards were replayed in their own scenes
 (`visual-fullgame-041/ending`). About 166 stock strings have no GaiaLabs
 declaration and stay in the original English. The walkable world map has
