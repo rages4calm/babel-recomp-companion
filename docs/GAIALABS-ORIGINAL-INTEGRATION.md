@@ -320,9 +320,10 @@ only by decoding the installed bytes: the tile row itself, the shared
 print call, and the box-only string. The 593 rows new to this batch have
 not been replayed in their own scenes; two sweep agents are doing that.
 
-Two five-row authored pages hide the speakers in small rooms (Kara in the
-Native Village hut, `08963C`, and on the raft, `059DCD`). They are left as
-GaiaLabs laid them out; the alternative is a page break inside a sentence.
+Two five-row authored pages hid the speakers in small rooms (Kara in the
+Native Village hut, `08963C`, and on the raft, `059DCD`). They now use the
+stock four-row box and turn the page at a clause (`CORRECTIONS` in the
+importer), which also holds four spelling or spacing fixes to the source.
 
 19 earlier strings whose pages differ from the source keep their earlier
 layout, 9 of them because the box they print into could not be proven.
@@ -333,7 +334,7 @@ Most of those are item-use messages printed by the inventory code.
 
 The importer now tries the authored transcription for every declaration and
 keeps the earlier stock-window layout only when the converter refuses the
-string. 1,087 of the 1,133 rows are authored. The 46 others are listed with
+string. 1,090 of the 1,133 rows are authored. The 43 others are listed with
 their reasons in the importer's summary (`authored_unsupported`); the
 largest group, 23, print into a box whose calling script could not be
 proven.

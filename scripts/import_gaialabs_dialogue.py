@@ -52,6 +52,19 @@ CORRECTIONS = {
     "049BE5": (("momoent", "moment"),),
     "04A3BB": (("bring[N]you you back home", "bring[N]you back home"),),
     "04D8D2": (("going on be", "going to be"), ("gradually become quiet", "gradually became quiet")),
+    "04FA25": (("can't ive you", "can't give you"),),
+    # Stray spaces that keep an over-wide row from being wrapped again.
+    "04F591": (("[FIN] …From", "[FIN]…From"),),
+    "05AE00": (("are we? [FIN]", "are we?[FIN]"),),
+    # One sentence over seven rows: no box holds it, so it turns the page
+    # at the clause instead of in the middle of a row.
+    "05C85E": (("experienced from when I[N]was born", "experienced from when I[FIN]was born"),),
+    # Five-row pages whose box covers Kara in a small room (the Native
+    # Village hut, the raft). They use the stock four-row box and turn the
+    # page at a clause.
+    "08963C": (("[TPL:1][TPL:10]", "[TPL:1][TPL:F]"), ("northwest and[N]were", "northwest and[FIN]were"),
+               ("selling children when[N]there's", "selling children when[FIN]there's")),
+    "059DCD": (("[::][TPL:12]", "[::][TPL:B]"), ("in books, but I[N]would", "in books, but I[FIN]would")),
 }
 
 # The Jeweler. His reward list is a box-only string followed by one string
@@ -643,6 +656,7 @@ def main():
     print(json.dumps({"revision": REVISION, "source_rows": len(seen), "output_rows": len(rows),
                       "authored_rows": authored,
                       "authored_unsupported": dict(Counter(unsupported.values())),
+                      "authored_unsupported_rows": {str(key): unsupported[key] for key in sorted(unsupported)},
                       "interface": dict(Counter(kind for kind, _, _ in interface)),
                       "excluded": dict(Counter(excluded.values()))}, sort_keys=True))
 
