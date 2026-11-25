@@ -19,6 +19,8 @@
 #include "iog_randomizer.h"
 #include "iog_cheat_rates.h"
 #include "iog_map_host.h"
+#include "iog_map_ui.h"
+#include <stdlib.h>
 #include "desktop/config.h"
 #include "desktop/sdl_compat.h"
 
@@ -27,20 +29,78 @@
  * the live [GamepadMap], as the label an Xbox-layout pad prints on it. Returns
  * 0 when no controller is connected or nothing is bound (callers then name a
  * keyboard key). Face buttons take the overlay's button colours. */
+/* Prompt style: 0 Auto, 1 SNES, 2 Xbox. Kept with the map controls
+ * (iog.enhancements / map_controls / prompts). */
+static const char *const kPromptStyles[] = {"AUTO", "SNES", "XBOX"};
+static const char *const kPromptValues[] = {"auto", "snes", "xbox"};
+static int g_prompt_style = -1;
+static int PromptStyleGet(void *ud)
+{
+    (void)ud;
+    if (g_prompt_style < 0) {
+        char value[16] = {0};
+        g_prompt_style = 0;
+        const char *force = getenv("IOG_PROMPT_STYLE");   /* headless checks */
+        if (force && *force) snprintf(value, sizeof(value), "%s", force);
+        else if (snes_mod_runtime_feature_enabled_c("iog.enhancements", "map_controls") > 0)
+            snes_mod_runtime_feature_option_value_c("iog.enhancements", "map_controls", "prompts", value, sizeof(value));
+        for (int i = 0; i < 3; i++) if (!strcmp(value, kPromptValues[i])) g_prompt_style = i;
+    }
+    return g_prompt_style;
+}
+static void PromptStyleSet(void *ud, int v)
+{
+    (void)ud;
+    if (v < 0 || v > 2) return;
+    g_prompt_style = v;
+    snes_mod_runtime_persist_feature_c("iog.enhancements", "map_controls", 1, "prompts", kPromptValues[v]);
+}
+
+/* Auto: SNES labels when player 1's controller reports itself as an
+ * SNES-layout pad, by SDL's type (Nintendo layouts) or by its name. */
+static int PadIsSnesLayout(void)
+{
+    const char *name = getenv("IOG_PROMPT_PAD_NAME");   /* headless checks */
+    int nintendo = 0;
+    if (!name) {
+#if SNESRECOMP_SDL3
+        int count = 0;
+        SDL_JoystickID *ids = SDL_GetGamepads(&count);
+        if (ids && count > 0) {
+            const SDL_GamepadType type = SDL_GetGamepadTypeForID(ids[0]);
+            nintendo = type == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO ||
+                       type == SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR;
+            name = SDL_GetGamepadNameForID(ids[0]);
+        }
+        if (ids) SDL_free(ids);
+#else
+        for (int i = 0; i < SDL_NumJoysticks(); i++) {
+            if (!SDL_IsGameController(i)) continue;
+            const SDL_GameControllerType type = SDL_GameControllerTypeForIndex(i);
+            nintendo = type == SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_PRO;
+            name = SDL_GameControllerNameForIndex(i);
+            break;
+        }
+#endif
+    }
+    return nintendo || IogMapUiSnesLayoutName(name);
+}
+
 int IogHostPadLabel(uint32_t snes_bit, char label[8], uint32_t *color)
 {
     /* [GamepadMap] Controls order: Up Down Left Right Select Start A B X Y L R. */
     static const uint32_t kOrder[12] = {SNES_PAD_UP, SNES_PAD_DOWN, SNES_PAD_LEFT, SNES_PAD_RIGHT,
         SNES_PAD_SELECT, SNES_PAD_START, SNES_PAD_A, SNES_PAD_B, SNES_PAD_X, SNES_PAD_Y,
         SNES_PAD_L, SNES_PAD_R};
-    static const struct { int button; const char *name; uint32_t color; } kNames[] = {
-        {kGamepadBtn_A, "A", SNES_OVL_COL_A}, {kGamepadBtn_B, "B", SNES_OVL_COL_B},
-        {kGamepadBtn_X, "X", SNES_OVL_COL_X}, {kGamepadBtn_Y, "Y", SNES_OVL_COL_Y},
-        {kGamepadBtn_Back, "BACK", 0}, {kGamepadBtn_Start, "START", 0},
-        {kGamepadBtn_L1, "LB", 0}, {kGamepadBtn_R1, "RB", 0}, {kGamepadBtn_L2, "LT", 0},
-        {kGamepadBtn_R2, "RT", 0}, {kGamepadBtn_L3, "L3", 0}, {kGamepadBtn_R3, "R3", 0},
-        {kGamepadBtn_DpadUp, "UP", 0}, {kGamepadBtn_DpadDown, "DOWN", 0},
-        {kGamepadBtn_DpadLeft, "LEFT", 0}, {kGamepadBtn_DpadRight, "RIGHT", 0},
+    /* The runner's button names are SDL's, which are positions. */
+    static const struct { int button, position; } kNames[] = {
+        {kGamepadBtn_A, IOG_PAD_SOUTH}, {kGamepadBtn_B, IOG_PAD_EAST},
+        {kGamepadBtn_X, IOG_PAD_WEST}, {kGamepadBtn_Y, IOG_PAD_NORTH},
+        {kGamepadBtn_Back, IOG_PAD_SELECT}, {kGamepadBtn_Start, IOG_PAD_START},
+        {kGamepadBtn_L1, IOG_PAD_L1}, {kGamepadBtn_R1, IOG_PAD_R1}, {kGamepadBtn_L2, IOG_PAD_L2},
+        {kGamepadBtn_R2, IOG_PAD_R2}, {kGamepadBtn_L3, IOG_PAD_L3}, {kGamepadBtn_R3, IOG_PAD_R3},
+        {kGamepadBtn_DpadUp, IOG_PAD_UP}, {kGamepadBtn_DpadDown, IOG_PAD_DOWN},
+        {kGamepadBtn_DpadLeft, IOG_PAD_LEFT}, {kGamepadBtn_DpadRight, IOG_PAD_RIGHT},
     };
     int pads = 0;
 #if SNESRECOMP_SDL3
@@ -54,9 +114,9 @@ int IogHostPadLabel(uint32_t snes_bit, char label[8], uint32_t *color)
         if (kOrder[i] != snes_bit) continue;
         for (size_t n = 0; n < sizeof(kNames) / sizeof(kNames[0]); n++)
             if (FindCmdForGamepadButton(kNames[n].button, 0) == kKeys_Controls + i) {
-                snprintf(label, 8, "%s", kNames[n].name);
-                *color = kNames[n].color;
-                return 1;
+                const int style = PromptStyleGet(NULL);
+                return IogMapUiPadGlyph(kNames[n].position, style == 1 || (style == 0 && PadIsSnesLayout()),
+                                        label, color);
             }
     }
     return 0;
@@ -171,6 +231,7 @@ static const char *const kEs[][2] = {
     {"MAP / RADAR (SNES BUTTONS)", "MAPA / RADAR (BOTONES SNES)"}, {"RADAR", "RADAR"},
     {"MAP ZOOM IN", "MAPA: ACERCAR"}, {"MAP ZOOM OUT", "MAPA: ALEJAR"}, {"MAP CENTER", "MAPA: CENTRAR"},
     {"MAP RADAR TOGGLE", "MAPA: RADAR"}, {"MAP BACK", "MAPA: VOLVER"},
+    {"BUTTON PROMPTS", "BOTONES EN PANTALLA"}, {"AUTO", "AUTO"}, {"SNES", "SNES"}, {"XBOX", "XBOX"},
     {"HP REFILL", "RECARGAR VIDA"}, {"MINIMUM DP", "DP MÍNIMO"}, {"MINIMUM STATS", "ESTADÍSTICAS MÍNIMAS"},
     {"CHEATS (ACHIEVEMENTS OFF)", "TRUCOS (SIN LOGROS)"}, {"INFINITE HP", "VIDA INFINITA"},
     {"DP 99", "DP 99"}, {"STATS BOOST", "MEJORA DE ESTADÍSTICAS"}, {"ALL 50 RED JEWELS", "LAS 50 JOYAS ROJAS"}, {"GAME COMPLETED", "JUEGO COMPLETADO"},
@@ -272,6 +333,10 @@ void IogSettingsInstall(void)
         it.get=MapControlGet;it.set=MapControlSet;it.ud=(void*)(intptr_t)action;
         snes_settings_menu_add(&it);
     }
+
+    memset(&it,0,sizeof it);it.kind=kSnesSetting_Choice;it.label="BUTTON PROMPTS";
+    it.choices=kPromptStyles;it.count=3;it.get=PromptStyleGet;it.set=PromptStyleSet;
+    snes_settings_menu_add(&it);
 
     static const char *const kCheatLabels[] = {"HP REFILL", "MINIMUM DP", "MINIMUM STATS"};
     memset(&it, 0, sizeof(it));

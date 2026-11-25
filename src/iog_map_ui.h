@@ -52,6 +52,20 @@ void IogMapUiSetPrompts(IogMapUi *ui, const IogMapUiPrompt *prompts,
 int IogMapUiGlyphWidth(const char *glyph, uint32_t color, int scale);
 void IogMapUiGlyphDraw(uint32_t *pixels, int stride, int height, int x, int y,
                        const char *glyph, uint32_t color, int scale);
+/* A colour with this alpha draws a filled round button with a dark letter:
+ * the SNES pad's four coloured buttons. Any other nonzero colour is a ring. */
+#define IOG_MAP_UI_GLYPH_FILLED(rgb) (0xfe000000u | ((uint32_t)(rgb) & 0xffffffu))
+/* Physical controller positions, whatever is printed on them. */
+enum { IOG_PAD_SOUTH, IOG_PAD_EAST, IOG_PAD_WEST, IOG_PAD_NORTH, IOG_PAD_L1, IOG_PAD_R1,
+       IOG_PAD_SELECT, IOG_PAD_START, IOG_PAD_L2, IOG_PAD_R2, IOG_PAD_L3, IOG_PAD_R3,
+       IOG_PAD_UP, IOG_PAD_DOWN, IOG_PAD_LEFT, IOG_PAD_RIGHT, IOG_PAD_POSITIONS };
+/* What a pad prints at a position. SNES layout: south B, east A, west Y, north X
+ * in the Super Famicom colours, L, R, SELECT, START. Xbox layout: A B X Y in the
+ * overlay's ring colours, LB, RB, BACK, START. False for an unknown position. */
+bool IogMapUiPadGlyph(int position, bool snes_layout, char label[8], uint32_t *color);
+/* True when a controller's reported name is an SNES-layout pad (SNES, Super
+ * Nintendo / Famicom, 8BitDo SN30 / SF30 and the like). */
+bool IogMapUiSnesLayoutName(const char *name);
 /* Paused controller-first bindings pane. Row0 is radar, rows1..5 are actions.
  * Input bindings contain distinct A/B/X/Y/L/R indices0..5. */
 bool IogMapUiDrawControls(uint8_t *bgra,size_t bytes,size_t pitch,

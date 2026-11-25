@@ -123,6 +123,22 @@ static void marker_legends(void){
  IogMapUiSetPrompts(&u,NULL,0,NULL);C(!u.prompt_count&&!u.back_prompt.glyph[0]);
  C(IogMapUiGlyphWidth("A",0xff6be06bu,2)==36&&IogMapUiGlyphWidth("LB",0,2)==44&&IogMapUiGlyphWidth("",0,2)==0);
  IogMapUiSetScale(&u,7);C(u.scale==1);
+ /* Pad letters by position: Xbox rings, or the SNES pad's four filled buttons. */
+ char name[8];uint32_t tint=0;
+ C(IogMapUiPadGlyph(IOG_PAD_SOUTH,false,name,&tint)&&!strcmp(name,"A")&&tint==0xff6be06bu);
+ C(IogMapUiPadGlyph(IOG_PAD_SOUTH,true,name,&tint)&&!strcmp(name,"B")&&tint==IOG_MAP_UI_GLYPH_FILLED(0xf2c94c));
+ C(IogMapUiPadGlyph(IOG_PAD_EAST,true,name,&tint)&&!strcmp(name,"A")&&tint==IOG_MAP_UI_GLYPH_FILLED(0xe5484d));
+ C(IogMapUiPadGlyph(IOG_PAD_WEST,true,name,&tint)&&!strcmp(name,"Y")&&IogMapUiPadGlyph(IOG_PAD_NORTH,true,name,&tint)&&!strcmp(name,"X"));
+ C(IogMapUiPadGlyph(IOG_PAD_WEST,false,name,&tint)&&!strcmp(name,"X")&&IogMapUiPadGlyph(IOG_PAD_NORTH,false,name,&tint)&&!strcmp(name,"Y"));
+ C(IogMapUiPadGlyph(IOG_PAD_L1,true,name,&tint)&&!strcmp(name,"L")&&!tint&&IogMapUiPadGlyph(IOG_PAD_L1,false,name,&tint)&&!strcmp(name,"LB"));
+ C(IogMapUiPadGlyph(IOG_PAD_SELECT,true,name,&tint)&&!strcmp(name,"SELECT")&&IogMapUiPadGlyph(IOG_PAD_SELECT,false,name,&tint)&&!strcmp(name,"BACK"));
+ C(!IogMapUiPadGlyph(IOG_PAD_POSITIONS,true,name,&tint)&&!IogMapUiPadGlyph(-1,false,name,&tint)&&!IogMapUiPadGlyph(0,true,NULL,&tint));
+ C(IogMapUiGlyphWidth("B",IOG_MAP_UI_GLYPH_FILLED(0xf2c94c),2)==36&&IogMapUiGlyphWidth("SELECT",0,1)==54);
+ static const char *const snes_pads[]={"8BitDo SN30 Pro","8Bitdo SF30 Pro","SNES Controller","8BitDo SNES30 GamePad","Nintendo Switch Online SNES Controller","Super Famicom Controller","Super Nintendo Entertainment System Controller","8BitDo S","usb gamepad (snes)"};
+ static const char *const other_pads[]={"Xbox Series X Controller","snesrecomp self-test pad","8BitDo Stadia","8BitDo Pro 2","PS5 Controller","Nintendo 64 Controller","Wireless Controller","","Genesis Controller"};
+ for(unsigned i=0;i<sizeof(snes_pads)/sizeof(snes_pads[0]);i++)C(IogMapUiSnesLayoutName(snes_pads[i]));
+ for(unsigned i=0;i<sizeof(other_pads)/sizeof(other_pads[0]);i++)C(!IogMapUiSnesLayoutName(other_pads[i]));
+ C(!IogMapUiSnesLayoutName(NULL));
  free(dst);
 }
 int main(int argc,char**argv){C(argc==3);fixture();actions();pointer_actions();controls_pane();marker_legends();dimensions(598,336,true,argv[1]);dimensions(598,336,false,argv[2]);dimensions(344,224,true,NULL);dimensions(784,336,true,NULL);dimensions(256,160,true,NULL);dimensions(2048,512,true,NULL);meta.gamepad=true;dimensions(344,224,true,NULL);fog_independence();printf("%u map UI assertions passed\n",checks);return 0;}

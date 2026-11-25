@@ -170,6 +170,25 @@ default_enabled = true
 
 [[option]]
 feature = "map_controls"
+id = "prompts"
+label = "Button prompts"
+type = "choice"
+default = "auto"
+
+[[option.choice]]
+value = "auto"
+label = "Auto"
+
+[[option.choice]]
+value = "snes"
+label = "SNES"
+
+[[option.choice]]
+value = "xbox"
+label = "Xbox"
+
+[[option]]
+feature = "map_controls"
 id = "radar"
 label = "Radar"
 type = "choice"

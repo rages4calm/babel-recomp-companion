@@ -56,10 +56,60 @@ int IogMapUiGlyphWidth(const char *glyph, uint32_t color, int scale) {
     return 0;
   return color ? 18 * scale : ((int)strlen(glyph) * 8 + 6) * scale;
 }
+bool IogMapUiPadGlyph(int position, bool snes_layout, char label[8], uint32_t *color) {
+  static const struct { const char *name; uint32_t color; } xbox[IOG_PAD_POSITIONS] = {
+      {"A", 0xff6be06bu}, {"B", 0xffff6b6bu}, {"X", 0xff5fa8ffu}, {"Y", 0xffffd24du},
+      {"LB", 0}, {"RB", 0}, {"BACK", 0}, {"START", 0}, {"LT", 0}, {"RT", 0}, {"L3", 0}, {"R3", 0},
+      {"UP", 0}, {"DOWN", 0}, {"LEFT", 0}, {"RIGHT", 0}};
+  /* Super Famicom: A red, B yellow, X blue, Y green. */
+  static const struct { const char *name; uint32_t color; } snes[IOG_PAD_POSITIONS] = {
+      {"B", IOG_MAP_UI_GLYPH_FILLED(0xf2c94c)}, {"A", IOG_MAP_UI_GLYPH_FILLED(0xe5484d)},
+      {"Y", IOG_MAP_UI_GLYPH_FILLED(0x4cc38a)}, {"X", IOG_MAP_UI_GLYPH_FILLED(0x5b8def)},
+      {"L", 0}, {"R", 0}, {"SELECT", 0}, {"START", 0}, {"L2", 0}, {"R2", 0}, {"L3", 0}, {"R3", 0},
+      {"UP", 0}, {"DOWN", 0}, {"LEFT", 0}, {"RIGHT", 0}};
+  if (position < 0 || position >= IOG_PAD_POSITIONS || !label || !color)
+    return false;
+  snprintf(label, 8, "%s", snes_layout ? snes[position].name : xbox[position].name);
+  *color = snes_layout ? snes[position].color : xbox[position].color;
+  return true;
+}
+static bool Letter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+bool IogMapUiSnesLayoutName(const char *name) {
+  if (!name)
+    return false;
+  char low[96];
+  size_t n = 0;
+  for (; name[n] && n < sizeof(low) - 1; n++)
+    low[n] = name[n] >= 'A' && name[n] <= 'Z' ? (char)(name[n] + 32) : name[n];
+  low[n] = 0;
+  static const char *const plain[] = {"super nintendo", "super famicom", "sn30", "sf30", "sfc30", "snes30"};
+  for (size_t i = 0; i < sizeof(plain) / sizeof(plain[0]); i++)
+    if (strstr(low, plain[i]))
+      return true;
+  /* "snes" as a word or model number, not a prefix ("snesrecomp ..."). */
+  for (const char *at = low; (at = strstr(at, "snes")) != NULL; at += 4)
+    if (!Letter(at[4]) && (at == low || !Letter(at[-1])))
+      return true;
+  /* 8BitDo S..., its SNES-shaped line, when the model is cut short. */
+  const char *brand = strstr(low, "8bitdo s");
+  return brand && (!brand[8] || brand[8] == ' ' || (brand[8] >= '0' && brand[8] <= '9'));
+}
 void IogMapUiGlyphDraw(uint32_t *pixels, int stride, int height, int x, int y,
                        const char *glyph, uint32_t color, int scale) {
   if (!pixels || !glyph || !glyph[0] || scale < 1)
     return;
+  if (color >> 24 == 0xfe) {
+    /* A solid button, a darker rim under it, the letter in the panel's ink. */
+    const uint32_t face = color | 0xff000000u;
+    const uint32_t rim = 0xff000000u | ((face >> 1) & 0x7f7f7fu);
+    snes_ovl_fill_disc(pixels, stride, height, x + 9 * scale, y + 9 * scale,
+                       9 * scale, rim);
+    snes_ovl_fill_disc(pixels, stride, height, x + 9 * scale, y + 9 * scale,
+                       9 * scale - scale, face);
+    snes_ovl_draw_char(pixels, stride, height, x + 5 * scale, y + 5 * scale,
+                       glyph[0], 0xff10131au, scale);
+    return;
+  }
   if (color) {
     snes_ovl_fill_disc(pixels, stride, height, x + 9 * scale, y + 9 * scale,
                        9 * scale, color);

@@ -29,12 +29,14 @@ bool RtlSpeculativeFrame(void){return speculative;}
 int snes_mod_runtime_feature_enabled_c(const char*p,const char*f){C(!strcmp(p,"iog.enhancements")&&!strcmp(f,"map_controls"));return custom_enabled;}
 int IogInventoryPageShown(void){return 0;}
 /* A connected Xbox-layout pad under the default map: SNES B is its A. */
-static bool pad_present=true;static bool achievements_open;
+static bool pad_present=true,snes_style;static bool achievements_open;
+/* The default [GamepadMap]: SNES B south, A east, Y west, X north. */
 int IogHostPadLabel(uint32_t bit,char label[8],uint32_t *color){
  if(!pad_present)return 0;
- const char *name=bit==SNES_PAD_B?"A":bit==SNES_PAD_A?"B":bit==SNES_PAD_Y?"X":bit==SNES_PAD_X?"Y":
-  bit==SNES_PAD_L?"LB":bit==SNES_PAD_R?"RB":bit==SNES_PAD_SELECT?"BACK":bit==SNES_PAD_START?"START":NULL;
- if(!name)return 0;snprintf(label,8,"%s",name);*color=name[1]?0:0xff6be06bu;return 1;
+ int position=bit==SNES_PAD_B?IOG_PAD_SOUTH:bit==SNES_PAD_A?IOG_PAD_EAST:bit==SNES_PAD_Y?IOG_PAD_WEST:
+  bit==SNES_PAD_X?IOG_PAD_NORTH:bit==SNES_PAD_L?IOG_PAD_L1:bit==SNES_PAD_R?IOG_PAD_R1:
+  bit==SNES_PAD_SELECT?IOG_PAD_SELECT:bit==SNES_PAD_START?IOG_PAD_START:-1;
+ return IogMapUiPadGlyph(position,snes_style,label,color);
 }
 void IogAchievementUiOpen(uint32_t held){(void)held;achievements_open=true;}
 void IogAchievementUiClose(void){achievements_open=false;}
@@ -210,6 +212,17 @@ int main(void){
  /* Prompts name the pad's own buttons: Load is SNES A, the pad's B. */
  C(g_prompt_count==5&&!strcmp(g_prompts[0].glyph,"B")&&g_prompts[0].color&&!strcmp(g_prompts[2].glyph,"LB")&&!g_prompts[2].color);
  C(!strcmp(g_prompts[4].glyph,"A")&&g_prompts[4].action==kActBack);
+ /* SNES style prints the pad's own letters at the same positions: Load, the
+  * east button, is A in red; Back, south, is B; the shoulders are L and R. */
+ snes_style=true;C(IogCompanionImage(&panel,&pw,&ph)&&g_prompt_count==5);
+ C(!strcmp(g_prompts[0].glyph,"A")&&g_prompts[0].color==IOG_MAP_UI_GLYPH_FILLED(0xe5484d)&&g_prompts[0].action==kActActivate);
+ C(!strcmp(g_prompts[1].glyph,"X")&&g_prompts[1].action==kActSave&&!strcmp(g_prompts[2].glyph,"L")&&!strcmp(g_prompts[3].glyph,"R"));
+ C(!strcmp(g_prompts[4].glyph,"B")&&g_prompts[4].color==IOG_MAP_UI_GLYPH_FILLED(0xf2c94c)&&g_prompts[4].action==kActBack);
+ for(int n=0;n<g_prompt_count;n++)C(g_prompts[n].x>=133&&g_prompts[n].x1<=243);
+ /* Either style, the same SNES button acts: east (SNES A) asks to load. */
+ IogCompanionNav(0,tick+=16);IogCompanionNav(SNES_PAD_A,tick+=16);C(g_confirm==0);
+ IogCompanionNav(0,tick+=16);IogCompanionNav(SNES_PAD_B,tick+=16);C(g_confirm==-1&&g_open);IogCompanionNav(0,tick+=16);
+ snes_style=false;C(IogCompanionImage(&panel,&pw,&ph)&&!strcmp(g_prompts[0].glyph,"B"));
  /* Every prompt stays inside the hint box (x 133..243, rows 159..209). */
  for(int n=0;n<g_prompt_count;n++)C(g_prompts[n].x>=133&&g_prompts[n].x1<=243&&g_prompts[n].y>=159&&g_prompts[n].y+8<=210);
  /* A pointer press on a prompt acts at the panel's scale: Save asks first. */
