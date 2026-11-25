@@ -18,6 +18,11 @@ HARNESS = r'''
 #include <stdlib.h>
 #include <string.h>
 #include "iog_world_renderer.c"
+/* No presenter here: the status plane is composed into the frame. */
+int snes_ovl_frame_layer_available(void) { return 0; }
+void snes_ovl_frame_layer_set(const uint32_t *pixels, int w, int h, int x, int y, int rect_w, int rect_h) {
+  (void)pixels; (void)w; (void)h; (void)x; (void)y; (void)rect_w; (void)rect_h;
+}
 #include "iog_ips.c"
 /* Exercise the real SDK digest over synthetic bytes; count title identity
  * checks without replacing the SHA-256 algorithm with a permissive stub. */

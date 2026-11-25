@@ -265,6 +265,12 @@ declaration and stay in the original English. The walkable world map has
 one "Enhanced world map" setting (launcher and in-game, on by default);
 off is the stock view.
 
+Local delta to the vendored runner (November 25): a frame layer the
+OpenGL presenter draws over the scaled frame, used for the status display
+and dialogue (`snes_overlay_draw.c/.h`, `desktop/opengl.c`). Carry it
+across any SNESRecomp update; upstream's host-overlay extraction may
+replace it.
+
 SNESRecomp main is 70 commits past the pin (`4348bdb`, November 24). A
 read-only inventory found 71 locally modified and 129 added vendor files.
 Of 35 files changed on both sides, 21 merge textually and 14 need a manual

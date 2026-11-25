@@ -12,6 +12,7 @@
 #include "iog_raster_parallax.h"
 #include "iog_scene_view.h"
 #include "iog_randomizer.h"
+#include "snes_overlay_draw.h"
 #include "common_cpu_infra.h"
 #include "common_rtl.h"
 #include "snes/cart.h"
@@ -42,6 +43,7 @@ static struct {
     bool initialized, enabled, stock, pending, composed, active, complete, valid;
     bool copy_reference;
     bool source_packet,mode7,mode7_perspective,absent_secondary,sky_field,stock_actor_field;
+    bool hud_layered; /* the status plane was left out of `output` for the presenter */
     bool awaiting_restore,restored_actor_field,fixed_plate;
     int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
@@ -721,7 +723,7 @@ void IogWorldBeginRaster(void)
     s.complete=false; s.valid=false; s.epoch_count=0;
     s.mode7=s.mode7_perspective=false;
     s.absent_secondary=false;
-    s.sky_field=s.stock_actor_field=s.restored_actor_field=false;
+    s.sky_field=s.stock_actor_field=s.restored_actor_field=false;s.hud_layered=false;
     s.fixed_plate=false;
     s.mode7_split=0;
     memset(&s.view,0,sizeof(s.view));
@@ -1827,6 +1829,20 @@ static void CompositeHud(uint8_t *dst,size_t pitch)
     }
 }
 
+/* The status display and dialogue boxes are 1.5 times the world's pixel
+ * size. Scaled into the frame by nearest pixel, every other column is drawn
+ * twice and one-pixel strokes come out uneven. Where the presenter can draw
+ * a layer over the scaled frame, hand it the plane instead: it is then
+ * scaled once, to the window, with even pixel widths. */
+static void PresentHud(uint8_t *dst,size_t pitch)
+{
+    static uint32_t layer[256*224];
+    if(!snes_ovl_frame_layer_available()) {CompositeHud(dst,pitch);return;}
+    for(int i=0;i<256*224;i++) layer[i]=(s.hud[i]>>24)?(s.hud[i]|0xff000000u):0;
+    int hudw=256*s.height/224;
+    snes_ovl_frame_layer_set(layer,256,224,(s.width-hudw)/2,0,hudw,s.height);
+}
+
 static void DrawCenteredField(uint8_t *dst,size_t pitch,const uint8_t *field,
                              int width,int plate_width,int source_rows,int rows)
 {
@@ -2358,7 +2374,8 @@ static bool RenderWorld(void)
     }
     /* Keep HUD physical size while the world camera shows a larger extent.
      * It is an independently extracted original UI plane, not world terrain. */
-    CompositeHud((uint8_t *)s.output,s.width*4);
+    s.hud_layered=snes_ovl_frame_layer_available()!=0;
+    if(!s.hud_layered) CompositeHud((uint8_t *)s.output,s.width*4);
     s.reason=authored_window_pan?"ready_authored_window_pan":freejia_wave?"ready_freejia_wave":
         larai_mist?"ready_larai_mist":
         water_wave?"ready_water_wave":
@@ -2527,6 +2544,7 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
         DrawCenteredField(dst,pitch,field,width,256*height/224,224,height);
     } else if(s.complete && !s.fixed_plate && width==s.width && height==s.height) {
         for(int y=0;y<height;y++) memcpy(dst+y*pitch,s.output+y*width,width*4);
+        if(s.hud_layered && !s.sky_field && !s.stock_actor_field && !s.mode7) PresentHud(dst,pitch);
         if(s.sky_field || s.stock_actor_field) {
             /* Keep live objects but replace visible source HUD pixels with
              * verified scenery before drawing BG3 at its usual display scale.
@@ -2538,7 +2556,7 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
                     memcpy(dst+(y+s.view.native_y)*pitch+(x+s.view.native_x)*4,
                         field+index*4,4);
             }
-            CompositeHud(dst,pitch);
+            PresentHud(dst,pitch);
         } else if(s.mode7) {
             int left=(width-256)/2,top=(height-224)/2;
             int map_rows=s.mode7_split?s.mode7_split-1:224;

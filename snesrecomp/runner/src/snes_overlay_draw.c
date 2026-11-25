@@ -281,3 +281,23 @@ void snes_ovl_blit_panel_rect(uint8_t *dst, int pitch, int dst_w, int dst_h,
         }
     }
 }
+
+/* Frame layer (snes_overlay_draw.h). */
+static struct { int available, w, h, rect[4]; const uint32_t *pixels; } s_frame_layer;
+void snes_ovl_frame_layer_enable(int available) { s_frame_layer.available = available != 0; }
+int snes_ovl_frame_layer_available(void) { return s_frame_layer.available; }
+void snes_ovl_frame_layer_set(const uint32_t *pixels, int w, int h,
+                              int x, int y, int rect_w, int rect_h) {
+  if (!s_frame_layer.available || !pixels || w <= 0 || h <= 0 || rect_w <= 0 || rect_h <= 0) return;
+  s_frame_layer.pixels = pixels;
+  s_frame_layer.w = w; s_frame_layer.h = h;
+  s_frame_layer.rect[0] = x; s_frame_layer.rect[1] = y;
+  s_frame_layer.rect[2] = rect_w; s_frame_layer.rect[3] = rect_h;
+}
+int snes_ovl_frame_layer_take(const uint32_t **pixels, int *w, int *h, int rect[4]) {
+  if (!s_frame_layer.pixels) return 0;
+  *pixels = s_frame_layer.pixels; *w = s_frame_layer.w; *h = s_frame_layer.h;
+  for (int i = 0; i < 4; i++) rect[i] = s_frame_layer.rect[i];
+  s_frame_layer.pixels = 0;
+  return 1;
+}

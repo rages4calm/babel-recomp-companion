@@ -110,4 +110,22 @@ void snes_ovl_draw_button(uint32_t *dst, int stride, int h_max,
 #define SNES_OVL_COL_X  0xFF5FA8FFu
 #define SNES_OVL_COL_Y  0xFFFFD24Du
 
+/* A frame layer: a picture the presenter draws over the frame AFTER the frame
+ * has been scaled to the window, so text and a status display stay sharp at
+ * the output resolution instead of being scaled with the game picture.
+ * (Local delta for Illusion of Gaia Companion; see docs/VISUAL-COVERAGE.md.)
+ *
+ * A presenter that can do this calls _enable(1) once it is ready. The game
+ * asks _available() each frame; when it is, the game leaves that picture out
+ * of the frame it composes and calls _set() from draw_frame. `pixels` are
+ * w x h ARGB words, alpha 0 or 255, premultiplied (transparent = 0), and
+ * must stay valid until the frame is presented. The rectangle is in frame
+ * pixels. The presenter calls _take() once per presented frame; the layer
+ * is dropped after that, so a frozen frame under a menu shows none. */
+void snes_ovl_frame_layer_enable(int available);
+int snes_ovl_frame_layer_available(void);
+void snes_ovl_frame_layer_set(const uint32_t *pixels, int w, int h,
+                              int x, int y, int rect_w, int rect_h);
+int snes_ovl_frame_layer_take(const uint32_t **pixels, int *w, int *h, int rect[4]);
+
 #endif /* SNES_OVERLAY_DRAW_H */

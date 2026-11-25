@@ -1000,11 +1000,24 @@ view is padding (`6F`, `79`, `EA`); a backdrop with its own camera and a
 flat first row continues upward in that colour (`2B`). Refusals now name
 their cause in the audit and write a `refused` row with the display state.
 
-Left open: the status display, title cards and dialogue boxes are scaled
-1.5 times by nearest pixel, which draws every other column twice and makes
-one-pixel strokes uneven on bright skies (Great Wall, Dao). Exact-area
-resampling was tried and reverted because it softens all dialogue text;
-the intended fix is to draw that layer at the output resolution. Also
+The status display, title cards and dialogue boxes are 1.5 times the
+world's pixel size. Scaled into the 598x336 frame by nearest pixel, every
+other column was drawn twice, so one-pixel strokes were uneven (most
+visible on the bright skies of the Great Wall and Dao). Exact-area
+resampling was tried and reverted because it softens all dialogue text.
+The plane is now a frame layer: the world renderer leaves it out of the
+frame and hands it to the OpenGL presenter, which draws it over the scaled
+frame with the sharp filter, so it is scaled once, to the window, with
+even pixel widths. This is a local delta to the vendored runner
+(`snes_ovl_frame_layer_*` in `snes_overlay_draw.c/.h`, `DrawFrameLayer`
+in `desktop/opengl.c`). The software presenter, a loaded shader preset and
+the Dual and Flip Grip layouts keep the earlier composition into the
+frame, and a frozen frame under a paused menu shows no status display.
+Checked in 1080p captures of a dialogue box (scene 97), the Great Wall
+status display and a room-change fade; not checked on a real window by a
+person, on OpenGL ES, or in the Dual layouts.
+
+Also
 open: single lit frames in `58`, `06`, `68` and `FE`; sideways streaks on
 the walkable map with the enhancement off and a two-pixel line at world
 x 438 in the Diamond Mine, neither settled against a stock field; black

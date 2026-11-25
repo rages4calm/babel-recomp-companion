@@ -45,6 +45,7 @@
 #include "present_filter.h"
 #include "hd_gpu.h"
 #include "present_shader.h"
+#include "snes_overlay_draw.h"
 #if SNESRECOMP_SDL3
 #define DeleteGlContext SDL_GL_DestroyContext
 #else
@@ -60,6 +61,9 @@ static int g_draw_width, g_draw_height;
 static unsigned int g_program, g_flash_program, g_VAO;
 /* PresentFilter programs (0 if they failed to build: plain program). */
 static unsigned int g_sharp_program, g_smooth_program;
+static unsigned int g_layer_texture;   /* the frame layer, see DrawFrameLayer */
+static int g_layer_tw, g_layer_th;
+static int FrameLayerUsable(void);
 
 /* Sharp: solid SNES pixels at any scale. Sample at the texel centre except
  * within one output pixel of a texel edge, where bilinear filtering blends
@@ -458,6 +462,7 @@ static bool OpenGLRenderer_Init(SDL_Window *window) {
 
   GlslShader_SetGles(g_gles);
   LoadShaderFromConfig();
+  snes_ovl_frame_layer_enable(FrameLayerUsable());
 
   return true;
 }
@@ -478,6 +483,8 @@ static void OpenGLRenderer_Destroy(void) {
   glDeleteTextures(1, &g_texture.gl_texture); memset(&g_texture, 0, sizeof(g_texture));
   glDeleteProgram(g_program); glDeleteProgram(g_flash_program);
   glDeleteVertexArrays(1, &g_VAO);
+  snes_ovl_frame_layer_enable(0);
+  if (g_layer_texture) { glDeleteTextures(1, &g_layer_texture); g_layer_texture = 0; }
   free(g_screen_buffer); g_screen_buffer = NULL; g_screen_buffer_size = 0;
   DeleteGlContext(g_context); g_context = NULL;
 }
@@ -611,6 +618,53 @@ static void DrawTouchPad(int drawable_w, int drawable_h) {
 }
 #endif
 
+/* The game's frame layer (snes_overlay_draw.h): drawn over the scaled frame
+ * with the sharp filter, so its pixels have even widths at any scale. */
+/* Not under a shader preset, which takes the whole picture, and not in the
+ * Dual / Flip Grip layouts, where the frame is only part of the buffer. */
+static int FrameLayerUsable(void) {
+  return g_glsl_shader == NULL && g_sharp_program != 0 && g_config.companion_layout <= 0;
+}
+
+static void DrawFrameLayer(const SnesDisplayViewport *viewport) {
+  const uint32_t *pixels;
+  int w, h, rect[4];
+  if (!snes_ovl_frame_layer_take(&pixels, &w, &h, rect)) return;
+  if (!g_sharp_program || g_draw_width <= 0 || g_draw_height <= 0) return;
+  if (!g_layer_texture) {
+    glGenTextures(1, &g_layer_texture);
+    g_layer_tw = g_layer_th = 0;
+  }
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, g_layer_texture);
+  SetFrameSwizzle();
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ALPHA);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  if (w == g_layer_tw && h == g_layer_th) {
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, UploadFormat(), UploadType(), pixels);
+  } else {
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, UploadFormat(), UploadType(), pixels);
+    g_layer_tw = w; g_layer_th = h;
+  }
+  const int x0 = viewport->x + (int)((long long)viewport->width * rect[0] / g_draw_width);
+  const int x1 = viewport->x + (int)((long long)viewport->width * (rect[0] + rect[2]) / g_draw_width);
+  const int top = (int)((long long)viewport->height * rect[1] / g_draw_height);
+  const int bottom = (int)((long long)viewport->height * (rect[1] + rect[3]) / g_draw_height);
+  glViewport(x0, viewport->y + viewport->height - bottom, x1 - x0, bottom - top);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);   /* premultiplied */
+  glUseProgram(g_sharp_program);
+  glUniform1i(glGetUniformLocation(g_sharp_program, "texture1"), 0);
+  glUniform2f(glGetUniformLocation(g_sharp_program, "uSrc"), (float)w, (float)h);
+  glBindVertexArray(g_VAO);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  glDisable(GL_BLEND);
+  glBindTexture(GL_TEXTURE_2D, g_texture.gl_texture);
+}
+
 static void OpenGLRenderer_BeginDraw(int width, int height, uint8 **pixels, int *pitch) {
   g_hd_frame = NULL; g_hd_overlay = NULL; g_hd_overlay_pitch = 0;
   size_t size = (size_t)width * (size_t)height;
@@ -700,10 +754,15 @@ static void OpenGLRenderer_EndDraw(void) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
     glBindVertexArray(g_VAO);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    DrawFrameLayer(&viewport);
   } else {
     GlslShader_Render(g_glsl_shader, &image, viewport.x, viewport.y,
                       viewport.width, viewport.height);
   }
+  /* A shader preset takes the whole picture, so the game composes the
+   * layer into the frame itself while one is loaded. */
+  snes_ovl_frame_layer_enable(FrameLayerUsable());
+  { const uint32_t *unused; int w, h, rect[4]; snes_ovl_frame_layer_take(&unused, &w, &h, rect); }
 
 #if SNESRECOMP_TOUCH_PAD
   DrawTouchPad(drawable_width, drawable_height);
