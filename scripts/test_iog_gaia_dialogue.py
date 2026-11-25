@@ -390,7 +390,12 @@ static void CheckInterfaceText(void)
     CHECK(!GaiaTitle(&scene, &scene_layout, pack, &occupied, 3, "Incorrect source", 26));
     CHECK(GaiaTitle(&scene, &scene_layout, pack, &occupied, 4, "This title is too wide", 26));
     CHECK(pack->npatches == 1 && pack->nbanks == 1 && pack->patches[0].len == 7);
-    CHECK(pack->patches[0].data[4] == 0xcc && pack->patches[0].data[5] == 11);
+    /* The long title opens its own wider box and centres its 22 glyphs in
+     * the 28 cells; the stock measure only sees the redirect. */
+    CHECK(pack->patches[0].data[4] == 0xcc && pack->patches[0].data[5] == 0);
+    static const uint8_t wide_box[] = {0xc1, 3, 7, 0xc7, 14, 1, 0xd2, 0, 0xcc, 6};
+    CHECK(!memcmp(pack->banks[0], wide_box, sizeof(wide_box)));
+    CHECK(pack->banks[0][sizeof(wide_box) + 22] == CMD_RET);
     IogTextFreePack(pack);
 }
 

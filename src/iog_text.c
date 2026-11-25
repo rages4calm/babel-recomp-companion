@@ -3299,17 +3299,22 @@ static int GaiaTitle(const Rom *r, const Structure *st, IogPack *pack, unsigned 
     }
     if (span < 7 || !GaiaPatchDisjoint(pack, off, 7))
         return 0;
-    /* The wider box moves four cells left. Compensate by decreasing the
-     * advertised width by eight, so the stock (18-width)/2 cursor moves
-     * four cells right. Both execution tiers keep the same stock code. */
-    const int measured = (int)n - ((int)width - 18);
+    /* A long title opens its own wider box over the stock one and centres
+     * itself in it, so the shared box stays stock and every other title
+     * keeps the stock centring. The stock code measures only the redirect. */
+    const uint8_t box[] = {0xc1, 3, 7, 0xc7, 14, 1, 0xd2, 0, 0xcc, (uint8_t)(2 * ((28 - n) / 2))};
+    /* A title that fits the stock box keeps it: the redirect then tells the
+     * stock measure its real length. */
+    const unsigned lead = width > 18 ? sizeof(box) : 0;
     for (int i = 0; i < 3; ++i) {
-        const uint32_t addr = GaiaUiAddress(pack, fill, n + 1);
+        const uint32_t addr = GaiaUiAddress(pack, fill, lead + n + 1);
         if (!addr)
             return 0;
-        if (AddSceneRedirectWidth(pack, r, off, addr, measured)) {
-            memcpy(pack->banks[pack->nbanks - 1] + *fill, encoded, n + 1);
-            *fill += n + 1;
+        if (AddSceneRedirectWidth(pack, r, off, addr, lead ? 3 : (int)n)) {
+            uint8_t *out = pack->banks[pack->nbanks - 1] + *fill;
+            memcpy(out, box, lead);
+            memcpy(out + lead, encoded, n + 1);
+            *fill += lead + n + 1;
             return 1;
         }
         ++*fill;
@@ -3351,10 +3356,11 @@ static int GaiaShortTitle(const Rom *stock, const Structure *st, IogPack *pack, 
         if (stock->rom[Padding + i] != 0xff)
             return 0;
     memcpy(data, first_word, sizeof(first_word));
-    /* The title counter sees 17 dictionary bytes. The renderer advances six
-     * tile words before the actual 15 glyphs, centering them in the wide box. */
+    /* The title counter sees 17 dictionary bytes, which puts the cursor at
+     * the left of the 18-cell field. The renderer advances two cells before
+     * the 15 glyphs, centring them in the stock box's 20 cells. */
     data[sizeof(first_word)] = 0xcc;
-    data[sizeof(first_word) + 1] = 12;
+    data[sizeof(first_word) + 1] = 4;
     memcpy(data + sizeof(first_word) + 2, text, len);
     const uint32_t title_start = Padding + sizeof(first_word);
     const uint8_t old_pointer[] = {(uint8_t)Padding, (uint8_t)(Padding >> 8)};
@@ -3391,11 +3397,7 @@ static void GaiaWideTitles(FILE *file, const Rom *stock, const Structure *struct
         else if (record == 0x0ca71b)
             installed += GaiaShortTitle(stock, structure, pack, value);
     }
-    if (installed) {
-        const uint8_t box[] = {0xc1, 3, 7, 0xc7, 14, 1, 0xd2, 0, CMD_RET};
-        AddPatch(pack, Format, box, sizeof(box));
-        pack->scene_translated += installed;
-    }
+    pack->scene_translated += installed;
 }
 
 static uint8_t GaiaMenuGlyph(unsigned c)
