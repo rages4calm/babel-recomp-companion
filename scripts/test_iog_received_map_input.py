@@ -18,6 +18,7 @@ Snes *g_snes;Ppu *g_ppu;CpuState g_cpu;
 static bool ready=true,speculative;static unsigned checks;
 #define C(x)do{checks++;if(!(x)){fprintf(stderr,"line %u: %s\n",__LINE__,#x);exit(1);}}while(0)
 bool RtlSpeculativeFrame(void){return speculative;}
+int IogHostPadLabel(uint32_t bit,char label[8],uint32_t *color){(void)bit;(void)label;(void)color;return 0;}
 IogMapRuntime *IogMapRuntimeCreate(const char *path){(void)path;return (IogMapRuntime*)(uintptr_t)1;}
 void IogMapRuntimeDestroy(IogMapRuntime *r){(void)r;}
 bool IogMapRuntimeFlush(IogMapRuntime *r){(void)r;return true;}

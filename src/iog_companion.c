@@ -37,17 +37,25 @@ int IogCompletionPercent(void);
 
 extern Ppu *g_ppu;
 
-enum { kW = 256, kH = 224, kCapW = 512, kCapH = 240 };
-enum { kPadSelect = 0x004, kPadDown = 0x020, kPadA = 0x100 };
-enum { kPageItems, kPageStatus, kPageSaves, kPageSettings, kPageMap, kPageCount };
-static const char *const kPageNames[kPageCount] = {"Items", "Status", "Saves", "Config", "Map"};
+enum { kW = 256, kH = 224, kCapW = 512, kCapH = 240, kMaxScale = 4 };
+enum { kPadSelect = 0x004 };
+/* The paused Companion screen has the pages only it provides. The game's own
+ * pause menu (Select) is the one Items and Status screen; the two live pages
+ * below exist only for the Dual / Flip Grip second screen, which sits beside
+ * the running game where that menu is not on view. */
+enum { kPageSaves, kPageMap, kPageAchievements, kPageSettings, kPageCount,
+       kLiveItems = kPageCount, kLiveStatus, kPageKinds };
+static const char *const kPageNames[kPageKinds] = {"Saves", "Map", "Achievements", "Config", "Items", "Status"};
+static const int kModalPages[kPageCount] = {kPageSaves, kPageMap, kPageAchievements, kPageSettings};
+static const int kLivePages[kPageCount] = {kLiveItems, kLiveStatus, kPageSaves, kPageSettings};
 
-static uint32_t g_inv[kCapW * kCapH], g_stat[kCapW * kCapH];
-static int g_inv_w, g_stat_w, g_have_inv, g_have_stat;
-static uint32_t g_canvas[kW * kH];          /* composed at 1x */
-static uint32_t g_panel[kW * 2 * kH * 2];   /* presented at 2x */
+static uint32_t g_inv[kCapW * kCapH];
+static int g_inv_w, g_have_inv;
+static uint32_t g_canvas[kW * kH];                              /* composed at 1x */
+static uint32_t g_panel[kW * kMaxScale * kH * kMaxScale];       /* presented at g_scale */
+static int g_scale = 2;
 
-static int g_open, g_page, g_slot, g_save_slot, g_confirm = -1;
+static int g_open, g_page = kPageSaves, g_live_page = kLiveItems, g_slot, g_save_slot, g_confirm = -1;
 /* Live (Dual / Flip Grip): drawn beside the running game every frame. */
 static int g_live, g_live_seen;
 static uint8_t g_inv_items[16];   /* the inventory the capture shows */
@@ -55,32 +63,36 @@ static uint32_t g_prev_nav;
 static int g_ptr_down;
 static int g_map_requested,g_map_start_held,g_map_start_consumed;
 
+int IogHostPadLabel(uint32_t snes_bit, char label[8], uint32_t *color);
+static int PadPresent(void) { char l[8]; uint32_t c; return IogHostPadLabel(SNES_PAD_B, l, &c) != 0; }
+static int Page(void) { return g_live ? g_live_page : g_page; }
+static const int *Pages(void) { return g_live ? kLivePages : kModalPages; }
+static int PageIndex(void)
+{
+    for (int i = 0; i < kPageCount; i++) if (Pages()[i] == Page()) return i;
+    return 0;
+}
+
 static uint16_t Rd(uint32_t a) { return g_snes->ram[a] | g_snes->ram[a + 1] << 8; }
 static void Wr(uint32_t a, uint16_t v) { g_snes->ram[a] = (uint8_t)v; g_snes->ram[a + 1] = (uint8_t)(v >> 8); }
 
-/* ---- capture -------------------------------------------------------------- */
-typedef struct {
-    int menu_frames, until_menu;   /* stop once the menu has been up this long */
-    int status;                    /* also walk to Cond. and open it */
-} CapCtx;
+/* ---- capture --------------------------------------------------------------
+ * One picture of the game's own menu: the pages' backdrop, the box art cut
+ * from it and the menu font. Select opens it; stop once it has been up. */
+typedef struct { int menu_frames, until_menu; } CapCtx;
 
 static uint32_t CapInput(int frame, void *ud)
 {
-    const CapCtx *c = (const CapCtx *)ud;
-    if (frame < 2) return kPadSelect;
-    if (!c->status) return 0;
-    /* Items -> Order -> Remove -> Cond., then A: two frames each. */
-    if ((frame >= 24 && frame < 26) || (frame >= 30 && frame < 32) || (frame >= 36 && frame < 38))
-        return kPadDown;
-    if (frame >= 42 && frame < 44) return kPadA;
-    return 0;
+    (void)ud;
+    return frame < 2 ? kPadSelect : 0;
 }
 
 static int CapStop(int frame, void *ud)
 {
     CapCtx *c = (CapCtx *)ud;
+    (void)frame;
     if (Rd(0x0644) == 0x00FF) c->menu_frames++;
-    return c->status ? frame >= 56 : c->menu_frames >= c->until_menu;
+    return c->menu_frames >= c->until_menu;
 }
 
 static int InPlayQuiet(void)
@@ -120,10 +132,10 @@ static void GrabFont(void *ud)
     g_have_font = 1;
 }
 
-static int Capture(int status, uint32_t *dst, int *w)
+static int Capture(uint32_t *dst, int *w)
 {
-    CapCtx c = {0, 22, status};
-    if (!status) snes_host_speculative_set_grab(GrabFont);
+    CapCtx c = {0, 22};
+    snes_host_speculative_set_grab(GrabFont);
     int cw = 0, ch = 0;
     if (!InPlayQuiet()) return 0;
     IogMapHostSuspend(true);
@@ -156,7 +168,7 @@ void IogCompanionGrabMenu(void)
 
 int IogCompanionCaptureInventory(void)
 {
-    if (Capture(0, g_inv, &g_inv_w)) {
+    if (Capture(g_inv, &g_inv_w)) {
         g_have_inv = 1;
         memcpy(g_inv_items, &g_snes->ram[0x0AB4], 16);
     }
@@ -310,21 +322,37 @@ static void Text(int x, int y, const char *s, uint32_t fg)
 }
 
 /* The companion's words in the game's language. */
+#include "iog_map_ui.h"
+
 static const char *T(const char *en)
 {
     static const char *const kEs[][2] = {
         {"Items", "Objetos"}, {"Status", "Estado"}, {"Saves", "Partida"}, {"Config", "Ajustes"},
-        {"Touch to choose", "Toca para elegir"}, {"L R:Page  B:Back", "L R:Pág.  B:Atrás"},
+        {"Map", "Mapa"}, {"Achievements", "Logros"},
+        {"Touch to choose", "Toca para elegir"},
         {"A: Equip", "A: Equipar"}, {"(empty)", "(vacío)"}, {"Equipped", "Equipado"},
-        {"Slot %02d", "Ranura %02d"}, {"Empty", "Vacía"}, {"A again: LOAD", "A otra vez: CARGAR"},
-        {"X again: SAVE", "X otra vez: GUARDAR"}, {"A: Load", "A: Cargar"}, {"X: Save", "X: Guardar"},
-        {"A: Open settings", "A: Abrir ajustes"}, {"Completed", "Completado"},
-        {"Map", "Mapa"}, {"A: Achievements", "A: Logros"}, {"No area map here", "Sin mapa aquí"},
+        {"Slot %02d", "Ranura %02d"}, {"Empty", "Vacía"}, {"Completed", "Completado"},
+        {"Load", "Cargar"}, {"Save", "Guardar"}, {"Yes, load", "Sí, cargar"}, {"Yes, save", "Sí, guardar"},
+        {"Cancel", "Cancelar"}, {"Open", "Abrir"}, {"Page", "Pág."}, {"Back", "Atrás"}, {"Settings", "Ajustes"},
+        {"Display and sound", "Pantalla y sonido"}, {"Language and text", "Idioma y texto"},
+        {"Map and radar buttons", "Botones de mapa y radar"}, {"Cheats", "Trucos"},
+        {"Save states, reset, quit", "Estados, reiniciar, salir"},
+        {"No area map here", "Sin mapa aquí"}, {"Achievements unavailable", "Logros no disponibles"},
+        {"A again: LOAD", "A otra vez: CARGAR"}, {"X again: SAVE", "X otra vez: GUARDAR"},
+        {"A: Load", "A: Cargar"}, {"X: Save", "X: Guardar"}, {"A: Settings", "A: Ajustes"},
     };
     if (!en || strcmp(IogI18nLanguage(), "es")) return en;
     for (size_t i = 0; i < sizeof(kEs) / sizeof(kEs[0]); i++)
         if (!strcmp(kEs[i][0], en)) return kEs[i][1];
     return en;
+}
+
+/* Characters, not bytes: the Spanish strings are UTF-8. */
+static int TextLen(const char *s)
+{
+    int n = 0;
+    for (; *s; s++) n += (*s & 0xC0) != 0x80;
+    return n;
 }
 
 static void Cursor(int x, int y, uint32_t c)
@@ -342,30 +370,81 @@ static void Frame(int x, int y, int w, int h, uint32_t c)
     Fill(x + w - 1, y, 1, h, c);
 }
 
-enum { kText = 0xFFFFFF, kHi = 0xFFE890, kGold = 0xF8D050, kTeal = 0x73E6CE };
+enum { kText = 0xFFFFFF, kHi = 0xFFE890, kGold = 0xF8D050, kTeal = 0x73E6CE, kDim = 0x8C8CA5 };
 
-/* Five rows inside the box's 51-pixel interior (159..209): a 10-pixel pitch
- * keeps the last row, "Map", off the frame; 12 put it across the border.
- * Text starts at 20 so a seven-letter Spanish name clears the right edge. */
-enum { kPageRowY = 160, kPageRowPitch = 10 };
+/* Four rows in the list box's interior (159..209). The paused screen's box
+ * is wide enough for "Achievements"; the live one keeps the narrow box. */
+enum { kPageRowY = 160, kPageRowPitch = 12, kHintRows = 4 };
+static const int kHintY[kHintRows] = {160, 173, 186, 200};
+static int ListW(void) { return g_live ? 74 : 120; }
+static int HintX(void) { return 8 + ListW() + 9; }
+
+static void Backdrop(void)
+{
+    if (g_have_inv) Blit(g_inv, g_inv_w); else Fill(0, 0, kW, kH, 0x001060);
+}
 
 static void PageList(void)
 {
-    Box(8, 151, 74, 65);
-    for (int p = 0; p < kPageCount; p++) {
-        const int y = kPageRowY + p * kPageRowPitch;
-        if (p == g_page) Cursor(13, y, kHi);
-        Text(20, y, T(kPageNames[p]), p == g_page ? kHi : kText);
+    Box(8, 151, ListW(), 65);
+    for (int i = 0; i < kPageCount; i++) {
+        const int y = kPageRowY + i * kPageRowPitch, p = Pages()[i];
+        if (p == Page()) Cursor(14, y, kHi);
+        Text(22, y, T(kPageNames[p]), p == Page() ? kHi : kText);
     }
 }
 
-static void Hint(const char *l1, const char *l2, const char *l3)
+/* ---- button prompts ---------------------------------------------------------
+ * A prompt names the control the player presses now: the controller button
+ * bound to that SNES button, as the glyph printed on it, or the keyboard key
+ * when no controller is in use. Glyphs are drawn on the scaled panel, over the
+ * place the 1x page left for them; each prompt is also a pointer target. */
+enum { kActNone, kActActivate, kActSave, kActBack, kActPrev, kActNext };
+typedef struct { int x, y, x1, action; char glyph[8]; uint32_t color; } PromptAt;
+static PromptAt g_prompts[12];
+static int g_prompt_count;
+
+static int GlyphK(void) { return g_scale >= 3 ? 2 : 1; }
+static int GlyphCells(const char *glyph, uint32_t color)
 {
-    Box(82, 151, 168, 65);
-    if (l1) Text(92, 160, T(l1), kText);
-    if (l2) Text(92, 172, T(l2), kText);
-    if (l3) Text(92, 184, T(l3), kText);
-    Text(92, 200, T(g_live ? "Touch to choose" : "L R:Page  B:Back"), kTeal);
+    return (IogMapUiGlyphWidth(glyph, color, GlyphK()) + g_scale - 1) / g_scale + 3;
+}
+
+static int PromptWidth(uint32_t bit, const char *key, const char *text)
+{
+    char glyph[8]; uint32_t color;
+    IogMapHostPrompt(bit, key, NULL, glyph, &color, NULL);
+    return (glyph[0] ? GlyphCells(glyph, color) : 0) + (text ? 8 * TextLen(T(text)) : 0);
+}
+
+static int Prompt(int x, int y, uint32_t bit, const char *key, const char *text, uint32_t fg, int action)
+{
+    char glyph[8]; uint32_t color;
+    IogMapHostPrompt(bit, key, NULL, glyph, &color, NULL);
+    PromptAt *q = g_prompt_count < 12 ? &g_prompts[g_prompt_count++] : NULL;
+    if (q) { q->x = x; q->y = y; q->action = action; memcpy(q->glyph, glyph, 8); q->color = color; }
+    if (glyph[0]) x += GlyphCells(glyph, color);
+    if (text) { Text(x, y, T(text), fg); x += 8 * TextLen(T(text)); }
+    if (q) q->x1 = x;
+    return x;
+}
+
+static void HintBox(void) { Box(8 + ListW(), 151, 242 - ListW(), 65); }
+
+/* The two rows every paused page ends with. */
+static void PageBackPrompts(void)
+{
+    int x = Prompt(HintX(), kHintY[2], SNES_PAD_L, "Q", NULL, kTeal, kActPrev);
+    Prompt(x, kHintY[2], SNES_PAD_R, "E", "Page", kTeal, kActNext);
+    Prompt(HintX(), kHintY[3], SNES_PAD_B, "Esc", "Back", kTeal, kActBack);
+}
+
+static void LiveHint(const char *l1, const char *l2)
+{
+    HintBox();
+    if (l1) Text(HintX() + 1, 160, T(l1), kText);
+    if (l2) Text(HintX() + 1, 172, T(l2), kText);
+    Text(HintX() + 1, 200, T("Touch to choose"), kTeal);
 }
 
 /* ---- pages ---------------------------------------------------------------- */
@@ -376,10 +455,10 @@ static void SlotPos(int i, int *x, int *y)
     *y = e[2] | e[3] << 8;
 }
 
+/* Live only. */
 static void DrawItems(void)
 {
-    if (g_have_inv) Blit(g_inv, g_inv_w);
-    else Fill(0, 0, kW, kH, 0x001060);
+    Backdrop();
     const uint8_t *slots = &g_snes->ram[0x0AB4];
     const int equipped = (int16_t)Rd(0x0AC4);
     for (int i = 0; i < 16; i++) {
@@ -392,7 +471,7 @@ static void DrawItems(void)
         }
     }
     PageList();
-    Hint(slots[g_slot] ? "A: Equip" : "(empty)", g_slot == equipped ? "Equipped" : NULL, NULL);
+    LiveHint(slots[g_slot] ? "A: Equip" : "(empty)", g_slot == equipped ? "Equipped" : NULL);
 }
 
 static void Number(int x, int y, unsigned n, int width)
@@ -402,40 +481,30 @@ static void Number(int x, int y, unsigned n, int width)
     Text(x, y, buf, kHi);
 }
 
+/* Live only: the values, drawn (the game's own screen is not captured). */
 static void DrawStatus(void)
 {
-    if (g_have_stat && !g_live) {
-        Blit(g_stat, g_stat_w);
-    } else {
-        if (g_have_inv) Blit(g_inv, g_inv_w); else Fill(0, 0, kW, kH, 0x001060);
-        Box(8, 8, 240, 136);
-        Text(24, 24, "HP", kTeal);
-        Number(56, 24, Rd(0x0ACE), 3);
-        Text(80, 24, "/", kText);
-        Number(88, 24, Rd(0x0ACA), 3);
-        Text(24, 40, "DP", kTeal);
-        Number(56, 40, Rd(0x0AD6), 3);
-        Text(24, 56, "STR", kTeal);
-        Number(56, 56, Rd(0x0ADE), 3);
-        Text(24, 72, "DEF", kTeal);
-        Number(56, 72, Rd(0x0ADC), 3);
-    }
+    Backdrop();
+    Box(8, 8, 240, 136);
+    Text(24, 24, "HP", kTeal);
+    Number(56, 24, Rd(0x0ACE), 3);
+    Text(80, 24, "/", kText);
+    Number(88, 24, Rd(0x0ACA), 3);
+    Text(24, 40, "DP", kTeal);
+    Number(56, 40, Rd(0x0AD6), 3);
+    Text(24, 56, "STR", kTeal);
+    Number(56, 56, Rd(0x0ADE), 3);
+    Text(24, 72, "DEF", kTeal);
+    Number(56, 72, Rd(0x0ADC), 3);
     PageList();
-    {
-        static char buf[24];
-        const int pct = IogCompletionPercent();
-        if (pct >= 0) snprintf(buf, sizeof(buf), "%s %d/100", T("Completed"), pct);
-        Hint(pct >= 0 ? buf : NULL, !g_live ? "A: Achievements" : NULL, NULL);
-    }
+    LiveHint(NULL, NULL);
 }
 
 static uint32_t g_thumb[SNES_SAVESTATE_THUMB_W * SNES_SAVESTATE_THUMB_H];
 
 static void DrawSaves(void)
 {
-    if (g_have_stat) Blit(g_stat, g_stat_w);
-    else if (g_have_inv) Blit(g_inv, g_inv_w);
-    else Fill(0, 0, kW, kH, 0x001060);
+    Backdrop();
     Box(8, 8, 242, 142);
     const int first = g_save_slot - 1 < 0 ? 0 : g_save_slot - 1 > SNES_SAVESTATE_SLOTS - 3
                       ? SNES_SAVESTATE_SLOTS - 3 : g_save_slot - 1;
@@ -458,42 +527,97 @@ static void DrawSaves(void)
             snes_savestate_slot_label(s, buf, sizeof(buf));
             Text(76, y + 20, buf, kText);
         } else {
-            Text(76, y + 20, T("Empty"), 0x8C8CA5);
+            Text(76, y + 20, T("Empty"), kDim);
         }
     }
     PageList();
-    if (g_confirm == 0) Hint("A again: LOAD", NULL, NULL);
-    else if (g_confirm == 1) Hint("X again: SAVE", NULL, NULL);
-    else Hint("A: Load", "X: Save", NULL);
+    HintBox();
+    if (g_live) {
+        Text(HintX() + 1, 160, T(g_confirm == 0 ? "A again: LOAD" : "A: Load"), kText);
+        Text(HintX() + 1, 172, T(g_confirm == 1 ? "X again: SAVE" : "X: Save"), kText);
+        Text(HintX() + 1, 200, T("Touch to choose"), kTeal);
+    } else if (g_confirm == 0) {
+        Prompt(HintX(), kHintY[0], SNES_PAD_A, "Enter", "Yes, load", kHi, kActActivate);
+        Prompt(HintX(), kHintY[1], SNES_PAD_B, "Esc", "Cancel", kText, kActBack);
+    } else if (g_confirm == 1) {
+        Prompt(HintX(), kHintY[0], SNES_PAD_X, "S", "Yes, save", kHi, kActSave);
+        Prompt(HintX(), kHintY[1], SNES_PAD_B, "Esc", "Cancel", kText, kActBack);
+    } else {
+        /* Load and Save share a row when both fit the box (to x = 243). */
+        int x = Prompt(HintX(), kHintY[0], SNES_PAD_A, "Enter", "Load", kText, kActActivate);
+        const int wrap = x + 6 + PromptWidth(SNES_PAD_X, "S", "Save") > 243;
+        Prompt(wrap ? HintX() : x + 6, kHintY[wrap ? 1 : 0], SNES_PAD_X, "S", "Save", kText, kActSave);
+        PageBackPrompts();
+    }
+}
+
+static void Notice(const char *l1, const char *l2, const char *l3)
+{
+    Backdrop();
+    Box(8, 8, 242, 142);
+    if (l1) Text(24, 24, T(l1), kHi);
+    if (l2) Text(24, 44, T(l2), kText);
+    if (l3) Text(24, 56, T(l3), kText);
 }
 
 static void DrawSettings(void)
 {
-    if (g_have_inv) Blit(g_inv, g_inv_w); else Fill(0, 0, kW, kH, 0x001060);
+    Notice("Settings", "Display and sound", "Language and text");
+    Text(24, 68, T("Map and radar buttons"), kText);
+    Text(24, 80, T("Cheats"), kText);
+    Text(24, 92, T("Save states, reset, quit"), kText);
     PageList();
-    Hint("A: Open settings", NULL, NULL);
+    HintBox();
+    if (g_live) {
+        Text(HintX() + 1, 160, T("A: Settings"), kText);
+        Text(HintX() + 1, 200, T("Touch to choose"), kTeal);
+        return;
+    }
+    Prompt(HintX(), kHintY[0], SNES_PAD_A, "Enter", "Open", kText, kActActivate);
+    PageBackPrompts();
+}
+
+static int PanelScale(void)
+{
+    int w = 0, h = 0;
+    IogMapHostOverlaySize(&w, &h);
+    const int s = w / kW < h / kH ? w / kW : h / kH;
+    return s < 1 ? 1 : s > kMaxScale ? kMaxScale : s;
 }
 
 static void Compose(void)
 {
-    switch (g_page) {
-    case kPageItems: DrawItems(); break;
-    case kPageStatus: DrawStatus(); break;
+    g_prompt_count = 0;
+    g_scale = g_live ? 2 : PanelScale();
+    switch (Page()) {
+    case kLiveItems: DrawItems(); break;
+    case kLiveStatus: DrawStatus(); break;
     case kPageSaves: DrawSaves(); break;
-    case kPageMap:
-        /* The hint box holds 18 characters; its last line already names
-         * the page and back buttons. */
-        if (g_have_inv) Blit(g_inv, g_inv_w); else Fill(0,0,kW,kH,0x152131);
-        PageList();
-        Hint("No area map here", NULL, NULL);break;
+    case kPageMap:           /* only when this area has no map: else the map itself */
+        Notice("Map", "No area map here", NULL);
+        PageList(); HintBox(); PageBackPrompts(); break;
+    case kPageAchievements:  /* only when the browser could not open */
+        Notice("Achievements", "Achievements unavailable", NULL);
+        PageList(); HintBox(); PageBackPrompts(); break;
     default: DrawSettings(); break;
     }
-    for (int y = 0; y < kH; y++)
+    if (g_live) return;
+    const int S = g_scale, pw = kW * S;
+    for (int y = 0; y < kH; y++) {
+        uint32_t *row = g_panel + (size_t)(y * S) * pw;
         for (int x = 0; x < kW; x++) {
             const uint32_t c = g_canvas[y * kW + x] | 0xFF000000u;
-            uint32_t *d = g_panel + (size_t)(2 * y) * (2 * kW) + 2 * x;
-            d[0] = d[1] = d[2 * kW] = d[2 * kW + 1] = c;
+            for (int i = 0; i < S; i++) row[x * S + i] = c;
         }
+        for (int j = 1; j < S; j++) memcpy(row + (size_t)j * pw, row, (size_t)pw * 4);
+    }
+    const int k = GlyphK();
+    for (int i = 0; i < g_prompt_count; i++) {
+        const PromptAt *q = &g_prompts[i];
+        if (q->glyph[0])
+            IogMapUiGlyphDraw(g_panel, pw, kH * S, q->x * S, q->y * S + (8 * S - IOG_MAP_UI_GLYPH_HEIGHT * k) / 2,
+                              q->glyph, q->color, k);
+    }
 }
 
 /* ---- actions ---------------------------------------------------------------- */
@@ -503,13 +627,17 @@ static void SetPage(int p)
 {
     g_ptr_down=0;
     IogMapHostClose();
-    g_page = (p + kPageCount) % kPageCount;
+    IogAchievementUiClose();
     g_confirm = -1;
-    if (g_page == kPageStatus && !g_have_stat && !g_live)   /* live: drawn values */
-        g_have_stat = Capture(1, g_stat, &g_stat_w);
-    if(g_page==kPageMap&&!g_live)IogMapHostOpen();
-    if(g_page==kPageItems&&!g_have_inv&&!g_live)IogCompanionCaptureInventory();
+    if (g_live) { g_live_page = p; return; }
+    g_page = p;
+    if (g_page == kPageMap) IogMapHostOpen();
+    else if (g_page == kPageAchievements) IogAchievementUiOpen(g_prev_nav);
+    /* A page drawn here needs the menu's picture for its boxes and backdrop. */
+    if (!IogMapHostIsOpen() && !IogAchievementUiIsOpen() && !g_have_inv) IogCompanionCaptureInventory();
 }
+
+static void StepPage(int d) { SetPage(Pages()[(PageIndex() + d + kPageCount) % kPageCount]); }
 
 static void Equip(int slot)
 {
@@ -521,8 +649,8 @@ static void Equip(int slot)
 
 static void Activate(void)
 {
-    switch (g_page) {
-    case kPageItems:
+    switch (Page()) {
+    case kLiveItems:
         Equip(g_slot);
         break;
     case kPageSaves:
@@ -537,9 +665,6 @@ static void Activate(void)
         Close();
         snes_settings_menu_open();
         break;
-    case kPageStatus:
-        if (g_open && !g_live) IogAchievementUiOpen(g_prev_nav);
-        break;
     default:
         break;
     }
@@ -547,7 +672,7 @@ static void Activate(void)
 
 static void SaveHere(void)
 {
-    if (g_page != kPageSaves) return;
+    if (Page() != kPageSaves) return;
     if (g_confirm == 1) {
         g_confirm = -1;
         snes_savestate_save_slot(g_save_slot);
@@ -556,14 +681,20 @@ static void SaveHere(void)
     }
 }
 
+static void Back(void)
+{
+    if (g_live) return;
+    if (g_confirm >= 0) g_confirm = -1; else Close();
+}
+
 static void Move(int dx, int dy)
 {
-    if (g_page == kPageItems) {
+    if (Page() == kLiveItems) {
         int col = g_slot % 4 + dx, row = g_slot / 4 + dy;
         col = (col + 4) % 4;
         row = (row + 4) % 4;
         g_slot = row * 4 + col;
-    } else if (g_page == kPageSaves && dy) {
+    } else if (Page() == kPageSaves && dy) {
         g_save_slot += dy;
         if (g_save_slot < 0) g_save_slot = 0;
         if (g_save_slot >= SNES_SAVESTATE_SLOTS) g_save_slot = SNES_SAVESTATE_SLOTS - 1;
@@ -574,42 +705,48 @@ static void Move(int dx, int dy)
 /* ---- host hooks ------------------------------------------------------------- */
 int IogCompanionOpen(void)
 {
-    if(g_map_requested){g_page=kPageMap;g_map_requested=0;}
+    g_map_requested=0;
     if (!g_snes || !Rd(0x09AA)) return 0;   /* not in play */
-    /* The pictures belong to this moment: re-take them (the game is paused,
-     * so the short wait is not a hitch in play). Status on first visit. */
-    if(g_page!=kPageMap)IogCompanionCaptureInventory();
-    g_have_stat = 0;
-    if (g_page == kPageStatus) g_have_stat = Capture(1, g_stat, &g_stat_w);
     const int eq = (int16_t)Rd(0x0AC4);
     g_slot = eq >= 0 && eq < 16 ? eq : 0;
-    g_confirm = -1;
     g_prev_nav = ~0u;
     g_open = 1;
-    if(g_page==kPageMap)IogMapHostOpen();
+    g_live = 0;
+    IogMapHostNotePad(PadPresent() != 0);
+    /* The map where this area has one, else the save states. */
+    SetPage(IogMapHostAvailable() ? kPageMap : kPageSaves);
+    if (g_page == kPageMap && !IogMapHostIsOpen()) SetPage(kPageSaves);
     return 1;
 }
 
 void IogCompanionNav(uint32_t in, uint32_t ticks)
 {
-    (void)ticks;
     const uint32_t p = in & ~g_prev_nav;
     g_prev_nav = in;
     if (!g_open && !g_live_seen) return;
-    if (IogAchievementUiIsOpen()) { IogAchievementUiNav(in, ticks); return; }
-    if(g_open&&g_page==kPageMap&&IogMapHostAvailable()){
-        IogMapHostNav(in,ticks);
-        if(!IogMapHostIsOpen())SetPage(kPageItems);
-        return;
-    }
     g_live = !g_open;   /* beside the running game: the right stick */
-    if (p & SNES_PAD_B) {
-        if (g_live) return;
-        if (g_confirm >= 0) g_confirm = -1; else Close();
-        return;
+    if (g_open) {
+        if (p) IogMapHostNotePad(PadPresent() != 0);
+        /* Start, which opened the screen, also returns to the game from any page. */
+        if (p & SNES_PAD_START) { Close(); return; }
+        if (g_page == kPageAchievements && IogAchievementUiIsOpen()) {
+            if (p & SNES_PAD_B) { Close(); return; }
+            if (p & SNES_PAD_L) { StepPage(-1); return; }
+            if (p & SNES_PAD_R) { StepPage(1); return; }
+            IogAchievementUiNav(in & ~(uint32_t)SNES_PAD_B, ticks);
+            return;
+        }
+        if (g_page == kPageMap && IogMapHostIsOpen()) {
+            /* L and R belong to the map (zoom by default): its Back leads to
+             * the pages, Start to the game. */
+            IogMapHostNav(in,ticks);
+            if(!IogMapHostIsOpen())SetPage(kPageSaves);
+            return;
+        }
     }
-    if (p & SNES_PAD_L) SetPage(g_page - 1);
-    if (p & SNES_PAD_R) SetPage(g_page + 1);
+    if (p & SNES_PAD_B) { Back(); return; }
+    if (p & SNES_PAD_L) StepPage(-1);
+    if (p & SNES_PAD_R) StepPage(1);
     if (p & SNES_PAD_A) Activate();
     if (p & SNES_PAD_X) SaveHere();
     if (p & SNES_PAD_LEFT) Move(-1, 0);
@@ -620,20 +757,28 @@ void IogCompanionNav(uint32_t in, uint32_t ticks)
 
 void IogCompanionKey(int key, int repeat)
 {
-    if (IogAchievementUiIsOpen()) { IogAchievementUiKey(key); return; }
-    if(repeat&&(key=='m'||key=='i'||key==27))return;
-    if(g_open&&g_page==kPageMap&&key!='q'&&key!='e'&&key!='i'){
+    if(repeat&&(key=='m'||key=='i'||key==27||key=='q'||key=='e'))return;
+    IogMapHostNotePad(false);   /* a key was pressed: name keys in the prompts */
+    if (g_open && g_page == kPageAchievements && IogAchievementUiIsOpen()) {
+        switch (key) {
+        case 27: case 'i': Close(); return;
+        case 'q': StepPage(-1); return;
+        case 'e': StepPage(1); return;
+        case 'm': SetPage(kPageMap); return;
+        default: IogAchievementUiKey(key); return;
+        }
+    }
+    if(g_open&&g_page==kPageMap&&IogMapHostIsOpen()&&key!='q'&&key!='e'&&key!='i'){
         IogMapHostKey(key,repeat);
-        if((key==27||key=='m')&&!IogMapHostIsOpen())SetPage(kPageItems);
+        if((key==27||key=='m')&&!IogMapHostIsOpen())SetPage(kPageSaves);
         return;
     }
-    (void)repeat;
-    /* SDL keycodes: Escape, I, arrows, Enter, Q/E pages, S save. */
+    /* SDL keycodes: Escape, I, arrows, Enter, Q/E pages, S save, M map. */
     switch (key) {
     case 27: case 'i': if (g_confirm >= 0) g_confirm = -1; else Close(); break;
-    case 'q': SetPage(g_page - 1); break;
-    case 'e': SetPage(g_page + 1); break;
-    case 'm':SetPage(kPageMap);break;
+    case 'q': StepPage(-1); break;
+    case 'e': StepPage(1); break;
+    case 'm': if (!g_live) SetPage(kPageMap); break;
     case '\r': case ' ': Activate(); break;
     case 's': SaveHere(); break;
     case 0x40000050: Move(-1, 0); break;   /* SDLK_LEFT  */
@@ -646,25 +791,45 @@ void IogCompanionKey(int key, int repeat)
 
 void IogCompanionPointer(int px, int py, int down)
 {
-    if (IogAchievementUiIsOpen()) { IogAchievementUiPointer(px, py, down); return; }
-    if(g_open&&g_page==kPageMap){
+    if (g_open && g_page == kPageAchievements && IogAchievementUiIsOpen()) {
+        IogAchievementUiPointer(px, py, down);
+        if (!IogAchievementUiIsOpen()) Close();
+        return;
+    }
+    if(g_open&&g_page==kPageMap&&IogMapHostIsOpen()){
         IogMapHostPointer(px,py,down);
-        if(!IogMapHostIsOpen())SetPage(kPageItems);
+        if(!IogMapHostIsOpen())SetPage(kPageSaves);
         return;
     }
     g_live = !g_open;
-    const int x = px / 2, y = py / 2;   /* panel -> 1x */
+    const int scale = g_live ? 2 : g_scale;   /* panel -> 1x */
+    const int x = px / scale, y = py / scale;
     const int was = g_ptr_down;
     g_ptr_down = down;
     if (!down || was) return;            /* act on the press */
     /* Page list. */
-    if (x >= 10 && x < 80 && y >= kPageRowY - 1 && y < kPageRowY - 1 + kPageRowPitch * kPageCount) {
-        const int p = (y - (kPageRowY - 1)) / kPageRowPitch;
-        if (p == g_page && p == kPageSettings) Activate();
+    if (x >= 10 && x < 8 + ListW() - 6 && y >= kPageRowY - 2 && y < kPageRowY - 2 + kPageRowPitch * kPageCount) {
+        const int p = Pages()[(y - (kPageRowY - 2)) / kPageRowPitch];
+        if (p == Page() && p == kPageSettings) Activate();
         else SetPage(p);
         return;
     }
-    if (g_page == kPageItems) {
+    /* A prompt is a button. */
+    if (!g_live)
+        for (int i = 0; i < g_prompt_count; i++) {
+            const PromptAt *q = &g_prompts[i];
+            if (x < q->x - 2 || x >= q->x1 + 2 || y < q->y - 3 || y >= q->y + 11) continue;
+            switch (q->action) {
+            case kActActivate: Activate(); break;
+            case kActSave: SaveHere(); break;
+            case kActBack: Back(); break;
+            case kActPrev: StepPage(-1); break;
+            case kActNext: StepPage(1); break;
+            default: break;
+            }
+            return;
+        }
+    if (Page() == kLiveItems) {
         for (int i = 0; i < 16; i++) {
             int sx, sy;
             SlotPos(i, &sx, &sy);
@@ -674,7 +839,7 @@ void IogCompanionPointer(int px, int py, int down)
                 return;
             }
         }
-    } else if (g_page == kPageSaves) {
+    } else if (Page() == kPageSaves) {
         const int first = g_save_slot - 1 < 0 ? 0 : g_save_slot - 1 > SNES_SAVESTATE_SLOTS - 3
                           ? SNES_SAVESTATE_SLOTS - 3 : g_save_slot - 1;
         if (x >= 16 && x < 248 && y >= 14 && y < 14 + 3 * 42) {
@@ -682,12 +847,10 @@ void IogCompanionPointer(int px, int py, int down)
             if (s == g_save_slot) Activate(); else { g_save_slot = s; g_confirm = -1; }
             return;
         }
-        if (y >= 156 && x >= 90) {          /* hint box: top half load, bottom save */
+        if (g_live && y >= 156 && x >= 90) {          /* hint box: top half load, bottom save */
             if (y < 178) Activate(); else SaveHere();
         }
-    } else if (g_page == kPageSettings && y >= 156 && x >= 90) {
-        Activate();
-    } else if (g_page == kPageStatus && y >= 156 && x >= 90) {
+    } else if (g_live && Page() == kPageSettings && y >= 156 && x >= 90) {
         Activate();
     }
 }
@@ -695,13 +858,13 @@ void IogCompanionPointer(int px, int py, int down)
 int IogCompanionImage(const uint32_t **px, int *w, int *h)
 {
     if (!g_open) return 0;
-    if (IogAchievementUiImage(px, w, h)) return 1;
+    if (g_page == kPageAchievements && IogAchievementUiImage(px, w, h)) return 1;
     if(g_page==kPageMap&&IogMapHostImage(px,w,h))return 1;
     g_live = 0;
     Compose();
     *px = g_panel;
-    *w = kW * 2;
-    *h = kH * 2;
+    *w = kW * g_scale;
+    *h = kH * g_scale;
     return 1;
 }
 
@@ -759,8 +922,8 @@ void IogCompanionAfterFrame(void)
             }
         }
     }
-    /* IOG_COMPANION_TEST=<frame>: open the companion there on page
-     * IOG_COMPANION_PAGE and write companion.ppm (headless check). */
+    /* IOG_COMPANION_TEST=<frame>: open the companion there on paused page
+     * IOG_COMPANION_PAGE (0 Saves, 3 Config) and write companion.ppm. */
     static long test_at = -2;
     if (test_at == -2) {
         const char *v = getenv("IOG_COMPANION_TEST");
@@ -771,19 +934,18 @@ void IogCompanionAfterFrame(void)
         return;
     test_at = -1;
     const char *pg = getenv("IOG_COMPANION_PAGE");
-    g_page = pg ? atoi(pg) % kPageCount : 0;
     if (!IogCompanionOpen()) return;
-    if (g_page == kPageStatus && !g_have_stat) g_have_stat = Capture(1, g_stat, &g_stat_w);
+    SetPage(pg && atoi(pg) % kPageCount == kPageSettings ? kPageSettings : kPageSaves);
     Compose();
     FILE *f = fopen("companion.ppm", "wb");
     if (f) {
-        fprintf(f, "P6\n%d %d\n255\n", kW * 2, kH * 2);
-        for (int i = 0; i < kW * 2 * kH * 2; i++) {
+        fprintf(f, "P6\n%d %d\n255\n", kW * g_scale, kH * g_scale);
+        for (int i = 0; i < kW * g_scale * kH * g_scale; i++) {
             const uint32_t p = g_panel[i];
             fputc(p >> 16 & 255, f); fputc(p >> 8 & 255, f); fputc(p & 255, f);
         }
         fclose(f);
     }
-    fprintf(stderr, "[companion] test page %d written (inv=%d stat=%d)\n", g_page, g_have_inv, g_have_stat);
-    g_open = 0;
+    fprintf(stderr, "[companion] test page %d written (inv=%d scale=%d)\n", g_page, g_have_inv, g_scale);
+    Close();
 }

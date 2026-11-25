@@ -28,9 +28,17 @@ static char stored[IOG_MAP_CONTROL_COUNT+1][16];
 bool RtlSpeculativeFrame(void){return speculative;}
 int snes_mod_runtime_feature_enabled_c(const char*p,const char*f){C(!strcmp(p,"iog.enhancements")&&!strcmp(f,"map_controls"));return custom_enabled;}
 int IogInventoryPageShown(void){return 0;}
-void IogAchievementUiOpen(uint32_t held){(void)held;}
-void IogAchievementUiClose(void){}
-bool IogAchievementUiIsOpen(void){return false;}
+/* A connected Xbox-layout pad under the default map: SNES B is its A. */
+static bool pad_present=true;static bool achievements_open;
+int IogHostPadLabel(uint32_t bit,char label[8],uint32_t *color){
+ if(!pad_present)return 0;
+ const char *name=bit==SNES_PAD_B?"A":bit==SNES_PAD_A?"B":bit==SNES_PAD_Y?"X":bit==SNES_PAD_X?"Y":
+  bit==SNES_PAD_L?"LB":bit==SNES_PAD_R?"RB":bit==SNES_PAD_SELECT?"BACK":bit==SNES_PAD_START?"START":NULL;
+ if(!name)return 0;snprintf(label,8,"%s",name);*color=name[1]?0:0xff6be06bu;return 1;
+}
+void IogAchievementUiOpen(uint32_t held){(void)held;achievements_open=true;}
+void IogAchievementUiClose(void){achievements_open=false;}
+bool IogAchievementUiIsOpen(void){return achievements_open;}
 void IogAchievementUiNav(uint32_t buttons,uint32_t ticks){(void)buttons;(void)ticks;}
 void IogAchievementUiKey(int key){(void)key;}
 void IogAchievementUiPointer(int x,int y,int pressed){(void)x;(void)y;(void)pressed;}
@@ -172,7 +180,12 @@ int main(void){
  press(SNES_PAD_RIGHT);C(controls[IOG_MAP_ZOOM_IN]==0);unique();
  IogMapHostNav(SNES_PAD_RIGHT,tick+=16);C(controls[IOG_MAP_ZOOM_IN]==0);
  const uint32_t *image=NULL;int width=0,height=0;
- C(IogMapHostImage(&image,&width,&height)&&image&&width==598&&height==336);
+ /* The pane is the host's overlay size: twice the presented frame, with
+  * doubled text once that is 672 high (the 1.5x wide view at any window). */
+ frame_w=299;frame_h=168;C(IogMapHostImage(&image,&width,&height)&&image&&width==598&&height==336&&canvas_scale==1);
+ frame_w=598;frame_h=336;C(IogMapHostImage(&image,&width,&height)&&width==1196&&height==672&&canvas_scale==2);
+ frame_w=448;frame_h=336;C(IogMapHostImage(&image,&width,&height)&&width==896&&height==672&&canvas_scale==2);
+ frame_w=256;frame_h=224;C(IogMapHostImage(&image,&width,&height)&&width==512&&height==448&&canvas_scale==1);
  press(SNES_PAD_B);C(!controls_open&&opened);
  press(control_bits[controls[IOG_MAP_BACK]]);C(!opened);
  /* Source-backed Start interception: safe radar mode only, held consumption,
@@ -184,7 +197,38 @@ int main(void){
  C(IogCompanionOpen()&&g_page==kPageMap&&opened&&!capture_requests);
  g_have_inv=1;IogCompanionNav(0,tick+=16);
  IogCompanionNav(control_bits[controls[IOG_MAP_BACK]],tick+=16);
- C(g_page==kPageItems&&!opened&&g_open);
+ /* The map's Back leads to the Companion's own pages, starting at Saves;
+  * the Items and Status pages are gone from the paused screen. */
+ C(g_page==kPageSaves&&!opened&&g_open&&kPageCount==4);
+ C(g_prompt_count==0);const uint32_t *panel=NULL;int pw=0,ph=0;
+ /* The page fills the overlay at the largest whole scale: 2x of 512x448,
+  * 3x (768x672) of the 1.5x wide view's 1196x672, and never less than 1x. */
+ frame_w=256;frame_h=224;C(IogCompanionImage(&panel,&pw,&ph)&&pw==512&&ph==448&&g_scale==2);
+ frame_w=598;frame_h=336;C(IogCompanionImage(&panel,&pw,&ph)&&pw==768&&ph==672&&g_scale==3);
+ frame_w=640;frame_h=360;C(IogCompanionImage(&panel,&pw,&ph)&&pw==768&&ph==672);
+ frame_w=448;frame_h=336;C(IogCompanionImage(&panel,&pw,&ph)&&pw==768&&ph==672);
+ /* Prompts name the pad's own buttons: Load is SNES A, the pad's B. */
+ C(g_prompt_count==5&&!strcmp(g_prompts[0].glyph,"B")&&g_prompts[0].color&&!strcmp(g_prompts[2].glyph,"LB")&&!g_prompts[2].color);
+ C(!strcmp(g_prompts[4].glyph,"A")&&g_prompts[4].action==kActBack);
+ /* Every prompt stays inside the hint box (x 133..243, rows 159..209). */
+ for(int n=0;n<g_prompt_count;n++)C(g_prompts[n].x>=133&&g_prompts[n].x1<=243&&g_prompts[n].y>=159&&g_prompts[n].y+8<=210);
+ /* A pointer press on a prompt acts at the panel's scale: Save asks first. */
+ IogCompanionPointer(g_prompts[1].x*g_scale+4,g_prompts[1].y*g_scale+4,1);C(g_confirm==1);IogCompanionPointer(0,0,0);
+ IogCompanionNav(0,tick+=16);IogCompanionNav(SNES_PAD_B,tick+=16);C(g_confirm==-1&&g_open);
+ /* Without a controller the same prompts name keyboard keys. */
+ pad_present=false;IogCompanionKey('x',0);C(IogCompanionImage(&panel,&pw,&ph)&&!strcmp(g_prompts[0].glyph,"Enter")&&!g_prompts[0].color);
+ pad_present=true;IogCompanionNav(0,tick+=16);
+ /* Shoulders walk Saves, Map, Achievements, Config; the map keeps L/R. */
+ IogCompanionNav(SNES_PAD_L,tick+=16);C(g_page==kPageSettings);IogCompanionNav(0,tick+=16);
+ IogCompanionNav(SNES_PAD_L,tick+=16);C(g_page==kPageAchievements&&achievements_open);IogCompanionNav(0,tick+=16);
+ IogCompanionNav(SNES_PAD_R,tick+=16);C(g_page==kPageSettings&&!achievements_open);IogCompanionNav(0,tick+=16);
+ IogCompanionNav(SNES_PAD_R,tick+=16);C(g_page==kPageSaves);IogCompanionNav(0,tick+=16);
+ IogCompanionNav(SNES_PAD_R,tick+=16);C(g_page==kPageMap&&opened);IogCompanionNav(0,tick+=16);
+ /* Start returns to the game from any page, the map included. */
+ IogCompanionNav(SNES_PAD_START,tick+=16);C(!g_open&&!opened);
+ human=SNES_PAD_START;C(!IogCompanionInput(&human)&&human==0);human=0;IogCompanionInput(&human);
+ human=SNES_PAD_START;C(IogCompanionInput(&human)&&IogCompanionOpen()&&g_page==kPageMap);
+ IogCompanionNav(0,tick+=16);IogCompanionNav(control_bits[controls[IOG_MAP_BACK]],tick+=16);C(g_page==kPageSaves&&g_open);
  human=SNES_PAD_START;C(!IogCompanionInput(&human)&&human==0);
  human=0;C(!IogCompanionInput(&human));
  ram[0x9ae]=8;human=SNES_PAD_START;C(!IogCompanionInput(&human)&&human==SNES_PAD_START);
@@ -201,8 +245,8 @@ int main(void){
   * list box's interior (rows 159..209 of the 151..215 box), and a press on
   * the last row selects that page. */
  C(kPageRowY>=159&&kPageRowY+(kPageCount-1)*kPageRowPitch+8<=210&&kPageRowPitch>=9);
- g_open=1;g_page=kPageItems;IogCompanionPointer(2*40,2*(kPageRowY+(kPageCount-1)*kPageRowPitch+4),1);
- C(g_page==kPageMap);IogCompanionPointer(0,0,0);Close();
+ g_open=1;g_page=kPageSaves;IogCompanionPointer(g_scale*40,g_scale*(kPageRowY+(kPageCount-1)*kPageRowPitch+4),1);
+ C(g_page==kPageSettings);IogCompanionPointer(0,0,0);Close();
  g_snes=NULL;human=0;IogCompanionInput(&human);
  IogMapHostShutdown();printf("%u map controller assertions passed; %u preference writes\n",checks,persisted);return 0;
 }

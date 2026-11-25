@@ -32,7 +32,7 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 - **MSU-1 soundtrack** can be imported from a local ZIP or folder with
   validation. Original SNES audio remains available.
   [Soundtrack setup and credits](docs/MSU1.md)
-- **Companion Achievements** has a controller-friendly browser under Status.
+- **Companion Achievements** has a controller-friendly browser on its own Companion page.
   Local progress is available in the opt-in preview.
   [Achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md)
 

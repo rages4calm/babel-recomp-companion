@@ -33,4 +33,13 @@ void IogMapHostPointer(int x,int y,int down);
 bool IogMapHostIsOpen(void);
 int IogMapHostImage(const uint32_t **pixels,int *width,int *height);
 void IogMapHostClose(void);
+/* The host's paused-overlay size in pixels (twice the presented frame). */
+void IogMapHostOverlaySize(int *w,int *h);
+/* The control the player presses for an SNES pad bit under the current
+ * bindings, as a glyph (colour nonzero: ringed letter) or, with no controller
+ * in use, the given keyboard key name. */
+void IogMapHostPrompt(uint32_t snes_bit,const char *key,const char *text,
+    char glyph[8],uint32_t *color,char out_text[16]);
+bool IogMapHostUsingPad(void);
+void IogMapHostNotePad(bool pad);
 #endif

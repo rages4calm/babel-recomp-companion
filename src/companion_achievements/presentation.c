@@ -6,6 +6,8 @@
 #include "desktop/config.h"
 #include "desktop/sdl_compat.h"
 #include "snes_overlay_draw.h"
+#include "iog_map_host.h"
+#include "iog_map_ui.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -16,10 +18,26 @@ static const ca_ui_metadata metadata[GAIA_ACHIEVEMENT_COUNT] = {
 };
 static const char *status;
 static bool initialized, pointer_down;
-static uint32_t browser[CA_UI_WIDTH * CA_UI_HEIGHT];
+/* The browser is laid out on a 598x336 grid (narrower windows: down to 448)
+ * and drawn at twice that when the host's overlay is at least 672 high, so
+ * its 8-pixel font is not small on a 1080p screen. */
+enum { GridW = 598, GridMinW = 448, GridH = 336, MaxScale = 2 };
+static uint32_t browser[GridW * MaxScale * GridH * MaxScale];
+static int grid_w = GridW, grid_scale = 1;
+int IogCompletionPercent(void);
 static uint32_t toast[CA_TOAST_WIDTH * CA_TOAST_HEIGHT];
 static int16_t chime[CA_CHIME_FRAMES];
-enum { Rows = 5, ListY = 88, RowHeight = 40 };
+enum { Rows = 5, ListX = 16, ListY = 62, RowHeight = 38, PagerY = 254, FooterY = 302 };
+static int ListW(void) { return (grid_w - 44) / 2; }
+static int CardX(void) { return ListX + ListW() + 12; }
+static void Layout(void) {
+    int w = 0, h = 0;
+    IogMapHostOverlaySize(&w, &h);
+    grid_scale = h >= GridH * 2 && w >= GridMinW * 2 ? 2 : 1;
+    grid_w = w / grid_scale;
+    if (grid_w > GridW) grid_w = GridW;
+    if (grid_w < GridMinW) grid_w = GridMinW;
+}
 #if SNESRECOMP_SDL3
 static SDL_AudioStream *audio;
 #else
@@ -80,16 +98,18 @@ void IogAchievementUiKey(int key) {
 void IogAchievementUiPointer(int x, int y, int pressed) {
     const bool edge = pressed && !pointer_down;
     pointer_down = pressed != 0;
-    if (!ui.open || !edge || x < 20 || x >= 620) return;
-    if (x >= 504 && y >= 324 && y < 346) { ca_ui_close(&ui); return; }
-    if (x >= 320) return;
+    x /= grid_scale;
+    y /= grid_scale;
+    if (!ui.open || !edge || x < ListX || x >= grid_w - 16) return;
+    if (x >= grid_w - 96 && y >= FooterY - 2 && y < FooterY + 22) { ca_ui_close(&ui); return; }
+    if (x >= ListX + ListW()) return;
     if (y >= ListY && y < ListY + Rows * RowHeight) {
         const size_t index = ui.selected / Rows * Rows + (size_t)(y - ListY) / RowHeight;
         if (index < ui.count) ui.selected = index;
     }
-    if (y >= 290 && y < 314) {
-        if (x < 52) ca_ui_command_apply(&ui, CA_UI_PREVIOUS_PAGE);
-        else if (x >= 288) ca_ui_command_apply(&ui, CA_UI_NEXT_PAGE);
+    if (y >= PagerY && y < PagerY + 22) {
+        if (x < ListX + 32) ca_ui_command_apply(&ui, CA_UI_PREVIOUS_PAGE);
+        else if (x >= ListX + ListW() - 32) ca_ui_command_apply(&ui, CA_UI_NEXT_PAGE);
     }
 }
 
@@ -114,21 +134,40 @@ static void Text(void *context, int x, int y, int w, int h, const char *text, ui
     snes_ovl_draw_text(surface->pixels, surface->width, surface->height, x, y, line, color, scale);
 }
 
-static void Gem(Surface *s, int x, int y, int scale, bool earned) {
+/* Browser drawing on the grid: every coordinate times grid_scale. */
+static void Box(int x, int y, int w, int h, uint32_t color) {
+    const int k = grid_scale;
+    snes_ovl_fill_rect(browser, grid_w * k, GridH * k, x * k, y * k, w * k, h * k, color);
+}
+static void Label(int x, int y, int w, const char *text, uint32_t color, int size) {
+    const int k = grid_scale;
+    char line[96];
+    const size_t max = (size_t)(w / (8 * size));
+    size_t len = strlen(text), copy = len > max ? max : len;
+    if (!max || max >= sizeof(line)) return;
+    memcpy(line, text, copy);
+    if (len > max && copy >= 3) memcpy(line + copy - 3, "...", 3);
+    line[copy] = '\0';
+    snes_ovl_draw_text(browser, grid_w * k, GridH * k, x * k, y * k, line, color, size * k);
+}
+static void Outline(int x, int y, int w, int h, uint32_t color) {
+    const int k = grid_scale;
+    for (int n = 0; n < k; ++n)
+        snes_ovl_stroke_rect(browser, grid_w * k, GridH * k, x * k + n, y * k + n, w * k - 2 * n, h * k - 2 * n, color);
+}
+static void Gem(int x, int y, int scale, bool earned) {
     const uint32_t edge = earned ? 0xffffbc72 : 0xff7f8094;
     for (int i = 0; i < 5; ++i) {
         const int w = 2 * i + 2;
-        Rectangle(s, x + (4 - i) * scale, y + i * scale, w * scale, scale, edge);
-        Rectangle(s, x + (4 - i) * scale, y + (9 - i) * scale, w * scale, scale, edge);
+        Box(x + (4 - i) * scale, y + i * scale, w * scale, scale, edge);
+        Box(x + (4 - i) * scale, y + (9 - i) * scale, w * scale, scale, edge);
     }
-    if (earned) {
-        Rectangle(s, x + 4 * scale, y + 2 * scale, 2 * scale, 5 * scale, 0xffffe4ad);
-    } else {
-        Rectangle(s, x + 3 * scale, y + 3 * scale, 4 * scale, 4 * scale, 0xff36364d);
-    }
+    if (earned) Box(x + 4 * scale, y + 2 * scale, 2 * scale, 5 * scale, 0xffffe4ad);
+    else Box(x + 3 * scale, y + 3 * scale, 4 * scale, 4 * scale, 0xff36364d);
 }
 
-static void Wrap(Surface *s, int x, int y, int columns, int rows, const char *source, uint32_t color) {
+static void Wrap(int x, int y, int columns, int rows, const char *source, uint32_t color) {
+    if (columns > 47) columns = 47;
     for (int row = 0; row < rows && *source; ++row) {
         size_t length = strlen(source);
         if (length > (size_t)columns) {
@@ -142,68 +181,98 @@ static void Wrap(Surface *s, int x, int y, int columns, int rows, const char *so
         source += length;
         while (*source == ' ') ++source;
         if (row == rows - 1 && *source && length >= 3) memcpy(line + length - 3, "...", 3);
-        Text(s, x, y + row * 15, 8 * columns, 10, line, color);
+        Label(x, y + row * 15, 8 * columns, line, color, 1);
     }
+}
+
+/* A footer prompt: the control under the current bindings, then its action.
+ * An empty action joins the glyph to the next one. Returns the next x. */
+static int Prompt(int x, uint32_t pad, const char *key, const char *action, uint32_t color) {
+    const int k = grid_scale;
+    char glyph[8];
+    uint32_t tint;
+    IogMapHostPrompt(pad, key, NULL, glyph, &tint, NULL);
+    if (glyph[0]) {
+        IogMapUiGlyphDraw(browser, grid_w * k, GridH * k, x * k, FooterY * k, glyph, tint, k);
+        x += IogMapUiGlyphWidth(glyph, tint, 1) + (action[0] ? 4 : 2);
+    }
+    if (action[0]) {
+        Label(x, FooterY + 5, 8 * (int)strlen(action), action, color, 1);
+        x += 8 * (int)strlen(action) + 14;
+    }
+    return x;
 }
 
 bool IogAchievementUiImage(const uint32_t **pixels, int *width, int *height) {
     if (!ui.open) return false;
-    Surface s = {browser, CA_UI_WIDTH, CA_UI_HEIGHT};
+    Layout();
+    const int W = grid_w, list_w = ListW(), card_x = CardX(), card_w = W - 16 - card_x;
     const uint32_t bg = 0xff171828, card = 0xff25263b, line = 0xff41435d;
     const uint32_t fg = 0xfffff1d9, dim = 0xffb8b8cb, jade = 0xff78e1c3, gold = 0xffffbc72;
-    Rectangle(&s, 0, 0, s.width, s.height, bg);
-    Rectangle(&s, 20, 55, 600, 1, line);
-    Text(&s, 20, 20, 440, 24, "ACHIEVEMENTS", fg);
+    Box(0, 0, W, GridH, bg);
+    Label(16, 12, W - 200, "ACHIEVEMENTS", fg, 2);
     char label[48];
     size_t earned = 0;
     for (size_t i = 0; i < ui.count; ++i) earned += ui.states[i].unlocked_at != 0;
     snprintf(label, sizeof(label), "%zu / %zu EARNED", earned, ui.count);
-    Text(&s, 620 - (int)strlen(label) * 8, 26, 192, 12, label, gold);
+    Label(W - 16 - (int)strlen(label) * 8, 16, 192, label, gold, 1);
+    Box(16, 36, W - 32, 1, line);
+    Label(16, 45, W - 32 - 160, status ? status : "Local progress", dim, 1);
+    const int percent = IogCompletionPercent();
+    if (percent >= 0) {
+        snprintf(label, sizeof(label), "GAME COMPLETED %d%%", percent);
+        Label(W - 16 - (int)strlen(label) * 8, 45, 192, label, dim, 1);
+    }
 
     const size_t first = ui.selected / Rows * Rows;
     for (size_t i = first; i < ui.count && i < first + Rows; ++i) {
         const bool unlocked = ui.states[i].unlocked_at != 0;
         const char *title = metadata[i].secret && !unlocked ? metadata[i].locked_title : ui.definitions[i].title;
         const int y = ListY + (int)(i - first) * RowHeight;
-        Rectangle(&s, 20, y, 300, 36, i == ui.selected ? 0xff39354e : card);
+        Box(ListX, y, list_w, RowHeight - 4, i == ui.selected ? 0xff39354e : card);
         if (i == ui.selected) {
-            snes_ovl_stroke_rect(browser, s.width, s.height, 20, y, 300, 36, jade);
-            Rectangle(&s, 20, y + 4, 4, 28, jade);
+            Outline(ListX, y, list_w, RowHeight - 4, jade);
+            Box(ListX, y + 4, 4, RowHeight - 12, jade);
         }
-        Gem(&s, 33, y + 12, 1, unlocked);
-        Text(&s, 53, y + 6, 256, 12, title, fg);
-        Text(&s, 53, y + 21, 240, 10, unlocked ? "EARNED" : "LOCKED", unlocked ? gold : dim);
+        Gem(ListX + 13, y + 12, 1, unlocked);
+        Label(ListX + 33, y + 6, list_w - 41, title, fg, 1);
+        Label(ListX + 33, y + 20, list_w - 41, unlocked ? "EARNED" : "LOCKED", unlocked ? gold : dim, 1);
     }
-    Rectangle(&s, 20, 290, 32, 22, card);
-    Rectangle(&s, 288, 290, 32, 22, card);
-    Text(&s, 32, 297, 10, 8, "<", jade);
-    Text(&s, 300, 297, 10, 8, ">", jade);
+    Box(ListX, PagerY, 32, 22, card);
+    Box(ListX + list_w - 32, PagerY, 32, 22, card);
+    Label(ListX + 12, PagerY + 7, 10, "<", jade, 1);
+    Label(ListX + list_w - 20, PagerY + 7, 10, ">", jade, 1);
     snprintf(label, sizeof(label), "PAGE %zu / %zu", first / Rows + 1, (ui.count + Rows - 1) / Rows);
-    Text(&s, 170 - (int)strlen(label) * 4, 297, 150, 8, label, dim);
+    Label(ListX + list_w / 2 - (int)strlen(label) * 4, PagerY + 7, 150, label, dim, 1);
 
-    Rectangle(&s, 336, 72, 284, 240, card);
+    Box(card_x, ListY, card_w, PagerY + 22 - ListY, card);
     const size_t selected = ui.selected;
     const ca_definition *def = &ui.definitions[selected];
     const ca_state selected_state = ui.states[selected];
     const bool unlocked = selected_state.unlocked_at != 0;
     const bool hidden = metadata[selected].secret && !unlocked;
-    Gem(&s, 356, 90, 3, unlocked);
-    Text(&s, 402, 102, 196, 11, unlocked ? "EARNED" : "LOCKED", unlocked ? gold : dim);
-    Wrap(&s, 356, 142, 30, 2, hidden ? metadata[selected].locked_title : def->title, fg);
-    Wrap(&s, 356, 180, 30, 4, hidden ? metadata[selected].locked_description : def->description, dim);
+    const int columns = (card_w - 32) / 8;
+    Gem(card_x + 16, ListY + 14, 3, unlocked);
+    Label(card_x + 60, ListY + 26, card_w - 76, unlocked ? "EARNED" : "LOCKED", unlocked ? gold : dim, 1);
+    Wrap(card_x + 16, ListY + 60, columns, 2, hidden ? metadata[selected].locked_title : def->title, fg);
+    Wrap(card_x + 16, ListY + 98, columns, 4, hidden ? metadata[selected].locked_description : def->description, dim);
     if (def->target > 1) {
         snprintf(label, sizeof(label), "%u / %u", selected_state.progress, def->target);
-        Text(&s, 356, 263, 240, 10, label, fg);
-        Rectangle(&s, 356, 282, 244, 5, line);
-        Rectangle(&s, 356, 282, (int)((uint64_t)244 * selected_state.progress / def->target), 5, jade);
+        Label(card_x + 16, ListY + 172, card_w - 32, label, fg, 1);
+        Box(card_x + 16, ListY + 190, card_w - 32, 5, line);
+        Box(card_x + 16, ListY + 190, (int)((uint64_t)(card_w - 32) * selected_state.progress / def->target), 5, jade);
     }
-    Text(&s, 20, 70, 294, 10, status ? status : "Local progress", dim);
-    Text(&s, 20, 332, 472, 12, "UP/DOWN: SELECT   LEFT/RIGHT: PAGE", dim);
-    Rectangle(&s, 504, 324, 116, 22, card);
-    Text(&s, 510, 332, 104, 10, "B / ESC: BACK", fg);   /* 104 px centred in 116 */
+    /* Footer: what to press, under the current bindings (or keyboard keys). */
+    int x = Prompt(ListX, 0, IogMapHostUsingPad() ? "PAD" : "ARROWS", "Browse", dim);
+    x = Prompt(x, SNES_PAD_L, "Q", "", dim);
+    x = Prompt(x, SNES_PAD_R, "E", "Screen", dim);
+    char glyph[8];
+    uint32_t tint;
+    IogMapHostPrompt(SNES_PAD_B, "ESC", NULL, glyph, &tint, NULL);
+    Prompt(W - 16 - IogMapUiGlyphWidth(glyph, tint, 1) - 4 - 32, SNES_PAD_B, "ESC", "Back", fg);
     *pixels = browser;
-    *width = s.width;
-    *height = s.height;
+    *width = W * grid_scale;
+    *height = GridH * grid_scale;
     return true;
 }
 

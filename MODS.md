@@ -150,8 +150,8 @@ With **New Game Plus** on:
 (The state is the same as the GaiaLabs NewGamePlus patch; the game's own
 menus are left stock.)
 
-**Completion** shows in the companion screen (Status) and the in-game
-settings. It is worth 100 points:
+**Completion** shows on the companion screen's Achievements page and in the
+in-game settings. It is worth 100 points:
 
 | Part | Points |
 |---|---|
@@ -219,12 +219,17 @@ nothing is shipped — everything comes from your ROM.
 
 | Page | What it does |
 |---|---|
-| Items | Your inventory on the stone pedestal. Choose a slot and press A (or tap it twice) to equip it. |
-| Status | The game's own Cond. page. |
-| Saves | The save-state slots with their thumbnails. A twice loads, X twice saves. |
+| Saves | The save-state slots with their thumbnails. Press the Load button twice to load, the Save button twice to save. |
+| Map | The area map, where the area has one. The screen opens here when it does. |
+| Achievements | The achievement browser and the completion figure. |
 | Config | Opens the in-game settings. |
 
-L and R change page, B closes. Everything works by touch as well.
+Items and Status live on the game's own pause menu (Select), which now
+scales to the wide view. The companion screen fills the display at the
+largest whole scale that fits. The shoulder buttons change page and the
+button that opened the screen closes it. Each prompt shows the button
+bound to that action on your controller, or the key name when no
+controller is connected. Everything works by touch as well.
 
 **Dual and Flip Grip.** In the settings, *Companion screen* puts the companion
 beside the running game instead of in a pause:

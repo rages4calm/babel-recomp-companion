@@ -66,14 +66,14 @@ static void pointer_actions(void){
  C(IogMapUiPointer(&u,316,156,true,w,h));C(u.center_x_q8==x-512&&u.center_y_q8==y-512);
  C(IogMapUiPointer(&u,-100,-100,false,w,h)&&!u.dragging&&!u.pointer_down);
  x=u.center_x_q8;y=u.center_y_q8;
- C(!IogMapUiPointer(&u,100,305,true,w,h));C(!IogMapUiPointer(&u,300,140,true,w,h));C(u.center_x_q8==x&&u.center_y_q8==y);C(IogMapUiPointer(&u,0,0,false,w,h));
+ C(!IogMapUiPointer(&u,100,320,true,w,h));C(!IogMapUiPointer(&u,300,140,true,w,h));C(u.center_x_q8==x&&u.center_y_q8==y);C(IogMapUiPointer(&u,0,0,false,w,h));
  C(!IogMapUiPointer(&u,-1,140,true,w,h));C(!IogMapUiPointer(&u,300,140,true,w,h));C(!u.dragging);C(IogMapUiPointer(&u,0,0,false,w,h));
- C(IogMapUiPointer(&u,480,30,true,w,h));C(u.zoom_index==4);C(!IogMapUiPointer(&u,480,30,true,w,h));C(u.zoom_index==4);C(IogMapUiPointer(&u,480,30,false,w,h));
- C(IogMapUiPointer(&u,450,30,true,w,h));C(u.zoom_index==3);C(IogMapUiPointer(&u,450,30,false,w,h));
- u.center_pending=false;C(IogMapUiPointer(&u,390,30,true,w,h));C(u.center_pending);C(IogMapUiPointer(&u,390,30,false,w,h));C(IogMapUiDraw(&u,dst,bytes,w*4,w,h,&src,&meta));C(u.center_x_q8==src.player_x*256+128);
+ C(IogMapUiPointer(&u,485,16,true,w,h));C(u.zoom_index==4);C(!IogMapUiPointer(&u,485,16,true,w,h));C(u.zoom_index==4);C(IogMapUiPointer(&u,485,16,false,w,h));
+ C(IogMapUiPointer(&u,455,16,true,w,h));C(u.zoom_index==3);C(IogMapUiPointer(&u,455,16,false,w,h));
+ u.center_pending=false;C(IogMapUiPointer(&u,390,16,true,w,h));C(u.center_pending);C(IogMapUiPointer(&u,390,16,false,w,h));C(IogMapUiDraw(&u,dst,bytes,w*4,w,h,&src,&meta));C(u.center_x_q8==src.player_x*256+128);
  C(IogMapUiPointer(&u,300,140,true,w,h));C(IogMapUiPointer(&u,INT_MAX,INT_MIN,true,w,h));C(u.center_x_q8==0&&u.center_y_q8==65536);C(IogMapUiPointer(&u,0,0,false,w,h));
  C(!IogMapUiPointer(&u,100,100,true,344,224));C(!u.pointer_down);
- C(IogMapUiPointer(&u,520,30,true,w,h));C(!u.full&&!u.visible&&!u.dragging);C(!IogMapUiPointer(&u,100,100,true,w,h));
+ C(IogMapUiPointer(&u,520,16,true,w,h));C(!u.full&&!u.visible&&!u.dragging);C(!IogMapUiPointer(&u,100,100,true,w,h));
  free(dst);
 }
 static void controls_pane(void){
@@ -97,11 +97,32 @@ static void marker_legends(void){
  IogMapUi u;IogMapUiInit(&u);u.full=true;
  IogMapUiMetadata both={.valid=true,.exit_legend={105,217,211,255},.chest_legend={255,190,96,255}};
  C(IogMapUiDraw(&u,dst,bytes,w*4,w,h,&src,&both));
- C(!memcmp(dst+(31*w+125)*4,(uint8_t[]){211,217,105,255},4));
- C(!memcmp(dst+(31*w+193)*4,(uint8_t[]){96,190,255,255},4));
+ /* The legend sits at the right of the bottom row: Exit, then Chest. */
+ C(!memcmp(dst+(317*w+481)*4,(uint8_t[]){211,217,105,255},4));
+ C(!memcmp(dst+(317*w+535)*4,(uint8_t[]){96,190,255,255},4));
+ C(memcmp(dst+(31*w+125)*4,(uint8_t[]){211,217,105,255},4));
  both.exit_legend.a=0;
  C(IogMapUiDraw(&u,dst,bytes,w*4,w,h,&src,&both));
- C(!memcmp(dst+(31*w+125)*4,(uint8_t[]){96,190,255,255},4));
+ C(!memcmp(dst+(317*w+535)*4,(uint8_t[]){96,190,255,255},4));
+ C(memcmp(dst+(317*w+481)*4,(uint8_t[]){211,217,105,255},4));
+ free(dst);
+ /* The first view is chosen from the explored cells (11x11 around the
+  * player here), not the whole 48x64 room: 16 px a cell, which the whole
+  * room would not fit. Doubled chrome shows the same cells at twice the size. */
+ IogMapUiInit(&u);u.full=true;dst=calloc(1,bytes);C(dst&&IogMapUiDraw(&u,dst,bytes,w*4,w,h,&src,&both)&&u.zoom_index==5);free(dst);
+ unsigned W=1196,H=672;bytes=W*H*4;dst=calloc(1,bytes);C(dst!=NULL);
+ IogMapUiInit(&u);u.full=true;IogMapUiSetScale(&u,2);C(u.scale==2&&IogMapUiDraw(&u,dst,bytes,W*4,W,H,&src,&both)&&u.zoom_index==5);
+ both.exit_legend.a=255;C(IogMapUiDraw(&u,dst,bytes,W*4,W,H,&src,&both));
+ C(!memcmp(dst+(634*W+962)*4,(uint8_t[]){211,217,105,255},4));
+ /* Header buttons are hit at the doubled positions; prompts are bounded. */
+ C(IogMapUiPointer(&u,970,32,true,W,H)&&u.zoom_index==6);C(IogMapUiPointer(&u,0,0,false,W,H));
+ C(!IogMapUiPointer(&u,485,16,true,W,H));C(IogMapUiPointer(&u,0,0,false,W,H)||true);
+ IogMapUiPrompt list[8];memset(list,0,sizeof(list));for(unsigned i=0;i<8;i++){memset(list[i].glyph,'G',7);memset(list[i].text,'t',15);}
+ IogMapUiSetPrompts(&u,list,8,&list[0]);C(u.prompt_count==IOG_MAP_UI_PROMPTS&&strlen(u.prompts[5].glyph)==7&&strlen(u.back_prompt.text)==15);
+ both.gamepad=true;C(IogMapUiDraw(&u,dst,bytes,W*4,W,H,&src,&both));
+ IogMapUiSetPrompts(&u,NULL,0,NULL);C(!u.prompt_count&&!u.back_prompt.glyph[0]);
+ C(IogMapUiGlyphWidth("A",0xff6be06bu,2)==36&&IogMapUiGlyphWidth("LB",0,2)==44&&IogMapUiGlyphWidth("",0,2)==0);
+ IogMapUiSetScale(&u,7);C(u.scale==1);
  free(dst);
 }
 int main(int argc,char**argv){C(argc==3);fixture();actions();pointer_actions();controls_pane();marker_legends();dimensions(598,336,true,argv[1]);dimensions(598,336,false,argv[2]);dimensions(344,224,true,NULL);dimensions(784,336,true,NULL);dimensions(256,160,true,NULL);dimensions(2048,512,true,NULL);meta.gamepad=true;dimensions(344,224,true,NULL);fog_independence();printf("%u map UI assertions passed\n",checks);return 0;}

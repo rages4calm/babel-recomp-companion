@@ -31,7 +31,34 @@ static bool controls_open,preferences_saved=true,input_held,input_consumed;
 static unsigned controls_row;
 static unsigned suspended;
 static uint32_t previous_pad,last_ticks;
-static uint32_t canvas[598*336];
+/* The paused map is drawn at the host's overlay size: twice the presented
+ * frame (598x336 at the 1.5x wide view, so 1196x672), with doubled chrome
+ * when that is at least 672 high. Frame size is noted at each radar call. */
+enum { CanvasMaxW=1600, CanvasMaxH=896 };
+static uint32_t canvas[CanvasMaxW*CanvasMaxH];
+static uint32_t controls_canvas[(CanvasMaxW/2)*(CanvasMaxH/2)];
+static int frame_w=256,frame_h=224,canvas_w=598,canvas_h=336,canvas_scale=1;
+int IogHostPadLabel(uint32_t snes_bit,char label[8],uint32_t *color);
+void IogMapHostOverlaySize(int *w,int *h)
+{
+    int ow=frame_w*2,oh=frame_h*2;
+    if(ow>CanvasMaxW)ow=CanvasMaxW;
+    if(oh>CanvasMaxH)oh=CanvasMaxH;
+    if(w)*w=ow;
+    if(h)*h=oh;
+}
+void IogMapHostPrompt(uint32_t snes_bit,const char *key,const char *text,
+    char glyph[8],uint32_t *color,char out_text[16])
+{
+    char label[8]={0};uint32_t tint=0;
+    if(!(snes_bit&&gamepad&&IogHostPadLabel(snes_bit,label,&tint))){
+        snprintf(label,sizeof(label),"%.7s",key?key:"");tint=0;
+    }
+    memcpy(glyph,label,8);*color=tint;
+    if(out_text)snprintf(out_text,16,"%.15s",text?text:"");
+}
+bool IogMapHostUsingPad(void){return gamepad;}
+void IogMapHostNotePad(bool pad){gamepad=pad;}
 static unsigned frame_number;
 static FILE *audit;
 static const char *const control_names[IOG_MAP_BUTTON_COUNT]={"A","B","X","Y","L","R"};
@@ -389,10 +416,28 @@ static bool Draw(uint8_t *dst,size_t bytes,size_t pitch,int w,int h)
         ui.radar?"ON":"OFF");
     snprintf(back,sizeof(back),"%s Back",control_names[controls[IOG_MAP_BACK]]);
     IogMapUiControllerHints(&ui,hint,back);
+    /* The physical buttons bound to those SNES buttons, as glyphs. Without a
+     * bound controller the text hints above remain (keyboard names). */
+    IogMapUiPrompt prompts[IOG_MAP_UI_PROMPTS],exit_prompt;unsigned count=0;
+    memset(prompts,0,sizeof(prompts));memset(&exit_prompt,0,sizeof(exit_prompt));
+    char probe[8];uint32_t tint;
+    if(ui.full&&gamepad&&IogHostPadLabel(control_bits[controls[IOG_MAP_BACK]],probe,&tint)){
+        snprintf(prompts[0].glyph,8,"PAD");snprintf(prompts[0].text,16,"Move");
+        IogMapHostPrompt(control_bits[controls[IOG_MAP_ZOOM_OUT]],"-","",prompts[1].glyph,&prompts[1].color,prompts[1].text);
+        IogMapHostPrompt(control_bits[controls[IOG_MAP_ZOOM_IN]],"+","Zoom",prompts[2].glyph,&prompts[2].color,prompts[2].text);
+        IogMapHostPrompt(control_bits[controls[IOG_MAP_CENTER]],"Home","Center",prompts[3].glyph,&prompts[3].color,prompts[3].text);
+        IogMapHostPrompt(control_bits[controls[IOG_MAP_RADAR]],"","",prompts[4].glyph,&prompts[4].color,NULL);
+        snprintf(prompts[4].text,16,"Radar %s",ui.radar?"ON":"OFF");
+        IogMapHostPrompt(SNES_PAD_SELECT,"Tab","Setup",prompts[5].glyph,&prompts[5].color,prompts[5].text);
+        IogMapHostPrompt(control_bits[controls[IOG_MAP_BACK]],"Esc","Back",exit_prompt.glyph,&exit_prompt.color,exit_prompt.text);
+        count=IOG_MAP_UI_PROMPTS;
+    }
+    IogMapUiSetPrompts(&ui,prompts,count,&exit_prompt);
     return IogMapUiDraw(&ui,dst,bytes,pitch,(unsigned)w,(unsigned)h,&source,&metadata);
 }
 void IogMapHostDrawRadar(uint8_t *dst,size_t pitch,int w,int h)
 {
+    if(w>=256&&h>=160){frame_w=w;frame_h=h;}
     if(opened||ui.full||!ui.radar||w<256||h<160||pitch>SIZE_MAX/(size_t)h)return;
     (void)Draw(dst,pitch*(size_t)h,pitch,w,h);
 }
@@ -400,7 +445,8 @@ int IogMapHostOpen(void)
 {
     if(!IogMapHostAvailable())return 0;
     if(!ui.full){IogMapUiInput in={0};in.toggle_full=true;IogMapUiHandleInput(&ui,&in);}
-    opened=true;controls_open=false;previous_pad=~0u;last_ticks=0;AuditEvent("map_open");return 1;
+    opened=true;controls_open=false;previous_pad=~0u;last_ticks=0;AuditEvent("map_open");
+    char probe[8];uint32_t tint;gamepad=IogHostPadLabel(SNES_PAD_B,probe,&tint)!=0;return 1;
 }
 int IogMapHostInput(uint32_t *human)
 {
@@ -443,7 +489,7 @@ void IogMapHostPointer(int x,int y,int down)
 {
     if(!opened)return;
     if(controls_open)return;
-    gamepad=false;IogMapUiPointer(&ui,x,y,down!=0,598,336);
+    gamepad=false;IogMapUiPointer(&ui,x,y,down!=0,(unsigned)canvas_w,(unsigned)canvas_h);
     AuditEvent("map_pointer");
     if(!ui.full)opened=false;
 }
@@ -506,15 +552,26 @@ void IogMapHostKey(int key,int repeat)
 int IogMapHostImage(const uint32_t **pixels,int *w,int *h)
 {
     if(!opened||!pixels||!w||!h)return 0;
-    memset(canvas,0,sizeof(canvas));
+    IogMapHostOverlaySize(&canvas_w,&canvas_h);
+    canvas_scale=canvas_h>=672&&canvas_w>=512?2:1;
+    canvas_w-=canvas_w%canvas_scale;canvas_h-=canvas_h%canvas_scale;
+    const size_t pitch=(size_t)canvas_w*4;
+    memset(canvas,0,pitch*(size_t)canvas_h);
     bool drawn;
     if(controls_open){
+        /* The bindings pane is text only: drawn once at 1x, then doubled. */
+        const int lw=canvas_w/canvas_scale,lh=canvas_h/canvas_scale;
         uint8_t bindings[5];for(unsigned n=0;n<5;n++)bindings[n]=(uint8_t)controls[n];
-        drawn=IogMapUiDrawControls((uint8_t*)canvas,sizeof(canvas),598*4,598,336,
-            bindings,controls_row,ui.radar,preferences_saved);
-    }else drawn=Draw((uint8_t*)canvas,sizeof(canvas),598*4,598,336);
+        drawn=IogMapUiDrawControls((uint8_t*)controls_canvas,sizeof(controls_canvas),(size_t)lw*4,
+            (unsigned)lw,(unsigned)lh,bindings,controls_row,ui.radar,preferences_saved);
+        if(drawn)for(int y=0;y<canvas_h;y++)for(int x=0;x<canvas_w;x++)
+            canvas[(size_t)y*canvas_w+x]=controls_canvas[(size_t)(y/canvas_scale)*lw+x/canvas_scale];
+    }else{
+        IogMapUiSetScale(&ui,(unsigned)canvas_scale);
+        drawn=Draw((uint8_t*)canvas,pitch*(size_t)canvas_h,pitch,canvas_w,canvas_h);
+    }
     if(!drawn)return 0;
-    *pixels=canvas;*w=598;*h=336;
+    *pixels=canvas;*w=canvas_w;*h=canvas_h;
     /* One diagnostic picture of the real paused map, never a separate fake UI. */
     static bool written,written_controls;
     bool *done=controls_open?&written_controls:&written;
@@ -522,8 +579,8 @@ int IogMapHostImage(const uint32_t **pixels,int *w,int *h)
     if(!*done&&output&&*output){
         FILE *file=fopen(output,"wb");
         if(file){
-            bool ok=fprintf(file,"P6\n598 336\n255\n")>0;
-            for(unsigned n=0;n<598*336&&ok;n++){
+            bool ok=fprintf(file,"P6\n%d %d\n255\n",canvas_w,canvas_h)>0;
+            for(unsigned n=0;n<(unsigned)(canvas_w*canvas_h)&&ok;n++){
                 uint32_t p=canvas[n];uint8_t rgb[3]={(uint8_t)(p>>16),(uint8_t)(p>>8),(uint8_t)p};
                 ok=fwrite(rgb,1,3,file)==3;
             }

@@ -19,6 +19,48 @@
 #include "iog_randomizer.h"
 #include "iog_cheat_rates.h"
 #include "iog_map_host.h"
+#include "desktop/config.h"
+#include "desktop/sdl_compat.h"
+
+/* ---- button prompts ----------------------------------------------------------
+ * The physical controller button bound to an SNES pad bit for player 1, from
+ * the live [GamepadMap], as the label an Xbox-layout pad prints on it. Returns
+ * 0 when no controller is connected or nothing is bound (callers then name a
+ * keyboard key). Face buttons take the overlay's button colours. */
+int IogHostPadLabel(uint32_t snes_bit, char label[8], uint32_t *color)
+{
+    /* [GamepadMap] Controls order: Up Down Left Right Select Start A B X Y L R. */
+    static const uint32_t kOrder[12] = {SNES_PAD_UP, SNES_PAD_DOWN, SNES_PAD_LEFT, SNES_PAD_RIGHT,
+        SNES_PAD_SELECT, SNES_PAD_START, SNES_PAD_A, SNES_PAD_B, SNES_PAD_X, SNES_PAD_Y,
+        SNES_PAD_L, SNES_PAD_R};
+    static const struct { int button; const char *name; uint32_t color; } kNames[] = {
+        {kGamepadBtn_A, "A", SNES_OVL_COL_A}, {kGamepadBtn_B, "B", SNES_OVL_COL_B},
+        {kGamepadBtn_X, "X", SNES_OVL_COL_X}, {kGamepadBtn_Y, "Y", SNES_OVL_COL_Y},
+        {kGamepadBtn_Back, "BACK", 0}, {kGamepadBtn_Start, "START", 0},
+        {kGamepadBtn_L1, "LB", 0}, {kGamepadBtn_R1, "RB", 0}, {kGamepadBtn_L2, "LT", 0},
+        {kGamepadBtn_R2, "RT", 0}, {kGamepadBtn_L3, "L3", 0}, {kGamepadBtn_R3, "R3", 0},
+        {kGamepadBtn_DpadUp, "UP", 0}, {kGamepadBtn_DpadDown, "DOWN", 0},
+        {kGamepadBtn_DpadLeft, "LEFT", 0}, {kGamepadBtn_DpadRight, "RIGHT", 0},
+    };
+    int pads = 0;
+#if SNESRECOMP_SDL3
+    SDL_JoystickID *ids = SDL_GetGamepads(&pads);
+    if (ids) SDL_free(ids);
+#else
+    pads = SDL_NumJoysticks();
+#endif
+    if (pads <= 0 || !label || !color) return 0;
+    for (int i = 0; i < 12; i++) {
+        if (kOrder[i] != snes_bit) continue;
+        for (size_t n = 0; n < sizeof(kNames) / sizeof(kNames[0]); n++)
+            if (FindCmdForGamepadButton(kNames[n].button, 0) == kKeys_Controls + i) {
+                snprintf(label, 8, "%s", kNames[n].name);
+                *color = kNames[n].color;
+                return 1;
+            }
+    }
+    return 0;
+}
 
 int IogHoldAdvanceGet(void);
 void IogHoldAdvanceSet(int v);
