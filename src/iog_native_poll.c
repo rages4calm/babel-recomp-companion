@@ -53,8 +53,9 @@ void IogNativePollInitialize(void)
 {
     interp_bridge_clear_native_rdnmi_polls();
 #ifndef SNESRECOMP_INTERPRETER_ONLY
+    /* On in a build that has native code; IOG_NATIVE_RDNMI_POLL=0 turns it off. */
     const char *setting = getenv("IOG_NATIVE_RDNMI_POLL");
-    if (!setting || strcmp(setting, "1") != 0 || !g_snes || !g_snes->cart)
+    if ((setting && !strcmp(setting, "0")) || !g_snes || !g_snes->cart)
         return;
     const Cart *cart = g_snes->cart;
     if (cart->type != CART_HIROM || !cart->rom ||

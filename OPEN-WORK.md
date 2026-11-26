@@ -141,6 +141,15 @@ Edward's Castle, the lookout and the gold ship
     decline at run time (cause not captured), about 30,000 that touch bytes
     the game patches while running, and a few stack-pointer and reset
     operations. `sdk-routes/residual-routes-ext3.json` has the list.
+  - **The owner's install runs the native build since November 26.** The
+    executable in his beta 6 folder was replaced by the native play build
+    (`cb-natdef`); the interpreter one is kept beside it as
+    `babel-recomp.interpreter.exe`. The native paths are now on by default in
+    a build that has them; `IOG_NATIVE_<NAME>=0` turns one off.
+  - **A public native build is the owner's decision.** The download is
+    interpreter-only because the repository rules forbid shipping
+    ROM-derived binaries. Other recomp projects either publish compiled
+    binaries or ship a builder that compiles from the player's own ROM.
   - **Not played by a person** on the extended build, and no speed
     measurement was taken.
   - **The four declarations are assertions.** They rest on the older

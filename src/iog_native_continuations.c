@@ -46,13 +46,20 @@ static void WriteNativeContinuationStats(void)
 }
 #endif
 
+/* The native paths are on in a build that has them; NAME=0 turns one off
+ * (the interpreter then runs that code, as in the public build). */
+static bool NativeSwitch(const char *name)
+{
+    const char *setting = getenv(name);
+    return !setting || strcmp(setting, "0");
+}
+
 void IogNativeContinuationsInitialize(void)
 {
     native_nmi_enabled = false;
     interp_bridge_clear_native_instructions();
 #if defined(IOG_HAS_NATIVE_CONTINUATIONS) && !defined(SNESRECOMP_INTERPRETER_ONLY)
-    const char *setting = getenv("IOG_NATIVE_CONTINUATIONS");
-    if (!setting || strcmp(setting, "1") || !g_snes || !g_snes->cart)
+    if (!NativeSwitch("IOG_NATIVE_CONTINUATIONS") || !g_snes || !g_snes->cart)
         return;
     const Cart *cart = g_snes->cart;
     if (cart->type != CART_HIROM || !cart->rom ||
@@ -77,15 +84,12 @@ void IogNativeContinuationsInitialize(void)
         interp_bridge_clear_native_instructions();
         return;
     }
-    const char *copy_setting = getenv("IOG_NATIVE_WRAM_COPY_CONTINUATIONS");
     interp_bridge_set_native_wram_copy_enabled(
-        copy_setting && !strcmp(copy_setting, "1"));
+        NativeSwitch("IOG_NATIVE_WRAM_COPY_CONTINUATIONS"));
 #endif
-    const char *frame_setting = getenv("IOG_NATIVE_FRAME_CONTINUATIONS");
     interp_bridge_set_native_frame_effects_enabled(
-        frame_setting && !strcmp(frame_setting, "1"));
-    const char *nmi_setting = getenv("IOG_NATIVE_NMI_CONTINUATIONS");
-    native_nmi_enabled = nmi_setting && !strcmp(nmi_setting, "1") &&
+        NativeSwitch("IOG_NATIVE_FRAME_CONTINUATIONS"));
+    native_nmi_enabled = NativeSwitch("IOG_NATIVE_NMI_CONTINUATIONS") &&
         interp_bridge_native_nmi_grants() != 0;
     const char *path = getenv("IOG_NATIVE_CONTINUATION_STATS");
     if (path && path[0] && strlen(path) < sizeof stats_path) {
