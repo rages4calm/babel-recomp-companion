@@ -124,7 +124,7 @@ on the launcher's Game page to **Open the setup screen**.
 | Input | Gamepad, deadzone, and **Button prompts**: Auto, SNES (classic) or Xbox |
 | Achievements | Your local progress |
 | Soundtrack | Import an optional MSU-1 music pack. Off until you import one; the game plays the original SNES music |
-| Cheats and Mods | Cheats, and the conveniences: **Enhanced world map**, **Status display at the screen edges**, run (auto-run or hold), text speed, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
+| Cheats and Mods | Cheats, and the conveniences: **Enhanced world map**, **Status display at the screen edges**, run (auto-run or hold), text speed, use key items on the spot, Red Jewel sparkles, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
 
 | Display page | Input page |
 | --- | --- |
