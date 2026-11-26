@@ -1,6 +1,7 @@
 # Illusion of Gaia Companion
 
-Read HANDOFF.md first, then the current baseline audit. Continue from receipts;
+Read HANDOFF.md first, then OPEN-WORK.md (what is unfinished, unfixed or
+untested) and the current baseline audit. Continue from receipts;
 do not redo completed audits or recreate validation archives without a reason.
 
 Current priority: full-game visual coverage and approved GaiaLabs maps with
