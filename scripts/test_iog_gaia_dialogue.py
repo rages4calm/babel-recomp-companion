@@ -1033,6 +1033,12 @@ def check_script_boxes(names):
                                prompt, names, rom, 0x8100) == (
         "[TPL:0D][TPL:01]The first one is big, and[N]it runs to a second row.[FIN]"
         "[TPL:0F][TPL:01]Third?[N][N] Yes[N] No[RET]")
+    # A question taller than the rows above the choices is read whole, then
+    # the choices scroll in under its last rows (GaiaLabs' [WAI]). A page of
+    # its own left the choices under blank rows with nothing asked.
+    tall = authored.transcribe("[TPL:1][TPL:10]Or, are you saying that[N]you came to buy a slave[N]too?[WAI][N] Yes[N] No",
+                               prompt, names, rom, 0x8100)
+    assert tall == "[SCR][TPL:0F][TPL:01]Or, are you saying that[N]you came to buy a slave[N]too?[WAI][N] Yes[N] No[RET]", tall
     for refused in ("[TPL:F]One.[N]Two?[N] Yes", "[TPL:F]One.[N]Two?[N] Yes[N] No[N] Maybe", "[TPL:F]One.[N] Yes[N] No[END]"):
         try:
             authored.transcribe(refused, prompt, names, rom, 0x8100)

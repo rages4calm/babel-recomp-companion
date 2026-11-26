@@ -532,6 +532,22 @@ def _choice_page(source, options, skip, final_box, stock_rows, plain, scroll=Fal
         keep = []
         while sentences and len(_wrap(" ".join(sentences[-1:] + keep))) <= skip:
             keep.insert(0, sentences.pop())
+        last = _wrap(sentences[-1]) if sentences else []
+        if not keep and len(last) <= final_box[3] and final_box[3] == skip + len(choices):
+            # The question itself is taller than the rows above the choices.
+            # As GaiaLabs writes it ([WAI] before the choices), the whole
+            # question is read first and the choices then scroll in under
+            # its last rows. A page of its own left the choices under blank
+            # rows with nothing asked. Earlier sentences keep their pages.
+            out = before
+            family = "top" if final_box[1] < 12 else "bottom"
+            early = _wrap(" ".join(sentences[:-1]))
+            while early:
+                shown, early = early[:4], early[4:]
+                out += f"[TPL:{_TEMPLATE[family, len(shown)]:X}]" + "".join(speaker + presentation) + "[N]".join(shown) + "[FIN]"
+                presentation = []
+            return (out + "[BOX]" + "".join(speaker + presentation) + "[N]".join(last) +
+                    "[WAI][N]" + "[N]".join(choices)), True
         # When even the last sentence needs more rows than the script leaves
         # above the choices, it gets its own page whole and the choices
         # follow alone. Breaking it across a button press reads worse.
@@ -543,7 +559,7 @@ def _choice_page(source, options, skip, final_box, stock_rows, plain, scroll=Fal
         out += f"[TPL:{_TEMPLATE[family, len(shown)]:X}]" + "".join(speaker + presentation) + "[N]".join(shown) + "[FIN]"
         presentation = []
     text += [""] * (skip - len(text))
-    return out + "[BOX]" + "".join(speaker + presentation) + "[N]".join(text + choices)
+    return out + "[BOX]" + "".join(speaker + presentation) + "[N]".join(text + choices), False
 
 
 def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, contract=None, entry=False,
@@ -634,8 +650,9 @@ def transcribe(source, stock, names, rom=None, offset=None, entry_box=None, cont
             raise Unsupported("authored string returns in the middle of a page")
         source += "[BOX]"
     else:
-        source = _choice_page(source, contract[0], contract[1], final["box"], final["row"] + 1 - contract[1],
-                              "[PAL:00]" in stock[stock.rfind("[FIN]") + 1:], scroll)
+        source, scrolled = _choice_page(source, contract[0], contract[1], final["box"], final["row"] + 1 - contract[1],
+                                        "[PAL:00]" in stock[stock.rfind("[FIN]") + 1:], scroll)
+        scroll = scroll or scrolled
     if mode != "end":
         source += "[RET]"
 

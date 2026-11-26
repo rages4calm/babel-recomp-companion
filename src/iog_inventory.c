@@ -198,6 +198,13 @@ static void Number(int x, int y, unsigned n)
     char buf[8];
     int len = 0;
     do buf[len++] = (char)('0' + n % 10); while ((n /= 10) && len < 3);
+    /* A dark badge under the digits: on the light platform a bare outlined
+     * digit was hard to read. Corners left open so it is not a hard box. */
+    const int left = x - 6 * len - 2, right = x + 1, top = y - 1, bottom = y + 8;
+    for (int py = top; py <= bottom; py++)
+        for (int px = left; px <= right; px++)
+            if (!((py == top || py == bottom) && (px == left || px == right)))
+                Plot(px, py, 0x18203A);
     /* Right-aligned on x; 6-pixel advance (the font's digits are narrow). */
     for (int i = 0; i < len; i++)
         Glyph(x - 6 * (i + 1), y, (uint8_t)buf[i], 0xF8F8F8);
@@ -232,19 +239,31 @@ static bool SlotIconShown(int x, int y)
     return false;
 }
 
+/* Every held item has its icon over its slot: the inventory page itself.
+ * One match is not enough: on the Cond. page Will's portrait sits where
+ * the icon of the seventh slot would be. */
+static bool AllSlotIconsShown(void)
+{
+    const uint8_t *rom = g_snes->cart->rom;
+    const uint8_t *slots = &Ram()[kSlots];
+    int held = 0;
+    for (int i = 0; i < 16; i++) {
+        const uint8_t *e = rom + kSlotTable + 4 * i;
+        if (!slots[i])
+            continue;
+        ++held;
+        if (!SlotIconShown(e[0] | e[1] << 8, e[2] | e[3] << 8))
+            return false;
+    }
+    return held > 0;
+}
+
 /* The inventory page of the pause menu is fully on screen. */
 int IogInventoryPageShown(void)
 {
     if (!g_snes || !g_ppu || Rd(0x0644) != 0x00FF || g_ppu->brightnessMult[31] != 255)
         return 0;
-    const uint8_t *rom = g_snes->cart->rom;
-    const uint8_t *slots = &Ram()[kSlots];
-    for (int i = 0; i < 16; i++) {
-        const uint8_t *e = rom + kSlotTable + 4 * i;
-        if (slots[i] && SlotIconShown(e[0] | e[1] << 8, e[2] | e[3] << 8))
-            return 1;
-    }
-    return 0;
+    return AllSlotIconsShown();
 }
 
 void IogInventoryOverlay(void)
@@ -256,12 +275,7 @@ void IogInventoryOverlay(void)
     const uint8_t *slots = &Ram()[kSlots];
     const int equipped = (int16_t)Rd(kEquippedSlot);
     /* Only on the inventory page itself: not on Cond., not mid-transition. */
-    bool page = false;
-    for (int i = 0; i < 16 && !page; i++) {
-        const uint8_t *e = rom + kSlotTable + 4 * i;
-        page = slots[i] && SlotIconShown(e[0] | e[1] << 8, e[2] | e[3] << 8);
-    }
-    if (!page)
+    if (!AllSlotIconsShown())
         return;
     for (int i = 0; i < 16; i++) {
         const uint8_t *e = rom + kSlotTable + 4 * i;

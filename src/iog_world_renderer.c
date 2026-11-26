@@ -47,7 +47,6 @@ static struct {
     bool copy_reference;
     bool source_packet,mode7,mode7_perspective,absent_secondary,sky_field,stock_actor_field;
     bool hud_layered; /* the status plane was left out of `output` for the presenter */
-    int shown_left,shown_right; /* first and last output column the room picture reached */
     bool awaiting_restore,restored_actor_field,fixed_plate;
     int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
@@ -62,6 +61,8 @@ static struct {
     uint8_t published[544];
     bool published_valid, repeated;
     struct { uint16_t staging, previous; uint8_t composed, pending; } unpaired;
+    /* Display setup of the last plain wide frame (reason "ready"). */
+    struct { bool valid; unsigned scene; uint8_t bgmode,mosaic,main,sub,cgwsel,cgadsub,hdmaen; uint32_t windowsel; } good;
     Ppu base, detached, mode7_source;
     bool mode7_filtered;
     uint32_t mode7_exact[256*224];
@@ -431,9 +432,19 @@ static bool StockActorFieldLayout(const Ppu *p,const uint8_t *ram)
      * composer. Keep their live actors in the native field and extend only
      * the verified room scenery. */
     unsigned scene=Word(ram,0x644);
-    if(p->bgmode!=9 || p->mosaic || p->windowsel ||
-       p->screenEnabled[0]!=(scene==0x46?0x15:0x17) || p->screenEnabled[1] ||
-       p->cgwsel!=0x80 || !SameActorFieldRoom(ram,s.active_ram))
+    if(p->bgmode!=9 || p->mosaic || p->windowsel || !SameActorFieldRoom(ram,s.active_ram))
+        return false;
+    /* Any room whose display is set up exactly as on its last plain wide
+     * frame: only the objects were published outside the composer (a
+     * dialogue start, a reward, a learned skill). Without this the whole
+     * picture fell back to 4:3 for those frames. */
+    if(s.good.valid && s.good.scene==scene && s.good.bgmode==p->bgmode &&
+       s.good.mosaic==p->mosaic && s.good.windowsel==p->windowsel &&
+       s.good.main==p->screenEnabled[0] && s.good.sub==p->screenEnabled[1] &&
+       s.good.cgwsel==p->cgwsel && s.good.cgadsub==p->cgadsub &&
+       s.good.hdmaen==g_snesrecomp_last_hdmaen)
+        return true;
+    if(p->screenEnabled[0]!=(scene==0x46?0x15:0x17) || p->screenEnabled[1] || p->cgwsel!=0x80)
         return false;
     switch(scene) {
     case 0x0B:
@@ -666,7 +677,7 @@ void IogWorldReset(void)
     s.published_valid=s.repeated=false;
     s.fixed_plate=false;
     s.awaiting_restore=true;
-    s.pan.valid=false;
+    s.pan.valid=false;s.good.valid=false;
     s.publish_sequence=0;
     s.reason="reset_or_unpaired_upload";
     memset(&s.wake,0,sizeof(s.wake));
@@ -2086,12 +2097,13 @@ uint32_t IogWorldHdHaze(int x,unsigned light) { return WorldSkyPixel(x+hd.sky_tu
  * the ornament left in the centre. The three parts are cut where the art has
  * gaps: in the label and foot rows between the labels and the ornament, in
  * the two life rows (15..30) between the tenth life orb and the ornament.
- * Everything below the status rows (dialogue) stays centred. A room narrower
- * than the view has black sides; the groups then sit at the room picture's
- * edges, not out on the black.
+ * Everything below the status rows (dialogue) stays centred. The groups stay
+ * at the screen's edges in a room narrower than the view too, so the display
+ * does not jump back to 4:3 at every small house.
  * Nothing is redrawn: each pixel of the game's plane moves whole. */
 int IogEdgeHudGet(void);
-enum { HudStatusRows=40, HudWideMax=640 };
+/* The status art ends on row 38; a text box at the top starts on row 39. */
+enum { HudStatusRows=39, HudWideMax=640 };
 static int HudPart(int x,int y)
 {
     if(y>=HudStatusRows) return 1;
@@ -2122,13 +2134,7 @@ static const uint32_t *HudWide(int *wide_width)
     int w=s.width*224/s.height;
     if(w<=256 || w>HudWideMax || !HudSplits()) return NULL;
     memset(wide,0,(size_t)w*224*sizeof(*wide));
-    int left=0,right=w;
-    if(s.shown_right>=s.shown_left) {
-        left=(s.shown_left*224+s.height-1)/s.height;
-        right=(s.shown_right+1)*224/s.height;
-    }
-    if(right-left<=256) return NULL;
-    const int shift[3]={left,(w-256)/2,right-256};
+    const int shift[3]={0,(w-256)/2,w-256};
     for(int y=0;y<224;y++) for(int x=0;x<256;x++) {
         uint32_t color=s.hud[y*256+x];
         if(color>>24) wide[y*w+x+shift[HudPart(x,y)]]=color|0xff000000u;
@@ -2214,7 +2220,6 @@ static bool RenderWorld(void)
 {
     if(s.mode7) return RenderMode7Plane();
     if(!s.valid || !s.epoch_count || s.width<256 || s.height<224) return false;
-    s.shown_left=s.width;s.shown_right=-1;
     PictureEpoch *first=&s.epochs[s.lines[1].epoch];
     bool live_actors=s.sky_field || s.stock_actor_field;
     const uint8_t *picture_ram=live_actors?first->ram:s.active_ram;
@@ -2557,6 +2562,18 @@ static bool RenderWorld(void)
                         ProjectEffect(effect_camera.ratio[1],camera_y):
                         EffectProjection(scene,true,s.view.world_y)-
                         EffectProjection(scene,true,camera_y))+row;
+                    /* A plane as fast as the camera or faster is in front of
+                     * the room, not a distant backdrop: the Diamond Mine's
+                     * lift cables move at 3/2 and the baskets hang from them.
+                     * It stays aligned with the original picture pixel for
+                     * pixel; the backdrop projection put the cables 85
+                     * pixels away from their baskets. */
+                    for(int axis=0;tracked_effect && axis<2;axis++) {
+                        unsigned ratio=effect_camera.ratio[axis];
+                        if((ratio>>8) && (ratio&255)>=(ratio>>8)) {
+                            if(axis) wy=camy+native_y; else wx=camx-left+chunk_x;
+                        }
+                    }
                 }
                 if(logical==1&&horizon) {
                     /* This finite sky/mountain plate has its own screen row.
@@ -2773,8 +2790,13 @@ static bool RenderWorld(void)
                     inside=false;
                 /* Both floors of a stair are shown, and so is the row
                  * where one meets the other. */
+                /* The next floor appears only as far as the camera has
+                 * reached it: its window opens with filler rows (often a
+                 * grey strip) that would otherwise sit detached at the
+                 * picture's edge from the first frame of the stair. */
                 if(pan_union && ((worldx>=bounds.left && worldx<bounds.right &&
-                      worldy>=bounds.top && worldy<bounds.bottom) ||
+                      worldy>=bounds.top && worldy<bounds.bottom &&
+                      (bounds.top>s.pan.top?worldy<camera_y+224:worldy>=camera_y)) ||
                      (worldx>=s.pan.left && worldx<s.pan.right &&
                       worldy>=s.pan.top && worldy<s.pan.bottom)))
                     inside=true;
@@ -2785,8 +2807,6 @@ static bool RenderWorld(void)
                 else if(padding)
                     s.output[row*s.width+start+x]=padding;
                 else continue;
-                if(start+x<s.shown_left) s.shown_left=start+x;
-                if(start+x>s.shown_right) s.shown_right=start+x;
             }
         }
     }
@@ -2853,6 +2873,13 @@ void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count
 {
     if(!s.enabled && !s.audit) return;
     ++s.frame;s.complete=s.enabled && (s.fixed_plate || RenderWorld());
+    if(s.complete && s.reason && !strcmp(s.reason,"ready") && g_snes && g_snes->ram) {
+        const Ppu *b=&s.base;
+        s.good.valid=true;s.good.scene=Word(g_snes->ram,0x644);
+        s.good.bgmode=b->bgmode;s.good.mosaic=b->mosaic;s.good.windowsel=b->windowsel;
+        s.good.main=b->screenEnabled[0];s.good.sub=b->screenEnabled[1];
+        s.good.cgwsel=b->cgwsel;s.good.cgadsub=b->cgadsub;s.good.hdmaen=g_snesrecomp_last_hdmaen;
+    }
     memset(&s.wake,0,sizeof(s.wake));
     if(s.complete && !s.fixed_plate && !s.mode7 && !s.sky_field && !s.stock_actor_field &&
        s.view.width==s.width && s.view.height==s.height &&

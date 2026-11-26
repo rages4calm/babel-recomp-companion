@@ -72,6 +72,12 @@ CORRECTIONS = {
     "08963C": (("[TPL:1][TPL:10]", "[TPL:1][TPL:F]"), ("northwest and[N]were", "northwest and[FIN]were"),
                ("selling children when[N]there's", "selling children when[FIN]there's")),
     "059DCD": (("[::][TPL:12]", "[::][TPL:B]"), ("in books, but I[N]would", "in books, but I[FIN]would")),
+    # The script leaves one row above these choices, as stock asks them in
+    # one row. A two-row question went to a page of its own, and the
+    # choices then sat under a blank row with nothing asked.
+    "079922": (("Drink the contents of the[N]glass?", "Drink from the glass?"),),
+    "09D462": (("Do you not know where to[N]go?", "Don't know where to go?"),),
+    "04E6E6": (("…do you want to try[N]going there?", "…want to go there?"),),
 }
 
 # The Jeweler. His reward list is a box-only string followed by one string

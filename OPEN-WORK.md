@@ -1,12 +1,53 @@
 # Open work
 
-What is still to do, and what was not fixed or not tested, as of November 25,
-2026 (tester build `v0.2.0-beta.10`). Read `HANDOFF.md` for
+What is still to do, and what was not fixed or not tested, as of November 26,
+2026 (tester build `v0.2.0-beta.11`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
+
+## Owner playtest of beta 10 (November 26)
+
+Ten bug marks, each reloaded with the owner's own settings and fixed or
+explained. Fixed in beta 11, checked on the marks, not yet played:
+
+- **Status display at the edges fell back to the centre** during dialogue at
+  the top of the screen (the text box starts on row 39, the check stopped at
+  row 40) and in rooms as narrow as the original picture (Neil's cottage, small
+  houses). It now stays at the screen edges in both.
+- **Brief 4:3 flashes** (learning Dark Friar, talking to a prisoner): 26 and 38
+  frames where the game uploaded objects outside its composer. A room whose
+  display is set up as on its last plain wide frame now keeps the wide picture
+  with the game's own actors in the middle. **Not reproduced**: both happened
+  before the marks were taken; check that they are gone in play.
+- **Grey strip on house stairs**: the next floor's window was shown below the
+  room from the first frame of the stair, so its filler rows sat at the edge.
+  It now appears only as far as the camera has reached it.
+- **Yes/No with nothing asked** (the slave trader in Freejia and five other
+  prompts): the converter turned GaiaLabs' `[WAI]` into a new page when the
+  question was taller than the rows above the choices. Those now show the
+  question, wait, and scroll the choices in under it. Three questions with one
+  row above their choices were shortened to one row
+  (`079922`, `09D462`, `04E6E6`). The scrolled rows lose the speaker's colour.
+- **Item stacking counter and equipped frame on the Cond. page**: the page
+  check took Will's portrait for an item icon. It now needs every held item's
+  icon. The counter has a dark badge so it reads on the light platform.
+- **Diamond Mine lift cables away from their baskets**: the 3/2-speed cable
+  layer was drawn with the backdrop projection, 85 pixels off. Planes as fast
+  as the camera or faster now stay aligned with the original picture. The
+  cables themselves cross the whole room in the original too (also behind the
+  status display, as in the interpreter's 4:3 picture).
+
+Open:
+
+- **Stuck after falling in the Sky Garden** (scene 53 to 54, landing at
+  496,640). The player's walk animation runs but the position never changes in
+  any direction: the landing spot is solid on every side. The interpreter is
+  stuck the same from the mark, so it happened during the fall. Not
+  reproduced: the owner's F1 state is in the hub (4C) and the route and the
+  place he stepped off are unknown. Needs a state from just before the jump.
 
 ## Owner playtest of beta 2 (November 26)
 
@@ -212,7 +253,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.10`)
+## The tester build (`v0.2.0-beta.11`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot
