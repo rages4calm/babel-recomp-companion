@@ -50,6 +50,7 @@ bool IogRasterParallaxPrepareBands(const uint8_t *rom,size_t rom_bytes,
     IogRasterParallax *output);
 
 /* The plane rows [first,end) of the band that holds plane_y. */
+int IogRasterParallaxBandShift(const IogRasterParallax *model,int plane_y,int shown_camera);
 bool IogRasterParallaxBandRows(const IogRasterParallax *model,int plane_y,
     int *first,int *end);
 

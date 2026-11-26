@@ -123,6 +123,17 @@ bool IogRasterParallaxPrepare(const uint8_t *rom,size_t size,bool verified,
     *out=chosen;return true;
 }
 
+/* How far a band's scroll differs, in whole pixels, when the camera it follows
+ * is `shown` and not the one the model was built from. A drifting band does
+ * not follow the camera: 0. */
+int IogRasterParallaxBandShift(const IogRasterParallax *m,int y,int shown)
+{
+    if(!m || !m->valid || y<0 || y>=m->height)return 0;
+    const IogRasterParallaxBand *b=Band(m,(unsigned)y);
+    if(!b || !b->factor || !(b->factor>>8))return 0;
+    return (int)(Project(b->factor,shown)>>4)-(int)(Project(b->factor,m->source_camera_x)>>4);
+}
+
 bool IogRasterParallaxBandRows(const IogRasterParallax *m,int y,int *first,int *end)
 {
     if(!m || !m->valid || !first || !end || y<0 || y>=m->height)return false;

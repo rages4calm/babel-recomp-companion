@@ -1,7 +1,7 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 25,
-2026 (tester build `v0.2.0-beta.8`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.9`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
@@ -29,8 +29,18 @@ refusal. None of it has been replayed by the owner yet. What is left:
   the house stair could not be triggered by placing the player.
 - **Inca room (slot 4):** one pixel row of green remains at the bottom left;
   it is in the original field too.
-- **Basement floor:** a 2-pixel lag remains while the camera moves, inside
-  the original field as this runner draws it. Not compared with hardware.
+- **Basement floor (scene `0A`):** fixed November 26 from the owner's bug
+  mark (`.local/batch-001/owner-playtest-2`). The floor is on the band-scrolled
+  plane. The game writes the wall layer's scroll in vertical blank and reads
+  the bands from memory at the top of the frame; this runner has finished the
+  frame's logic by then, so the bands ran one camera step ahead and the floor
+  slid 2 pixels under the walls while walking. The wide renderer now registers
+  each band to the camera the walls are shown at
+  (`IogRasterParallaxBandShift`). A standing and a moving frame now differ
+  only in the player and the minimap. Not done: the **Original 4:3 picture**
+  comes straight from the PPU and still has the slide; scenes `2B`/`2C` use the
+  same code and were not looked at; the castle sky scene was compared before
+  and after and only its sky bands move, by under a pixel of camera.
 - **The bottom-row rule changes the framing of nearly every room.** The
   survey compares presentation reasons, not pictures, so earlier approvals of
   bottom edges need a second look. The scene-specific bottom cuts in
@@ -184,7 +194,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.8`)
+## The tester build (`v0.2.0-beta.9`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

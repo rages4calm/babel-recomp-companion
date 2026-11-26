@@ -2538,6 +2538,7 @@ static bool RenderWorld(void)
                 int camx=ScrollWorld(e->ram,0x68A+logical*2,p->hScroll[physical]);
                 int camy=ScrollWorld(e->ram,0x68E + logical*2,p->vScroll[physical]);
                 int wx=camx-left+chunk_x,wy=camy+native_y;
+                int band_shift=0; /* pixels a band plane row was moved to meet the walls */
                 bool star_plane=logical==1 && babel_stars;
                 bool effect=logical==1 && (!bounded || scene==0x85) && !classroom &&
                     (tracked_effect || horizon || EffectPlaneScene(scene));
@@ -2597,6 +2598,19 @@ static bool RenderWorld(void)
                         else if(IogRasterParallaxSample(&band_model,plane_y,
                                 band_model.source_camera_x,&phase))
                             scroll=phase;
+                    }
+                    /* The game writes the wall layer's scroll during vertical
+                     * blank and reads these bands from memory at the top of the
+                     * frame. This runner has finished the frame's game logic by
+                     * then, so the bands are one camera step ahead of the walls
+                     * and a floor drawn on this plane slides under them while
+                     * the camera moves. Register each band to the camera the
+                     * walls are shown at. */
+                    int walls=ScrollWorld(e->ram,0x68A,Word(line->registers,offsetof(Ppu,hScroll)+(physical^1)*2));
+                    int ahead=(int)band_model.source_camera_x-walls;
+                    if(ahead && ahead>=-16 && ahead<=16) {
+                        band_shift=IogRasterParallaxBandShift(&band_model,plane_y,walls);
+                        scroll=(unsigned)((int)scroll+band_shift);
                     }
                     wx=(int)(scroll&1023)-left+chunk_x;
                     wy=camy+native_y;
@@ -2679,7 +2693,7 @@ static bool RenderWorld(void)
                      * VRAM entry, including partially updated scroll strips. */
                     int source_y=wy-camy;
                     int source_x=camx;
-                    if(finite_castle) source_x=wx+left-chunk_x;
+                    if(finite_castle) source_x=wx+left-chunk_x-band_shift; /* where the uploaded cells really are */
                     else if(finite_wall) {
                         uint16_t phase;
                         if(IogRasterParallaxSample(&wall_model,wy+1,wall_source_camera,&phase))source_x=phase;
