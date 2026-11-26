@@ -350,6 +350,11 @@ Three things to know after the update:
   the graph now has 1,358 variants, 1,262 AOT-eligible. `graph-pre-declare`
   is the graph before that, `sdk-update/declare.py` the script that found
   the four. `OPEN-WORK.md` has the measurements.
+  The same day the native step set grew by 8,494 contexts: the build
+  directory's `IOG_NATIVE_EFFECTS_SOURCE` is now
+  `sdk-update/ext3/effects/native_continuations.c` (before:
+  `visual-fullgame-035/native/kress-next-effects`). `sdk-update/extend.py
+  RESIDUAL.json OUTDIR [BASE-CONTEXTS]` makes the next one.
   The build directory is `.local/batch-001/sdk-update/build`;
   `sdk-update/mk.py LABEL [--play]` builds the working tree there and links
   `visual-fullgame-041/cb-LABEL`. The older `build-tree.py` and

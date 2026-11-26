@@ -118,16 +118,35 @@ Edward's Castle, the lookout and the gold ship
   update, 1,248 before it). Same source, old graph against new, over the
   198-scene survey: every renderer log identical, interpreted instructions
   1,779,645 down to 598,348; scene `3E` 6,207 down to 31. Still open:
-  - **The 142 route replays were not rerun** on the new graph.
-  - **The 598,348 remaining instructions** are the next targets; scene `1F`
-    has the most (64,280 in 620 frames). `SNESRECOMP_INTERP_RESIDUAL=<file>`
-    (new, in the runner's `interp_bridge.c`) writes one line per instruction
-    the interpreter itself ran: `PC e m x frame`.
+  The 142 route replays are also identical between the two graphs, with the
+  same total CPU cycles.
+- **Native steps extended (November 26).** The interpreter's residual was
+  profiled with `SNESRECOMP_INTERP_RESIDUAL=<file>` (new, in the runner's
+  `interp_bridge.c`; one line per instruction the interpreter itself ran:
+  `PC e m x frame`) over the 198 scenes and the 142 routes. It was almost all
+  enemy, script and credits code never selected for native steps.
+  `sdk-update/extend.py` appended 8,494 contexts the effect generator
+  supports to the 35,098 already selected (`sdk-update/ext3/contexts.json`,
+  effects in `sdk-update/ext3/effects`; the native build directory now uses
+  them). Against the build before it, all 198 scenes and all 142 routes have
+  identical renderer logs and the routes the same total CPU cycles.
+  Interpreted instructions: survey 598,348 down to 17,063; routes 18,187,963
+  down to 221,564 (845,414 cycles of 10.1 billion, 0.008 percent). On the
+  morning's build the same two totals were 1,779,645 and 21,656,871.
+  Still open:
+  - **The new contexts skipped the older process's extra checks:** no
+    independent RomAtlas decode and no per-case witness, only the generator's
+    own policy and the identical replays.
+  - **What is left:** about 191,000 instructions at registered sites that
+    decline at run time (cause not captured), about 30,000 that touch bytes
+    the game patches while running, and a few stack-pointer and reset
+    operations. `sdk-routes/residual-routes-ext3.json` has the list.
+  - **Not played by a person** on the extended build, and no speed
+    measurement was taken.
   - **The four declarations are assertions.** They rest on the older
-    analyzer's proof and on the identical survey, not on a new proof.
-  - **Not reported upstream.** It looks like a regression in SNESRecomp's
-    return analysis for routines split into tail fragments; a report on its
-    tracker needs the owner's go-ahead.
+    analyzer's proof and on the identical survey and routes.
+  - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
+    game-free test. No reply yet; a PR was offered, not sent.
   - The public download is interpreter-only and is not affected either way.
 
 ## The tester build (`v0.2.0-beta.6`)
