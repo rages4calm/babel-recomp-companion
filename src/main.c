@@ -346,6 +346,32 @@ static void IogWorldHdPublish(const uint8_t *dst, size_t pitch, int width, int h
     else SnesHdFrameDestroy(frame);
 }
 
+/* The status display and dialogue are a layer the presenter draws over the
+ * scaled frame (snes_ovl_frame_layer_set), so an achievement toast drawn into
+ * the frame came out underneath them. Clear the layer where the toast is,
+ * and the toast shows through, above the status display. */
+static void IogToastAboveStatus(int width, int height)
+{
+    int toast[4], rect[4], lw = 0, lh = 0;
+    uint32_t *layer = NULL;
+    static int below = -1;   /* IOG_TOAST_BELOW_STATUS=1: the old picture, for comparison */
+    if (below < 0) { const char *v = getenv("IOG_TOAST_BELOW_STATUS"); below = v && *v == '1'; }
+    if (below) return;
+    if (!IogAchievementUiToastRect(width, height, toast) ||
+        !snes_ovl_frame_layer_peek(&layer, &lw, &lh, rect) || !layer ||
+        rect[2] <= 0 || rect[3] <= 0 || lw <= 0 || lh <= 0) return;
+    int x0 = (toast[0] - rect[0]) * lw / rect[2];
+    int x1 = ((toast[0] + toast[2] - rect[0]) * lw + rect[2] - 1) / rect[2];
+    int y0 = (toast[1] - rect[1]) * lh / rect[3];
+    int y1 = ((toast[1] + toast[3] - rect[1]) * lh + rect[3] - 1) / rect[3];
+    if (toast[0] < rect[0]) x0 = 0;
+    if (toast[1] < rect[1]) y0 = 0;
+    if (x1 > lw) x1 = lw;
+    if (y1 > lh) y1 = lh;
+    for (int y = y0; y < y1 && x0 < x1; y++)
+        memset(layer + (size_t)y * lw + x0, 0, (size_t)(x1 - x0) * sizeof(*layer));
+}
+
 static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
                            int width, int height, double alpha)
 {
@@ -355,6 +381,7 @@ static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
     if(drawn) {
         IogMapHostDrawRadar(dst,pitch,width,height);
         IogAchievementUiToast(dst,pitch,width,height);
+        IogToastAboveStatus(width,height);
         if(IogWalkableWorldActive() && IogWalkableWorldEnhanced()) {
             IogWalkableWorldDrawOverlay(dst,pitch,width,height);
         } else if(IogWalkableWorldActive()) {

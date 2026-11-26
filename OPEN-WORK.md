@@ -1,53 +1,62 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 25,
-2026 (tester build `v0.2.0-beta.3`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.4`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
 
-## Owner playtest of beta 2 (November 26): reported, being worked
+## Owner playtest of beta 2 (November 26)
 
 The owner played from the start to Freejia on the interpreter build. His save
-states are copied to `.local/batch-001/owner-playtest-1/saves` (`save0.sav`
-is his "slot 1", `save1.sav` slot 2, and so on; `save.srm` is the battery
-save). Remove an item here only when it is fixed and seen fixed.
+states are in `.local/batch-001/owner-playtest-1/saves` (`save0.sav` is his
+"slot 1", and so on; `save.srm` is the battery save). Fixed in beta 4 and seen
+fixed in pictures by the agents (evidence in
+`visual-fullgame-041/playtest1-render` and `playtest1-ui`): the castle sky
+and red streak, the basement floor, the gold ship, the clubhouse bottom strip,
+castle stair pans, the battery save lost after a state load and Reset, Reset
+itself, confirmations for load and save state, SNES button prompts in the
+settings footer and save browser, the achievement toast behind the status
+display, the classroom area map, and the launcher's "settings changed"
+refusal. None of it has been replayed by the owner yet. What is left:
 
-Picture:
-- The clubhouse at the start looks wrong: the bottom of the room seems pushed
-  up, and a textured wall shows at the bottom where Erik walks in through it
-  and past the stairs. He says interiors in general feel like this.
-- Going up or down stairs in some buildings: the screen flashes, and the wide
-  view drops to 4:3 for a split second.
-- Edward's Castle (slot 2, all over the castle): the Mode 7 background does
-  not move, though on the SNES it scrolls constantly; and running along a
-  hallway sends a solid red colour across the screen.
-- Edward's Castle basement (slot 3): the floor moves as he walks.
-- Learning Psycho Dash in Dark Space: the wide view drops to 4:3 briefly.
-- Slot 4: grass and an Inca statue appear at the bottom left.
-- The gold ship (slots 5 and 6, 6 is after he wakes): wide view off and black
-  everywhere.
-- Achievement toasts are drawn behind the status display.
-- In the intro classroom, walking toward the exit makes the area map (radar)
-  disappear until he walks on or back.
-
-Controls and menus:
-- Choosing SNES button prompts in the in-game settings did not change the
-  button pictures; they stayed Xbox.
-- Loading and saving a state need a confirmation. He lost progress to an
-  accidental load.
-- After Reset to the title screen, his in-game (battery) save was not there.
-- He reports LT+L3 opens both the Companion menu and the settings.
-- He finds the Companion menu pointless and wants it gone: achievements moved
-  into the settings menu, the map on a single button not used by the game
-  (right bumper or Select were his examples), and save state and load state
-  on their own keys. Not started; the hotkey collision comes first.
-
-Launcher:
-- Changing settings gives "Settings changed outside this window. Revert to
-  reload them before applying your changes."
+- **Psycho Dash drop to 4:3:** not reproduced; the pickup would not start in
+  five staged attempts. A related change keeps the Dark Space star ring on
+  frames with no HDMA; whether that was his drop is unknown.
+- **Stairs in South Cape houses:** the pan fix was seen in the castle only;
+  the house stair could not be triggered by placing the player.
+- **Inca room (slot 4):** one pixel row of green remains at the bottom left;
+  it is in the original field too.
+- **Basement floor:** a 2-pixel lag remains while the camera moves, inside
+  the original field as this runner draws it. Not compared with hardware.
+- **The bottom-row rule changes the framing of nearly every room.** The
+  survey compares presentation reasons, not pictures, so earlier approvals of
+  bottom edges need a second look. The scene-specific bottom cuts in
+  `RoomPictureBounds` are now special cases of it and could go.
+- **Gold ship at night:** only reached by a late warp that was too dark to
+  judge.
+- **"LT+L3 opens both menus":** not a gesture collision. His log shows the
+  settings opening when the Companion's Config page handed over on A. It goes
+  away with the Companion redesign below.
+- **Auto prompts cannot detect his 8BitDo:** in X-input mode it identifies as
+  an Xbox 360 controller. He has to choose SNES by hand.
+- **Not looked at after the prompt change:** achievement footer, walkable
+  world prompt, rewind strip. With Xbox style the settings footer now reads
+  (B) SELECT / (A) BACK, which is true to the default mapping.
+- **The pending-save flush before a state load** is not exercised by any
+  test; an in-game save could not be driven in the harness.
+- **Reset now boots through the reset vector**, which also changes the
+  end-of-game return to title (`iog_ngplus.c`). Not tested.
+- **No setting turns the confirmations off.**
+- **Toast text is cut short** ("A LITTLE STRO...").
+- Seen in his files, not investigated: `radar = "off"` in his mod state;
+  `SourceP1 = 1` (keyboard) in his config although the pad plays; d-pad Up on
+  the settings menu's top row does not wrap.
+- **Companion redesign (decided, not started):** drop the Companion menu,
+  move achievements into the settings menu, put the map on one button the
+  game does not use, give save state and load state their own keys.
 
 ## Decided, not built
 
@@ -69,7 +78,7 @@ Launcher:
   finding out why before choosing targets. The regenerated graph has 1,229
   AOT-eligible variants; the old one had 1,248.
 
-## The tester build (`v0.2.0-beta.3`)
+## The tester build (`v0.2.0-beta.4`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

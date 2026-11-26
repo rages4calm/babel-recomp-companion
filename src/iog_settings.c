@@ -123,6 +123,25 @@ int IogHostPadLabel(uint32_t snes_bit, char label[8], uint32_t *color)
     return 0;
 }
 
+/* The runner's own menus (settings footer, save-state browser, rewind strip)
+ * name SNES buttons in fixed colours, which on screen is an Xbox pad whatever
+ * the player holds. Draw them as the Companion pages do: the button the
+ * player presses, in the chosen prompt style. Without a controller the
+ * runner's own letters stay. */
+static int OverlayButton(uint32_t *dst, int stride, int h_max, int x, int y, char label, uint32_t col)
+{
+    (void)col;
+    const uint32_t bit = label == 'A' ? SNES_PAD_A : label == 'B' ? SNES_PAD_B :
+                         label == 'X' ? SNES_PAD_X : label == 'Y' ? SNES_PAD_Y :
+                         label == 'L' ? SNES_PAD_L : label == 'R' ? SNES_PAD_R : 0;
+    char glyph[8] = {0};
+    uint32_t tint = 0;
+    if (!bit || !IogHostPadLabel(bit, glyph, &tint) || !glyph[0] || !tint)
+        return 0;
+    IogMapUiGlyphDraw(dst, stride, h_max, x, y, glyph, tint, 1);
+    return 1;
+}
+
 int IogHoldAdvanceGet(void);
 void IogHoldAdvanceSet(int v);
 
@@ -243,6 +262,9 @@ static const char *const kEs[][2] = {
     {"CHEATS (ACHIEVEMENTS OFF)", "TRUCOS (SIN LOGROS)"}, {"INFINITE HP", "VIDA INFINITA"},
     {"DP 99", "DP 99"}, {"STATS BOOST", "MEJORA DE ESTADÍSTICAS"}, {"ALL 50 RED JEWELS", "LAS 50 JOYAS ROJAS"}, {"GAME COMPLETED", "JUEGO COMPLETADO"},
     {"ROOM-CLEAR REWARDS", "PREMIOS POR SALA"}, {"ORIGINAL (1X)", "ORIGINAL (1X)"},
+    {"LOAD STATE", "CARGAR ESTADO"}, {"SAVE OVER STATE", "SOBRESCRIBIR ESTADO"},
+    {"UNSAVED PROGRESS IS LOST", "SE PIERDE LO NO GUARDADO"}, {"YES, LOAD", "SÍ, CARGAR"},
+    {"YES, SAVE", "SÍ, GUARDAR"}, {"SAME KEY OR BUTTON AGAIN: YES", "MISMA TECLA O BOTÓN OTRA VEZ: SÍ"},
 };
 
 static const char *Translate(const char *en)
@@ -283,6 +305,7 @@ void IogSettingsInstall(void)
         g_config.window_height = 720;
     }
     snes_ui_set_translator(Translate);
+    snes_ovl_set_button_draw(OverlayButton);
     SnesSettingItem it;
     memset(&it, 0, sizeof(it));
     it.kind = kSnesSetting_Header;

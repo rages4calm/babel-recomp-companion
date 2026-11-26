@@ -98,6 +98,12 @@ static void sample_thumb(const uint32_t *fb, int w, int h);
 /* Footer feedback remains visible while the browser is open. */
 static char s_status[48];
 
+/* Local: a load, and a save over an existing state, ask for the same button
+ * a second time (the settings menu's and the Companion page's idiom). -1:
+ * nothing asked, 0: load, 1: save. Moving, Back or closing withdraws it. */
+static int s_arm = -1;
+static uint32_t s_arm_ms;
+
 /* Held-direction state for auto-repeat. */
 static uint32_t s_prev_inputs;
 static uint32_t s_repeat_next;
@@ -382,6 +388,7 @@ static void menu_move(int delta)
         s_selected += slot_count();
     while (s_selected >= slot_count())
         s_selected -= slot_count();
+    s_arm = -1;
     s_status[0] = '\0';
     s_dirty = 1;
     snes_netplay_menu_cursor(s_selected); /* every peer shows the host's cursor */
@@ -470,6 +477,43 @@ static void menu_submit(int save)
     snes_savestate_menu_close();
 }
 
+/* Local: see s_arm. SNESRECOMP_STATE_CONFIRM=0 turns it off; the upstream
+ * self-tests that press the button once are left as they were. */
+static int confirm_wanted(void)
+{
+    static int wanted = -1;
+    if (wanted < 0) {
+        const char *force = getenv("SNESRECOMP_STATE_CONFIRM");
+        if (force && *force) wanted = force[0] != '0';
+        else wanted = !getenv("SNESRECOMP_OVERLAY_SELFTEST_LOADAT") &&
+                      !getenv("SNESRECOMP_OVERLAY_SELFTEST") &&
+                      !getenv("SNESRECOMP_OVERLAY_SELFTEST_PAD");
+    }
+    return wanted;
+}
+
+static void menu_ask(int save, uint32_t ticks_ms)
+{
+    if (snes_netplay_active() || !confirm_wanted() || !slot_exists(s_selected)) {
+        s_arm = -1;
+        menu_submit(save);
+        return;
+    }
+    if (s_arm == save) {
+        if ((uint32_t)(ticks_ms - s_arm_ms) < 250u)
+            return;                 /* a bounce is not an answer */
+        s_arm = -1;
+        menu_submit(save);
+        return;
+    }
+    s_arm = save;
+    s_arm_ms = ticks_ms;
+    if (save)
+        set_local_status("SAVE OVER SLOT %02d? PRESS SAVE AGAIN", "SAVE OVER QUICK? PRESS SAVE AGAIN");
+    else
+        set_local_status("LOAD SLOT %02d? PRESS LOAD AGAIN", "LOAD QUICK STATE? PRESS LOAD AGAIN");
+}
+
 int snes_savestate_menu_is_open(void)
 {
     return s_open;
@@ -486,6 +530,7 @@ static void close_local(void)
     s_mirror = 0;
     s_repeat_dir = 0;
     s_input_guard = s_prev_inputs;
+    s_arm = -1;
     s_status[0] = '\0';
     s_dirty = 1;
 }
@@ -614,15 +659,21 @@ void snes_savestate_menu_poll_nav(uint32_t inputs, uint32_t ticks_ms)
         return;
     }
     if (pressed & SSM_BTN_B) {
+        if (s_arm >= 0) {           /* local: Back answers no first */
+            s_arm = -1;
+            s_status[0] = '\0';
+            s_dirty = 1;
+            return;
+        }
         snes_savestate_menu_close();
         return;
     }
     if (pressed & SSM_BTN_A) {
-        menu_submit(0);
+        menu_ask(0, ticks_ms);
         return;
     }
     if (pressed & SSM_BTN_X) {
-        menu_submit(1);
+        menu_ask(1, ticks_ms);
         return;
     }
 
@@ -680,6 +731,7 @@ void snes_savestate_menu_handle_key(int key, int repeat)
     if (slot < 0 || slot >= slot_count())
         return;
     s_selected = slot;
+    s_arm = -1;
     s_status[0] = '\0';
     s_dirty = 1;
     snes_netplay_menu_cursor(s_selected);

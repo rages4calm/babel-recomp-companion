@@ -280,7 +280,7 @@ ground uses it. The smooth (xBR) present filter in
 `runner/src/present_filter.*` and `desktop/opengl.c` is also local and
 absent upstream.
 
-The first public tester build is `v0.2.0-beta.3` (November 26, pre-release; beta.2 lacked the launcher's button-prompt setting and two cheat fixes,
+The first public tester build is `v0.2.0-beta.4` (November 26, pre-release; it carries the fixes from the owner's first playtest,
 Windows x64). It is the interpreter-only build from
 `.local/batch-001/release/build`, packaged by `scripts/package_release.py`
 with `--companion` and `--gaialabs`: the Companion launcher, the generated
@@ -293,6 +293,30 @@ it); the walkable-map data is found at `i18n/gaialabs-world-map.bin` beside
 the executable; and an automatic window size becomes 1280x720 while the wide
 view is on. `.local/batch-001/release/rt.py` runs a staged or unzipped
 build on the hidden desktop with no developer variables.
+
+Local deltas to the vendored runner from the owner's first playtest
+(November 26); carry them across any SNESRecomp update:
+
+- `desktop/host_main.c`: quick save and load slots ask first
+  (`RequestStateSlot`, `StateSlotDo`, `StateSlotAnswered`,
+  `StateConfirmWanted`; `HandleCommand` routes the slots through it, Autosave
+  calls `StateSlotDo` directly; scripts, `SNESRECOMP_RUN_FRAMES` runs and the
+  debug server are never asked; `SNESRECOMP_STATE_CONFIRM=1/0` forces it).
+  The yes/no prompt gained a hint line, a 250 ms guard (`PromptArmed`), Y/N
+  keys and "same key again" (`g_prompt.again`, `opened_ms`, `PromptKey`,
+  `SetPadButtonOrFallthrough`). `SramAutoFlush` writes a pending battery save
+  before a state load or reset re-baselines.
+- `snes_savestate_menu.c`: the browser asks before Load or Save (`s_arm`,
+  `confirm_wanted`, `menu_ask`).
+- `snes_overlay_draw.c/.h`: `snes_ovl_set_button_draw` (`SnesOvlButtonFn`)
+  lets the game draw the overlay's button glyphs, and
+  `snes_ovl_frame_layer_peek` lets it edit the frame layer.
+
+The game side of the same fixes: `GameSnapshotPreflight`, `GameStateLoaded`
+and `GameHardwareReset` in `src/game_rtl.c` keep the live battery save across
+state loads and rewinds (a blank battery adopts the state's copy) and make
+Reset boot from the reset vector; `IogToastAboveStatus` in `src/main.c`;
+`OverlayButton` in `src/iog_settings.c`.
 
 SNESRecomp was updated on November 25 from `22c01ef1` to upstream main
 `627b2f27` (96 commits) by a three-way merge of the vendored tree against

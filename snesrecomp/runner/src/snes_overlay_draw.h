@@ -102,6 +102,13 @@ void snes_ovl_draw_text(uint32_t *dst, int stride, int h_max,
  * to psxrecomp's shape-coded PlayStation glyphs. 18x18 including the ring. */
 void snes_ovl_draw_button(uint32_t *dst, int stride, int h_max,
                           int x, int y, char label, uint32_t col);
+/* Local: every overlay's face buttons go through snes_ovl_draw_button with
+ * the SNES button's letter. A title that shows the player's own controller
+ * (Xbox or SNES labels, as bound) installs a drawer here; it returns 0 to
+ * leave a button to the default above. The box is the same 18x18. */
+typedef int (*SnesOvlButtonFn)(uint32_t *dst, int stride, int h_max,
+                               int x, int y, char label, uint32_t col);
+void snes_ovl_set_button_draw(SnesOvlButtonFn fn);
 
 /* The palette both overlays use for face buttons, so a hint row reads the same
  * wherever it appears. */
@@ -127,5 +134,8 @@ int snes_ovl_frame_layer_available(void);
 void snes_ovl_frame_layer_set(const uint32_t *pixels, int w, int h,
                               int x, int y, int rect_w, int rect_h);
 int snes_ovl_frame_layer_take(const uint32_t **pixels, int *w, int *h, int rect[4]);
+/* Local: the layer set for this frame, left in place, so the title can clear
+ * the part of it that something drawn into the frame must show through. */
+int snes_ovl_frame_layer_peek(uint32_t **pixels, int *w, int *h, int rect[4]);
 
 #endif /* SNES_OVERLAY_DRAW_H */

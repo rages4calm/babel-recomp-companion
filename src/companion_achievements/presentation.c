@@ -10,6 +10,7 @@
 #include "iog_map_ui.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static ca_ui ui;
@@ -303,10 +304,35 @@ static void PlayChime(void) {
 }
 
 void IogAchievementUiFrame(unsigned frame, uint32_t ticks, bool quiet) {
+    /* IOG_ACHIEVEMENT_TOAST_AT=<frame>: test only. Show the first
+     * achievement's toast from that frame, without touching any progress. */
+    static long toast_at = -2;
+    if (toast_at == -2) {
+        const char *v = getenv("IOG_ACHIEVEMENT_TOAST_AT");
+        toast_at = v && *v ? strtol(v, NULL, 0) : -1;
+    }
+    if (toast_at >= 0 && (long)frame >= toast_at) {
+        toast_at = -1;
+        Initialize();
+        ca_state states[CA_MAX_ACHIEVEMENTS];
+        memset(states, 0, sizeof(states));
+        states[0].unlocked_at = 1;
+        states[0].progress = gaia_definitions[0].target;
+        if (initialized && ca_ui_snapshot(&ui, states, GAIA_ACHIEVEMENT_COUNT)) ca_ui_notice(&ui, 0);
+    }
     if (!initialized && frame % 30) return;
     Initialize();
     if (frame % 30 == 0) Refresh();
     if (ca_ui_tick(&ui, 0, ticks, !quiet)) PlayChime();
+}
+
+/* The toast's rectangle in a width x height frame while one is shown. */
+bool IogAchievementUiToastRect(int width, int height, int rect[4]) {
+    int x, y;
+    if (!ui.toast_active || ui.paused || ui.open ||
+        !ca_ui_toast_origin(0, 0, width, height, 1, &x, &y)) return false;
+    rect[0] = x; rect[1] = y; rect[2] = CA_TOAST_WIDTH; rect[3] = CA_TOAST_HEIGHT;
+    return true;
 }
 
 void IogAchievementUiToast(uint8_t *dst, size_t pitch, int width, int height) {

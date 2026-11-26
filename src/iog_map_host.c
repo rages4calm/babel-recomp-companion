@@ -183,6 +183,12 @@ void IogMapHostFrame(bool verified,const char *content)
         Word(r,0x9aa)&&Word(r,0x654)==15&&!Word(r,0x642)&&
         !(Word(r,0x9ec)&0x6000)&&(Word(r,0x644)<0xe5||Word(r,0x644)==0xea)&&
         (g_ppu->bgmode&7)==1&&(g_ppu->inidisp&0x8f)==15&&!(r[0x6ef]&8);
+    /* For the audit only: which of the host's own tests refused the frame. */
+    unsigned refused=0;
+    if(audit&&r&&g_ppu&&!valid)
+        refused=(!verified)|(!Word(r,0x9aa))<<1|(Word(r,0x654)!=15)<<2|(Word(r,0x642)!=0)<<3|
+            ((Word(r,0x9ec)&0x6000)!=0)<<4|((g_ppu->bgmode&7)!=1)<<5|((g_ppu->inidisp&0x8f)!=15)<<6|
+            ((r[0x6ef]&8)!=0)<<7;
     if(valid){
         unsigned w=Word(r,0x692),h=Word(r,0x696);
         unsigned x=Word(r,0x6d6),y=Word(r,0x6d8),right=Word(r,0x6da),bottom=Word(r,0x6de);
@@ -201,18 +207,25 @@ void IogMapHostFrame(bool verified,const char *content)
         f.player_x=(int16_t)Word(r,0x9a2);f.player_y=(int16_t)Word(r,0x9a4);
         f.profile_verified=valid;
         /* Both qualified classroom adapters use aligned scenery planes. The
-         * floor is real secondary artwork, not an independently moving sky. */
+         * floor is real secondary artwork, not an independently moving sky.
+         * Aligned means the two planes share one camera and one scroll. The
+         * scroll registers are a frame behind the camera while it moves (the
+         * game writes them at the next vertical blank), so they are compared
+         * with each other, not with the camera: compared with the camera, the
+         * map refused every frame of a scroll and the radar vanished whenever
+         * the player walked through the part of the room where the view
+         * follows him. */
         f.aligned_secondary_source=f.scene==8&&Word(r,0x68a)==Word(r,0x68c)&&
             Word(r,0x68e)==Word(r,0x690)&&(g_ppu->screenEnabled[0]&3)==3&&
-            (g_ppu->hScroll[physical]&1023)==(Word(r,0x68a)&1023)&&
-            (g_ppu->hScroll[physical^1]&1023)==(Word(r,0x68c)&1023)&&
-            (g_ppu->vScroll[physical]&1023)==(Word(r,0x68e)&1023)&&
-            (g_ppu->vScroll[physical^1]&1023)==(Word(r,0x690)&1023);
-        if(f.scene==8&&!f.aligned_secondary_source)valid=false;
+            (g_ppu->hScroll[physical]&1023)==(g_ppu->hScroll[physical^1]&1023)&&
+            (g_ppu->vScroll[physical]&1023)==(g_ppu->vScroll[physical^1]&1023);
+        if(audit&&!valid)refused|=1u<<8;
+        if(f.scene==8&&!f.aligned_secondary_source){valid=false;refused|=1u<<9;}
 #ifndef IOG_RECEIVED_REFERENCE
         /* These are the actual scene loader's source-cache slots, not a hash
          * of mutable door tiles. A changed authored source still gets its own
          * journal while normal scripted map edits retain discovery. */
+        if(audit&&valid&&!StableAssets(r))refused|=1u<<10;
         valid=valid&&StableAssets(r);
         f.stable_source_identity=valid;
         f.profile_verified=valid;
@@ -223,10 +236,11 @@ void IogMapHostFrame(bool verified,const char *content)
     if(audit){
         IogMapRuntimeStatus status;IogMapRuntimeGetStatus(runtime,&status);
         char layout[65];for(unsigned n=0;n<32;n++)snprintf(layout+n*2,3,"%02x",status.layout_sha256[n]);
-        fprintf(audit,"{\"frame\":%u,\"ready\":%s,\"scene\":%u,\"player\":[%d,%d],\"explored\":%zu,\"writes\":%llu,\"loads\":%llu,\"layout\":\"%s\",\"reason\":\"%s\"}\n",
+        fprintf(audit,"{\"frame\":%u,\"ready\":%s,\"scene\":%u,\"player\":[%d,%d],\"explored\":%zu,\"writes\":%llu,\"loads\":%llu,\"layout\":\"%s\",\"reason\":\"%s\",\"refused\":%u,\"pixel\":[%u,%u],\"camera\":[%u,%u,%u,%u]}\n",
             frame_number,ready?"true":"false",status.scene,status.player_cell_x,status.player_cell_y,
             status.explored_cells,(unsigned long long)status.persistent_writes,
-            (unsigned long long)status.persistent_loads,layout,status.reason?status.reason:"unsupported_host_frame");
+            (unsigned long long)status.persistent_loads,layout,status.reason?status.reason:"unsupported_host_frame",
+            refused,r?Word(r,0x9a2):0,r?Word(r,0x9a4):0,r?Word(r,0x68a):0,r?Word(r,0x68c):0,r?Word(r,0x68e):0,r?Word(r,0x690):0);
         fflush(audit);
     }
 }

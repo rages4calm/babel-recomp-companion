@@ -2893,6 +2893,9 @@ static struct {
   int pending, open, sel;
   char q[200], yes[48], no[48];
   void (*done)(int);
+  /* Local: the command (kKeys_*) that asked; pressing it again answers yes. */
+  uint32_t again;
+  uint32_t opened_ms;
 } g_prompt;
 static int g_reset_request;
 static uint32_t g_prompt_panel[512 * 448];
@@ -2903,6 +2906,7 @@ void snes_host_request_prompt(const char *q, const char *yes, const char *no, vo
   snprintf(g_prompt.no, sizeof(g_prompt.no), "%s", no ? no : "NO");
   g_prompt.done = done;
   g_prompt.sel = 0;
+  g_prompt.again = 0;
   g_prompt.pending = 1;
 }
 void snes_host_request_reset(void) { g_reset_request = 1; }
@@ -2913,7 +2917,7 @@ static int PromptImage(const uint32_t **px, int *w, int *h) {
   for (int i = 0; i < W * H; i++) g_prompt_panel[i] = 0x90000000u;   /* dim the game */
   int lines = 1;
   for (const char *c = g_prompt.q; *c; c++) lines += *c == '\n';
-  const int bh = 24 * lines + 120, by = (H - bh) / 2;
+  const int bh = 24 * lines + 120 + (g_prompt.again ? 16 : 0), by = (H - bh) / 2;
   snes_ovl_fill_rect(g_prompt_panel, W, H, 40, by, W - 80, bh, 0xFF171B25u);
   snes_ovl_stroke_rect(g_prompt_panel, W, H, 40, by, W - 80, bh, 0xFFFFD24Du);
   char line[64];
@@ -2937,16 +2941,32 @@ static int PromptImage(const uint32_t **px, int *w, int *h) {
       snes_ovl_stroke_rect(g_prompt_panel, W, H, x - 14, y + i * 32 - 6, len * 16 + 28, 28, 0xFFFFD24Du);
     snes_ovl_draw_text(g_prompt_panel, W, H, x, y + i * 32, opt[i], i == g_prompt.sel ? 0xFFFFD24Du : 0xFFE2E5EBu, 2);
   }
+  if (g_prompt.again) {
+    const char *hint = snes_ui_tr("SAME KEY OR BUTTON AGAIN: YES");
+    snes_ovl_draw_text(g_prompt_panel, W, H, (W - snes_ovl_text_len(hint) * 8) / 2, y + 68, hint, 0xFF8F97A6u, 1);
+  }
   *px = g_prompt_panel; *w = W; *h = H;
   return 1;
 }
 
 static int g_prompt_result = -1;
+/* Local: no answer in the first quarter second, so the press that asked (or
+ * its bounce) cannot also answer. */
+static bool PromptArmed(void) { return SDL_GetTicks() - g_prompt.opened_ms >= 250; }
 static void PromptKey(int key, int repeat) {
-  (void)repeat;
-  if (key == (int)SDLK_UP || key == (int)SDLK_DOWN) g_prompt.sel ^= 1;
-  else if (key == (int)SDLK_RETURN || key == (int)SDLK_SPACE) g_prompt_result = g_prompt.sel == 0;
-  else if (key == (int)SDLK_ESCAPE || key == (int)SDLK_BACKSPACE) g_prompt_result = 0;
+  if (repeat) return;
+  if (key == (int)SDLK_UP || key == (int)SDLK_DOWN) {
+    /* The arrows already move it through the pad word when they are the
+     * keyboard player's d-pad; twice would leave the cursor where it was. */
+    if (!KeyIsPadControl(key)) g_prompt.sel ^= 1;
+    return;
+  }
+  if (!PromptArmed()) return;
+  if (key == (int)SDLK_RETURN || key == (int)SDLK_SPACE) g_prompt_result = g_prompt.sel == 0;
+  else if (key == (int)SDLK_ESCAPE || key == (int)SDLK_BACKSPACE || key == 'n') g_prompt_result = 0;
+  else if (key == 'y') g_prompt_result = 1;
+  else if (g_prompt.again && (uint32_t)FindCmdForSdlKey((SDL_Keycode)key, SDL_GetModState()) == g_prompt.again)
+    g_prompt_result = 1;
 }
 
 static void PresentFrozenWithOverlay(void);
@@ -2955,6 +2975,7 @@ static void RunPromptLoop(bool *running) {
   g_overlay_modal = true;
   SetAudioPaused(true);
   g_prompt.open = 1;
+  g_prompt.opened_ms = SDL_GetTicks();
   g_prompt_result = -1;
   uint32_t prev = ~0u;
   const char *script = HostGetenv("PROMPT_ANSWER");   /* headless: "yes" / "no" */
@@ -2963,8 +2984,10 @@ static void RunPromptLoop(bool *running) {
     const uint32_t nav = OverlayNavInputs(), p = nav & ~prev;
     prev = nav;
     if (p & (SNES_PAD_UP | SNES_PAD_DOWN)) g_prompt.sel ^= 1;
-    if (p & SNES_PAD_A) g_prompt_result = g_prompt.sel == 0;
-    if (p & SNES_PAD_B) g_prompt_result = 0;
+    if (PromptArmed()) {
+      if (p & SNES_PAD_A) g_prompt_result = g_prompt.sel == 0;
+      if (p & SNES_PAD_B) g_prompt_result = 0;
+    }
     if (script && *script) g_prompt_result = !strcmp(script, "yes");
     PresentFrozenWithOverlay();
     SDL_Delay(8);
@@ -2976,6 +2999,51 @@ static void RunPromptLoop(bool *running) {
   OverlayNoteClosed();
   host_report_breadcrumb("prompt CLOSED: %s", g_prompt_result > 0 ? "yes" : "no");
   if (g_prompt.done) g_prompt.done(g_prompt_result > 0);
+}
+
+/* ---- Local: the quick slots ask first ------------------------------------
+ * F1-F10 load and Shift+F1-F10 save (and the pad's ZL+L / ZL+R) acted at
+ * once: one stray key replaced the game in progress, or the state it would
+ * have been restored from. A load of an existing state and a save over one
+ * now ask through the prompt above; a save to an empty slot and a load of an
+ * empty one lose nothing and stay immediate. The load prompt starts on NO.
+ * The same key or chord again, or Y, answers yes in one press. A script's
+ * loadstate/savestate, the debug server and Autosave do not come through
+ * here, and a bounded run (SNESRECOMP_RUN_FRAMES) or a scripted one is never
+ * asked. SNESRECOMP_STATE_CONFIRM=1/0 forces it on or off. */
+static int g_state_ask_save, g_state_ask_slot;
+static void StateSlotDo(int save, int slot) {
+  if (save) {
+    snes_savestate_menu_write_slot(slot);
+  } else {
+    RtlSaveLoad(kSaveLoad_Load, slot);
+    GameReset();
+  }
+}
+static void StateSlotAnswered(int yes) {
+  if (yes) StateSlotDo(g_state_ask_save, g_state_ask_slot);
+}
+static bool StateConfirmWanted(void) {
+  const char *force = HostGetenv("STATE_CONFIRM");
+  if (force && *force) return force[0] != '0';
+  return !HostGetenv("RUN_FRAMES") && g_script_count == 0;
+}
+static void RequestStateSlot(int save, int slot, uint32_t cmd) {
+  if (!StateConfirmWanted() || g_prompt.pending || g_prompt.open ||
+      !snes_savestate_slot_exists(slot)) {
+    StateSlotDo(save, slot);
+    return;
+  }
+  char q[96];
+  if (save) snprintf(q, sizeof(q), "%s %d?", snes_ui_tr("SAVE OVER STATE"), slot + 1);
+  else snprintf(q, sizeof(q), "%s %d?\n%s", snes_ui_tr("LOAD STATE"), slot + 1,
+                snes_ui_tr("UNSAVED PROGRESS IS LOST"));
+  g_state_ask_save = save;
+  g_state_ask_slot = slot;
+  snes_host_request_prompt(q, snes_ui_tr(save ? "YES, SAVE" : "YES, LOAD"), snes_ui_tr("NO"),
+                           StateSlotAnswered);
+  g_prompt.sel = save ? 0 : 1;
+  g_prompt.again = cmd;
 }
 
 #if SNESRECOMP_TRACE
@@ -3252,6 +3320,15 @@ static void SramAutoFlush(void) {
   if (copy_size != g_sram_size || gen != RtlStateGeneration()) {
     gen = RtlStateGeneration();
     if (copy_size == g_sram_size && copy) {
+      /* Local: a save the game made in the last half second is still
+       * waiting here. Write that image now instead of dropping it. */
+      if (quiet >= 0) {
+        char path[128];
+        RtlEnsureSaveDir();
+        RtlSramFilePath(path, sizeof(path));
+        if (RtlWriteSramImage(path, copy, (size_t)copy_size))
+          host_report_breadcrumb("game save (SRAM) written to disk before a state load or reset");
+      }
       memcpy(copy, g_sram, (size_t)g_sram_size);
       quiet = -1;
       return;
@@ -5798,7 +5875,7 @@ error_reading:;
   OpenAllGamepads();
 
   if (g_config.autosave && !g_netplay_session)
-    HandleCommand(kKeys_Load + 0, true);
+    StateSlotDo(0, 0);   /* local: Autosave is not asked (see RequestStateSlot) */
 
   /* --resume-state: the in-game launcher restarted this game to apply a
    * setting a live session cannot take, and saved the moment it left. The
@@ -6599,7 +6676,7 @@ error_reading:;
   }
 
   if (g_config.autosave && !g_netplay_session)
-    HandleCommand(kKeys_Save + 0, true);
+    StateSlotDo(1, 0);   /* local: Autosave is not asked */
   /* A live config change made in-game -- a hotkey, a snesrecomp_set_* helper,
    * or a dependent game's own menu -- survives the session, like the
    * launcher's. */
@@ -6743,10 +6820,9 @@ static void HandleCommand(uint32 j, bool pressed) {
   if (!pressed)
     return;
   if (j <= kKeys_Load_Last) {
-    RtlSaveLoad(kSaveLoad_Load, j - kKeys_Load);
-    GameReset();
+    RequestStateSlot(0, j - kKeys_Load, j);
   } else if (j <= kKeys_Save_Last) {
-    snes_savestate_menu_write_slot(j - kKeys_Save);
+    RequestStateSlot(1, j - kKeys_Save, j);
   } else {
     switch (j) {
     case kKeys_Fullscreen:
@@ -6996,8 +7072,12 @@ static void SetPadButtonOrFallthrough(uint32 j, bool pressed) {
       return;
     }
   }
-  if (g_overlay_modal)
+  if (g_overlay_modal) {
+    /* Local: the chord that asked, pressed again, answers the prompt. */
+    if (pressed && g_prompt.open && g_prompt.again && j == g_prompt.again && PromptArmed())
+      g_prompt_result = 1;
     return;   /* a panel owns the screen: no state loads behind it */
+  }
   HandleCommand(j, pressed);
 }
 

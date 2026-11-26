@@ -687,7 +687,7 @@ static void Activate(void)
         Equip(g_slot);
         break;
     case kPageSaves:
-        if (g_confirm == 0) {
+        if (g_confirm == 0 || !snes_savestate_slot_exists(g_save_slot)) {
             g_confirm = -1;
             if (snes_savestate_load_slot(g_save_slot)) Close();
         } else {
@@ -709,7 +709,8 @@ static void Activate(void)
 static void SaveHere(void)
 {
     if (Page() != kPageSaves) return;
-    if (g_confirm == 1) {
+    /* Saving to an empty slot overwrites nothing: no question. */
+    if (g_confirm == 1 || !snes_savestate_slot_exists(g_save_slot)) {
         g_confirm = -1;
         snes_savestate_save_slot(g_save_slot);
     } else {

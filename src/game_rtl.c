@@ -51,6 +51,7 @@
 #endif
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "common_cpu_infra.h"
@@ -397,6 +398,69 @@ static void GameStateLoad(SaveLoadInfo *sli, uint32_t version)
 #endif
 }
 
+/* The battery save belongs to the game, not to a save state.
+ *
+ * A save state carries the cartridge RAM of the moment it was made, so
+ * loading one used to put that older copy back: a diary written in the game
+ * after the state was made vanished from the title screen, and the copy on
+ * disk was replaced by the old one at the next exit. The cartridge RAM in
+ * memory is now kept across every ordinary state load and rewind; only the
+ * game writes it. One exception, which can only add: while the battery is
+ * blank it takes the state's copy, so a save that survives only inside a
+ * state can still be brought back. Rollback loads (speculative capture,
+ * run-ahead) restore their own snapshot exactly, as before. */
+static uint8_t s_battery_keep[0x8000];
+static int s_battery_keep_size = -1;
+
+static bool GameSnapshotPreflight(const void *data, size_t size)
+{
+    (void)data; (void)size;
+    s_battery_keep_size = -1;
+    if (g_sram && g_sram_size > 0 && (size_t)g_sram_size <= sizeof(s_battery_keep)) {
+        memcpy(s_battery_keep, g_sram, (size_t)g_sram_size);
+        s_battery_keep_size = g_sram_size;
+    }
+    return true;
+}
+
+static void GameStateLoaded(uint32_t version)
+{
+    (void)version;
+    const int size = s_battery_keep_size;
+    s_battery_keep_size = -1;
+    if (RtlIsRollbackLoad() || size <= 0 || size != g_sram_size || !g_sram)
+        return;
+    const char *state_copy = getenv("IOG_STATE_BATTERY");   /* "1": the old behaviour, for comparison runs */
+    if (state_copy && *state_copy == '1')
+        return;
+    int blank = 1;
+    for (int i = 0; i < size && blank; i++)
+        blank = s_battery_keep[i] == 0x00 || s_battery_keep[i] == 0xFF;
+    if (blank)
+        return;
+    if (memcmp(g_sram, s_battery_keep, (size_t)size)) {
+        memcpy(g_sram, s_battery_keep, (size_t)size);
+        fprintf(stderr, "[battery] kept the in-game save across a state load\n");
+    }
+}
+
+/* Reset (Ctrl+R, the settings menu, a script) resets the machine under a
+ * running game. The guest's parked program position is host state, so it has
+ * to go too: left in place, the next frame resumed the old main loop against
+ * the reset CPU and memory map, ran into zeroed memory and either found its
+ * way to the title by accident or stayed on a black screen. Cleared, the next
+ * frame boots from the reset vector as a power-on does. */
+static void GameHardwareReset(void)
+{
+    g_resume_pc = 0;
+#ifndef IOG_RECEIVED_REFERENCE
+    IogWorldReset();
+    IogAchievementAuditInvalidate();
+#else
+    IogReceivedObserverReset();
+#endif
+}
+
 const RtlGameInfo kGameInfo = {
     .title = "illusionofgaiausa",
     .initialize = &GameInitialize,
@@ -405,6 +469,9 @@ const RtlGameInfo kGameInfo = {
     .save_name_prefix = "save",
     .state_save_extra = &GameStateSave,
     .state_load_extra = &GameStateLoad,
+    .on_state_loaded = &GameStateLoaded,
+    .snapshot_preflight = &GameSnapshotPreflight,
+    .hardware_reset = &GameHardwareReset,
 };
 
 void GameSessionReset(void)

@@ -183,9 +183,15 @@ void snes_ovl_draw_text(uint32_t *dst, int stride, int h_max,
     }
 }
 
+/* Local: a title may draw the face buttons its own way (prompt style). */
+static SnesOvlButtonFn s_button_fn;
+void snes_ovl_set_button_draw(SnesOvlButtonFn fn) { s_button_fn = fn; }
+
 void snes_ovl_draw_button(uint32_t *dst, int stride, int h_max,
                           int x, int y, char label, uint32_t col)
 {
+    if (s_button_fn && s_button_fn(dst, stride, h_max, x, y, label, col))
+        return;
     snes_ovl_fill_disc(dst, stride, h_max, x + 9, y + 9, 9, col);
     snes_ovl_fill_disc(dst, stride, h_max, x + 9, y + 9, 8, 0xFF171B25u);
     snes_ovl_draw_char(dst, stride, h_max, x + 5, y + 5, label, col, 1);
@@ -293,6 +299,13 @@ void snes_ovl_frame_layer_set(const uint32_t *pixels, int w, int h,
   s_frame_layer.w = w; s_frame_layer.h = h;
   s_frame_layer.rect[0] = x; s_frame_layer.rect[1] = y;
   s_frame_layer.rect[2] = rect_w; s_frame_layer.rect[3] = rect_h;
+}
+/* Local: the layer as set for this frame, without taking it. */
+int snes_ovl_frame_layer_peek(uint32_t **pixels, int *w, int *h, int rect[4]) {
+  if (!s_frame_layer.pixels) return 0;
+  *pixels = (uint32_t *)s_frame_layer.pixels; *w = s_frame_layer.w; *h = s_frame_layer.h;
+  for (int i = 0; i < 4; i++) rect[i] = s_frame_layer.rect[i];
+  return 1;
 }
 int snes_ovl_frame_layer_take(const uint32_t **pixels, int *w, int *h, int rect[4]) {
   if (!s_frame_layer.pixels) return 0;
