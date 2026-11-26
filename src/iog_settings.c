@@ -176,6 +176,13 @@ void IogWorldMapEnhancedSet(int on); /* persists the feature itself */
 static int WorldMapGet(void *ud) { (void)ud; return IogWorldMapEnhancedGet(); }
 static void WorldMapSet(void *ud, int v) { (void)ud; IogWorldMapEnhancedSet(v != 0); }
 
+/* ---- status display at the screen edges (iog.graphics/edge_hud) ----------- */
+int IogEdgeHudGet(void);
+void IogEdgeHudSet(int on);
+static const char *const kStatusLayouts[] = {"CENTERED", "SCREEN EDGES"};
+static int EdgeHudGet(void *ud) { (void)ud; return IogEdgeHudGet(); }
+static void EdgeHudSet(void *ud, int v) { (void)ud; IogEdgeHudSet(v != 0); }
+
 /* ---- language (iog.languages/language) ------------------------------------ */
 static const char *const kLangNames[] = {"ENGLISH", "ESPAÑOL", "FRANÇAIS", "DEUTSCH"};
 static const char *const kLangCodes[] = {"original", "es", "fr", "de"};
@@ -262,6 +269,7 @@ static const char *const kEs[][2] = {
     {"CHEATS (ACHIEVEMENTS OFF)", "TRUCOS (SIN LOGROS)"}, {"INFINITE HP", "VIDA INFINITA"},
     {"DP 99", "DP 99"}, {"STATS BOOST", "MEJORA DE ESTADÍSTICAS"}, {"ALL 50 RED JEWELS", "LAS 50 JOYAS ROJAS"}, {"GAME COMPLETED", "JUEGO COMPLETADO"},
     {"ROOM-CLEAR REWARDS", "PREMIOS POR SALA"}, {"ORIGINAL (1X)", "ORIGINAL (1X)"},
+    {"STATUS DISPLAY", "MARCADOR"}, {"CENTERED", "CENTRADO"}, {"SCREEN EDGES", "BORDES DE PANTALLA"},
     {"LOAD STATE", "CARGAR ESTADO"}, {"SAVE OVER STATE", "SOBRESCRIBIR ESTADO"},
     {"UNSAVED PROGRESS IS LOST", "SE PIERDE LO NO GUARDADO"}, {"YES, LOAD", "SÍ, CARGAR"},
     {"YES, SAVE", "SÍ, GUARDAR"}, {"SAME KEY OR BUTTON AGAIN: YES", "MISMA TECLA O BOTÓN OTRA VEZ: SÍ"},
@@ -342,6 +350,17 @@ void IogSettingsInstall(void)
     it.get = ScalingGet;
     it.set = ScalingSet;
     snes_settings_menu_add(&it);
+
+    if (IogWorldEnabled()) {   /* the wide view only: the original picture has no room */
+        memset(&it, 0, sizeof(it));
+        it.kind = kSnesSetting_Choice;
+        it.label = "STATUS DISPLAY";
+        it.choices = kStatusLayouts;
+        it.count = 2;
+        it.get = EdgeHudGet;
+        it.set = EdgeHudSet;
+        snes_settings_menu_add(&it);
+    }
 
     memset(&it, 0, sizeof(it));
     it.kind = kSnesSetting_Choice;

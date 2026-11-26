@@ -50,3 +50,15 @@ presentation_only = true
 [[plugin]]
 feature = "wide_view"
 id = "iog.wide_view"
+
+[[feature]]
+id = "edge_hud"
+name = "Status display at the screen edges"
+description = "In the wide view, moves the player's life to the left edge of the picture and the enemy's life to the right edge, and leaves the DP ornament in the centre. Off: the original status display, as one block in the centre. Screens shown at the original width keep the original layout."
+group = "Graphics"
+default_enabled = false
+presentation_only = true
+
+[[plugin]]
+feature = "edge_hud"
+id = "iog.edge_hud"

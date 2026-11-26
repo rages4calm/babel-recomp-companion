@@ -46,6 +46,7 @@ static struct {
     bool copy_reference;
     bool source_packet,mode7,mode7_perspective,absent_secondary,sky_field,stock_actor_field;
     bool hud_layered; /* the status plane was left out of `output` for the presenter */
+    int shown_left,shown_right; /* first and last output column the room picture reached */
     bool awaiting_restore,restored_actor_field,fixed_plate;
     int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
@@ -2076,8 +2077,76 @@ bool IogWorldHdQuery(int row,int width,int height,IogWorldHdRow *out)
 }
 uint32_t IogWorldHdHaze(int x,unsigned light) { return WorldSkyPixel(x+hd.sky_turn,0,light); }
 
+/* The optional status display at the screen edges (iog.graphics/edge_hud).
+ * The game draws one 256-pixel status display: PLAYER and the player's life
+ * between a left bracket, the DP ornament in the middle, ENEMY and its life
+ * before a right bracket. In a wider picture the two life groups can sit at
+ * the picture's own edges, as far from them as on the original screen, with
+ * the ornament left in the centre. The three parts are cut where the art has
+ * gaps: in the label and foot rows between the labels and the ornament, in
+ * the two life rows (15..30) between the tenth life orb and the ornament.
+ * Everything below the status rows (dialogue) stays centred. A room narrower
+ * than the view has black sides; the groups then sit at the room picture's
+ * edges, not out on the black.
+ * Nothing is redrawn: each pixel of the game's plane moves whole. */
+int IogEdgeHudGet(void);
+enum { HudStatusRows=40, HudWideMax=640 };
+static int HudPart(int x,int y)
+{
+    if(y>=HudStatusRows) return 1;
+    bool life=y>=15 && y<=30;
+    return x<(life?96:80)?0:x>=(life?160:176)?2:1;
+}
+/* Only the status display itself is split: both brackets on view and the
+ * gaps beside the ornament empty. A text box over the top rows is not. */
+static bool HudSplits(void)
+{
+    if(!IogEdgeHudGet()) return false;
+    bool left=false,right=false;
+    for(int x=8;x<16;x++) left|=(s.hud[20*256+x]>>24)!=0;
+    for(int x=240;x<248;x++) right|=(s.hud[20*256+x]>>24)!=0;
+    if(!left || !right) return false;
+    for(int y=0;y<HudStatusRows;y++) {
+        if(y>=15 && y<=30) continue;
+        for(int x=73;x<88;x++) if(s.hud[y*256+x]>>24) return false;
+        for(int x=168;x<183;x++) if(s.hud[y*256+x]>>24) return false;
+    }
+    return true;
+}
+/* The plane laid out over the whole picture width, at the plane's own pixel
+ * size; NULL when it stays one centred block. */
+static const uint32_t *HudWide(int *wide_width)
+{
+    static uint32_t wide[HudWideMax*224];
+    int w=s.width*224/s.height;
+    if(w<=256 || w>HudWideMax || !HudSplits()) return NULL;
+    memset(wide,0,(size_t)w*224*sizeof(*wide));
+    int left=0,right=w;
+    if(s.shown_right>=s.shown_left) {
+        left=(s.shown_left*224+s.height-1)/s.height;
+        right=(s.shown_right+1)*224/s.height;
+    }
+    if(right-left<=256) return NULL;
+    const int shift[3]={left,(w-256)/2,right-256};
+    for(int y=0;y<224;y++) for(int x=0;x<256;x++) {
+        uint32_t color=s.hud[y*256+x];
+        if(color>>24) wide[y*w+x+shift[HudPart(x,y)]]=color|0xff000000u;
+    }
+    *wide_width=w;
+    return wide;
+}
+
 static void CompositeHud(uint8_t *dst,size_t pitch)
 {
+    int wide_width=0;
+    const uint32_t *wide=HudWide(&wide_width);
+    if(wide) {
+        for(int y=0;y<s.height;y++) for(int x=0;x<s.width;x++) {
+            uint32_t color=wide[(y*224/s.height)*wide_width+x*wide_width/s.width];
+            if(color>>24) memcpy(dst+y*pitch+x*4,&color,sizeof(color));
+        }
+        return;
+    }
     int hudw=256*s.height/224,hudx=(s.width-hudw)/2;
     for(int y=0;y<s.height;y++) for(int x=0;x<hudw;x++) {
         uint32_t color=s.hud[(y*224/s.height)*256+x*256/hudw];
@@ -2095,6 +2164,9 @@ static void PresentHud(uint8_t *dst,size_t pitch)
 {
     static uint32_t layer[256*224];
     if(!snes_ovl_frame_layer_available()) {CompositeHud(dst,pitch);return;}
+    int wide_width=0;
+    const uint32_t *wide=HudWide(&wide_width);
+    if(wide) {snes_ovl_frame_layer_set(wide,wide_width,224,0,0,s.width,s.height);return;}
     for(int i=0;i<256*224;i++) layer[i]=(s.hud[i]>>24)?(s.hud[i]|0xff000000u):0;
     int hudw=256*s.height/224;
     snes_ovl_frame_layer_set(layer,256,224,(s.width-hudw)/2,0,hudw,s.height);
@@ -2141,6 +2213,7 @@ static bool RenderWorld(void)
 {
     if(s.mode7) return RenderMode7Plane();
     if(!s.valid || !s.epoch_count || s.width<256 || s.height<224) return false;
+    s.shown_left=s.width;s.shown_right=-1;
     PictureEpoch *first=&s.epochs[s.lines[1].epoch];
     bool live_actors=s.sky_field || s.stock_actor_field;
     const uint8_t *picture_ram=live_actors?first->ram:s.active_ram;
@@ -2696,6 +2769,9 @@ static bool RenderWorld(void)
                     s.output[row*s.width+start+x]=backdrop_only&&inside?composite[x]:s.row[x+skip];
                 else if(padding)
                     s.output[row*s.width+start+x]=padding;
+                else continue;
+                if(start+x<s.shown_left) s.shown_left=start+x;
+                if(start+x>s.shown_right) s.shown_right=start+x;
             }
         }
     }

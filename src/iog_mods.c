@@ -319,6 +319,7 @@ void IogHoldAdvanceSet(int v)
  * the prompt plate. Off is the stock walking view. iog_walkable_world.c reads
  * it every frame, so the in-game settings can change it mid-session. */
 static int g_world_map_enhanced;
+static int g_edge_hud;   /* iog.graphics/edge_hud, below */
 
 static void ActivateWorldMap(void) { g_world_map_enhanced = 1; }
 int IogWorldMapEnhancedGet(void) { return g_world_map_enhanced; }
@@ -346,6 +347,7 @@ static void ResetHd(void)
      * so the in-game settings can turn it on mid-session. */
     g_advance_period = 0;
     g_world_map_enhanced = 0;
+    g_edge_hud = 0;
     snes_mod_register_input_filter(HoldAdvanceFilter);
     g_cheat_hp = g_cheat_dp = g_cheat_stats = 0;
     g_room_reward_multiplier=1;
@@ -359,6 +361,15 @@ static void ResetHd(void)
     PresentFilter_Set(kPresentFilter_Config);
 }
 
+/* ---- status display at the screen edges (iog.graphics/edge_hud) ----------- */
+static void ActivateEdgeHud(void) { g_edge_hud = 1; }
+int IogEdgeHudGet(void) { return g_edge_hud; }
+void IogEdgeHudSet(int on)
+{
+    g_edge_hud = on != 0;
+    snes_mod_runtime_persist_feature_c("iog.graphics", "edge_hud", on != 0, NULL, NULL);
+}
+
 /* Read at start by the world renderer (IogWorldEnabled); nothing to switch here. */
 static void ActivateWideView(void) {}
 
@@ -367,6 +378,7 @@ SNES_MOD_CONSTRUCTOR(register_iog_mods)
     snes_mod_register_reset_callback(ResetHd);
     snes_mod_register_presentation_plugin("iog.hd", ActivateHd);
     snes_mod_register_presentation_plugin("iog.wide_view", ActivateWideView);
+    snes_mod_register_presentation_plugin("iog.edge_hud", ActivateEdgeHud);
     snes_mod_register_activation_plugin("iog.run", ActivateRun);
     snes_mod_register_activation_plugin("iog.hold_advance", ActivateHoldAdvance);
     snes_mod_register_activation_plugin("iog.hotswap", ActivateSwap);

@@ -61,6 +61,7 @@ included. Maintained by
 | In-game settings (display, audio, HD scaling, button prompts, enhanced world map) | **Esc**, or **LT + R3** on a pad |
 | Area map | **Start** wherever the area has a map; **L** / **R** zoom, Back returns to the game |
 | Achievements | In-game settings → **Achievements**; or **I**, or **LT + L3** |
+| Status display at the screen edges (optional, Wide view) | In-game settings → **Status display**; or the launcher's Cheats and Mods page |
 | Save state | **Shift + F1–F10**, or **LT + R** (slot 1) |
 | Load state | **F1–F10**, or **LT + L** (slot 1). Loading, and saving over a state, ask first |
 | Save-state browser | **F11**, or **LT + Start** |
@@ -96,7 +97,7 @@ on the launcher's Game page to **Open the setup screen**.
 | Input | Gamepad, deadzone, and **Button prompts**: Auto, SNES (classic) or Xbox |
 | Achievements | Your local progress |
 | Soundtrack | Import an optional MSU-1 music pack |
-| Cheats and Mods | Cheats, and the conveniences: **Enhanced world map**, hold to run, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
+| Cheats and Mods | Cheats, and the conveniences: **Enhanced world map**, **Status display at the screen edges**, hold to run, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
 
 | Display page | Input page |
 | --- | --- |

@@ -1,7 +1,7 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 25,
-2026 (tester build `v0.2.0-beta.5`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.6`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
@@ -77,19 +77,35 @@ for slot 1, F11 / LT+Start for the browser). Seen in pictures in Freejia
 - **Spanish strings** for the removed pages are still in `iog_companion.c`'s
   table; harmless.
 
+## Status display at the screen edges (done November 26, not played)
+
+An option, off by default: `iog.graphics/edge_hud`, the **Status display** row
+in the in-game settings (wide view only) and a toggle under Cheats and Mods in
+the launcher. It moves the game's own pixels and redraws nothing: PLAYER, the
+player's life and the left bracket go to the left edge of the room picture,
+ENEMY, its life and the right bracket to the right edge, the DP ornament stays
+in the centre, dialogue stays centred. The cuts are at the gaps in the art
+(`HudPart` in `src/iog_world_renderer.c`). In a room with black sides the
+groups sit at the room picture's edges. Seen in pictures in the Inca room,
+Edward's Castle, the lookout and the gold ship
+(`visual-fullgame-041/playtest1-ui/hud-check2.png`). Not checked:
+
+- **Not played by the owner.**
+- **Enemy life was never on screen** in a checked picture. Its columns
+  (x 160 to 239) are taken from the status tilemap's layout, not seen.
+- **Scenes at the original width** (fixed plates, Mode 7, fallbacks) keep the
+  one-block display, because it is baked into their picture.
+- **Whether the groups move** while the camera scrolls past a map edge, during
+  screen shake or during fades: not looked at.
+- **The software path** (`CompositeHud`, presenters without the frame layer)
+  uses the same layout and was not run.
+- **The achievement toast** clears the layer under it by rectangle; not rerun
+  with the wide layer.
+- Two smaller ideas were not built: hide the ENEMY label while there is no
+  enemy, and a faint shadow behind the display over bright scenes.
+
 ## Decided, not built
 
-- **Optional edge-anchored status display.** In the wide view the status
-  display is still the original 256-pixel block in the middle of a wider
-  picture. Proposal: PLAYER life at the top-left, ENEMY life at the top-right,
-  the DP counter and ornament centred. The owner wants it as a choice, with
-  the centred layout kept. Two smaller ideas went with it: hide the ENEMY
-  label while there is no enemy, and a faint shadow behind the display so it
-  reads over bright scenes. Nothing is designed or built. The status display
-  is already its own layer (`PresentHud`, `s.hud` in
-  `src/iog_world_renderer.c`; `DrawFrameLayer` in the runner's `opengl.c`),
-  which is what makes this cheap. Use the Game UI/UX skill named in
-  `AGENTS.md` when designing it.
 - **Native coverage.** The owner's next priority after the tester build. On
   the updated SDK the private native build still carries about 99.9 percent of
   CPU cycles, but the interpreter share rose from 31 to about 6,200
@@ -97,7 +113,7 @@ for slot 1, F11 / LT+Start for the browser). Seen in pictures in Freejia
   finding out why before choosing targets. The regenerated graph has 1,229
   AOT-eligible variants; the old one had 1,248.
 
-## The tester build (`v0.2.0-beta.5`)
+## The tester build (`v0.2.0-beta.6`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot
