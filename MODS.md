@@ -195,6 +195,11 @@ menus are left stock.)
 - **Item stacking**: Red Jewels, Herbs and Crystals keep one inventory slot;
   the inventory screen shows how many you carry. Using one brings out the
   next (still equipped). The extra units are stored in the save file.
+  The Jeweler takes every stacked Red Jewel at once, as he does in the
+  original game: while his menu is up the jewels are laid out in your free
+  slots so his own count takes them and pays each reward tier, and any that
+  did not fit are added to his count right after. At 50 jewels he warps you
+  to the optional Solid Arm fight on every talk, as in the original.
 - **Equipped indicator**: a gold frame marks the equipped item on the
   inventory screen.
 

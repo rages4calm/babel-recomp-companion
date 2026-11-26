@@ -132,7 +132,7 @@ on the launcher's Game page to **Open the setup screen**.
 
 ## Development status
 
-**Current build:** `0.2.0-beta.15`, Windows x64, pre-release for
+**Current build:** `0.2.0-beta.16`, Windows x64, pre-release for
 playtesting. Automated routes reach the ending and the credits; a full
 playthrough by a person is under way.
 

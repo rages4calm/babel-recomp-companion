@@ -1,12 +1,24 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 26,
-2026 (tester build `v0.2.0-beta.15`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.16`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
+
+## Jeweler takes stacked jewels at once (beta 16, November 26)
+
+The owner found that with item stacking the Jeweler took one Red Jewel per
+talk (he counts the jewel items in the 16 slots; stacking leaves one).
+`src/iog_inventory.c` `GemFrame`: while a choice menu is up with Gem's actor
+(`$08:CEA3`-`$D092`) beside the player, the stacked jewels fill the free
+slots; once he has taken them (no jewel left, `$0AB0` changed) the rest is
+added to `$0AB0`; a closed menu without giving restacks them. Checked on the
+owner's F1 state (scene `$6B`, 32 jewels, 18 given): one talk gave all 32
+(count 50) and paid the 20 and 30 tiers; "Just wanted to see you" restacked
+all 31. Not checked in the interpreter (host-side RAM only, no game code).
 
 ## From Gaia and Time (betas 13 to 15, November 26)
 
@@ -344,7 +356,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.15`)
+## The tester build (`v0.2.0-beta.16`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

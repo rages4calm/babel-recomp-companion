@@ -52,9 +52,79 @@ static bool InPlay(void)
     return Rd(0x09AA) != 0 || Rd(0x0644) == 0x00FF;
 }
 
+/* ---- the Jeweler takes every stacked jewel ---------------------------------
+ * Gem's "Give you Red Jewels" counts the jewel items in the 16 slots, adds
+ * them to $0AB0 (BCD), removes them and pays the reward tiers. With stacking
+ * only one jewel is in a slot, so he took one per talk. While his menu is up
+ * (a choice menu, $065C, with Gem's actor beside the player), the stacked
+ * jewels are laid out into the free slots so his own count takes them; any
+ * that do not fit are added to his count once he has taken the rest. */
+static bool g_gem_session;
+static uint16_t g_gem_given_before;
+
+static bool GemBeside(void)
+{
+    const uint8_t *ram = Ram();
+    const int px = (int16_t)Rd(0x1014), py = (int16_t)Rd(0x1016);
+    unsigned a = Rd(0x56), n = 0;
+    while (a >= 0x1000 && a < 0x1FC0 && n++ < 84) {
+        const unsigned pc = Rd(a);
+        if ((ram[a + 2] & 0x3F) == 0x08 && pc >= 0xCEA3 && pc < 0xD093) {
+            const int dx = (int16_t)Rd(a + 0x14) - px, dy = (int16_t)Rd(a + 0x16) - py;
+            return dx * dx + dy * dy < 48 * 48;
+        }
+        a = Rd(a + 6);
+    }
+    return false;
+}
+
+static uint16_t BcdAdd(uint16_t bcd, unsigned add)
+{
+    unsigned v = ((bcd >> 12) & 15) * 1000 + ((bcd >> 8) & 15) * 100 + ((bcd >> 4) & 15) * 10 + (bcd & 15) + add;
+    if (v > 9999) v = 9999;
+    return (uint16_t)((v / 1000) << 12 | (v / 100 % 10) << 8 | (v / 10 % 10) << 4 | (v % 10));
+}
+
+/* True while the jewels are laid out for Gem: the merge below waits. */
+static bool GemFrame(void)
+{
+    uint8_t *slots = &Ram()[kSlots];
+    const bool menu = Rd(0x065C) != 0, message = (Rd(0x09EC) & 0x6000) != 0;
+    if (!g_gem_session) {
+        if (!menu || !Ram()[0x0B56] || !GemBeside())
+            return false;
+        bool held = false;
+        for (int i = 0; i < 16; i++) held |= slots[i] == 0x01;
+        if (!held) return false;
+        g_gem_session = true;
+        g_gem_given_before = Rd(0x0AB0);
+        for (int i = 0; i < 16 && Ram()[0x0B56]; i++)
+            if (!slots[i]) { slots[i] = 0x01; Ram()[0x0B56]--; }
+        return true;
+    }
+    bool held = false;
+    for (int i = 0; i < 16; i++) held |= slots[i] == 0x01;
+    if (!held && Rd(0x0AB0) != g_gem_given_before) {
+        /* He took every jewel in the slots: hand him the rest too. */
+        if (Ram()[0x0B56]) {
+            Wr(0x0AB0, BcdAdd(Rd(0x0AB0), Ram()[0x0B56]));
+            Ram()[0x0B56] = 0;
+        }
+        g_gem_session = false;
+        return false;
+    }
+    if (!menu && !message) {   /* closed without giving: stack them again */
+        g_gem_session = false;
+        return false;
+    }
+    return true;
+}
+
 static void StackFrame(void)
 {
     if (!g_snes || !InPlay())
+        return;
+    if (GemFrame())
         return;
     uint8_t *slots = &Ram()[kSlots];
     const int equipped = (int16_t)Rd(kEquippedSlot);
