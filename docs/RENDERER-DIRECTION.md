@@ -34,7 +34,7 @@ Dark Space, flight and ending expose only their authoritative source plate with
 black outside. Unsupported layouts/phases keep fallback. The older expanded-
 culling preview's Aqueduct failure remains historical on that legacy path.
 Smooth motion, remaining scenes/interfaces and complete ultrawide composition
-still need work. See [batch 020 evidence and limits](NATIVE-BATCH-020.md).
+still need work. See batch 020 evidence and limits (in the git history).
 
 The current same-build SPAN/reference CPU check reports 59.2% / 70.3% less
 whole-process CPU at 1x / 1.5x. The separate 019→020 default-SPAN check reports

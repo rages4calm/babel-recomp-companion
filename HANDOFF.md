@@ -1,6 +1,6 @@
 # Illusion of Gaia Companion — handoff
 
-> **November 26, 2026:** the private scratch under `.local` was cut from 141 GB to 5 GB at the owner's request. Most `.local/batch-001/...` evidence paths named below no longer exist. `OPEN-WORK.md` ("Scratch cleanup") lists what was kept and why.
+> **November 26, 2026:** the private scratch under `.local` was cut from 141 GB to 5 GB at the owner's request. Most `.local/batch-001/...` evidence paths named below no longer exist. `OPEN-WORK.md` ("Scratch cleanup") lists what was kept and why. The same day the repository dropped the Codex process files: the per-batch logs (`docs/NATIVE-*`, `docs/FRAMEWORK-*`, `docs/VISUAL-FULLGAME-*` and a few others), the cleanup scripts and `.cmd` files, and `contributions/`. They remain in the git history; links to them below no longer resolve.
 
 Updated November 25, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).

@@ -1,52 +1,65 @@
-# Generated recompiler output — derived from a copyrighted ROM. Never commit.
-/src/gen/
-/recomp/funcs.h
+# Illusion of Gaia Companion
 
-# The ROM itself, in every form. Players supply their own.
+# --- Game data: players supply their own. Never commit. ----------------------
 *.sfc
 *.smc
 *.srm
-
-# Build trees and packaged output
-/build/
-/build-*/
-/.local/
-/dist/
-/saves/
-
-# Local probe output that names paths on one machine
-/rom_probe.json
-
-# Launcher/runtime state written beside the executable (and in the repo root
-# when the game is run from there): the cached ROM path, keybinds, settings.
-# All of it is one machine's, none of it is the project's.
-/rom.cfg
-/keybinds.ini
-/config.ini
-/config.local.ini
-/input.ini
-
-.DS_Store
-
-# Player data and personal files: logs, saves, MSU-1 packs, other ROMs,
-# third-party patches, RetroAchievements login.
-/logs/
 *.sav
 *.pcm
 *.msu
-/msu1/
 /languages/
 /mods/**/*.ips
-ra.ini
-*.token
-last_run_report.json
-*.bak*
-__pycache__/
-/tools/randomizer/.iogr/
 
-# Android build output and the machine's SDK path
+# Generated from the ROM by the recompiler
+/src/gen/
+/recomp/funcs.h
+
+# --- Build output -------------------------------------------------------------
+/build/
+/build-*/
+/dist/
+/companion/bin/
+/companion/obj/
+/companion/tests/bin/
+/companion/tests/obj/
+/snesrecomp/recompiler-rs/target/
 /android/local.properties
 /android/.gradle/
 /android/build/
 /android/app/build/
 /android/app/.cxx/
+
+# --- Private working area (test builds, replays, profiles, playtest data) -----
+/.local/
+
+# --- Files the game and launcher write beside the executable ------------------
+/saves/
+/logs/
+/msu1/
+/screenshots/
+/diagnostics/
+/rom.cfg
+/keybinds.ini
+/config.ini
+/config.local.ini
+/input.ini
+last_run_report.json
+*.token
+ra.ini
+/rom_probe.json
+
+# --- Tool and editor clutter -------------------------------------------------
+__pycache__/
+.pytest_cache/
+*.bak
+*.bak.*
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+/tools/randomizer/.iogr/
+
+# Pasted screenshots dropped in the repository root
+/image-*.png

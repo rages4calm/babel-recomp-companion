@@ -65,11 +65,11 @@ through the default radar. Renderer-only observation must not wake enemies or
 change collision, quest flags or gameplay visibility.
 
 The first native helpers and packet-based map preview are documented in
-[the full-game batch](VISUAL-FULLGAME-001.md). Camera-rectangle diagnostic masks
+the full-game batch (in the git history). Camera-rectangle diagnostic masks
 are not earned exploration or optical line of sight. Likewise, zero collision
 is only an unobstructed-cell diagnostic; slopes, water, ledges and occupied cells
 need more precise radar classification. The runtime and in-game controls are now connected for qualified sources;
-see [current implementation and limits](VISUAL-FULLGAME-002.md).
+see current implementation and limits (in the git history).
 
 Qualify transitions, room changes, load/rewind, menu/dialogue overlap, viewport
 resizing and both input styles. Include source provenance and explicit runtime
@@ -94,7 +94,7 @@ the item. The Diamond Mine capture exercises a chest on a different map page.
 ## Controller and local-map routing — November 19
 
 Controller operation is required, with shared physical button mapping and
-configurable local Map actions. See [current integration](VISUAL-FULLGAME-003.md).
+configurable local Map actions. See current integration (in the git history).
 Original Start now opens our enhanced local map only in verified contexts where
 the original input handler would open radar. Its pause contexts and world travel
 retain their original input. The received experimental reference still has its

@@ -100,4 +100,4 @@ Native 8x versus forced-interpreter 8x matched all comparison gates; a separate
 1x control confirmed eight effect assertions for HP/max HP, strength and defense.
 These are actual engine effects under synthetic events. The loaded terrain
 remains South Cape; no dungeon visit or natural enemy-clear reward is claimed.
-[Complete inputs, values and limitations](ASSISTED-TESTING.md).
+Complete inputs, values and limitations (in the git history).

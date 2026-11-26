@@ -17,7 +17,7 @@ the flag map, not a replacement for the current engine or native qualification.
 
 November 8 follow-up: [module/source preflight](GAIALABS-MODULE-INTEGRATION.md)
 and [Mesen2 runtime readiness](MESEN2-REFERENCE.md) now have actual private
-checks. [Batch 006](NATIVE-BATCH-006.md) records native/framework work separately.
+checks. Batch 006 (in the git history) records native/framework work separately.
 The reference-collection observations below retain their November 6 scope;
 the developer build/profile was still pending at that inspection.
 

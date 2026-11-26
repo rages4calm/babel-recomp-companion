@@ -246,8 +246,7 @@ after a crash (the half-minute rewrite is the fallback).
   public build. They are generated from the public GPL-3.0 repository and
   carry the notice and license; telling them is a courtesy the owner may want
   to do himself.
-- **`docs/ROMATLAS-PLAN.md`** contains a local user path. It is already
-  public in the repository and no longer ships in the zip.
+
 
 ## Cheats and conveniences
 
@@ -286,6 +285,9 @@ launcher. Still open or untested:
   menu's status page; state loads in the mosaic-revealed rooms other than
   Luke's house (`5A`, `7D`, the Gem rooms), which the fix covers by inference.
 - **Diamond Mine:** a line at world x of about 438. Open.
+- **Classic 16:9 picture** (wide view off, `Widescreen = 1`): at the Great Wall
+  (route `fanger`, frame 1462) a solid green strip fills the right edge.
+  Seen in a capture on November 26; not investigated.
 - **Walkable world map with Enhanced off:** streaks in the picture. Open.
 - **Euro arrival:** black corners. Open.
 - **Prison entry** is still a fallback to the original picture in the audit.

@@ -1,48 +1,71 @@
 # Illusion of Gaia Companion
 
-A controller-first PC edition of Quintet's SNES adventure, with square-pixel
-widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
+Quintet's 1993 SNES adventure as a modern PC release: the game recompiled to
+native code, a true widescreen view drawn from the game's own scenery, an
+area map that fills in as you explore, a walkable world map, the GaiaLabs
+retranslation, achievements and optional orchestral MSU-1 music.
 
-[Features](#features) · [How to play](#how-to-play) · [Build from source](#build-from-source) ·
-[Development status](#development-status) · [Credits](#thanks)
+[Features](#features) · [How to play](#how-to-play) · [Development status](#development-status) ·
+[Build from source](#build-from-source) · [Credits](#thanks)
 
-**A Windows test build is available on the
+**Windows test builds are on the
 [Releases page](https://github.com/rages4calm/babel-recomp-companion/releases).**
-It is a pre-release for playtesting; expect bugs and please
-[report them](https://github.com/rages4calm/babel-recomp-companion/issues).
+They are pre-releases for playtesting; please
+[report what you find](https://github.com/rages4calm/babel-recomp-companion/issues).
 Bring your own unmodified **Illusion of Gaia (USA)** ROM; no game data is
 included. Maintained by
 [Carl Prewitt Jr. / rages4calm](https://github.com/rages4calm), based on
 [Babel Recomp](https://github.com/mrOt4/babel-recomp) by mr0ta / mrOt4.
 
-![Watermia's docks in square-pixel widescreen at 1.5×](https://github.com/user-attachments/assets/81a3df72-cc86-41c4-ba7e-5ea2dc49f566)
+![Edward's Castle rampart in the wide view, with the mountain sky running the full width of the screen](docs/images/castle-sky.png)
 
 ## Features
 
-- **Widescreen and 1.5×** extend the view with real scenery in supported
-  rooms. Fixed compositions keep their original framing at the same scale.
-  [Visual coverage and renderer direction](docs/VISUAL-COVERAGE.md)
-- **World travel and local maps** combine GaiaLabs' walkable world map
-  with Companion's scenery-based area map, explored terrain, discovered
-  markers and radar. The GaiaLabs Retranslation pack, included in release
-  builds, supplies 1,133 retranslated dialogue entries, all 124 approved menu strings, and all 64 named room
-  titles.
-  [GaiaLabs integration](docs/GAIALABS-ORIGINAL-INTEGRATION.md) ·
-  [Companion map](docs/MAP-SYSTEM-DIRECTION.md)
-- **Companion Launcher** verifies your ROM and exposes display, audio
-  and gamepad settings. Its Cheats and Mods panel includes optional 1×–8×
-  room-clear rewards. The existing hold-Y run and full remapping remain
-  available. [Launcher](companion/README.md) · [Cheats and mods](docs/CHEATS-AND-MODS.md)
-- **MSU-1 soundtrack** can be imported from a local ZIP or folder with
-  validation. Original SNES audio remains available.
-  [Soundtrack setup and credits](docs/MSU1.md)
-- **Companion Achievements** has a controller-friendly browser, opened from the in-game settings.
-  Progress is saved locally on your PC; nothing is sent to any service.
-  [Achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md)
+### A wider world, from the game's own art
 
-| Companion radar in Freejia | Walkable world map at South Cape |
+The wide view shows about one and a half times the original screen in each
+direction, with square pixels, using the scenery the game already has beyond
+the edges of the original frame. Parallax skies, Mode 7 floors and boss rooms
+keep working at the wider size. Screens made for the original width (title,
+menus, a few story scenes) keep their original framing.
+
+| The Great Wall | Sky Garden |
 | --- | --- |
-| ![Freejia street with the Companion area radar in the lower-right corner](https://github.com/user-attachments/assets/9a9be356-f8c2-4117-b952-bc3e8f75e75a) | ![Will standing above South Cape on the expanded Mode 7 world map](https://github.com/user-attachments/assets/bfba1b8c-bd55-42c8-a6d6-d355d04d1560) |
+| ![The Great Wall's rampart stretching across the full wide view under a desert sky](docs/images/great-wall.png) | ![A Sky Garden platform floating over open sky in the wide view](docs/images/sky-garden.png) |
+| **Inca Ruins** | **Diamond Mine** |
+| ![The Inca Ruins courtyard with its stone heads, in the wide view](docs/images/inca-ruins.png) | ![The Diamond Mine with fences and enemies spread across the wide view](docs/images/diamond-mine.png) |
+
+### Mode 7 in the wide view
+
+The world map, the flight over the ocean and the other Mode 7 scenes fill
+the wide view. The walkable world map's ground is drawn by the GPU at your
+window's resolution; the others use the optional HD Mode 7 setting.
+
+| Walkable world map | Flight over the ocean |
+| --- | --- |
+| ![Will and his friends crossing the walkable world map in Mode 7 perspective](docs/images/world-map.png) | ![The airplane over a Mode 7 ocean that reaches to the horizon](docs/images/ocean-flight.png) |
+
+### Maps, music, achievements
+
+- **Area map and radar.** Press **Start** wherever an area has a map: a
+  scenery-based map that reveals as you explore, with exits and chests. A
+  small radar sits in the corner while you play.
+- **Walkable world map** from the GaiaLabs project, with an enhanced view:
+  higher camera, place markers and a minimap.
+- **GaiaLabs Retranslation**, included: 1,133 retranslated dialogue entries,
+  all 124 approved menu strings and all 64 named room titles.
+- **Achievements**, saved on your PC, with a controller-friendly browser in
+  the in-game settings.
+- **Optional MSU-1 orchestral soundtrack**, imported and verified on the
+  launcher's Soundtrack page. The original SNES music is the default.
+- **Conveniences you can switch on:** hold to run, hold to advance dialogue,
+  item stacking, quick item selection, an equipped-item marker, a status
+  display at the screen edges, and save states with a confirmation before
+  anything is overwritten.
+- **Companion Launcher** for picture, scaling, audio, controller, cheats and
+  mods, with SNES or Xbox button prompts throughout.
+
+![The status display split to the screen edges in the wide view: player life at the left, the DP ornament centred, enemy life at the right](docs/images/status-edges.png)
 
 ## How to play
 
@@ -105,34 +128,26 @@ on the launcher's Game page to **Open the setup screen**.
 
 ## Development status
 
-Original v44 fixes the Watermia save-load frame and the backdrop seams
-in the Diamond Mine elevator and Angel Village annex.
-[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#watermia-save-load-and-finite-room-edges)
+**Current build:** `0.2.0-beta.10`, Windows x64, pre-release for
+playtesting. Automated routes reach the ending and the credits; a full
+playthrough by a person is under way.
 
-Original v41 fixes save-resume framing at square-pixel 1.5× across
-tested stock rooms. Campaign-wide visual and retranslation checks continue.
-[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#save-resume-framing-across-the-campaign)
+- **Native code.** The game's 65816 code is recompiled ahead of time to
+  native code. In our replays of 142 routes through the game (the bosses, the
+  ending and the credits), less than 0.001 percent of CPU time is left to the
+  built-in interpreter, which takes over automatically for anything the
+  native code does not cover, so nothing is ever blocked. The SNES sound
+  processor (SPC700) is still interpreted.
+- **Widescreen.** The wide view covers the campaign; the remaining visual
+  faults are listed openly.
+- **Tested how.** Before a change ships, replays of 198 scenes and 142 routes
+  must draw identically to the build before it. Playtesters have a built-in
+  bug marker that saves the exact moment something looks wrong.
+- **Next.** Finishing native coverage from real play sessions, the open
+  visual faults, then more optional enhancements.
 
-Original v39 fixes the Larai Cliff mist seam and preserves square-pixel 1.5×
-through the Changed World map, New Babel and the credits.
-[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#larai-cliff-mist-and-ending-framing)
-
-Original v31 keeps the wider view through Babel's victory effects, the
-Ship Dream transitions, and the flight into Sky Garden's Mode 7 crash.
-[Visual fixes and controller checks](docs/VISUAL-COVERAGE.md#babel-victory-waves-ship-dream-and-sky-garden-flight)
-
-The Original v27 controller replays verify the linked Solid Arm fight and
-return to Babel, the rooftop, both Dark Gaia forms and the ending through
-the credits and final school scene. Tests used checkpoint-linked virtual
-controller input at square-pixel 1.5×. See the coverage notes for the tested
-rooms, inherited stat boosts and fallback checks.
-[Latest route verification](docs/VISUAL-COVERAGE.md#solid-arm-through-the-ending)
-
-Fully native execution is a development goal. The default source build
-interprets the 65816 instructions from your ROM. The private native build
-replaces selected execution paths with qualified native code. SPC700 remains
-interpreted. The interpreter, renderer reference path and stock world map
-remain available. [Native test results and scope](docs/NATIVE-BATCH-025.md)
+What is still open, unfixed or untested is listed in
+[OPEN-WORK.md](OPEN-WORK.md).
 
 ## Build from source
 
