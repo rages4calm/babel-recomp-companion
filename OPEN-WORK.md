@@ -1,7 +1,7 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 25,
-2026 (tester build `v0.2.0-beta.9`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.10`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
@@ -137,6 +137,24 @@ Checked in one hidden run (mark, state, log lines, confirmation). Not
 checked: a long session, the screenshot file itself, and the exit write
 after a crash (the half-minute rewrite is the fallback).
 
+## Soundtrack (November 26)
+
+- **MSU-1 is now off by default** (`iog.enhancements/msu1`
+  `default_enabled = false`). Before beta 10 a fresh download showed
+  "Active: MSU-1 soundtrack" on the launcher while the game, with no pack,
+  played SNES music. Importing a pack turns it on.
+- Checked from a clean unzipped folder: no pack means original audio in the
+  launcher and the game; importing the owner's JUD6MENT zip verifies 28
+  tracks, recognizes the catalog, turns it on, and the game plays from it.
+  The launcher's own soundtrack tests pass (47 + 9 checks).
+- **The launcher lists only packs inside the current game folder.** The
+  owner's pack lived in the beta 2 folder after later betas were unzipped
+  beside it, so his dropdown was empty although the game played the pack.
+  Testers who update by unzipping a new folder hit the same thing;
+  `START HERE.txt` now says which folders to copy. Not fixed in code: the
+  launcher could find a pack in a sibling version folder, or store the pack
+  path relative to the game folder.
+
 ## Decided, not built
 
 - **Native coverage.** The interpreter rise after the SDK update is explained
@@ -194,7 +212,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.9`)
+## The tester build (`v0.2.0-beta.10`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

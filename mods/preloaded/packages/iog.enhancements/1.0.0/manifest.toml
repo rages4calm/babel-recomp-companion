@@ -71,9 +71,9 @@ id = "iog.hotswap"
 [[feature]]
 id = "msu1"
 name = "MSU-1 soundtrack"
-description = "Play the music from an MSU-1 pack for Illusion of Gaia (CD-quality 44.1 kHz). Sound effects stay the game's own. Songs the pack lacks play as usual."
+description = "Play the music from an MSU-1 pack for Illusion of Gaia (CD-quality 44.1 kHz). Sound effects stay the game's own. Songs the pack lacks play as usual. Off until you import a pack on the launcher's Soundtrack page, which turns it on."
 group = "Audio"
-default_enabled = true
+default_enabled = false
 
 [[resource]]
 feature = "msu1"

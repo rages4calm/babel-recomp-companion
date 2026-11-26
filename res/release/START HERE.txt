@@ -23,6 +23,18 @@ WHAT IS ON BY DEFAULT
 Each can be turned off: Wide view is the Picture choice on the launcher's
 Display page, and Enhanced world map is under Cheats and Mods. See i18n/GAIALABS-NOTICE.md for the other two.
 
+MUSIC
+The game plays its original SNES music. To use an MSU-1 orchestral pack,
+open the launcher's Soundtrack page and import the pack's ZIP or folder;
+that turns it on. "Use original audio" on the same page turns it off.
+
+UPDATING TO A NEWER TEST BUILD
+Unzip the new build into its own folder, then copy these from the old
+folder into the new one before you start it: the saves folder, the msu1
+folder (if you imported music), config.ini and mods\preloaded\state.toml.
+If the Soundtrack page then shows no pack, select it there and press
+"Use imported" once.
+
 IN THE GAME
 - Esc (or Left Trigger + Right Stick click): settings
   Achievements are in the settings.

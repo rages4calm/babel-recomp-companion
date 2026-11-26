@@ -5,6 +5,11 @@ if (args.Contains("--engine")) { await EngineSmoke.Run(args); return; }
 if (args.Contains("--mods-tests")) { NativeModSettingsTests.Run(); return; }
 if (args.Contains("--activation")) { ActivationTests.Run(); return; }
 if (args.Contains("--soundtrack-tests")) { await SoundtrackTests.RunAsync(); return; }
+if (args.Length == 2 && args[0] == "--list-soundtracks") {
+    var found = await SoundtrackService.FindInstalledAsync(args[1]);
+    Console.WriteLine(JsonSerializer.Serialize(new { count = found.Count, found, active = SoundtrackActivation.Read(args[1]) }));
+    return;
+}
 if (args.Length == 3 && args[0] == "--import-soundtrack") {
     var result = await SoundtrackService.ImportAsync(args[1], args[2]);
     var verified = await SoundtrackService.InspectInstalledAsync(result.PackDirectory);
