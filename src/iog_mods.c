@@ -453,6 +453,124 @@ void IogHoldAdvanceSet(int v)
     g_advance_period = kPeriods[v & 3];
 }
 
+/* ---- auto-use key items ------------------------------------------------------ */
+
+/* After andrewclunn's Gaia and Time (auto-use-items/*.patch.asm, the GaiaLabs
+ * line of work), done differently: no actor or code is added to the game.
+ * Pressing the talk button (A) where a key item you carry does something
+ * hands the game an item-button press (B) with that item equipped, for the
+ * frames A stays held. The game's own item code ($03:843F table) then runs
+ * exactly as if you had equipped it and pressed B, natively; afterwards the
+ * item you had equipped is equipped again.
+ *
+ * The spots are the game's own checks, read from each item's handler: the
+ * room ($0644) and the player's tile ($09A6 x, $09A8 y), start inclusive and
+ * end exclusive (a subset of the game's area where it is inclusive). The
+ * melodies and the hieroglyphs are left out: those are played or chosen on
+ * purpose. Default button type only (B is the item button). */
+typedef struct AutoUseSpot { uint8_t item, scene, x0, y0, x1, y1; } AutoUseSpot;
+static const AutoUseSpot kAutoUse[] = {
+    {0x02, 0x0B, 14, 16, 16, 17}, {0x02, 0x0B, 10, 23, 12, 24},   /* Prison Key, Edward's Castle */
+    {0x03, 0x1E, 0x37, 0x12, 0x39, 0x14},                         /* Incan Statue A */
+    {0x04, 0x1E, 0x26, 0x15, 0x28, 0x17},                         /* Incan Statue B */
+    {0x07, 0x25, 0x0E, 0x19, 0x10, 0x1B},                         /* Diamond Block */
+    {0x0A, 0x2F, 0, 0, 255, 255},                                 /* Meat, on the raft */
+    {0x0B, 0x44, 15, 22, 17, 25}, {0x0C, 0x44, 15, 22, 17, 25},   /* Mine Keys A and B */
+    {0x0E, 0x4C, 22, 12, 24, 15}, {0x0E, 0x4C, 22, 16, 24, 19},   /* Crystal Ball */
+    {0x0E, 0x4C, 8, 10, 11, 13}, {0x0E, 0x4C, 8, 14, 11, 17},
+    {0x0F, 0x3F, 24, 52, 26, 55},                                 /* Lift Key */
+    {0x10, 0x5A, 8, 7, 10, 8},                                    /* Palace Key */
+    {0x11, 0x5D, 10, 17, 23, 26},                                 /* Purification Stone */
+    {0x12, 0x63, 6, 6, 10, 8}, {0x12, 0x63, 22, 6, 26, 8},        /* Prayer Statue */
+    {0x13, 0x66, 35, 8, 38, 10}, {0x13, 0x66, 42, 8, 45, 10},     /* Rama's Statue */
+    {0x14, 0x74, 7, 8, 9, 10},                                    /* Magic Powder */
+    {0x19, 0x95, 40, 9, 45, 13},                                  /* Tearpot */
+    {0x1A, 0xA2, 20, 8, 22, 9}, {0x1A, 0xA2, 46, 18, 48, 19},     /* Mushroom Drops */
+    {0x1A, 0xA2, 40, 36, 42, 37},
+    {0x1D, 0xAE, 6, 6, 7, 8}, {0x1D, 0xAE, 8, 6, 9, 8},           /* Gorgon Flower */
+    {0x1D, 0xAE, 10, 6, 11, 8},
+};
+static bool g_auto_use;
+static bool g_au_latched;          /* A held since a press was handed over as B */
+static int16_t g_au_prev_slot = -1; /* what was equipped before, to restore */
+static uint8_t g_au_prev_item, g_au_item;
+static bool g_au_restore;
+
+static int AutoUseSlot(void)
+{
+    const unsigned scene = Rd(0x0644), tx = Rd(0x09A6), ty = Rd(0x09A8);
+    const uint8_t *slots = &g_snes->ram[0x0AB4];
+    for (size_t i = 0; i < sizeof(kAutoUse) / sizeof(kAutoUse[0]); i++) {
+        const AutoUseSpot *s = &kAutoUse[i];
+        if (s->scene != scene || tx < s->x0 || tx >= s->x1 || ty < s->y0 || ty >= s->y1)
+            continue;
+        /* Meat only once the villagers on the raft are hungry (flag 02)
+         * and not yet fed (flag 03), as Gaia and Time does. */
+        if (s->item == 0x0A && ((g_snes->ram[0x0A00] & 0x0C) != 0x04))
+            continue;
+        for (int k = 0; k < 16; k++)
+            if (slots[k] == s->item)
+                return k;
+    }
+    return -1;
+}
+
+static uint32_t AutoUseFilter(uint32_t in)
+{
+    if (!g_auto_use || !g_snes)
+        return in;
+    if (!(in & kPadA)) {
+        g_au_latched = false;
+        return in;
+    }
+    if (g_au_latched)
+        return (in & ~kPadA) | kPadB;
+    /* Free to act: a player, no menu, no message, movement not locked. */
+    if (!Rd(0x09AA) || Rd(0x0644) == 0x00FF || (Rd(0x09EC) & 0x6000) || (Rd(0x09AE) & 0x3800))
+        return in;
+    const int slot = AutoUseSlot();
+    if (slot < 0)
+        return in;
+    if (!g_au_restore) {
+        g_au_prev_slot = (int16_t)Rd(0x0AC4);
+        g_au_prev_item = (uint8_t)Rd(0x0AC6);
+    }
+    g_au_item = g_snes->ram[0x0AB4 + slot];
+    Wr(0x0AC4, (uint16_t)slot);
+    Wr(0x0AC6, g_au_item);
+    g_au_latched = true;
+    g_au_restore = true;
+    return (in & ~kPadA) | kPadB;
+}
+
+/* Once the item's message has closed, equip again what was equipped before
+ * (if it is still in its slot). */
+static void AutoUseFrame(void)
+{
+    if (!g_snes || !g_au_restore || g_au_latched)
+        return;
+    if ((Rd(0x09EC) & 0x6000) || Rd(0x0644) == 0x00FF)
+        return;
+    g_au_restore = false;
+    const uint8_t *slots = &g_snes->ram[0x0AB4];
+    if (g_au_prev_slot >= 0 && g_au_prev_slot < 16 && slots[g_au_prev_slot] == g_au_prev_item &&
+        g_au_prev_item) {
+        Wr(0x0AC4, (uint16_t)g_au_prev_slot);
+        Wr(0x0AC6, g_au_prev_item);
+    } else if ((int16_t)Rd(0x0AC4) >= 0 && Rd(0x0AC6) == g_au_item) {
+        Wr(0x0AC4, 0xFFFF);   /* nothing was equipped before */
+        Wr(0x0AC6, 0);
+    }
+}
+
+static void ActivateAutoUse(void) { g_auto_use = true; }
+int IogAutoUseGet(void) { return g_auto_use; }
+void IogAutoUseSet(int on)
+{
+    g_auto_use = on != 0;
+    snes_mod_runtime_persist_feature_c("iog.enhancements", "auto_use", on != 0, NULL, NULL);
+}
+
 /* ---- Enhanced world map ---------------------------------------------------- */
 
 /* One switch for everything added to the walkable world map: the filtered
@@ -493,6 +611,9 @@ static void ResetHd(void)
     g_text_active = false;
     snes_mod_register_frame_callback(RunFrame);
     snes_mod_register_frame_callback(TextSpeedFrame);
+    g_auto_use = g_au_latched = g_au_restore = false;
+    snes_mod_register_input_filter(AutoUseFilter);
+    snes_mod_register_frame_callback(AutoUseFrame);
     g_world_map_enhanced = 0;
     g_edge_hud = 0;
     snes_mod_register_input_filter(HoldAdvanceFilter);
@@ -529,6 +650,7 @@ SNES_MOD_CONSTRUCTOR(register_iog_mods)
     snes_mod_register_activation_plugin("iog.run", ActivateRun);
     snes_mod_register_activation_plugin("iog.hold_advance", ActivateHoldAdvance);
     snes_mod_register_activation_plugin("iog.text_speed", ActivateTextSpeed);
+    snes_mod_register_activation_plugin("iog.auto_use", ActivateAutoUse);
     snes_mod_register_activation_plugin("iog.hotswap", ActivateSwap);
     snes_mod_register_activation_plugin("iog.world_map", ActivateWorldMap);
     snes_mod_register_activation_plugin("iog.cheat.hp", ActivateInfiniteHp);

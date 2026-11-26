@@ -1,14 +1,14 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 26,
-2026 (tester build `v0.2.0-beta.13`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.14`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
 
-## From Gaia and Time (beta 13, November 26)
+## From Gaia and Time (betas 13 and 14, November 26)
 
 andrewclunn (Drewish), author of the *Gaia and Time* hack, gave permission
 to use his features; the owner asked for the ones worth having. Rebuilt in C
@@ -28,6 +28,17 @@ the README:
   the interpreter give identical frames. It writes `$7E` only while a message
   is up; a state loaded mid-message can take the written value for the
   script's own pace until the next line.
+- **Use key items on the spot** (beta 14, `iog.enhancements/auto_use`, on by
+  default). Pressing A where a carried key item works hands the game a B
+  press with the item equipped while A is held; the previous equipment is
+  restored after the message. 28 spots for 17 items, taken from the handlers
+  in the item-use table at `$03:843F` (room `$0644`, tile `$09A6`/`$09A8`;
+  `COP 45` areas taken as end-exclusive, the explicit compares as written).
+  Checked only at Rama's Statue on the owner's F1 state: A on the right
+  pedestal raises it and opens the cemetery, identically in native and the
+  interpreter; A away from it does nothing. **Not checked at the other 27
+  spots**, nor with a button type other than the default (the item button
+  is then not B). Melodies and hieroglyphs are left out on purpose.
 - **Not taken, by choice:** his four items, item placements, ability and
   control changes, options menu and HUD rewrite (they change game code and
   rebalance the game), and his script (still in QA, written around his
@@ -322,7 +333,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.13`)
+## The tester build (`v0.2.0-beta.14`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

@@ -14,6 +14,7 @@ play stays the stock USA ROM (the launcher verifies it).
 | Languages (`iog.languages`) | Game language | Spanish, French or German text and font from your own *Illusion of Time* ROM |
 | Gameplay enhancements (`iog.enhancements`) | Run button | Auto-run: walk to build speed, hold **Y** (or X) to start sooner; or Hold: hold the button with a direction to sprint |
 | | Text speed | Normal, Cinematic or Instant; hold the run button to hurry any line |
+| | Use key items on the spot | Press A where a key item you carry works and Will uses it, no equipping needed |
 | | Item hotswapping | Hold **X** and press **L/R** to equip the previous/next item |
 | | MSU-1 soundtrack | CD-quality music from an MSU-1 pack |
 | | Item stacking | Red Jewels, Herbs and Crystals share one slot, with counters on the inventory screen |
@@ -91,6 +92,17 @@ written without accents.
   button hurries the line (paced lines at half their delay). It changes only
   the game's per-letter delay ($7E) while a message is up and puts the
   script's value back when it closes.
+- **Use key items on the spot** (after *Gaia and Time*, on by default): press
+  A where a key item you carry does something and Will uses it: the Prison
+  Key, both Incan Statues, the Diamond Block, the Meat on the raft, both Mine
+  Keys, the Crystal Ball, the Lift Key, the Palace Key, the Purification
+  Stone, the Prayer and Rama's Statues, the Magic Powder, the Tearpot, the
+  Mushroom Drops and the Gorgon Flower. No game code is added: for as long as
+  A is held the game gets its item button (B) with that item equipped, its
+  own item code runs, and the item you had equipped comes back afterwards.
+  The spots are the game's own checks (room and tile, read from each item's
+  handler). Melodies and hieroglyphs are left to you. It assumes the
+  default button type (B is the item button).
 - **Hotswapping**: hold X and press L or R to cycle the equipped item
   through the inventory (past either end nothing is equipped). The game's
   item sound confirms it.
@@ -212,7 +224,8 @@ launcher's Hotkeys) opens the settings over the paused game:
 - Display: fullscreen (desktop), FPS counter
 - Audio: volume
 - Illusion of Gaia: HD scaling, language (only those whose ROM you have),
-  hold to advance text, text speed, run, MSU-1 soundtrack (next launch)
+  hold to advance text, text speed, run, use key items on the spot, MSU-1
+  soundtrack (next launch)
 - System: save states, reset (asks twice), quit (asks twice)
 
 Changes apply at once unless the menu says "applies on the next launch",

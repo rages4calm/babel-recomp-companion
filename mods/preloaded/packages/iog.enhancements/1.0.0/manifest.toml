@@ -197,6 +197,17 @@ feature = "text_speed"
 id = "iog.text_speed"
 
 [[feature]]
+id = "auto_use"
+name = "Use key items on the spot"
+description = "Press A where a key item you carry does something (a statue on its pedestal, a key at its door, the Crystal Ball, the Purification Stone and the rest) and Will uses it, without equipping it first. Melodies and hieroglyphs still work as usual. After andrewclunn's Gaia and Time."
+group = "Gameplay"
+default_enabled = true
+
+[[plugin]]
+feature = "auto_use"
+id = "iog.auto_use"
+
+[[feature]]
 id = "world_map"
 name = "Enhanced world map"
 description = "On the walkable world map: a smoother map picture with a hazed horizon, a higher camera that shows more of the land, markers over the places you can visit, a small map with your position, and a clearer entry prompt. You also get control sooner after leaving a town. Off: the plain walking view."
