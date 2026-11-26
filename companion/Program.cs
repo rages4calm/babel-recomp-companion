@@ -16,6 +16,7 @@ internal static class Program
             form.Icon = launcherIcon;
             AddSoundtrackButton(form, controller);
             AddCheatsModsButton(form, controller);
+            ReloadWhenReturning(form, controller);
             var smoke = Array.IndexOf(args, "--smoke-test");
             if (smoke >= 0) {
                 if (smoke + 1 >= args.Length) throw new ArgumentException("Supply a fresh smoke-test directory.");
@@ -34,6 +35,22 @@ internal static class Program
             if (!args.Contains("--smoke-test")) MessageBox.Show(error.Message, "Companion could not start", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
+    }
+
+    /// <summary>
+    /// The game rewrites its own settings while it runs. Coming back to the
+    /// launcher with nothing unapplied, pick those up, so the next Apply is
+    /// not refused as a conflict with a file the player never touched here.
+    /// </summary>
+    private static void ReloadWhenReturning(LauncherForm form, LauncherController controller)
+    {
+        // The shell's own Revert also redraws the open page; fall back to a plain reload.
+        var revert = typeof(LauncherForm).GetMethod("Revert", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, Type.EmptyTypes);
+        form.Activated += (_, _) => {
+            if (controller.HasChanges) return;
+            try { if (revert != null) revert.Invoke(form, null); else controller.Reload(); }
+            catch (Exception) { /* a locked or half-written file: the next activation tries again */ }
+        };
     }
 
     private static Icon LoadLauncherIcon()
