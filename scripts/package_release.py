@@ -1,4 +1,9 @@
-"""Package only verified interpreter builds, with notices and no player data."""
+"""Package a verified build, with notices and no player data.
+
+The default is an interpreter-only build with no ROM-derived code. --native
+packages a build that contains compiled game code instead; the owner decided
+on November 26, 2026 to publish those as binaries. Generated source, ROMs and
+player data stay out of the package either way."""
 from __future__ import annotations
 import argparse
 from pathlib import Path
@@ -16,15 +21,21 @@ FORBIDDEN_NAMES = {"rom.cfg", "config.ini", "config.local.ini", "ra.ini",
                    "keybinds.ini", "input.ini", "last_run_report.json", "state.toml", "retroachievements.token"}
 
 
-def validate_build(build: Path) -> Path:
+def validate_build(build: Path, native: bool = False) -> Path:
     cache = (build / "CMakeCache.txt").read_text(encoding="utf-8")
-    if not re.search(r"^SNESRECOMP_INTERPRETER_ONLY:BOOL=(ON|TRUE|1)$", cache, re.M):
-        raise ValueError("Public packages require SNESRECOMP_INTERPRETER_ONLY=ON")
+    interpreter = re.search(r"^SNESRECOMP_INTERPRETER_ONLY:BOOL=(ON|TRUE|1)$", cache, re.M)
+    if native and interpreter:
+        raise ValueError("--native needs a build with SNESRECOMP_INTERPRETER_ONLY=OFF")
+    if not native and not interpreter:
+        raise ValueError("Public packages require SNESRECOMP_INTERPRETER_ONLY=ON (or pass --native)")
     for name in ("babel-recomp.exe", "babel-recomp", "babel-recomp.nro", "babel-recomp.3dsx"):
         binary = build / name
         if binary.is_file():
             data = binary.read_bytes()
-            if PUBLIC_ID not in data or PRIVATE_ID in data:
+            if native:
+                if PRIVATE_ID not in data or PUBLIC_ID in data:
+                    raise ValueError("Binary lacks the native execution identity")
+            elif PUBLIC_ID not in data or PRIVATE_ID in data:
                 raise ValueError("Binary lacks public execution identity; rebuild interpreter-only")
             return binary
     raise ValueError("No supported executable; VPK/APK need their own verified pipeline")
@@ -39,10 +50,10 @@ def validate_payload(stage: Path) -> None:
 
 
 def package(build: Path, tag: str, root: Path = ROOT, companion: Path | None = None,
-            gaialabs: Path | None = None) -> Path:
+            gaialabs: Path | None = None, native: bool = False) -> Path:
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", tag):
         raise ValueError("Invalid platform tag")
-    binary = validate_build(build)
+    binary = validate_build(build, native)
     version = (root / "VERSION").read_text(encoding="utf-8").strip()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+_-]*", version):
         raise ValueError("Invalid VERSION")
@@ -154,9 +165,11 @@ if __name__ == "__main__":
     parser.add_argument("tag")
     parser.add_argument("--companion", type=Path, help="Windows managed launcher output directory")
     parser.add_argument("--gaialabs", type=Path, help="folder holding the generated GaiaLabs dialogue pack and map data")
+    parser.add_argument("--native", action="store_true",
+                        help="package a build that contains compiled game code (owner decision, November 26, 2026)")
     args = parser.parse_args()
     try:
         package(args.build.resolve(), args.tag, companion=args.companion.resolve() if args.companion else None,
-                gaialabs=args.gaialabs.resolve() if args.gaialabs else None)
+                gaialabs=args.gaialabs.resolve() if args.gaialabs else None, native=args.native)
     except (ValueError, OSError) as error:
         parser.exit(1, f"package_release: {error}\n")

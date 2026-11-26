@@ -280,7 +280,7 @@ ground uses it. The smooth (xBR) present filter in
 `runner/src/present_filter.*` and `desktop/opengl.c` is also local and
 absent upstream.
 
-The current public tester build is `v0.2.0-beta.6` (November 26, pre-release; beta 6 adds the optional status display at the screen edges, `iog.graphics/edge_hud`; beta 5 removed the paused Companion menu: Start opens the map, achievements open from the settings; it carries the fixes from the owner's first playtest,
+The current public tester build is `v0.2.0-beta.7` (November 26, pre-release; beta 7 is the first download with the compiled native game code, by the owner's decision, packaged with `--native` from `sdk-update/build`; beta 6 added the optional status display at the screen edges, `iog.graphics/edge_hud`; beta 5 removed the paused Companion menu: Start opens the map, achievements open from the settings; it carries the fixes from the owner's first playtest,
 Windows x64). It is the interpreter-only build from
 `.local/batch-001/release/build`, packaged by `scripts/package_release.py`
 with `--companion` and `--gaialabs`: the Companion launcher, the generated

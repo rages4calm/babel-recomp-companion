@@ -1,7 +1,7 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 25,
-2026 (tester build `v0.2.0-beta.6`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.7`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
@@ -141,24 +141,14 @@ Edward's Castle, the lookout and the gold ship
     decline at run time (cause not captured), about 30,000 that touch bytes
     the game patches while running, and a few stack-pointer and reset
     operations. `sdk-routes/residual-routes-ext3.json` has the list.
-  - **The owner's install runs the native build since November 26.** The
-    executable in his beta 6 folder was replaced by the native play build
-    (`cb-natdef`); the interpreter one is kept beside it as
-    `babel-recomp.interpreter.exe`. The native paths are now on by default in
-    a build that has them; `IOG_NATIVE_<NAME>=0` turns one off.
-  - **A public native build is the owner's decision.** The download is
-    interpreter-only because the repository rules forbid shipping
-    ROM-derived binaries. Other recomp projects either publish compiled
-    binaries or ship a builder that compiles from the player's own ROM.
   - **Not played by a person** on the extended build, and no speed
     measurement was taken.
   - **The four declarations are assertions.** They rest on the older
     analyzer's proof and on the identical survey and routes.
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
-  - The public download is interpreter-only and is not affected either way.
 
-## The tester build (`v0.2.0-beta.6`)
+## The tester build (`v0.2.0-beta.7`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot
@@ -171,9 +161,15 @@ Edward's Castle, the lookout and the gold ship
   The store only opens once play begins, and every way of driving input
   automatically also switches recording off by design, so no unlock, toast or
   saved `progress.json` has been observed in a real session.
-- **Interpreter only.** The download has no ROM-derived native code, so
-  testers run the slower path. The 198-scene survey and the route replays
-  were run on the native build, not on the interpreter build.
+- **Native since beta 7.** The owner decided on November 26 to publish the
+  compiled game code in the download (`package_release.py --native`, from
+  `.local/batch-001/sdk-update/build`). The package was run from a clean
+  folder: a cold boot to the title and the Inca room from his save, with 12
+  and 0 interpreted instructions. It differs from the earlier downloads in
+  two build options that came with the native build directory and were not
+  compared in play: `SNESRECOMP_DSP_MIX_IMPL` is LLE (was NATIVE) and
+  `SNESRECOMP_EXECUTION_DEFAULT` is off (was on). The executable's identity
+  string still says `rom-derived-code=private`.
 - **Wide view off was not tested** on the public build (the setting
   `iog.graphics/wide_view` disabled). The setting needs a restart and has no
   in-game row yet.

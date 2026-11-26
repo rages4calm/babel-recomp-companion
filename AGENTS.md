@@ -24,6 +24,10 @@ Fix neighboring rooms and transitions too; scene admission is not visual approva
 - Never commit ROMs, ROM-derived generated source/binaries, saves, states,
   soundtrack packs, game screenshots or private validation data. Do not blanket-add
   the workspace; inspect the staged diff and tracked-file list before pushing.
+- Release downloads may contain the compiled native game code (owner decision,
+  November 26, 2026; `scripts/package_release.py --native`). That is the
+  executable only: the generated C source, the ROM and everything else in the
+  rule above still never go into the repository or a package.
 - Keep one bounded scratch batch under ignored .local/; compact completed evidence.
 - Use shared CompanionLauncher/CompanionAchievements contracts. Do not add UI
   options for unimplemented engine features. Preserve native settings and owner data.
