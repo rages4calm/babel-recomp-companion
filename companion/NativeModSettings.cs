@@ -37,6 +37,7 @@ public static class NativeModSettings
             "Normal keeps the game's pacing. Cinematic types plain lines one letter per frame. Instant shows every line at once.",
             Choices: new[] { new ChoiceItem("normal", "Normal"), new ChoiceItem("cinematic", "Cinematic"), new ChoiceItem("instant", "Instant") })),
         Toggle("mod.auto-use", "Convenience", "Use key items on the spot", "iog.enhancements", "auto_use", "Press A where a key item you carry does something and Will uses it without equipping it first (after andrewclunn's Gaia and Time). Melodies and hieroglyphs still work as usual.", true),
+        Toggle("mod.jewel-sparkles", "Convenience", "Red Jewel sparkles", "iog.enhancements", "jewel_sparkles", "A twinkle of light marks each hidden Red Jewel you have not found yet, and the people who would give you one (after andrewclunn's Gaia and Time).", true),
         Toggle("mod.stacking", "Convenience", "Stack common items", "iog.enhancements", "stacking", "Red Jewels, Herbs and Crystals each share one inventory slot, with a counter."),
         Toggle("mod.equipped", "Convenience", "Mark the equipped item", "iog.enhancements", "equipped", "Draw the equipped-item frame in the original inventory."),
         Toggle("mod.hotswap", "Convenience", "Quick item selection", "iog.enhancements", "hotswap", "Hold the configured modifier and press L/R. Existing modifier mapping is preserved (default X)."),

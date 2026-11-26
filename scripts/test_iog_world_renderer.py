@@ -96,6 +96,8 @@ void PpuClearOverlayCaptures(Ppu*p){memset(p->overlayCaptures,0,sizeof(p->overla
 void PpuSetExtraSpace(Ppu*p,uint16_t n){CHECK(p!=g_ppu&&!n);p->extraLeftRight=0;}
 void PpuSetWidescreenHudSplit(Ppu*p,uint8_t h,uint8_t l,uint8_t r){CHECK(p!=g_ppu&&!h&&!l&&!r);}
 void PpuSetExtraObjects(Ppu*p,const PpuExtraObject*objects,size_t count){p->extraObjects=objects;p->extraObjectCount=count;}
+void IogSparkleDraw(uint8_t*d,size_t pitch,int w,int h,int x,int y){(void)d;(void)pitch;(void)w;(void)h;(void)x;(void)y;}
+int IogEdgeHudGet(void){return 0;}
 void PpuDrawDetachedLine(Ppu*p,int line){
  CHECK(p!=g_ppu&&(line==0||line==1));if(!line)return;detached_lines++;
  CHECK(p->renderPitch==1024&&!p->renderVram&&!p->hdFrame&&!p->overlayRenderBuffer[2]);
@@ -1196,15 +1198,19 @@ static void generic_authored_window(void){
   CHECK(s.output[y*598+x]==expected);
  }
  CHECK(!memcmp(before_ram,ram,sizeof(ram))&&!memcmp(before_ppu.vram,g_ppu->vram,sizeof(before_ppu.vram)));
- /* A stair changes the floor bounds early. The remaining old floor is still
-  * authoritative inside the native field, with no peek at the next floor. */
+ /* A stair changes the floor bounds early, with no remembered floor to
+  * slide from (a door entered mid-pan, a loaded state). The rows the
+  * original camera shows continue across the room's width ([256,768),
+  * so from the field's left edge to the picture's right); nothing above or
+  * below them, so no peek at the next floor. (Beta 12: black blocks beside
+  * the field on Seaside Palace stairs.) */
  IogWorldReset();word(0x6D8,0);word(0x6DE,256);publication();
  IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
  IogWorldEndRaster(0,225,0);
  CHECK(s.complete&&!strcmp(s.reason,"ready_authored_window_pan"));
  CHECK(s.view.native_x==171&&s.view.native_y==56);
  for(int y=0;y<336;y++)for(int x=0;x<598;x++){
-  uint32_t expected=x>=171&&x<427&&y>=56&&y<280?
+  uint32_t expected=x>=171&&y>=56&&y<280?
    0xff000000u|((85u+x)&1023)|(((201u+y)&1023)<<10):0;
   CHECK(s.output[y*598+x]==expected);
  }
@@ -1266,8 +1272,10 @@ static void stair_pan_between_floors(void){
  CHECK(s.view.world_x==85&&s.view.world_y==456&&s.view.native_x==171&&s.view.native_y==56);
  CHECK(s.pan.top==512&&s.pan.view_y==456); /* still the floor it left */
  for(int y=0;y<336;y++)for(int x=0;x<598;x+=13){
-  /* The new floor above, the old floor to the bottom of its picture. */
-  uint32_t expected=y<280?0xff000000u|((85u+x)&1023)|(((457u+y)&1023)<<10):0;
+  /* The old floor to the bottom of its picture. The floor above appears
+   * only as far as the camera has reached it (beta 11: its window opens
+   * with filler rows that otherwise sat at the picture's top edge). */
+  uint32_t expected=y>=56&&y<280?0xff000000u|((85u+x)&1023)|(((457u+y)&1023)<<10):0;
   CHECK(s.output[y*598+x]==expected);
  }
  /* Half way. The old floor leaves by the bottom of the original field. */
@@ -1285,12 +1293,13 @@ static void stair_pan_between_floors(void){
  CHECK(!strcmp(s.reason,"ready")&&s.view.world_y==200&&s.view.native_y==56);
  CHECK(s.pan.top==256&&s.pan.bottom==480&&s.pan.view_y==200);
  CHECK(s.output[55*598+5]==0&&s.output[56*598+5]&&s.output[279*598+5]&&s.output[280*598+5]==0);
- /* Without a remembered floor (a state loaded during the pan) the
-  * original field alone stays, as before. */
+ /* Without a remembered floor (a state loaded during the pan) the rows
+  * the original camera shows continue across the room (beta 12); rows
+  * above and below them stay padding. */
  IogWorldReset();s.publish_sequence=0;word(0x6D8,512);word(0x6DC,768);word(0x6DE,768);
  picture_at(256,256);
  CHECK(!strcmp(s.reason,"ready_authored_window_pan")&&s.view.native_x==171&&s.view.native_y==56);
- CHECK(s.output[100*598+5]==0&&s.output[100*598+300]);
+ CHECK(s.output[100*598+5]&&s.output[100*598+300]&&s.output[20*598+5]==0&&s.output[300*598+5]==0);
 }
 /* Dark Space keeps its star ring while no HDMA runs: every row then has
  * one scroll. Any row that differs is not that state. */

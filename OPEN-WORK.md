@@ -1,14 +1,14 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 26,
-2026 (tester build `v0.2.0-beta.14`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.15`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
 
-## From Gaia and Time (betas 13 and 14, November 26)
+## From Gaia and Time (betas 13 to 15, November 26)
 
 andrewclunn (Drewish), author of the *Gaia and Time* hack, gave permission
 to use his features; the owner asked for the ones worth having. Rebuilt in C
@@ -39,6 +39,17 @@ the README:
   interpreter; A away from it does nothing. **Not checked at the other 27
   spots**, nor with a button type other than the default (the item button
   is then not B). Melodies and hieroglyphs are left out on purpose.
+- **Red Jewel sparkles** (beta 15, `iog.enhancements/jewel_sparkles`, on by
+  default, `src/iog_sparkle.c`). Drawn by the host over the finished picture
+  (wide view at presentation, 4:3 into the render buffer), not as actors.
+  Hidden jewels: actor `$00:C672`, index actor+`$0E`, flag `$0280+index`.
+  Givers: Lance `$79` (`$A5` set, `$E2` clear), Ann `$95` (`$D6`, `$E5`
+  clear), stone girl `$AE` (`$E6`), snake game `$C6` (`$E7`), on the actor
+  nearest the spawn tile. Seen on staged warps from the owner's F1 state:
+  South Cape's jewel by the bell tower (wide and 4:3), and the Gorgon hut's
+  stone girl and its jewel. **Not seen:** Lance, Ann, the snake game, and the
+  other thirteen jewels. Left out: his fisherman's pot and trapped slave
+  sparkles (tied to his script changes) and the new jewel sources he adds.
 - **Not taken, by choice:** his four items, item placements, ability and
   control changes, options menu and HUD rewrite (they change game code and
   rebalance the game), and his script (still in QA, written around his
@@ -333,7 +344,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.14`)
+## The tester build (`v0.2.0-beta.15`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

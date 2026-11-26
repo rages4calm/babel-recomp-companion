@@ -61,7 +61,8 @@ window's resolution; the others use the optional HD Mode 7 setting.
 - **Conveniences you can switch on:** auto-run (walk to build speed; hold the
   run button to start sooner) or hold to run, a text speed setting with the
   run button to hurry any line, using key items by pressing A on their
-  spot, hold to advance dialogue,
+  spot, a twinkle over each Red Jewel still to be found, hold to advance
+  dialogue,
   item stacking, quick item selection, an equipped-item marker, a status
   display at the screen edges, and save states with a confirmation before
   anything is overwritten.
@@ -131,7 +132,7 @@ on the launcher's Game page to **Open the setup screen**.
 
 ## Development status
 
-**Current build:** `0.2.0-beta.14`, Windows x64, pre-release for
+**Current build:** `0.2.0-beta.15`, Windows x64, pre-release for
 playtesting. Automated routes reach the ending and the credits; a full
 playthrough by a person is under way.
 
@@ -220,8 +221,8 @@ This port stands on the work of many people. Thank you all.
   — author of the *Gaia and Time* hack
   ([source](https://github.com/Azarem/gaia-iog-baserom/tree/drew/gaia-and-time)).
   The auto-run, the text speed setting (Cinematic, Instant, and the run
-  button to hurry text) and using key items on the spot follow his design,
-  rebuilt here with his permission.
+  button to hurry text), using key items on the spot and the Red Jewel
+  sparkles follow his design, rebuilt here with his permission.
 - **Aleks** ([ALEKS Ultimate NX](https://github.com/Alexgg1014/The-Legend-of-Zelda-A-Link-To-The-Past-Alek-s-Ultimate-NX-Edition))
   — for the dual-screen companion (the Dual and Flip Grip layouts) and for
   their help throughout. Its safe boot and crash reporter were adapted here

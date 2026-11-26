@@ -235,6 +235,7 @@ static void IogBeforeRunFrame(void)
 }
 
 #include "iog_companion.h"
+#include "iog_sparkle.h"
 /* After a frame is rasterised: presentation added by mods. */
 static void IogEndSimFrame(const uint8_t *field, unsigned number)
 {
@@ -242,6 +243,8 @@ static void IogEndSimFrame(const uint8_t *field, unsigned number)
     (void)number;
     IogCompanionGrabMenu();
     IogInventoryOverlay();
+    if (!IogWorldEnabled())
+        IogSparkleNative();   /* the wide view draws its own at presentation */
     if (field) IogSceneViewEndFrame(&s_scene_view, number);
 }
 

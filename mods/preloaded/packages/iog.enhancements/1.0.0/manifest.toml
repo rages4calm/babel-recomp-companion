@@ -208,6 +208,17 @@ feature = "auto_use"
 id = "iog.auto_use"
 
 [[feature]]
+id = "jewel_sparkles"
+name = "Red Jewel sparkles"
+description = "A twinkle of light marks each hidden Red Jewel you have not found yet, and the people who would give you one. Nothing else changes: the jewels are where they always were. After andrewclunn's Gaia and Time."
+group = "Gameplay"
+default_enabled = true
+
+[[plugin]]
+feature = "jewel_sparkles"
+id = "iog.jewel_sparkles"
+
+[[feature]]
 id = "world_map"
 name = "Enhanced world map"
 description = "On the walkable world map: a smoother map picture with a hazed horizon, a higher camera that shows more of the land, markers over the places you can visit, a small map with your position, and a clearer entry prompt. You also get control sooner after leaving a town. Off: the plain walking view."

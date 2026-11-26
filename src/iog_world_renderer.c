@@ -12,6 +12,7 @@
 #include "iog_raster_parallax.h"
 #include "iog_scene_view.h"
 #include "iog_randomizer.h"
+#include "iog_sparkle.h"
 #include "snes_overlay_draw.h"
 #include "common_cpu_infra.h"
 #include "common_rtl.h"
@@ -3061,6 +3062,9 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
         DrawCenteredField(dst,pitch,field,width,256*height/224,224,height);
     } else if(s.complete && !s.fixed_plate && width==s.width && height==s.height) {
         for(int y=0;y<height;y++) memcpy(dst+y*pitch,s.output+y*width,width*4);
+        /* Red Jewel sparkles sit in the scene, under the status display. */
+        if(!s.sky_field && !s.stock_actor_field && !s.mode7)
+            IogSparkleDraw(dst,pitch,width,height,s.view.world_x,s.view.world_y);
         if(s.hud_layered && !s.sky_field && !s.stock_actor_field && !s.mode7) PresentHud(dst,pitch);
         if(s.sky_field || s.stock_actor_field) {
             /* Keep live objects but replace visible source HUD pixels with
@@ -3073,6 +3077,7 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
                     memcpy(dst+(y+s.view.native_y)*pitch+(x+s.view.native_x)*4,
                         field+index*4,4);
             }
+            IogSparkleDraw(dst,pitch,width,height,s.view.world_x,s.view.world_y);
             PresentHud(dst,pitch);
         } else if(s.mode7) {
             int left=(width-256)/2,top=(height-224)/2;
@@ -3121,6 +3126,11 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
         int left=(width-256)/2,top=(height-224)/2;
         for(int y=0;y<224;y++) memcpy(dst+(y+top)*pitch+left*4,
             field+y*256*4,256*4);
+        /* The original field, framed: sparkles inside it only. */
+        if(g_snes) {
+            int cam_x=(int16_t)Word(g_snes->ram,0x68A),cam_y=(int16_t)Word(g_snes->ram,0x68E);
+            IogSparkleDraw(dst+top*pitch+left*4,pitch,256,224,cam_x,cam_y);
+        }
     }
     const char *output=getenv("IOG_WORLD_OUTPUT");
     const char *frame=getenv("IOG_WORLD_OUTPUT_FRAME");

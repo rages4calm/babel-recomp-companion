@@ -15,6 +15,7 @@ play stays the stock USA ROM (the launcher verifies it).
 | Gameplay enhancements (`iog.enhancements`) | Run button | Auto-run: walk to build speed, hold **Y** (or X) to start sooner; or Hold: hold the button with a direction to sprint |
 | | Text speed | Normal, Cinematic or Instant; hold the run button to hurry any line |
 | | Use key items on the spot | Press A where a key item you carry works and Will uses it, no equipping needed |
+| | Red Jewel sparkles | A twinkle over each hidden Red Jewel not found yet, and over the people who would give one |
 | | Item hotswapping | Hold **X** and press **L/R** to equip the previous/next item |
 | | MSU-1 soundtrack | CD-quality music from an MSU-1 pack |
 | | Item stacking | Red Jewels, Herbs and Crystals share one slot, with counters on the inventory screen |
@@ -103,6 +104,14 @@ written without accents.
   The spots are the game's own checks (room and tile, read from each item's
   handler). Melodies and hieroglyphs are left to you. It assumes the
   default button type (B is the item button).
+- **Red Jewel sparkles** (after *Gaia and Time*, on by default): a twinkle of
+  light over each of the sixteen hidden Red Jewels until you pick it up, and
+  over Lance (after the party), Ann (the Gorgon Flower trade), the stone girl
+  in the Gorgon hut and the snake game in Dao until they have given theirs.
+  Where his hack adds a sparkle actor to the game, this draws the light over
+  the finished picture: nothing in the game changes, and it shows the same
+  in the wide view, its margins and the 4:3 picture. It reads the game's own
+  "found" flags, so it disappears the moment the jewel is yours.
 - **Hotswapping**: hold X and press L or R to cycle the equipped item
   through the inventory (past either end nothing is equipped). The game's
   item sound confirms it.

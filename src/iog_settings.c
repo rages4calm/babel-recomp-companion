@@ -174,6 +174,9 @@ int IogAutoUseGet(void);
 void IogAutoUseSet(int on);
 static int AutoUseGet(void *ud) { (void)ud; return IogAutoUseGet(); }
 static void AutoUseSet(void *ud, int v) { (void)ud; IogAutoUseSet(v != 0); }
+#include "iog_sparkle.h"
+static int SparkleGet(void *ud) { (void)ud; return IogSparkleGet(); }
+static void SparkleSet(void *ud, int v) { (void)ud; IogSparkleSet(v != 0); }
 static int RunGet(void *ud) { (void)ud; return IogRunGet(); }
 static void RunSet(void *ud, int v) { (void)ud; IogRunSet(v); }
 
@@ -419,6 +422,13 @@ void IogSettingsInstall(void)
     it.label = "USE KEY ITEMS ON THE SPOT";
     it.get = AutoUseGet;
     it.set = AutoUseSet;
+    snes_settings_menu_add(&it);
+
+    memset(&it, 0, sizeof(it));
+    it.kind = kSnesSetting_Toggle;
+    it.label = "RED JEWEL SPARKLES";
+    it.get = SparkleGet;
+    it.set = SparkleSet;
     snes_settings_menu_add(&it);
 
     if (msu1_available()) {

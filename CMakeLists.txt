@@ -106,6 +106,7 @@ set(IOG_SOURCES
     src/iog_cheat_rates.c
     src/iog_msu.c
     src/iog_inventory.c
+    src/iog_sparkle.c
     src/iog_ips.c
     src/iog_ngplus.c
     src/iog_randomizer.c
