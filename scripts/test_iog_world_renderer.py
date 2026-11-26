@@ -1460,6 +1460,25 @@ static void stock_actor_field_after_unpaired_upload(void){
   g_snesrecomp_last_hdmaen=0;
  }
 }
+static void field_window_rebase(void){
+ /* An unmeasured window stays on the original field's columns and rows. */
+ Ppu p;memset(&p,0,sizeof(p));
+ p.window1left=0;p.window1right=0;p.window2left=100;p.window2right=140;
+ RebaseFieldWindows(&p,171,true);
+ CHECK(p.window1left==171&&p.window1right==171&&p.window2left==255&&p.window2right==0);
+ p.window1left=0;p.window1right=0;p.window2left=100;p.window2right=140;
+ RebaseFieldWindows(&p,171-224,true);
+ CHECK(p.window1left==255&&p.window1right==0&&p.window2left==47&&p.window2right==87);
+ p.window1left=250;p.window1right=255;p.window2left=0;p.window2right=255;
+ RebaseFieldWindows(&p,171-448,true);
+ CHECK(p.window1left==255&&p.window1right==0&&p.window2left==255&&p.window2right==0);
+ p.window2left=0;p.window2right=255;
+ RebaseFieldWindows(&p,-100,true);
+ CHECK(p.window2left==0&&p.window2right==155);
+ p.window1left=120;p.window1right=136;p.window2left=0;p.window2right=255;
+ RebaseFieldWindows(&p,0,false);
+ CHECK(p.window1left==255&&p.window1right==0&&p.window2left==255&&p.window2right==0);
+}
 static void restored_actor_field_before_first_upload(void){
  static uint8_t dst[598*336*4];
  fixture();g_ppu->inidisp=15;g_ppu->screenEnabled[0]=0x17;
@@ -1491,7 +1510,9 @@ static void restored_actor_field_before_first_upload(void){
   IogWorldReset();IogWorldCaptureAtCompose(&g_cpu,0x83c714);
   IogWorldCaptureAfterCompose(&g_cpu,0x83c789);
   CHECK(RestoredActorFieldLayout(g_ppu,ram));
-  g_ppu->mosaic=0x11;CHECK(!RestoredActorFieldLayout(g_ppu,ram));g_ppu->mosaic=0;
+  g_ppu->mosaic=0x11;CHECK(!RestoredActorFieldLayout(g_ppu,ram));
+  /* Layer bits with a one-pixel block draw nothing (a mosaic-revealed room). */
+  g_ppu->mosaic=3;CHECK(RestoredActorFieldLayout(g_ppu,ram));g_ppu->mosaic=0;
   word(0x642,1);CHECK(!RestoredActorFieldLayout(g_ppu,ram));word(0x642,0);
  }
  word(0x644,0xa2);IogWorldReset();IogWorldCaptureAtCompose(&g_cpu,0x83c714);
@@ -1869,7 +1890,7 @@ int main(int argc,char**argv){CHECK(argc==2);
   * world-map presentation is covered by test_iog_mode7_plane.py and
   * test_iog_mode7_perspective.py. */
  putenv("IOG_WORLD_MAP_FILTER=0");
- phase_queue();epochs_and_read_only();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+ phase_queue();epochs_and_read_only();field_window_rebase();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 

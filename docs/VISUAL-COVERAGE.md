@@ -1026,6 +1026,44 @@ About 20 reviewed scenes were judged at the entry camera only, 50 captured
 scenes were not looked at and 38 were not captured. All of this is
 headless software output at 598x336; the GPU path was not checked.
 
+### Finer-grained fallback: evidence and two corrections (batch 043)
+
+A census on the batch 042 build replayed the 114 retained routes, 28 stagings
+(cold boot to title and file select, death and respawn, the raft, Castoth,
+portals, gem trips, the glass game, Dark Space, the stock destination menu) and
+the 198-scene entry survey with a per-frame record of refusal reason, picture
+class and window and mosaic registers: about 413,000 frames in 225 scenes. Every
+refused frame was blank or at brightness 0, except the first frame after loading
+a state in Luke's house (`79`), two respawn scenes reached only because the
+staged seeds had no respawn record (`80`, `AA`), and the known staged-warp cases
+in `78` and `91`. No frame was refused for a window, mosaic, mid-frame mode
+change or mid-raster upload, so no per-line or per-layer fallback was added:
+nothing observed would use it. The lit phases that still show the original
+picture are the fixed plates (logos, title, file select, inventory, statue
+ceremony, ending, credits) and the composed 256-column scenes
+(`2A E4 E5 E7 E8 F0 DC`), which have no art beyond the field.
+
+Two faults were corrected. A colour window without a measured layout was drawn
+in the coordinates of each render chunk, which put a vertical line 53 pixels
+inside the field for 26 frames of Dark Gaia's entrance; windows now stay on the
+original field's columns and rows (`RebaseFieldWindows`), and those frames again
+equal the stock field. A state loaded in a mosaic-revealed room showed the small
+field for one frame because the restored-frame rule required mosaic register 0;
+a one-pixel block size is now accepted, and that frame equals the two after it.
+
+The survey gives identical per-frame reasons and end states in all 198 scenes,
+142 route and staging runs are identical apart from the two intended frames, and
+the ROM-free tests pass with one new function and one new assertion.
+
+Open: the player sprite is tinted differently from the stock field during Dark
+Gaia's defeat white-out; the Vampires' circle window was not seen (the kill was
+not staged), so the window correction is verified on Dark Gaia only; kills of
+Castoth and Sand Fanger and the pause menu's status page were not run; state
+loads in the other mosaic-revealed rooms are covered by inference. The single
+lit frames earlier reported in `58`, `06`, `68` and `FE` did not reproduce.
+Routes were replayed with the pack they were recorded with. Evidence is in
+`visual-fullgame-041/wsline`.
+
 ## Bounded entry survey
 
 `scripts/survey_iog_scenes.py` stages isolated copies of a private fixture's

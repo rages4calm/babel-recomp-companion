@@ -209,6 +209,30 @@ static void RebaseWindow1(Ppu *p,int offset)
     }
 }
 
+/* A window is written in the coordinates of the original 256x224 field.
+ * In a wide picture it stays on that field: both windows move with it, and
+ * the rows above and below the field, which no raster line described,
+ * have none. Used for every enabled window without a measured layout of
+ * its own; what remains after the frame gates is the colour window (the
+ * Vampires' circle, Dark Gaia's entrance). */
+static void RebaseFieldWindows(Ppu *p,int offset,bool field_row)
+{
+    if(!field_row) {
+        p->window1left=p->window2left=255;
+        p->window1right=p->window2right=0;
+        return;
+    }
+    RebaseWindow1(p,offset);
+    int left=p->window2left+offset,right=p->window2right+offset;
+    if(left>right || right<0 || left>255) {
+        p->window2left=255;
+        p->window2right=0;
+    } else {
+        p->window2left=(uint8_t)Clamp(left,0,255);
+        p->window2right=(uint8_t)Clamp(right,0,255);
+    }
+}
+
 enum { DaoHeatPeriod=64 };
 
 static bool DaoHeatWave(const PictureEpoch *e,const Ppu *p)
@@ -387,9 +411,11 @@ static bool RestoredActorFieldLayout(const Ppu *p,const uint8_t *ram)
     if((p->bgmode&7)!=1 || (p->windowsel && !DaoWorldWindow(p,ram) && !dark_gaia_window) || PPU_forcedBlank(p) ||
        p->frameInterlace || PPU_objInterlace(p) || !SameActorFieldRoom(ram,s.pending_ram))
         return false;
-    if(!p->mosaic) return true;
-    if(scene==0xE9) return MansionAndSolidArmMosaic(p,ram);
-    return p->mosaic==3 && DarkSpaceMosaic(p,ram);
+    /* A room that was revealed through a mosaic keeps its layer bits set
+     * with a block size of one pixel (Luke's house, the Gem rooms, Dark
+     * Space). That register value draws nothing. */
+    if(!(p->mosaic>>4)) return true;
+    return scene==0xE9 && MansionAndSolidArmMosaic(p,ram);
 }
 
 static bool StockActorFieldLayout(const Ppu *p,const uint8_t *ram)
@@ -2272,6 +2298,8 @@ static bool RenderWorld(void)
             memcpy(p,line->registers,PPU_SAVESTATE_REGS_SIZE);
             if(KnownWorldWindow(p,e->ram))
                 RebaseWindow1(p,left-chunk_x);
+            else if(p->windowsel&0xAAAAAAu)
+                RebaseFieldWindows(p,left-chunk_x,native_y>=0 && native_y<224);
             uint16_t source_hscroll[2]={p->hScroll[0],p->hScroll[1]};
             uint16_t source_vscroll[2]={p->vScroll[0],p->vScroll[1]};
             if(s.copy_reference) memcpy(p->vram,e->vram,sizeof(p->vram));
