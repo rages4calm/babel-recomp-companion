@@ -20,6 +20,7 @@ HARNESS = r'''
 #include "iog_world_renderer.c"
 /* No presenter here: the status plane is composed into the frame. */
 int snes_ovl_frame_layer_available(void) { return 0; }
+int snesrecomp_exe_dir_path(const char *leaf, char *out, size_t max_len) { (void)leaf;(void)out;(void)max_len; return 0; }
 void snes_ovl_frame_layer_set(const uint32_t *pixels, int w, int h, int x, int y, int rect_w, int rect_h) {
   (void)pixels; (void)w; (void)h; (void)x; (void)y; (void)rect_w; (void)rect_h;
 }

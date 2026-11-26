@@ -354,10 +354,14 @@ static void ResetHd(void)
     PresentFilter_Set(kPresentFilter_Config);
 }
 
+/* Read at start by the world renderer (IogWorldEnabled); nothing to switch here. */
+static void ActivateWideView(void) {}
+
 SNES_MOD_CONSTRUCTOR(register_iog_mods)
 {
     snes_mod_register_reset_callback(ResetHd);
     snes_mod_register_presentation_plugin("iog.hd", ActivateHd);
+    snes_mod_register_presentation_plugin("iog.wide_view", ActivateWideView);
     snes_mod_register_activation_plugin("iog.run", ActivateRun);
     snes_mod_register_activation_plugin("iog.hold_advance", ActivateHoldAdvance);
     snes_mod_register_activation_plugin("iog.hotswap", ActivateSwap);

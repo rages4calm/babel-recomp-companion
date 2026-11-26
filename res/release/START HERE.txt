@@ -1,0 +1,36 @@
+ILLUSION OF GAIA COMPANION - TEST BUILD
+=======================================
+
+This is a test build. Things will be wrong. Please report what you find:
+https://github.com/rages4calm/babel-recomp-companion/issues
+
+WHAT YOU NEED
+- Windows 10 or 11, 64-bit.
+- Your own Illusion of Gaia (USA) ROM (.sfc or .smc). No game data is
+  included in this download.
+- The .NET 8 Desktop Runtime for the launcher:
+  https://dotnet.microsoft.com/download/dotnet/8.0
+
+HOW TO START
+1. Unzip the whole folder somewhere you can write to (not Program Files).
+2. Run illusion-of-gaia.Companion.exe.
+3. On the Game page, choose your ROM, press Apply, then Play.
+
+WHAT IS ON BY DEFAULT
+- Wide view: more of each area around the original picture.
+- The GaiaLabs Retranslation script.
+- The walkable world map, with the enhanced view.
+Each can be turned off: Wide view and Enhanced world map are under Cheats
+and Mods in the launcher. See i18n/GAIALABS-NOTICE.md for the other two.
+
+IN THE GAME
+- Esc (or Left Trigger + Right Stick click): settings
+- I (or Left Trigger + Left Stick click): companion screen
+- Alt+Enter: fullscreen
+- F11 (or Left Trigger + Start): save states
+
+WHEN YOU REPORT A PROBLEM
+Say where you were, what you were doing, and your display and controller
+setup. A screenshot helps. Logs are in the logs folder next to the game.
+
+Based on Babel Recomp by mr0ta. Full credits are in README.md.

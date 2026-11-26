@@ -280,6 +280,20 @@ ground uses it. The smooth (xBR) present filter in
 `runner/src/present_filter.*` and `desktop/opengl.c` is also local and
 absent upstream.
 
+The first public tester build is `v0.2.0-beta.1` (November 25, pre-release,
+Windows x64). It is the interpreter-only build from
+`.local/batch-001/release/build`, packaged by `scripts/package_release.py`
+with `--companion` and `--gaialabs`: the Companion launcher, the generated
+GaiaLabs dialogue pack and walkable-map data (GPL-3.0, with
+`res/release/GAIALABS-NOTICE.md`) and `res/release/START HERE.txt`. No ROM
+and no ROM-derived code are in it. For that build the wide view became a
+setting, `iog.graphics/wide_view`, on by default and read from
+`mods/preloaded/state.toml` at start (`IOG_WORLD_RENDERER` still overrides
+it); the walkable-map data is found at `i18n/gaialabs-world-map.bin` beside
+the executable; and an automatic window size becomes 1280x720 while the wide
+view is on. `.local/batch-001/release/rt.py` runs a staged or unzipped
+build on the hidden desktop with no developer variables.
+
 SNESRecomp was updated on November 25 from `22c01ef1` to upstream main
 `627b2f27` (96 commits) by a three-way merge of the vendored tree against
 the old pin: 57 files taken from upstream, 37 added, 22 merged textually and

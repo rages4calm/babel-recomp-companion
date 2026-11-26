@@ -1,8 +1,7 @@
 # Mods
 
 > This document describes inherited Babel features. In Companion, optional music
-> can also be managed through Soundtrack in the new launcher. RetroAchievements
-> account/service support is disabled; local CompanionAchievements is being
+> can also be managed through Soundtrack in the new launcher. Local CompanionAchievements is being
 > integrated separately. See [current status](README.md) and [music setup](docs/MSU1.md).
 
 Every mod here is off by default and is switched on from the launcher's
@@ -201,7 +200,6 @@ launcher's Hotkeys) opens the settings over the paused game:
 
 - Display: fullscreen (desktop), FPS counter
 - Audio: volume
-- RetroAchievements: on/off, account and game status
 - Illusion of Gaia: HD scaling, language (only those whose ROM you have),
   hold to advance text, MSU-1 soundtrack (next launch)
 - System: save states, reset (asks twice), quit (asks twice)
@@ -268,28 +266,6 @@ settings) changes the walkable world map: a higher camera, smoother ground,
 pins with names over the places you can travel to, a small minimap, a
 clearer "Enter" prompt and control a little sooner after leaving a town.
 Turn it off for the original walking view.
-
-## RetroAchievements
-
-Settings -> **RetroAchievements**: tick the box and log in with your
-RetroAchievements account. Illusion of Gaia (US) is game 945 there; the game
-is recognised from your own ROM file (mods that change the game in memory do
-not change what it is recognised as).
-
-- **Softcore only.** Save states, rewind and run-ahead stay available, so
-  hardcore is not offered (it would be a false claim to the service).
-- Only the session token is stored (`retroachievements.token` beside the
-  game), never your password. Log out deletes it.
-- No network or a server problem never stops the game; unlocks made offline
-  are sent when the connection comes back.
-- Achievements are not loaded for a session with **cheats** or a
-  **randomizer seed**, and stop when **New Game+** is applied: those games
-  are not the one the achievements describe.
-- Unlocks appear as a message in the corner of the screen.
-
-Network: libcurl on Linux and macOS, WinHTTP on Windows, devkitPro's
-`switch-curl` on Switch (install it before building:
-`sudo dkp-pacman -S switch-curl`). Android, 3DS and Vita: not yet.
 
 ## Logs and crash reports (all platforms)
 

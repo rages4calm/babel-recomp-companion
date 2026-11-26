@@ -20,6 +20,7 @@
 #include "iog_cheat_rates.h"
 #include "iog_map_host.h"
 #include "iog_map_ui.h"
+#include "iog_world_renderer.h"
 #include <stdlib.h>
 #include "desktop/config.h"
 #include "desktop/sdl_compat.h"
@@ -276,6 +277,11 @@ static void CompletionText(void *ud, int v, char *out, size_t cap)
 
 void IogSettingsInstall(void)
 {
+    /* The wide view fills a 16:9 window; the host's automatic size is 4:3. */
+    if (IogWorldEnabled() && (!g_config.window_width || !g_config.window_height)) {
+        g_config.window_width = 1280;
+        g_config.window_height = 720;
+    }
     snes_ui_set_translator(Translate);
     SnesSettingItem it;
     memset(&it, 0, sizeof(it));

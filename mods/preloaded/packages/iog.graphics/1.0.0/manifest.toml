@@ -38,3 +38,15 @@ label = "Smooth edges (xBR, OpenGL)"
 [[plugin]]
 feature = "hd"
 id = "iog.hd"
+
+[[feature]]
+id = "wide_view"
+name = "Wide view"
+description = "Shows more of each area around the original picture, with square pixels and the status display and dialogue drawn at your screen's resolution. Screens made for the original width (title, menus, a few story scenes) stay their original size. Off: the original picture. Takes effect the next time the game starts."
+group = "Graphics"
+default_enabled = true
+presentation_only = true
+
+[[plugin]]
+feature = "wide_view"
+id = "iog.wide_view"

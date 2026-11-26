@@ -7,11 +7,10 @@
 
 Port nativo para PC y consolas de **Illusion of Gaia** (SNES, USA), construido
 sobre un framework de recompilación estática, con idiomas, banda sonora MSU-1,
-escalado HD, New Game+, RetroAchievements y mucho más.
+escalado HD, New Game+ y mucho más.
 
 [Read in English](README.md)
 
-[![Apóyame en Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/mr0ta)
 
 > **No se incluye ningún dato del juego.** Ni este repositorio ni sus
 > versiones contienen la ROM, gráficos, música ni código generado a partir del
@@ -43,8 +42,7 @@ Este port se apoya en el trabajo de mucha gente. Gracias a todos.
 - **Aleks** ([ALEKS Ultimate NX](https://github.com/Alexgg1014/The-Legend-of-Zelda-A-Link-To-The-Past-Alek-s-Ultimate-NX-Edition)):
   por la pantalla dual (los modos Dual y Flip Grip de la pantalla compañera) y
   por su ayuda durante todo el proyecto. De su port se adaptaron, con permiso,
-  el arranque seguro, el informe de cuelgues y el almacenamiento de
-  RetroAchievements.
+  el arranque seguro y el informe de cuelgues.
 - **EstebanPdN** ([zelda-alttp-3ds](https://github.com/EstebanPdN/zelda-alttp-3ds)):
   el port en el que se basa ALEKS Ultimate NX.
 - **Illusion of Gaia Randomizer**: DontBaguMe y colaboradores
@@ -63,8 +61,6 @@ Este port se apoya en el trabajo de mucha gente. Gracias a todos.
   [recompiler-rs](https://github.com/perplexes/snesrecomp) (perplexes),
   [ar-recomp](https://github.com/DerrickGold/ar-recomp) (DerrickGold); ver
   [THIRD_PARTY_ATTRIBUTION.md](snesrecomp/THIRD_PARTY_ATTRIBUTION.md).
-- **[RetroAchievements](https://retroachievements.org)** y
-  **[rcheevos](https://github.com/RetroAchievements/rcheevos)**.
 - **[SDL](https://github.com/libsdl-org/SDL)**,
   **[Dear ImGui](https://github.com/ocornut/imgui)** (Omar Cornut),
   **[stb](https://github.com/nothings/stb)** (Sean Barrett) y las fuentes
@@ -142,7 +138,6 @@ Este port se apoya en el trabajo de mucha gente. Gracias a todos.
 - **Pantalla complementaria** (I, o ZL + L3): inventario, estado, estados
   guardados y ajustes con el arte del propio juego, también táctil. Los modos
   *Dual* y *Flip Grip* la muestran junto al juego en marcha.
-- **RetroAchievements** (softcore); los logros sin conexión se envían después.
 - **Registros y crash logs** en `logs/` en todas las plataformas, para
   adjuntarlos al informar de un fallo.
 - **Controles táctiles** en Android: un mando en pantalla junto a la imagen,
@@ -401,9 +396,6 @@ El código fuente está bajo la
 modificar y compartir con cualquier fin no comercial. Los frameworks mantienen
 sus propias licencias (`snesrecomp/LICENSE`, `recomp-ui/LICENSE` y los avisos
 de terceros citados). Ninguna cubre el juego, que no se distribuye aquí.
-
-Las donaciones por Ko-fi son voluntarias y no son una venta del juego ni de
-este software: todo es gratuito.
 
 *Illusion of Gaia* es una marca de sus respectivos propietarios. Este proyecto
 no está afiliado ni respaldado por Nintendo, Square Enix ni Quintet.

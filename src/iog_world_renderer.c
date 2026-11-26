@@ -22,6 +22,7 @@
 #include "snes/ppu_brightness.h"
 #include "snes/interp_bridge.h"
 #include "sha256.h"
+#include "host_paths.h"
 #include "snesrecomp_rom_identity.h"
 #include <math.h>
 #include <stddef.h>
@@ -590,12 +591,36 @@ static int PositiveMod(int value,int divisor)
     return remainder<0?remainder+divisor:remainder;
 }
 
+/* The "Wide view" setting (iog.graphics/wide_view), read from the saved mod
+ * state because this is asked before the host loads its mods. On unless the
+ * player turned it off. */
+static bool WideViewSetting(void)
+{
+    char path[1024];
+    if(!snesrecomp_exe_dir_path("mods/preloaded/state.toml",path,sizeof(path))) return true;
+    FILE *file=fopen(path,"rb");
+    if(!file) return true;
+    char line[512];
+    bool feature=false,package=false,name=false,on=true;
+    while(fgets(line,sizeof(line),file)) {
+        const char *at=line;
+        while(*at==' ' || *at=='	') at++;
+        if(*at=='[') {feature=!strncmp(at,"[[feature]]",11);package=name=false;continue;}
+        if(!feature) continue;
+        if(!strncmp(at,"package_id",10)) package=strstr(at,"\"iog.graphics\"")!=NULL;
+        else if(!strncmp(at,"id",2) && (at[2]==' ' || at[2]=='=')) name=strstr(at,"\"wide_view\"")!=NULL;
+        else if(!strncmp(at,"enabled",7) && package && name) on=strstr(at,"false")==NULL;
+    }
+    fclose(file);
+    return on;
+}
+
 bool IogWorldEnabled(void)
 {
     if(!s.initialized) {
         s.initialized=true;
         const char *mode=getenv("IOG_WORLD_RENDERER");
-        s.enabled=mode && !strcmp(mode,"1");
+        s.enabled=mode && *mode?!strcmp(mode,"1"):WideViewSetting();
         const char *reference=getenv("IOG_WORLD_REFERENCE_PIXELS");
         s.copy_reference=reference && !strcmp(reference,"1");
         const char *packet=getenv("IOG_WORLD_SOURCE_PACKET");

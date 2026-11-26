@@ -3,6 +3,7 @@
  * This adapter uses the Original actors, perspective producer and scene loader. */
 #include "iog_walkable_world.h"
 
+#include "host_paths.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -250,6 +251,9 @@ bool IogWalkableWorldInitialize(void)
     world.rom=cart->rom;
     const char *path=getenv("IOG_WALKABLE_MAP_DATA");
     const char *enabled=getenv("IOG_WALKABLE_MAP");
+    char beside[1024];
+    if((!path || !*path) && snesrecomp_exe_dir_path("i18n/gaialabs-world-map.bin",beside,sizeof(beside)))
+        path=beside;
     if(!path || !*path || (enabled && !strcmp(enabled,"0")))return false;
     FILE *file=fopen(path,"rb");
     if(!file)return false;

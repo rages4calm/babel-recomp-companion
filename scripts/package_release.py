@@ -38,7 +38,8 @@ def validate_payload(stage: Path) -> None:
             raise ValueError(f"Private/player data in package: {path.relative_to(stage)}")
 
 
-def package(build: Path, tag: str, root: Path = ROOT, companion: Path | None = None) -> Path:
+def package(build: Path, tag: str, root: Path = ROOT, companion: Path | None = None,
+            gaialabs: Path | None = None) -> Path:
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", tag):
         raise ValueError("Invalid platform tag")
     binary = validate_build(build)
@@ -71,15 +72,27 @@ def package(build: Path, tag: str, root: Path = ROOT, companion: Path | None = N
                 raise ValueError(f"Symlink in staged assets: {directory}")
             validate_payload(source)
             shutil.copytree(source, dest / directory)
+        if gaialabs is not None:
+            # Generated from the public GPL-3.0 Retranslation source; shipped
+            # as separate data with its notice and license.
+            for filename in ("gaialabs-dialogue.tsv", "gaialabs-world-map.bin"):
+                source = gaialabs / filename
+                if source.is_symlink() or not source.is_file():
+                    raise ValueError(f"Missing or linked GaiaLabs data: {filename}")
+                shutil.copy2(source, dest / "i18n" / filename)
+            for filename in ("GAIALABS-NOTICE.md", "GPL-3.0.txt"):
+                shutil.copy2(root / "res/release" / filename, dest / "i18n" / filename)
+        if (root / "res/release/START HERE.txt").is_file():
+            shutil.copy2(root / "res/release/START HERE.txt", stage)
         for document in ("LICENSE", "README.md", "MODS.md"):
             shutil.copy2(root / document, stage)
-        for document in ("HANDOFF.md", "README.es.md"):
-            if (root / document).is_file():
-                shutil.copy2(root / document, stage)
-        if (root / "docs").is_dir():
-            (stage / "docs").mkdir()
-            for document in (root / "docs").glob("*.md"):
-                shutil.copy2(document, stage / "docs")
+        if (root / "README.es.md").is_file():
+            shutil.copy2(root / "README.es.md", stage)
+        # Player-facing guides only; development records stay in the repository.
+        (stage / "docs").mkdir()
+        for document in ("MSU1.md", "CHEATS-AND-MODS.md", "ACHIEVEMENTS-INTEGRATION.md"):
+            if (root / "docs" / document).is_file():
+                shutil.copy2(root / "docs" / document, stage / "docs")
         if (root / "companion/README.md").is_file():
             (stage / "companion").mkdir()
             shutil.copy2(root / "companion/README.md", stage / "companion")
@@ -140,8 +153,10 @@ if __name__ == "__main__":
     parser.add_argument("build", type=Path)
     parser.add_argument("tag")
     parser.add_argument("--companion", type=Path, help="Windows managed launcher output directory")
+    parser.add_argument("--gaialabs", type=Path, help="folder holding the generated GaiaLabs dialogue pack and map data")
     args = parser.parse_args()
     try:
-        package(args.build.resolve(), args.tag, companion=args.companion.resolve() if args.companion else None)
+        package(args.build.resolve(), args.tag, companion=args.companion.resolve() if args.companion else None,
+                gaialabs=args.gaialabs.resolve() if args.gaialabs else None)
     except (ValueError, OSError) as error:
         parser.exit(1, f"package_release: {error}\n")

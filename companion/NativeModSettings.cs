@@ -33,6 +33,7 @@ public static class NativeModSettings
         Toggle("mod.equipped", "Convenience", "Mark the equipped item", "iog.enhancements", "equipped", "Draw the equipped-item frame in the original inventory."),
         Toggle("mod.hotswap", "Convenience", "Quick item selection", "iog.enhancements", "hotswap", "Hold the configured modifier and press L/R. Existing modifier mapping is preserved (default X)."),
         Toggle("mod.advance", "Convenience", "Hold to advance dialogue", "iog.enhancements", "hold_advance", "Hold a confirm button through dialogue. Questions still require a fresh press; existing speed choice is preserved."),
+        Toggle("mod.wide-view", "Convenience", "Wide view", "iog.graphics", "wide_view", "Shows more of each area around the original picture, with the status display and dialogue at your screen's resolution. Off: the original picture. Takes effect the next time the game starts."),
         Toggle("mod.world-map", "Convenience", "Enhanced world map", "iog.enhancements", "world_map", "On the walkable world map: smoother map picture, higher camera, markers over the places you can visit, a small map and a clearer entry prompt. Off shows the plain walking view.", true)
     };
     private static readonly GameDefinition ValidationDefinition = new("gaia-mod-options", "Gaia mods", "", Fields.Select(x => x.Option).ToArray());

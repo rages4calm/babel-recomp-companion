@@ -6,8 +6,12 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 [Features](#features) · [Build from source](#build-from-source) ·
 [Development status](#development-status) · [Credits](#thanks)
 
-**Windows playtest in development.** Bring your own unmodified
-**Illusion of Gaia (USA)** ROM. Maintained by
+**A Windows test build is available on the
+[Releases page](https://github.com/rages4calm/babel-recomp-companion/releases).**
+It is a pre-release for playtesting; expect bugs and please
+[report them](https://github.com/rages4calm/babel-recomp-companion/issues).
+Bring your own unmodified **Illusion of Gaia (USA)** ROM; no game data is
+included. Maintained by
 [Carl Prewitt Jr. / rages4calm](https://github.com/rages4calm), based on
 [Babel Recomp](https://github.com/mrOt4/babel-recomp) by mr0ta / mrOt4.
 
@@ -20,8 +24,8 @@ widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
   [Visual coverage and renderer direction](docs/VISUAL-COVERAGE.md)
 - **World travel and local maps** combine GaiaLabs' walkable world map
   with Companion's scenery-based area map, explored terrain, discovered
-  markers and radar. Locally prepared packs also supply all 1,127 retranslated
-  chapter entries, all 124 approved menu strings, and all 64 named room
+  markers and radar. The GaiaLabs Retranslation pack, included in release
+  builds, supplies 1,133 retranslated dialogue entries, all 124 approved menu strings, and all 64 named room
   titles.
   [GaiaLabs integration](docs/GAIALABS-ORIGINAL-INTEGRATION.md) ·
   [Companion map](docs/MAP-SYSTEM-DIRECTION.md)
@@ -111,15 +115,14 @@ original documentation records Babel's platform builds, controls, mods and
 hardware results. [Babel documentation](https://github.com/mrOt4/babel-recomp#readme) ·
 [Documentación original en castellano](README.es.md)
 
-[![Support mr0ta on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/mr0ta)
-
 ## Thanks
 
 This port stands on the work of many people. Thank you all.
 
 - **[mr0ta / mrOt4](https://github.com/mrOt4)** — original author of
   **[Babel Recomp](https://github.com/mrOt4/babel-recomp)**, the foundation
-  of this fork. The Ko-fi link above supports the original author.
+  of this fork. mr0ta no longer works on this project; to support the
+  original author, visit the Babel Recomp repository.
 - **[CompanionLauncher](https://github.com/rages4calm/companion-launcher)**
   and **[CompanionAchievements](https://github.com/rages4calm/companion-achievements)**
   — shared Companion integrations by Carl Prewitt Jr. and contributors (MIT).
@@ -128,14 +131,18 @@ This port stands on the work of many people. Thank you all.
   SNES static-recompilation framework this port is built on, by Matthew
   Stanley and the R.A.I.D. community; and its launcher,
   **[recomp-ui](https://github.com/RetroPortingToolKit/recomp-ui)**.
+- **[GaiaLabs Retranslation](https://github.com/Azarem/IOGRetranslation)** by
+  Azarem and contributors (GPL-3.0) — the retranslated script and the walkable
+  world map. Release builds include a dialogue pack and map data generated
+  from that source; see `i18n/GAIALABS-NOTICE.md` in the download.
 - **[GaiaLabs](https://github.com/Azarem/GaiaLabs)** by Azarem — the Illusion
   of Gaia ROM-hacking toolkit, disassembly and database: symbols, text format,
   and the reference patches behind the run button, New Game+, music transitions
   and more. This port would not exist without these tools.
 - **Aleks** ([ALEKS Ultimate NX](https://github.com/Alexgg1014/The-Legend-of-Zelda-A-Link-To-The-Past-Alek-s-Ultimate-NX-Edition))
   — for the dual-screen companion (the Dual and Flip Grip layouts) and for
-  their help throughout. Its safe boot, crash reporter and RetroAchievements
-  storage were adapted here with permission.
+  their help throughout. Its safe boot and crash reporter were adapted here
+  with permission.
 - **EstebanPdN** ([zelda-alttp-3ds](https://github.com/EstebanPdN/zelda-alttp-3ds))
   — the port ALEKS Ultimate NX is built on.
 - **Illusion of Gaia Randomizer** — DontBaguMe and contributors
@@ -155,8 +162,6 @@ This port stands on the work of many people. Thank you all.
   [recompiler-rs](https://github.com/perplexes/snesrecomp) (perplexes),
   [ar-recomp](https://github.com/DerrickGold/ar-recomp) (DerrickGold) — see
   [THIRD_PARTY_ATTRIBUTION.md](snesrecomp/THIRD_PARTY_ATTRIBUTION.md).
-- **[RetroAchievements](https://retroachievements.org)** and
-  **[rcheevos](https://github.com/RetroAchievements/rcheevos)**.
 - **[SDL](https://github.com/libsdl-org/SDL)**,
   **[Dear ImGui](https://github.com/ocornut/imgui)** (Omar Cornut),
   **[stb](https://github.com/nothings/stb)** (Sean Barrett), the
@@ -186,9 +191,6 @@ The source code is under the
 and share for any non-commercial purpose. The frameworks keep their own
 licenses (`snesrecomp/LICENSE`, `recomp-ui/LICENSE`, and the third-party notices
 above). None of them covers the game, which is not distributed here.
-
-Donations through Ko-fi are voluntary and are not a sale of the game or of
-this software: everything here is free.
 
 *Illusion of Gaia* is a trademark of its respective owners. This project is
 not affiliated with or endorsed by Nintendo, Square Enix or Quintet.
