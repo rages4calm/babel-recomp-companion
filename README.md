@@ -36,7 +36,7 @@ included. Maintained by
 - **MSU-1 soundtrack** can be imported from a local ZIP or folder with
   validation. Original SNES audio remains available.
   [Soundtrack setup and credits](docs/MSU1.md)
-- **Companion Achievements** has a controller-friendly browser on its own Companion page.
+- **Companion Achievements** has a controller-friendly browser, opened from the in-game settings.
   Progress is saved locally on your PC; nothing is sent to any service.
   [Achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md)
 
@@ -59,10 +59,11 @@ included. Maintained by
 | What | How to reach it |
 | --- | --- |
 | In-game settings (display, audio, HD scaling, button prompts, enhanced world map) | **Esc**, or **LT + R3** on a pad |
-| Companion screen: Items, Status, Map, Saves, Config | **I**, or **LT + L3** |
-| Achievements | Companion screen → **Status** → confirm |
-| Area map and radar | Companion screen → **Map**; **L** / **R** zoom |
-| Save states | **F11**, or **LT + Start**; **F1–F10** load, **Shift + F1–F10** save |
+| Area map | **Start** wherever the area has a map; **L** / **R** zoom, Back returns to the game |
+| Achievements | In-game settings → **Achievements**; or **I**, or **LT + L3** |
+| Save state | **Shift + F1–F10**, or **LT + R** (slot 1) |
+| Load state | **F1–F10**, or **LT + L** (slot 1). Loading, and saving over a state, ask first |
+| Save-state browser | **F11**, or **LT + Start** |
 | Rewind | **F12** |
 | Fast forward | **Tab**, or **LT + RT** |
 | Run | Hold **Y** with a direction |

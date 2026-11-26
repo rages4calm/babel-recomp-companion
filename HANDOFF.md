@@ -280,7 +280,7 @@ ground uses it. The smooth (xBR) present filter in
 `runner/src/present_filter.*` and `desktop/opengl.c` is also local and
 absent upstream.
 
-The first public tester build is `v0.2.0-beta.4` (November 26, pre-release; it carries the fixes from the owner's first playtest,
+The current public tester build is `v0.2.0-beta.5` (November 26, pre-release; beta 5 removes the paused Companion menu: Start opens the map, achievements open from the settings; it carries the fixes from the owner's first playtest,
 Windows x64). It is the interpreter-only build from
 `.local/batch-001/release/build`, packaged by `scripts/package_release.py`
 with `--companion` and `--gaialabs`: the Companion launcher, the generated

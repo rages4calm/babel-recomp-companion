@@ -1,7 +1,7 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 25,
-2026 (tester build `v0.2.0-beta.4`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.5`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
@@ -37,9 +37,6 @@ refusal. None of it has been replayed by the owner yet. What is left:
   `RoomPictureBounds` are now special cases of it and could go.
 - **Gold ship at night:** only reached by a late warp that was too dark to
   judge.
-- **"LT+L3 opens both menus":** not a gesture collision. His log shows the
-  settings opening when the Companion's Config page handed over on A. It goes
-  away with the Companion redesign below.
 - **Auto prompts cannot detect his 8BitDo:** in X-input mode it identifies as
   an Xbox 360 controller. He has to choose SNES by hand.
 - **Not looked at after the prompt change:** achievement footer, walkable
@@ -54,9 +51,31 @@ refusal. None of it has been replayed by the owner yet. What is left:
 - Seen in his files, not investigated: `radar = "off"` in his mod state;
   `SourceP1 = 1` (keyboard) in his config although the pad plays; d-pad Up on
   the settings menu's top row does not wrap.
-- **Companion redesign (decided, not started):** drop the Companion menu,
-  move achievements into the settings menu, put the map on one button the
-  game does not use, give save state and load state their own keys.
+
+## Companion redesign (done November 26, not played)
+
+The paused Companion menu is gone. Start opens the area map wherever the area
+has one (in towns too, where the game itself only pauses) and the map's Back
+returns to the game. Achievements open from an **Achievements** row in the
+in-game settings and Back returns there; **I** / **LT+L3** open them directly.
+Save and load state keep their own keys (Shift+F1-F10 / F1-F10, LT+R / LT+L
+for slot 1, F11 / LT+Start for the browser). Seen in pictures in Freejia
+(`visual-fullgame-041/playtest1-ui/ui-rd3`, `ui-rd4`). Not checked:
+
+- **Not played by the owner.**
+- **Start no longer shows the game's PAUSE in towns** that have a map. Where
+  there is no map, and on the world map, Start is unchanged. Whether Start
+  can now open the map at a moment the game would have refused it (mid
+  cutscene) was not hunted for; the map freezes the game and changes nothing.
+- **The "Achievements unavailable" notice** (browser failed to open) was not
+  seen; the browser opened every time.
+- **Achievements from the settings on the title screen** (not in play) were
+  not run.
+- **Pointer and touch** on the map and achievements after the change: not run.
+- **The Dual / Flip Grip second screen** still has its five pages and was not
+  rerun after the code around it was cut.
+- **Spanish strings** for the removed pages are still in `iog_companion.c`'s
+  table; harmless.
 
 ## Decided, not built
 
@@ -78,7 +97,7 @@ refusal. None of it has been replayed by the owner yet. What is left:
   finding out why before choosing targets. The regenerated graph has 1,229
   AOT-eligible variants; the old one had 1,248.
 
-## The tester build (`v0.2.0-beta.4`)
+## The tester build (`v0.2.0-beta.5`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

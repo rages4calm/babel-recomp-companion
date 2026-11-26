@@ -8,6 +8,8 @@ void IogCompanionGrabMenu(void);
 /* Host companion hooks (SnesDesktopHostGame.companion_*). */
 int IogCompanionOpen(void);
 int IogCompanionAchievementQuiet(void);
+/* The settings menu's Achievements row: open them when it has closed. */
+void IogCompanionRequestAchievements(void);
 /* Optional local-human input hook: replace the Original local radar command
  * with the paused enhanced Map. Does not handle scripts/netplay/world travel. */
 int IogCompanionInput(uint32_t *human);

@@ -25,9 +25,12 @@ Display page, and Enhanced world map is under Cheats and Mods. See i18n/GAIALABS
 
 IN THE GAME
 - Esc (or Left Trigger + Right Stick click): settings
-- I (or Left Trigger + Left Stick click): companion screen
+  Achievements are in the settings.
+- Start: the area map, wherever the area has one
+- Shift+F1 (or Left Trigger + R): save state
+- F1 (or Left Trigger + L): load state. It asks first.
+- F11 (or Left Trigger + Start): all save states
 - Alt+Enter: fullscreen
-- F11 (or Left Trigger + Start): save states
 
 WHEN YOU REPORT A PROBLEM
 Say where you were, what you were doing, and your display and controller

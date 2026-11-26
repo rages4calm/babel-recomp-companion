@@ -93,7 +93,7 @@ Keep the implemented systems rather than replacing them blindly:
 | System | Inherited implementation and integration constraint |
 |---|---|
 | Controls/settings | Shared desktop host owns input/remapping and the in-game settings overlay. `src/iog_settings.c` persists title options through the mod runtime so the next launcher session agrees. Validate remaps and displayed chords on real pads. |
-| Companion screen | Items, Status, Saves and Config pages; pad/touch navigation; Dual and rotated Flip Grip layouts (`src/iog_companion.c`). It is not a scenery map or story journal. |
+| Companion screen | Only the Dual and rotated Flip Grip second screen (Items, Status, Map, Saves, Config; pad/touch). The paused Companion menu was removed in November 2026: Start opens the map, achievements open from the settings (`src/iog_companion.c`). |
 | Running | Optional frame callback invokes the game's dash by setting its motion state, gated on player/movement locks (`src/iog_mods.c:56`). Preserve form/puzzle restrictions; no speed multiplier is justified by this audit. |
 | Item switching | Optional modifier plus L/R rotates equipped inventory entries and queues the game's confirm sound (`src/iog_mods.c:96`). |
 | Stacking | Red Jewels, Herbs and Crystals use per-save spare bytes `$0B55-$0B57`; overlay digits come from the loaded game (`src/iog_inventory.c`). Retain save compatibility and test equipped-item consumption. |

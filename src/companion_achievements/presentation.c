@@ -264,9 +264,7 @@ bool IogAchievementUiImage(const uint32_t **pixels, int *width, int *height) {
         Box(card_x + 16, ListY + 190, (int)((uint64_t)(card_w - 32) * selected_state.progress / def->target), 5, jade);
     }
     /* Footer: what to press, under the current bindings (or keyboard keys). */
-    int x = Prompt(ListX, 0, IogMapHostUsingPad() ? "PAD" : "ARROWS", "Browse", dim);
-    x = Prompt(x, SNES_PAD_L, "Q", "", dim);
-    x = Prompt(x, SNES_PAD_R, "E", "Screen", dim);
+    Prompt(ListX, 0, IogMapHostUsingPad() ? "PAD" : "ARROWS", "Browse", dim);
     char glyph[8];
     uint32_t tint;
     IogMapHostPrompt(SNES_PAD_B, "ESC", NULL, glyph, &tint, NULL);

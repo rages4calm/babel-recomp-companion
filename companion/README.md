@@ -55,7 +55,7 @@ the clean supported base image; optional patched-mode inputs belong in Babel.
   `COMPANION_DATA_ROOT` for an isolated test profile. Saves, ROMs, keybinds, mods,
   MSU-1 packs and achievements stay in their existing native locations.
 
-In-game shortcuts remain Babel's: **Esc / LT+R3** settings, **I / LT+L3** companion,
+In-game shortcuts remain Babel's: **Esc / LT+R3** settings, **Start** area map, **I / LT+L3** achievements,
 **F11 / LT+Start** states, **Tab / LT+RT** fast forward. LT means the left trigger
 (ZL on Nintendo, L2 on PlayStation). Default SNES keys and full shortcuts remain
 documented in the upstream README. This batch does not reimplement full remapping,

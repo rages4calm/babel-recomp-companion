@@ -149,8 +149,7 @@ With **New Game Plus** on:
 (The state is the same as the GaiaLabs NewGamePlus patch; the game's own
 menus are left stock.)
 
-**Completion** shows on the companion screen's Achievements page and in the
-in-game settings. It is worth 100 points:
+**Completion** shows in the achievement browser and in the in-game settings. It is worth 100 points:
 
 | Part | Points |
 |---|---|
@@ -208,29 +207,25 @@ Changes apply at once unless the menu says "applies on the next launch",
 and are saved: config.ini for the host's, the mod selection for the game's,
 so the launcher shows the same choices.
 
-## Companion screen
+## Map, achievements and save states
 
-Press **I** (keyboard) or **ZL+L3** (pad) during play. The game pauses and
-shows a companion screen in the game's own art: the pause menu is opened
-off-screen for a moment and its pictures, boxes and font are reused, so
-nothing is shipped — everything comes from your ROM.
+There is no separate Companion menu. Each thing has its own way in:
 
-| Page | What it does |
+| What | How |
 |---|---|
-| Saves | The save-state slots with their thumbnails. Press the Load button twice to load, the Save button twice to save. |
-| Map | The area map, where the area has one. The screen opens here when it does. |
-| Achievements | The achievement browser and the completion figure. |
-| Config | Opens the in-game settings. |
+| Area map | **Start**, wherever the area has a map. Its Back button returns to the game. Where there is no map, Start pauses as it always did. |
+| Achievements | The **Achievements** row of the in-game settings, or **I** / **ZL+L3**. Back returns to where you came from. |
+| Save state | **Shift+F1–F10**, or **ZL+R** for slot 1. Saving over a state asks first. |
+| Load state | **F1–F10**, or **ZL+L** for slot 1. Loading asks first. |
+| All save states | **F11**, or **ZL+Start**: the browser with thumbnails. |
 
-Items and Status live on the game's own pause menu (Select), which now
-scales to the wide view. The companion screen fills the display at the
-largest whole scale that fits. The shoulder buttons change page and the
-button that opened the screen closes it. Each prompt shows the button
-bound to that action on your controller, or the key name when no
-controller is connected. Everything works by touch as well.
+Items and Status live on the game's own pause menu (Select), which
+scales to the wide view. Each prompt shows the button bound to that
+action on your controller, or the key name when no controller is
+connected.
 
-**Dual and Flip Grip.** In the settings, *Companion screen* puts the companion
-beside the running game instead of in a pause:
+**Dual and Flip Grip.** In the settings, *Companion screen* puts a second
+screen (Items, Status, Map, Saves, Config) beside the running game:
 
 - **Dual** puts the game and the companion side by side.
 - **Flip Grip** and **Flip Grip R** stack them and turn the picture a quarter

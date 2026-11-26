@@ -297,6 +297,16 @@ static void CompletionText(void *ud, int v, char *out, size_t cap)
     else snprintf(out, cap, "%d%%", pct);
 }
 
+/* Achievements: the browser opens once this menu has closed, and its Back
+ * returns here. */
+#include "iog_companion.h"
+static void ActAchievements(void *ud)
+{
+    (void)ud;
+    snes_settings_menu_close();
+    IogCompanionRequestAchievements();
+}
+
 void IogSettingsInstall(void)
 {
     /* The wide view fills a 16:9 window; the host's automatic size is 4:3. */
@@ -316,6 +326,12 @@ void IogSettingsInstall(void)
     it.kind = kSnesSetting_Info;
     it.label = "GAME COMPLETED";
     it.value_text = CompletionText;
+    snes_settings_menu_add(&it);
+
+    memset(&it, 0, sizeof(it));
+    it.kind = kSnesSetting_Action;
+    it.label = "ACHIEVEMENTS";
+    it.action = ActAchievements;
     snes_settings_menu_add(&it);
 
     memset(&it, 0, sizeof(it));

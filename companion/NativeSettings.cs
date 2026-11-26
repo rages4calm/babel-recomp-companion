@@ -30,7 +30,7 @@ internal static class NativeSettings
         Int("audio.volume", "Audio", "Master volume (%)", "Sound", "Volume", 100, 0, 100,
             "Same mixer setting as in-game shortcuts. Use Soundtrack to download/import optional music or select original audio."),
         Bool("input.gamepad", "Input", "Enable gamepad", "GamepadMap", "EnableGamepad1", true,
-            "Xbox, PlayStation, Switch and 8BitDo pads all work. In game with a pad: LT+R3 settings, LT+L3 companion screen, LT+Start save states, LT+RT fast forward. LT is the left trigger (ZL / L2)."),
+            "Xbox, PlayStation, Switch and 8BitDo pads all work. In game with a pad: Start area map, LT+R3 settings and achievements, LT+R save state, LT+L load state, LT+Start all save states, LT+RT fast forward. LT is the left trigger (ZL / L2)."),
         Int("input.deadzone", "Input", "Analog deadzone", "GamepadMap", "GamepadDeadzone", 3277, 0, 32767,
             "How far a stick must move before it counts, from 0 to 32767. The default is 3277 (10%). Raise it if the character drifts."),
     };
