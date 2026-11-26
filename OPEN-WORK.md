@@ -106,12 +106,29 @@ Edward's Castle, the lookout and the gold ship
 
 ## Decided, not built
 
-- **Native coverage.** The owner's next priority after the tester build. On
-  the updated SDK the private native build still carries about 99.9 percent of
-  CPU cycles, but the interpreter share rose from 31 to about 6,200
-  instructions per 620 frames in the one scene measured (`3E`). Start by
-  finding out why before choosing targets. The regenerated graph has 1,229
-  AOT-eligible variants; the old one had 1,248.
+- **Native coverage.** The interpreter rise after the SDK update is explained
+  and fixed (November 26). The analyzer of SNESRecomp `627b2f27` rejects a
+  return that follows a pull whose push is in an earlier fragment of the same
+  routine, so four sprite helpers lost their return proof and all 33 routines
+  calling them, the per-frame sprite composer `83C714` included, were cut at
+  the call and left to the interpreter bridge. Four `exit_mx_variant` lines in
+  `recomp/bank03.cfg` declare the widths the older analyzer had proven. The
+  regenerated graph (`.local/batch-001/sdk-update/graph`; the one before is
+  `graph-pre-declare`) has 1,262 AOT-eligible variants (1,229 after the
+  update, 1,248 before it). Same source, old graph against new, over the
+  198-scene survey: every renderer log identical, interpreted instructions
+  1,779,645 down to 598,348; scene `3E` 6,207 down to 31. Still open:
+  - **The 142 route replays were not rerun** on the new graph.
+  - **The 598,348 remaining instructions** are the next targets; scene `1F`
+    has the most (64,280 in 620 frames). `SNESRECOMP_INTERP_RESIDUAL=<file>`
+    (new, in the runner's `interp_bridge.c`) writes one line per instruction
+    the interpreter itself ran: `PC e m x frame`.
+  - **The four declarations are assertions.** They rest on the older
+    analyzer's proof and on the identical survey, not on a new proof.
+  - **Not reported upstream.** It looks like a regression in SNESRecomp's
+    return analysis for routines split into tail fragments; a report on its
+    tracker needs the owner's go-ahead.
+  - The public download is interpreter-only and is not affected either way.
 
 ## The tester build (`v0.2.0-beta.6`)
 

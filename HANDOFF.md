@@ -294,6 +294,10 @@ the executable; and an automatic window size becomes 1280x720 while the wide
 view is on. `.local/batch-001/release/rt.py` runs a staged or unzipped
 build on the hidden desktop with no developer variables.
 
+One more local delta to the vendored runner (November 26): `SNESRECOMP_INTERP_RESIDUAL=<file>`
+in `runner/src/snes/interp_bridge.c` logs each instruction the interpreter itself runs.
+Off unless set; carry it across SDK updates.
+
 Local deltas to the vendored runner from the owner's first playtest
 (November 26); carry them across any SNESRecomp update:
 
@@ -341,6 +345,11 @@ Three things to know after the update:
   configure. The graph was regenerated with the recorded command of
   `native-016/graph-world-v1` into `.local/batch-001/sdk-update/graph`
   (415 roots, 1,339 variants, 1,229 AOT-eligible; before: 1,333 and 1,248).
+  November 26: four `exit_mx_variant` lines in `recomp/bank03.cfg` (and in
+  the graph's prepared cfg) restore return proofs the updated analyzer lost;
+  the graph now has 1,358 variants, 1,262 AOT-eligible. `graph-pre-declare`
+  is the graph before that, `sdk-update/declare.py` the script that found
+  the four. `OPEN-WORK.md` has the measurements.
   The build directory is `.local/batch-001/sdk-update/build`;
   `sdk-update/mk.py LABEL [--play]` builds the working tree there and links
   `visual-fullgame-041/cb-LABEL`. The older `build-tree.py` and
