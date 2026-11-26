@@ -327,6 +327,33 @@ launcher. Still open or untested:
 - **The settings-menu point** once considered for an upstream SNESRecomp issue
   was never rechecked against the updated code.
 
+## Scratch cleanup (November 26)
+
+At the owner's request the old private scratch under `.local` was cut from
+141 GB to 5 GB. **Most `.local/batch-001/native-0xx` and
+`visual-fullgame-0xx` paths named in `HANDOFF.md` and the `docs/` batch
+notes no longer exist.** They were evidence archives; nothing current used
+them. What was kept is exactly what these still need, checked by regenerating
+the native graph byte-identically and rebuilding from what remained:
+
+- `sdk-update/` (graph, native build directory, `ext4`/`ext5` native step
+  sets, `mk.py`, `extend.py`, `grant.py`, `declare.py`, `prune.py`),
+  `release/` (public build directory, GaiaLabs data, `rt.py`, release notes);
+- the profile manifests the graph is generated from (inside `native-002` to
+  `native-014`, `native-016/graph-world-v1`, `native-023`), the bundled Python
+  (`native-007/tool-versions/python-current`), the GaiaLabs sources
+  (`native-006`), `native-021/wram-effects-v1`;
+- `visual-fullgame-041/`: `wsline` (the 142 routes), `sdk-survey`,
+  `sdk-routes`, `playtest1-ui`, the baseline builds `cb-wsl2`, `cb-sdk0`,
+  `cb-wsfix11`, and the save states the routes start from (spread over the
+  remaining `visual-fullgame-0xx` folders);
+- `owner-playtest-*` (the owner's saves, bug marks and session logs),
+  `codex-history`, `manual-test-slots-025`.
+
+`sdk-update/prune.py` is the script that worked out the keep list. After
+each round of work delete the `cb-*` builds, `ui-*` and `travel-*` runs it
+made; they are rebuildable.
+
 ## Housekeeping
 
 - **`wsurvey/survey.py` overwrites `survey.json` on every run**, including a

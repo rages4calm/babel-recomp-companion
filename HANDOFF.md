@@ -1,5 +1,7 @@
 # Illusion of Gaia Companion — handoff
 
+> **November 26, 2026:** the private scratch under `.local` was cut from 141 GB to 5 GB at the owner's request. Most `.local/batch-001/...` evidence paths named below no longer exist. `OPEN-WORK.md` ("Scratch cleanup") lists what was kept and why.
+
 Updated November 25, 2026. Development version `0.1.0-dev.1`.
 Read this first; the completed source audit is [here](docs/BASELINE-AUDIT.md).
 
