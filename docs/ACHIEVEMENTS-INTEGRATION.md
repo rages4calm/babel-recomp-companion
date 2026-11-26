@@ -6,11 +6,9 @@ development. State loads and resets start a new observation generation.
 The audit writes to stderr only. The v40 browser opens from **Companion → Status**
 with SNES A or Enter. The list and detail pane expose progress and mask the
 ending until earned. B or Escape returns to Status with game input still paused.
-The desktop progress writer remains opt-in with `IOG_ACHIEVEMENT_PROGRESS=1`.
+The desktop progress writer is on by default; `IOG_ACHIEVEMENT_PROGRESS=0` turns it off.
 Only committed unlocks queue an in-game toast and optional synthesized chime.
 The Companion Launcher reads the selected executable's profile and catalog.
-Babel's RetroAchievements sources and credits are preserved.
-[Service policy and build boundary](RETROACHIEVEMENTS.md)
 
 The unchanged MIT-licensed shared core and presentation module are pinned from
 [CompanionAchievements](https://github.com/rages4calm/companion-achievements)

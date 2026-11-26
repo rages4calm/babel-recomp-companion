@@ -280,7 +280,7 @@ ground uses it. The smooth (xBR) present filter in
 `runner/src/present_filter.*` and `desktop/opengl.c` is also local and
 absent upstream.
 
-The first public tester build is `v0.2.0-beta.1` (November 25, pre-release,
+The first public tester build is `v0.2.0-beta.2` (November 25, pre-release; beta.1 lacked achievement recording,
 Windows x64). It is the interpreter-only build from
 `.local/batch-001/release/build`, packaged by `scripts/package_release.py`
 with `--companion` and `--gaialabs`: the Companion launcher, the generated

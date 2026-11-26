@@ -74,8 +74,7 @@ launcher. It reads progress from the selected executable's directory at
 Select a different executable and Apply to browse that installation's progress.
 Missing progress shows locked entries. Malformed progress or a file from another
 game, edition or seed produces an error. Browsing and refreshing never write
-progress or award achievements. Native progress recording remains independently
-opt-in.
+progress or award achievements. The game records progress locally by default.
 
 ## Optional music
 

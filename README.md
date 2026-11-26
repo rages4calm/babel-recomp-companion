@@ -37,7 +37,7 @@ included. Maintained by
   validation. Original SNES audio remains available.
   [Soundtrack setup and credits](docs/MSU1.md)
 - **Companion Achievements** has a controller-friendly browser on its own Companion page.
-  Local progress is available in the opt-in preview.
+  Progress is saved locally on your PC; nothing is sent to any service.
   [Achievement integration](docs/ACHIEVEMENTS-INTEGRATION.md)
 
 | Companion radar in Freejia | Walkable world map at South Cape |

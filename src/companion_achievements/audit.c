@@ -38,7 +38,8 @@ void IogAchievementAuditStart(int argc, char **argv)
     read_only = flag && !strcmp(flag, "1");
 #if defined(IOG_ACHIEVEMENT_STORAGE) && !SNESRECOMP_TRACE
     flag = getenv("IOG_ACHIEVEMENT_PROGRESS");
-    if (read_only || !flag || strcmp(flag, "1")) return;
+    /* Local progress is recorded unless IOG_ACHIEVEMENT_PROGRESS=0. */
+    if (read_only || (flag && !strcmp(flag, "0"))) return;
     static const char *const diagnostics[] = {
         "SNESRECOMP_RUN_FRAMES", "SNESRECOMP_DEBUG_PORT", "SNESRECOMP_OVERLAY_SELFTEST_PAD",
         "SNESRECOMP_COMPANION_SELFTEST_PAD", "SNESRECOMP_CLASSROOM_PAD_ROUTE",
