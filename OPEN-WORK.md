@@ -117,7 +117,7 @@ Edward's Castle, the lookout and the gold ship
   `graph-pre-declare`) has 1,262 AOT-eligible variants (1,229 after the
   update, 1,248 before it). Same source, old graph against new, over the
   198-scene survey: every renderer log identical, interpreted instructions
-  1,779,645 down to 598,348; scene `3E` 6,207 down to 31. Still open:
+  1,779,645 down to 598,348; scene `3E` 6,207 down to 31.
   The 142 route replays are also identical between the two graphs, with the
   same total CPU cycles.
 - **Native steps extended (November 26).** The interpreter's residual was
