@@ -293,9 +293,16 @@ The pin has not been moved.
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. It selects batch 036's
-`babel-originalv40kress.exe` and the corresponding private cards pack and
-continues the isolated test profile's save. The test executable has the
+`.local/batch-001/visual-fullgame-010`. Since November 25 it selects
+`visual-fullgame-042/babel-original-v41.exe` (HEAD 7a8a91f, linked with the
+real host rather than the test host) and dialogue pack `dialogue-v71.tsv`,
+forces the Enhanced world map on (`plainmap` as the first argument turns
+it off) and continues the isolated test profile's save. The profile's mod
+manifest was left as it is, so the enhancement is set by the launcher
+there, not by the in-game toggle. `Play Original v40 Rollback.cmd`
+selects batch 036's `babel-originalv40kress.exe` and its private cards
+pack. The v41 build ran 620 frames in six scenes and gave a correct 1080p
+world map capture; it has not been played by a person. The test executable has the
 required `i18n/structure.txt` alongside it. `Play Original v39 Rollback.cmd`
 selects the previous build and interface pack. `Play Original v38 Rollback.cmd`
 selects the prior build and its dialogue-only pack. `Play Original v37 Kress Rollback.cmd`
