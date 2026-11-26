@@ -128,6 +128,34 @@ public static class NativeModSettings
         else root = SetValue(root, key, encoded, newline);
         return text[..block.BodyStart] + root + values + text[block.End..];
     }
+    private static readonly Dictionary<string,string> MapControls = new() { ["package_id"] = "iog.enhancements", ["id"] = "map_controls" };
+    /// <summary>The button-prompt style the game will use: auto, snes or xbox.</summary>
+    public static string ReadPrompts(string engineDirectory) {
+        var bytes = ReadBounded(StatePath(engineDirectory)); if (bytes == null) return "auto";
+        var feature = Find(Decode(bytes), "feature", MapControls);
+        // The game only reads the style while the map controls feature is on.
+        if (feature != null && Value(SplitValues(feature.Body).Root, "enabled") == "false") return "auto";
+        var style = feature == null ? null : Value(SplitValues(feature.Body).Values, "prompts");
+        return style is "snes" or "xbox" ? style : "auto";
+    }
+    public static void ApplyPrompts(string engineDirectory, string style) {
+        if (style is not ("auto" or "snes" or "xbox")) throw new ArgumentException("Unknown button prompt style.");
+        var path = StatePath(engineDirectory); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var gate = new FileStream(path + ".companion-lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        var original = ReadBounded(path); var text = original == null ? "format_version = 1\n" : Decode(original);
+        var newline = text.Contains("\r\n") ? "\r\n" : "\n";
+        text = Upsert(text, "package", new Dictionary<string,string> { ["id"] = "iog.enhancements" }, "version", "\"1.0.0\"", newline);
+        // Map controls are on by default; keep them on so the style is read.
+        text = Upsert(text, "feature", MapControls, "enabled", "true", newline);
+        text = Upsert(text, "feature", MapControls, "prompts", JsonSerializer.Serialize(style), newline, nested: true);
+        if (original != null && text == Decode(original)) return;
+        var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try {
+            var encoding = new UTF8Encoding(original != null && original.AsSpan().StartsWith(new byte[] {239,187,191}));
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { stream.Write(encoding.GetPreamble().Concat(encoding.GetBytes(text)).ToArray()); stream.Flush(true); }
+            File.Move(temp, path, true);
+        } finally { if (File.Exists(temp)) File.Delete(temp); }
+    }
     public static bool IsEngineRunning(string executable) {
         var expected = Path.GetFullPath(executable);
         foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(expected))) {

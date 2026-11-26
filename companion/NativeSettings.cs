@@ -15,8 +15,8 @@ internal static class NativeSettings
         new("Graphics", "Fullscreen", new("video.fullscreen", "Display", "Window mode", OptionKind.Choice, OptionValue.From("0"), "Applies on next launch.", Choices: new[] {
             new ChoiceItem("0", "Windowed"), new ChoiceItem("1", "Desktop fullscreen"), new ChoiceItem("2", "Exclusive fullscreen") })),
         Int("video.scale", "Display", "Window scale", "Graphics", "WindowScale", 3, 1, 10),
-        Bool("video.widescreen", "Display", "Babel 16:9 widescreen", "Graphics", "Widescreen", false,
-            "Real extra terrain columns. Scene and actor coverage is under audit; 21:9 and 32:9 are not implemented here."),
+        Bool("video.widescreen", "Display", "Classic 16:9 widescreen", "Graphics", "Widescreen", false,
+            "The original Babel widescreen. Only used while Wide view is switched off under Cheats and Mods; Wide view replaces it."),
         new("Graphics", "VSync", new("video.vsync", "Display", "Vertical sync", OptionKind.Choice, OptionValue.From("1"),
             "Adaptive uses late-swap tearing where the graphics driver supports it. Restart after applying.", Choices: new[] {
                 new ChoiceItem("0", "Off"), new ChoiceItem("1", "On"), new ChoiceItem("adaptive", "Adaptive") })),
@@ -29,9 +29,9 @@ internal static class NativeSettings
         Int("audio.volume", "Audio", "Master volume (%)", "Sound", "Volume", 100, 0, 100,
             "Same mixer setting as in-game shortcuts. Use Soundtrack to download/import optional music or select original audio."),
         Bool("input.gamepad", "Input", "Enable gamepad", "GamepadMap", "EnableGamepad1", true,
-            "Choose Babel tools on Game for full remapping. Existing bindings and controller GUID remain intact."),
+            "Xbox, PlayStation, Switch and 8BitDo pads all work. In game with a pad: LT+R3 settings, LT+L3 companion screen, LT+Start save states, LT+RT fast forward. LT is the left trigger (ZL / L2)."),
         Int("input.deadzone", "Input", "Analog deadzone", "GamepadMap", "GamepadDeadzone", 3277, 0, 32767,
-            "SDL axis units. Settings: Esc / LT+R3. Companion: I / LT+L3. Save states: F11 / LT+Start. Fast forward: Tab / LT+RT.")
+            "How far a stick must move before it counts, from 0 to 32767. The default is 3277 (10%). Raise it if the character drifts."),
     };
     internal static IEnumerable<OptionDefinition> Options => Fields.Select(x => x.Option);
     internal static bool IsNative(string id) => Fields.Any(x => x.Option.Id == id);

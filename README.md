@@ -3,7 +3,7 @@
 A controller-first PC edition of Quintet's SNES adventure, with square-pixel
 widescreen, a scenery map that reveals as you explore, and optional MSU-1 music.
 
-[Features](#features) · [Build from source](#build-from-source) ·
+[Features](#features) · [How to play](#how-to-play) · [Build from source](#build-from-source) ·
 [Development status](#development-status) · [Credits](#thanks)
 
 **A Windows test build is available on the
@@ -43,6 +43,62 @@ included. Maintained by
 | Companion radar in Freejia | Walkable world map at South Cape |
 | --- | --- |
 | ![Freejia street with the Companion area radar in the lower-right corner](https://github.com/user-attachments/assets/9a9be356-f8c2-4117-b952-bc3e8f75e75a) | ![Will standing above South Cape on the expanded Mode 7 world map](https://github.com/user-attachments/assets/bfba1b8c-bd55-42c8-a6d6-d355d04d1560) |
+
+## How to play
+
+1. Download the latest test build from the
+   [Releases page](https://github.com/rages4calm/babel-recomp-companion/releases)
+   and unzip the whole folder.
+2. Install the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
+   if the launcher does not start.
+3. Run `illusion-of-gaia.Companion.exe`, choose your USA ROM on the **Game**
+   page, press **Apply**, then **Play**.
+
+### Where everything is
+
+| What | How to reach it |
+| --- | --- |
+| In-game settings (display, audio, HD scaling, button prompts, enhanced world map) | **Esc**, or **LT + R3** on a pad |
+| Companion screen: Items, Status, Map, Saves, Config | **I**, or **LT + L3** |
+| Achievements | Companion screen → **Status** → confirm |
+| Area map and radar | Companion screen → **Map**; **L** / **R** zoom |
+| Save states | **F11**, or **LT + Start**; **F1–F10** load, **Shift + F1–F10** save |
+| Rewind | **F12** |
+| Fast forward | **Tab**, or **LT + RT** |
+| Run | Hold **Y** with a direction |
+| Quick item selection | Hold **X** and press **L** / **R** |
+| Walkable world map | Leave a town; **Up** / **Down** walk, **Left** / **Right** turn, confirm to enter a place |
+| Fullscreen, pause, screenshot | **Alt + Enter**, **P**, **PrtSc** |
+
+LT is the left trigger (ZL on Nintendo pads, L2 on PlayStation). R3 and L3 are
+the stick clicks. Button names above are SNES buttons.
+
+### Default keyboard
+
+| SNES button | Key | SNES button | Key |
+| --- | --- | --- | --- |
+| D-pad | Arrow keys | Start | Enter |
+| A | X | Select | Right Shift |
+| B | Z | L | C |
+| X | S | R | V |
+| Y | A | | |
+
+Controllers work without setup. To change keys or buttons, set **Launch
+destination** on the launcher's Game page to **Babel tools and remapping**.
+
+### In the launcher
+
+| Page | What it does |
+| --- | --- |
+| Display, Audio | Window mode, VSync, filtering, volume |
+| Input | Gamepad, deadzone, and **Button prompts**: Auto, SNES (classic) or Xbox |
+| Achievements | Your local progress |
+| Soundtrack | Import an optional MSU-1 music pack |
+| Cheats and Mods | Cheats, and the conveniences: **Wide view**, **Enhanced world map**, hold to run, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
+
+| Input page | Achievements page |
+| --- | --- |
+| ![The launcher's Input page with gamepad, deadzone, button prompts and keyboard shortcuts](docs/images/launcher-input.png) | ![The launcher's Achievements page](docs/images/launcher-achievements.png) |
 
 ## Development status
 

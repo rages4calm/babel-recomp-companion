@@ -63,6 +63,14 @@ internal static class NativeModSettingsTests
             Throws<InvalidDataException>(() => NativeModSettings.Read(root), "duplicate target feature rejected");
             File.WriteAllText(state, "format_version = 1\n[[feature]]\npackage_id = \"iog.cheats\"\nid = \"dp\"\nenabled = true\n[feature.values]\namount = \"12\"\namount = \"14\"\n");
             Throws<InvalidDataException>(() => NativeModSettings.Read(root), "duplicate target option rejected");
+            File.WriteAllText(state, "format_version = 1\n[[feature]]\npackage_id = \"iog.cheats\"\nid = \"dp\"\nenabled = true\n");
+            Check(NativeModSettings.ReadPrompts(root) == "auto", "button prompts default to auto");
+            NativeModSettings.ApplyPrompts(root, "snes");
+            Check(NativeModSettings.ReadPrompts(root) == "snes", "button prompt style round trips");
+            Check(File.ReadAllText(state).Contains("id = \"dp\"") && File.ReadAllText(state).Contains("prompts = \"snes\""), "prompt style keeps other selections");
+            NativeModSettings.ApplyPrompts(root, "xbox"); NativeModSettings.ApplyPrompts(root, "xbox");
+            Check(NativeModSettings.ReadPrompts(root) == "xbox" && System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(state), "prompts").Count == 1, "prompt style is updated in place");
+            Throws<ArgumentException>(() => NativeModSettings.ApplyPrompts(root, "ps"), "unknown prompt style rejected");
             Console.WriteLine($"PASS {checks} native mod settings checks (synthetic state; no game or owner data)");
         } finally { Directory.Delete(root, true); }
     }

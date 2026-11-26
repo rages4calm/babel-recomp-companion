@@ -16,6 +16,7 @@ public sealed class GameAdapter : JsonGameAdapterBase
     private static readonly string DefaultEngine = File.Exists(Path.Combine(AppContext.BaseDirectory, EngineName))
         ? Path.Combine(AppContext.BaseDirectory, EngineName) : Path.Combine(Project, "build", EngineName);
     private const string AchievementEdition = "stock-companion";
+    private const string PromptsId = "input.prompts", KeysId = "input.keys";
     private static readonly GameDefinition Game = new(
         "illusion-of-gaia", "Illusion of Gaia Companion",
         "Babel Recomp by mr0ta · Companion edition in development",
@@ -29,7 +30,14 @@ public sealed class GameAdapter : JsonGameAdapterBase
             new OptionDefinition("launch.mode", "Game", "Launch destination", OptionKind.Choice, OptionValue.From("game"),
                 "Babel tools retain mod management and full remapping. In game: Esc / LT+R3 settings; I / LT+L3 companion screen.",
                 Choices: new[] { new ChoiceItem("game", "Play directly"), new ChoiceItem("babel", "Babel tools and remapping") })
-        }.Concat(NativeSettings.Options).ToArray(),
+        }.Concat(NativeSettings.Options).Concat(new[] {
+            new OptionDefinition(PromptsId, "Input", "Button prompts", OptionKind.Choice, OptionValue.From("auto"),
+                "Which button names the game shows. Auto uses SNES letters and colours on an SNES-style pad (8BitDo, Switch Online) and Xbox letters otherwise. The same setting is in the in-game settings.",
+                Choices: new[] { new ChoiceItem("auto", "Auto"), new ChoiceItem("snes", "SNES (classic)"), new ChoiceItem("xbox", "Xbox") }),
+            new OptionDefinition(KeysId, "Input", "Keyboard shortcuts", OptionKind.Choice, OptionValue.From("list"),
+                "Esc settings · I companion screen · F11 save states · F12 rewind · F1-F10 load state, Shift+F1-F10 save state · Tab fast forward · P pause · Alt+Enter fullscreen · PrtSc screenshot. To change buttons or keys, set Launch destination on the Game page to Babel tools and remapping.",
+                Choices: new[] { new ChoiceItem("list", "Reference") })
+        }).ToArray(),
         HasAchievements: true,
         Branding: new("#101A23", "#1B2B37", "#D7B46A", "#F2EBDD", "#A7B5BD"));
 
@@ -42,7 +50,12 @@ public sealed class GameAdapter : JsonGameAdapterBase
         var paths = base.ReadSettings(profile);
         foreach (var option in Definition.Options.Where(x => !NativeSettings.IsNative(x.Id)))
             paths.Values.TryAdd(option.Id, option.DefaultValue.Clone());
-        return NativeSettings.Read(paths);
+        var read = NativeSettings.Read(paths);
+        // The game's own mod state holds the prompt style; the launcher copy only mirrors it.
+        try { read.Values[PromptsId] = OptionValue.From(NativeModSettings.ReadPrompts(Path.GetDirectoryName(read.Values["engine.path"].GetString()!)!)); }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException) { }
+        read.Values[KeysId] = OptionValue.From("list");
+        return read;
     }
 
     public override AchievementSnapshot ReadAchievements(ProfileDescriptor profile)
@@ -82,9 +95,15 @@ public sealed class GameAdapter : JsonGameAdapterBase
             NativeSettings.Read(new(new(paths), stored.Revision));
             Store(profile).Write(paths, stored.Revision); return;
         }
+        var prompts = values[PromptsId].GetString()!;
+        var promptsChanged = prompts != current.Values[PromptsId].GetString();
+        var engineDirectory = Path.GetDirectoryName(values["engine.path"].GetString()!)!;
+        if (promptsChanged && NativeModSettings.IsEngineRunning(values["engine.path"].GetString()!))
+            throw new InvalidOperationException("Close the game before changing Button prompts here, or change it in the in-game settings.");
         NativeSettings.Apply(current, values,
             () => { if (ReadSettings(profile).Revision != expectedRevision) throw new SettingsConflictException(); },
             () => Store(profile).Write(paths, stored.Revision));
+        if (promptsChanged) NativeModSettings.ApplyPrompts(engineDirectory, prompts);
     }
 
     public override Readiness CheckReady(ProfileDescriptor profile, IReadOnlyDictionary<string, JsonElement> values)
