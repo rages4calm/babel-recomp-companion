@@ -52,8 +52,6 @@ played it.
 - **Windows x64 only.** The tag also started the workflow builds for Linux,
   macOS, Android, 3DS and Vita; their results were not looked at and nothing
   from them was published.
-- **`v0.2.0-beta.1`** is marked superseded. It had no downloads. Deleting it
-  is the owner's call.
 - **GaiaLabs has not been told** that the dialogue pack and map data ship in a
   public build. They are generated from the public GPL-3.0 repository and
   carry the notice and license; telling them is a courtesy the owner may want
