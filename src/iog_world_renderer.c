@@ -1649,9 +1649,86 @@ static uint32_t WorldSkyPixel(int column,int above,unsigned light)
     return light>=15?rgb:Mode7Mix(0,rgb,light*256u/15u);
 }
 
+/* GPU ground for the filtered walking map. When the host says the runner's
+ * GPU Mode 7 presenter will take this frame (IogWorldSetMapGpu, decided in
+ * main.c before the frame is built), each ground row is recorded as a
+ * prepared affine row and the presenter samples the plane at the window's
+ * resolution. The box filter is then skipped: the software picture keeps a
+ * one-sample ground, which is what lies under objects and overlays and what
+ * is shown if the presenter turns the frame down. Sky rows, objects and
+ * every overlay stay software pixels. Samples 0: the software plane. */
+static struct {
+    int samples,used;
+    bool ready;
+    unsigned sea;
+    int sky_turn;
+    struct { uint8_t kind,haze,light,line,control,sea_edge,cgwsel,cgadsub; uint16_t fixed; double affine[8]; } rows[MaxHeight];
+} hd;
+void IogWorldSetMapGpu(int samples) { hd.samples=samples<0?0:samples>4?4:samples; }
+static bool Mode7HdRecord(int row,const Ppu *p,const int32_t from[4],const int32_t to[4],
+    int y,unsigned haze,int line,const uint32_t colors[256],const uint16_t *cgram,bool sea_edge)
+{
+    int cx=SnesMode7HdSign13(p->m7matrix[4]),cy=SnesMode7HdSign13(p->m7matrix[5]);
+    int h=SnesMode7HdSign13(p->m7matrix[6])-cx,v=SnesMode7HdSign13(p->m7matrix[7])-cy;
+    h=(h&0x2000)?(h|~1023):(h&1023);
+    v=(v&0x2000)?(v|~1023):(v&1023);
+    bool flip_x=PPU_m7xFlip(p),flip_y=PPU_m7yFlip(p);
+    double edge[2][4];
+    for(int e=0;e<2;e++) {
+        const int32_t *m=e?to:from;
+        double yy=(flip_y?255.0-(y+e):(double)(y+e))+v,hh=h+(flip_x?255:0);
+        edge[e][0]=(m[0]*hh+m[1]*yy)/256.0+cx*256.0;
+        edge[e][1]=(m[2]*hh+m[3]*yy)/256.0+cy*256.0;
+        edge[e][2]=(flip_x?-m[0]:m[0])/256.0;
+        edge[e][3]=(flip_x?-m[2]:m[2])/256.0;
+    }
+    unsigned light=PPU_brightness(p);
+    hd.rows[row].kind=1;hd.rows[row].haze=(uint8_t)haze;hd.rows[row].light=(uint8_t)light;
+    hd.rows[row].line=(uint8_t)line;hd.rows[row].control=p->m7sel;hd.rows[row].sea_edge=sea_edge;
+    for(int c=0;c<4;c++) {
+        hd.rows[row].affine[c]=edge[0][c];hd.rows[row].affine[c+4]=edge[1][c]-edge[0][c];
+    }
+    /* The GPU rows carry the palette, brightness and fixed-colour math the
+     * shared shader implements; anything else keeps the software plane. */
+    hd.rows[row].cgwsel=p->cgwsel;hd.rows[row].cgadsub=p->cgadsub;hd.rows[row].fixed=p->fixedColor;
+    unsigned prevent=(p->cgwsel>>4)&3,clip=(p->cgwsel>>6)&3;
+    if((p->cgwsel&3) || clip==3 || clip==1 ||
+       (sea_edge && ((p->cgadsub&1)!=0)!=((p->cgadsub&32)!=0))) return false;
+    for(unsigned c=0;c<8;c++) if(!isfinite(hd.rows[row].affine[c])) return false;
+    for(unsigned i=0;i<256;i++) {
+        unsigned color=cgram[i],layer=i?0:5;
+        bool math=prevent!=3 && prevent!=1 && (p->cgadsub&(1u<<layer));
+        uint32_t expected=0;
+        for(unsigned c=0;c<3;c++) {
+            int value=(color>>(5*c))&31;
+            if(math) {
+                int other=(p->fixedColor>>(5*c))&31;
+                value+=p->cgadsub&128?-other:other;
+                if(value<0)value=0;
+                if(p->cgadsub&64)value/=2;
+                if(value>31)value=31;
+            }
+            expected|=(uint32_t)ppu_brightness_level((unsigned)value,light)<<(16-8*c);
+        }
+        if((colors[i]&0xffffffu)!=expected) return false;
+    }
+    return true;
+}
+/* The one-sample ground of a recorded row: the same transform the presenter
+ * uses, read at the middle of each pixel. */
+static void Mode7HdSoftRow(int row,const Ppu *p,int first_x,int count,
+    const uint32_t colors[256],uint32_t outside,uint32_t *out)
+{
+    const double *a=hd.rows[row].affine;
+    double step_u=(a[2]+.5*a[6])/256.0,step_w=(a[3]+.5*a[7])/256.0;
+    double u=(a[0]+.5*a[4])/256.0+(first_x+.5)*step_u,w=(a[1]+.5*a[5])/256.0+(first_x+.5)*step_w;
+    for(int i=0;i<count;i++,u+=step_u,w+=step_w)
+        out[i]=IogMode7PlaneColor(p,colors,outside,(int)floor(u),(int)floor(w))&0xffffffu;
+}
+
 static bool RenderMode7Plane(void)
 {
-    s.mode7_filtered=false;
+    s.mode7_filtered=false;hd.ready=false;
     if(!s.valid || !s.epoch_count) return false;
     /* Mode7 observes its own raster epochs, not the prior Mode1 OAM pair. */
     s.visual.part_count=0;
@@ -1733,6 +1810,8 @@ static bool RenderMode7Plane(void)
         int32_t probe[4];
         while(horizon<1 && IogMode7PerspectiveSmooth(&s.mode7_parameters,horizon,0,probe)!=
               kIogMode7PerspectiveMatrix) horizon++;
+        hd.ready=hd.samples>0;hd.used=hd.samples;hd.sea=sea;hd.sky_turn=sky_turn;
+        memset(hd.rows,0,sizeof(hd.rows));
     }
     uint8_t prior_registers[PPU_SAVESTATE_REGS_SIZE];
     memset(prior_registers,0,sizeof(prior_registers));
@@ -1774,7 +1853,17 @@ static bool RenderMode7Plane(void)
             if(status==kIogMode7PerspectiveMatrix) {
                 if(IogMode7PerspectiveSmooth(&s.mode7_parameters,y+1,0,to)!=
                    kIogMode7PerspectiveMatrix) memcpy(to,from,sizeof(to));
-                IogMode7PlaneFilteredRowEdge(source,from,to,y,-left,s.width,colors,haze,out);
+                if(hd.ready && !Mode7HdRecord(row,source,from,to,y,
+                    edge_is_sea && y-horizon<HazeRows?(unsigned)(HazeRows-(y-horizon))*208u/HazeRows:0,
+                    Clamp(y,1,224),colors,epoch->cgram,edge_is_sea && (source->m7sel&0xC0)==0x80)) {
+                    /* Not a row the presenter can draw: build this picture
+                     * again from the top with the software plane. */
+                    hd.ready=false;row=-1;prior_epoch=-1;
+                    memset(prior_registers,0,sizeof(prior_registers));
+                    continue;
+                }
+                if(hd.ready) Mode7HdSoftRow(row,source,-left,s.width,colors,haze,out);
+                else IogMode7PlaneFilteredRowEdge(source,from,to,y,-left,s.width,colors,haze,out);
                 if(edge_is_sea && y-horizon<HazeRows) {
                     unsigned part=(unsigned)(HazeRows-(y-horizon))*208u/HazeRows;
                     for(int x=0;x<s.width;x++)
@@ -1818,6 +1907,26 @@ static bool RenderMode7Plane(void)
         s.mode7_perspective?"ready_mode7_perspective":
         uniform?"ready_mode7_plane":"ready_mode7_raster_band";return true;
 }
+
+/* One recorded ground row for the publisher in main.c; kind 0 is a row the
+ * software picture keeps (sky). False: nothing to publish this frame. */
+bool IogWorldHdQuery(int row,int width,int height,IogWorldHdRow *out)
+{
+    if(!out || !hd.ready || !s.complete || !s.mode7 || !s.mode7_filtered || s.fixed_plate ||
+       width!=s.width || height!=s.height || row<0 || row>=height) return false;
+    *out=(IogWorldHdRow){0};
+    out->samples=hd.used;out->soft=s.output+row*width;
+    if(!hd.rows[row].kind) return true;
+    const PictureEpoch *epoch=&s.epochs[s.lines[hd.rows[row].line].epoch];
+    out->kind=1;out->haze=hd.rows[row].haze;out->light=hd.rows[row].light;
+    out->control=hd.rows[row].control;out->cgwsel=hd.rows[row].cgwsel;
+    out->cgadsub=hd.rows[row].cgadsub;out->fixed=hd.rows[row].fixed;
+    out->edge=hd.rows[row].sea_edge?(int)hd.sea:-1;
+    out->vram=epoch->vram;out->cgram=epoch->cgram;
+    memcpy(out->affine,hd.rows[row].affine,sizeof(out->affine));
+    return true;
+}
+uint32_t IogWorldHdHaze(int x,unsigned light) { return WorldSkyPixel(x+hd.sky_turn,0,light); }
 
 static void CompositeHud(uint8_t *dst,size_t pitch)
 {

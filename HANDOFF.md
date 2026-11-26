@@ -271,6 +271,15 @@ and dialogue (`snes_overlay_draw.c/.h`, `desktop/opengl.c`). Carry it
 across any SNESRecomp update; upstream's host-overlay extraction may
 replace it.
 
+Second local delta (same day): a game-published `hd_frame` no longer needs
+the HD MODE 7 setting or a raster-sized presentation
+(`desktop/host_main.c`, the gate before the HD capture; four lines in
+`desktop/opengl.c`: `g_hd_refused`, `snesrecomp_opengl_hd_refused`, the
+`if (g_hd_frame)` test and the refusal flag). The walkable world map's
+ground uses it. The smooth (xBR) present filter in
+`runner/src/present_filter.*` and `desktop/opengl.c` is also local and
+absent upstream.
+
 SNESRecomp main is 70 commits past the pin (`4348bdb`, November 24). A
 read-only inventory found 71 locally modified and 129 added vendor files.
 Of 35 files changed on both sides, 21 merge textually and 14 need a manual

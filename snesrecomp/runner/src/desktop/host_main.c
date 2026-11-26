@@ -1953,7 +1953,7 @@ static void DrawPpuFrameWithPerf(void) {
   }
   const SnesHdFrame *hd = NULL;
   SnesHdView hd_view;
-  if (!PresentationDiffersRaster() && g_config.mode7.enabled && !g_config.frame_blend) {
+  if ((g_game->hd_frame || (!PresentationDiffersRaster() && g_config.mode7.enabled)) && !g_config.frame_blend) {
     hd = g_game->hd_frame ? g_game->hd_frame() :
          !g_custom_frame ? SnesHdCaptureFrame(g_hd_capture) : NULL;
   }

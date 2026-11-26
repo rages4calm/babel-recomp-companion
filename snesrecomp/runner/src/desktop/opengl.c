@@ -166,6 +166,8 @@ static bool g_hd_tried;
 static const SnesHdFrame *g_hd_frame;
 static const uint32_t *g_hd_overlay;
 static size_t g_hd_overlay_pitch;
+static bool g_hd_refused;   /* a published frame the GPU presenter could not draw */
+bool snesrecomp_opengl_hd_refused(void) { return g_hd_refused; }
 void snesrecomp_opengl_set_hd(const SnesHdFrame *frame,
                             const uint32_t *overlay, size_t pitch) {
   g_hd_frame = frame; g_hd_overlay = overlay; g_hd_overlay_pitch = pitch;
@@ -701,7 +703,7 @@ static void OpenGLRenderer_EndDraw(void) {
   GlTextureWithSize image = g_texture;
   SnesHdGpuImage hd_image;
   bool enhanced = false;
-  if (g_hd_frame && g_config.mode7.enabled) {
+  if (g_hd_frame) {   /* the host decides which frames are offered */
     if (!g_hd_tried) { g_hd_gpu = SnesHdGpuCreate(); g_hd_tried = true; }
     enhanced = SnesHdGpuRender(g_hd_gpu, g_hd_frame, g_config.mode7.scale,
         (unsigned)viewport.width, (unsigned)viewport.height,
@@ -709,6 +711,7 @@ static void OpenGLRenderer_EndDraw(void) {
         (const uint32_t *)g_screen_buffer, g_draw_width * 4,
         g_hd_overlay, g_hd_overlay_pitch, &hd_image);
     if (enhanced) image = (GlTextureWithSize){hd_image.texture, hd_image.width, hd_image.height};
+    else g_hd_refused = true;
   }
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, enhanced ? image.gl_texture : g_texture.gl_texture);

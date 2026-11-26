@@ -536,6 +536,35 @@ hold. Not looked at with the setting on: regions other than Watermia/Euro
 and Itory, the scripted flights, frame cost of the overlay, and play by a
 person.
 
+**Enhanced world map, GPU ground.** With the Enhanced world map on and the
+OpenGL presenter in use, the walking map's ground is drawn by the runner's
+GPU Mode 7 presenter at the window's resolution (2 samples per axis; 1
+when the presenter's memory rule would otherwise reduce the picture). The
+renderer records each ground row as a prepared affine row and publishes it
+through `hd_frame`; sky, haze source, Will, pins, minimap and plates remain
+software pixels, selected wherever the finished picture differs from the
+software ground. On those frames the box filter is skipped and the 598x336
+picture carries a one-sample ground, so `--source-frame` pictures and
+paused backdrops are not what the player sees. The software plane is used
+with a shader preset, linear filtering, frame blending, the Dual/Flip
+layouts, SDL presenters, rows whose colour math the shader cannot
+reproduce, and for the rest of the session after the presenter refuses a
+frame. `IOG_WORLD_MAP_GPU=0` forces the software plane; `1..4` forces a
+sample count. It does not depend on the HD MODE 7 setting, which has no
+effect in the wide view. Process CPU on the map is about 0.5 ms per frame
+lower than the software plane on the test machine; the gain is the
+picture. Checked in 1080p sequences of turning, walking, appearing on the
+map, the fade into a town, the arrival zoom and tilt at Euro and the map
+edge at Dao: ground, Will, pins and minimap coincide with the software
+view. With `IOG_WORLD_MAP_GPU=0`, and with the enhancement off, a 1080p
+frame is byte-identical to the previous build, and the seven walking trips
+are unchanged. Not verified: shimmer in continuous motion (stills four or
+more frames apart), the fall-back after a refused frame, the paused
+backdrop, a closed destination's grey pin, 4K, linear filtering, and
+non-NVIDIA or OpenGL 3.3 hardware. On GPU frames the software pixels
+(Will, pins, labels, sky) are scaled by nearest pixel instead of the
+present filter. The other Mode 7 scenes stay on the software path.
+
 Build the collision data from a local checkout of the pinned GaiaLabs source.
 
 ```powershell

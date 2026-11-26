@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include "common_rtl.h"
 #include "snes/snes.h"
+#include "snes/hd_jobs.h"
 #include "snesrecomp_rom_identity.h"  /* generated from rom_identity.txt */
 #include "desktop/config.h"
 #include "desktop/display_aspect.h"
@@ -253,9 +254,102 @@ static void IogDrawWorldHint(uint8_t *dst,size_t pitch,int width,int height,
     snes_ovl_draw_text((uint32_t *)dst,stride,height,x,y,text,0xfff2dda4u,1);
 }
 
+/* GPU ground for the Enhanced walking map: hand its ground rows to the
+ * runner's GPU Mode 7 presenter, which samples the plane at the window's
+ * resolution. IogMapGpuSamples decides, before a frame is built, whether the
+ * presenter will take it; the renderer then skips its own filtered plane.
+ * IogWorldHdPublish is called with the finished host picture: whatever the
+ * software picture's ground does not explain (objects, pins, minimap,
+ * plates) stays a software pixel. NULL withdraws the rows. */
+#if SNESRECOMP_HAS_GL_PRESENTER && !SNESRECOMP_SDL_GLES2_ONLY
+bool snesrecomp_opengl_hd_refused(void);   /* desktop/opengl.c */
+#define IOG_MAP_GPU_PRESENTER 1
+#else
+#define IOG_MAP_GPU_PRESENTER 0
+#endif
+/* Samples per axis for the next frame; 0: the software plane.
+ * IOG_WORLD_MAP_GPU=0 forces the software plane, 1..4 a sample count. */
+static int IogMapGpuSamples(int dw, int dh, int width, int height)
+{
+    static int forced = -2;
+    static bool refused;
+    if (forced == -2) {
+        const char *value = getenv("IOG_WORLD_MAP_GPU");
+        forced = value && *value >= '0' && *value <= '4' && !value[1] ? *value - '0' : -1;
+    }
+    if (!IOG_MAP_GPU_PRESENTER || !forced || refused || dw <= 0 || dh <= 0 ||
+        width <= 0 || height <= 0 || width > kSnesHdMaxWidth || height > kSnesHdMaxHeight) return 0;
+#if IOG_MAP_GPU_PRESENTER
+    /* A frame the presenter turned down: the software plane from here on. */
+    if (snesrecomp_opengl_hd_refused()) { refused = true; return 0; }
+#endif
+    /* The presenter draws game-published rows only on OpenGL, on the plain
+     * nearest path, in the single-screen layout and without frame blending.
+     * Shader presets and linear filtering take the software picture. */
+    if (g_config.output_method != kOutputMethod_OpenGL || (g_config.shader && *g_config.shader) ||
+        g_config.linear_filtering || g_config.frame_blend || g_config.companion_layout > 0 ||
+        !IogWalkableWorldEnhanced()) return 0;
+    SnesDisplayViewport view = SnesDisplayAspect_FitViewport((double)width / height, dw, dh);
+    /* Its raster is the frame times the configured Mode 7 scale; below the
+     * window's size it would be coarser than the software plane. */
+    if ((long long)width * g_config.mode7.scale < view.width || view.width <= 0 || view.height <= 0) return 0;
+    int samples = forced > 0 ? forced : 2;
+    /* The presenter's own memory rule (opengl.c: 128 MB), else it halves the picture. */
+    while (samples > 1 && (unsigned long long)view.width * view.height * 4 * (1 + samples * samples) +
+           (unsigned long long)(width + 1) * view.height * samples * 16 > 128ull * 1024 * 1024) samples--;
+    return samples;
+}
+static SnesHdFrame *s_map_hd;
+static int s_map_gpu;   /* IogMapGpuSamples at this present */
+static const struct SnesHdFrame *IogWorldHdFrame(void) { return s_map_hd; }
+static void IogWorldHdPublish(const uint8_t *dst, size_t pitch, int width, int height)
+{
+    SnesHdFrameDestroy(s_map_hd); s_map_hd = NULL;
+    IogWorldHdRow r;
+    if (!dst || !s_map_gpu || width > kSnesHdMaxWidth || height > kSnesHdMaxHeight ||
+        !IogWorldHdQuery(0, width, height, &r)) return;
+    SnesHdFrame *frame = SnesHdFrameCreate((unsigned)width, (unsigned)height);
+    static SnesHdLine line;
+    const uint16_t *picture = NULL;
+    int left = (width - 256) / 2, source = -1;
+    bool ok = frame && SnesHdFrameSetSampling(frame, (unsigned)r.samples);
+    for (int row = 0; row < height && ok; row++) {
+        ok = IogWorldHdQuery(row, width, height, &r);
+        memset(&line, 0, sizeof(line));
+        memcpy(line.native, dst + row * pitch, (size_t)width * 4);
+        line.kind = kSnesHdNative; line.brightness = 15;
+        if (ok && r.kind) {
+            if (picture != r.vram) { source = SnesHdFrameAddPicture(frame, r.vram); picture = r.vram; }
+            if (source < 0) { ok = false; break; }
+            line.kind = kSnesHdAffine; line.source = (uint16_t)source;
+            line.control = r.control; line.brightness = r.light;
+            line.cgwsel = r.cgwsel; line.cgadsub = r.cgadsub; line.fixed_color = r.fixed;
+            memcpy(line.palette, r.cgram, sizeof(line.palette));
+            if (r.edge >= 0) line.palette[0] = r.cgram[r.edge];
+            line.screen_left = line.active_left = (int16_t)-left;
+            line.active_right = (int16_t)(width - left);
+            memcpy(line.affine, r.affine, sizeof(line.affine));
+            unsigned alpha = r.haze * 255u / 256u;
+            for (int x = 0; x < width; x++) {
+                line.visibility[x] = 1;
+                line.native_mask[x] = ((line.native[x] ^ r.soft[x]) & 0xffffffu) != 0;
+                if (alpha) {
+                    uint32_t sky = IogWorldHdHaze(x, r.light);
+                    line.overlay[x] = alpha << 24 | (((sky >> 16) & 255) * alpha / 255) << 16 |
+                        (((sky >> 8) & 255) * alpha / 255) << 8 | (sky & 255) * alpha / 255;
+                }
+            }
+        }
+        ok = ok && SnesHdFrameSetLine(frame, (unsigned)row, &line);
+    }
+    if (ok && SnesHdFrameSeal(frame)) s_map_hd = frame;
+    else SnesHdFrameDestroy(frame);
+}
+
 static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
                            int width, int height, double alpha)
 {
+    IogWorldHdPublish(NULL,0,0,0);
     int drawn=IogWorldEnabled()?IogWorldDraw(dst,pitch,field,width,height,alpha):
         IogSceneViewDraw(&s_scene_view,dst,pitch,field,width,height,alpha);
     if(drawn) {
@@ -275,6 +369,7 @@ static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
                 IogDrawWorldHint(dst,pitch,width,height,height-22,"Up/Down: Walk  Left/Right: Turn");
             }
         }
+        if(IogWorldEnabled()) IogWorldHdPublish(dst,pitch,width,height);
     }
     return drawn;
 }
@@ -292,6 +387,7 @@ static void IogResetSceneView(void)
 static void IogPresentationGeometry(int dw, int dh, int *w, int *h)
 {
     IogWorldGeometry(dw, dh, w, h);
+    if (IogWorldEnabled() && w && h) IogWorldSetMapGpu(s_map_gpu = IogMapGpuSamples(dw, dh, *w, *h));
 }
 
 static void IogViewport(int fw, int fh, int dw, int dh, SnesDisplayViewport *out)
@@ -367,6 +463,18 @@ int main(int argc, char **argv)
 #else
     fprintf(stderr, "%s\n", IOG_EXECUTION_ID);
     IogAchievementAuditStart(argc, argv);
+#endif
+#ifndef IOG_RECEIVED_REFERENCE
+    /* The wide world view publishes the walking map's ground to the GPU
+     * presenter. The classic view keeps the host's own Mode 7 capture, which
+     * a game-published frame would replace. */
+    static SnesDesktopHostGame world_host;
+    if (IogWorldEnabled()) {
+        world_host = kGameHost; world_host.hd_frame = IogWorldHdFrame;
+        const int world_result = snesrecomp_desktop_main(&world_host, argc, argv);
+        IogAchievementAuditShutdown();
+        return world_result;
+    }
 #endif
     const int result = snesrecomp_desktop_main(&kGameHost, argc, argv);
 #ifndef IOG_RECEIVED_REFERENCE
