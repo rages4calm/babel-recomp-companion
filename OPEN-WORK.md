@@ -1,12 +1,49 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 26,
-2026 (tester build `v0.2.0-beta.11`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.12`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
+
+## Owner playtest of beta 11 (November 26)
+
+Eight bug marks (`.local/batch-001/owner-playtest-5`). Fixed in beta 12,
+checked on the marks, not yet played. Every beta 10 mark gives the same wide
+frames on beta 11 and beta 12 apart from the item counter.
+
+- **Item counter still hard to read**: the digits were taken from the game's
+  BG3 font in VRAM, whose colour indices are not an outline, so they came out
+  garbled. The counter now uses its own bold 4x7 digits, white on a dark badge
+  with a light rim.
+- **The plane enters and leaves at the old 4:3 edges** (the flight from the
+  Sky Garden, scene 58): the plane stands left of the scene's 256-pixel window
+  as it flies in and right of it as it leaves, and the renderer's rule for
+  actors on another floor of a map cut their pixels to the original field.
+  The flight's sky has one floor, so that rule no longer applies there.
+- **Black rectangles on Seaside Palace stairs**: when a floor was entered
+  through a door while the camera was still panning (no remembered floor to
+  slide from), only the old field and the window showed, with black beside
+  the field. The rows the original camera shows now continue across the
+  room's width. The floor-to-floor slide also accepts floors of different
+  widths.
+- **Dotted column and flashing strip in Mu**: under a per-line horizontal wave
+  (Mu's water, village heat, room-transition waves) the field's edge tile
+  columns, where the game streams the next strip, came from live VRAM and
+  showed stale cells in the middle of the wide picture. Those columns now come
+  from the map. The original 4:3 picture shows the same dots at its own edge.
+- **A Mu stone face that blinks and seems unkillable**: native and the
+  interpreter give the same result, and one face died after several hits. It is
+  the game's normal hit flash. No change.
+- **The owner's F1 save in Mu**: the room with two pedestals (scene 66) takes
+  two Rama's Statues (item `13`, flags `80` and `81`); the save had `80` set
+  and no statue. At the owner's request a Rama's Statue was put in the empty
+  slot of his F1 state; the original is in
+  `saves-backup-before-rama-statue`. Tested on beta 11: using it on the right
+  pedestal raises the statue and opens the cemetery. The chest or event that
+  gives the second statue was not looked up and is not flagged.
 
 ## Owner playtest of beta 10 (November 26)
 
@@ -47,7 +84,13 @@ Open:
   any direction: the landing spot is solid on every side. The interpreter is
   stuck the same from the mark, so it happened during the fall. Not
   reproduced: the owner's F1 state is in the hub (4C) and the route and the
-  place he stepped off are unknown. Needs a state from just before the jump.
+  place he stepped off are unknown. The owner then gave a state from just
+  before the jump (slot 7, scene 53 at 532,594) and the same jump worked for
+  them in play. Eight replays from it (straight down, down-left, down-right,
+  at two distances, and sideways first) all landed in 54 at 496,540 to 576
+  or stayed in 53, and Will could then walk in every direction. Native
+  matched the interpreter on every replay. Still open: the landing spot
+  that fails was not found.
 
 ## Owner playtest of beta 2 (November 26)
 
@@ -253,7 +296,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.11`)
+## The tester build (`v0.2.0-beta.12`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

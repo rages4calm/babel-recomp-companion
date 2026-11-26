@@ -173,24 +173,22 @@ static void Plot(int x, int y, uint32_t rgb)
         }
 }
 
-/* A character of the game's BG3 font (2bpp, tile = character code),
- * outlined for legibility: colour 0 transparent. */
-static void Glyph(int x, int y, uint8_t ch, uint32_t fg)
+/* A bold 4x7 digit font of our own. The game's BG3 font, read from VRAM,
+ * came out garbled at this size (its colour indices are not an outline). */
+static const uint8_t kDigits[10][7] = {   /* 4 bits per row, MSB = left */
+    {0x6,0x9,0x9,0x9,0x9,0x9,0x6}, {0x2,0x6,0x2,0x2,0x2,0x2,0x7},
+    {0x6,0x9,0x1,0x2,0x4,0x8,0xF}, {0xE,0x1,0x1,0x6,0x1,0x1,0xE},
+    {0x9,0x9,0x9,0xF,0x1,0x1,0x1}, {0xF,0x8,0xE,0x1,0x1,0x9,0x6},
+    {0x6,0x8,0x8,0xE,0x9,0x9,0x6}, {0xF,0x1,0x1,0x2,0x2,0x4,0x4},
+    {0x6,0x9,0x9,0x6,0x9,0x9,0x6}, {0x6,0x9,0x9,0x7,0x1,0x1,0x6},
+};
+
+static void Digit(int x, int y, unsigned d, uint32_t fg)
 {
-    const uint16_t *vram = PpuRenderVram(g_ppu);
-    const unsigned base = PPU_bgTileAdr(g_ppu, 2);
-    uint8_t px[8][8];
-    for (int r = 0; r < 8; r++) {
-        const uint16_t w = vram[(base + ch * 8 + r) & 0x7fff];
-        for (int c = 0; c < 8; c++)
-            px[r][c] = (uint8_t)(((w >> (7 - c)) & 1) | ((w >> (15 - c)) & 1) << 1);
-    }
-    for (int r = 0; r < 8; r++)
-        for (int c = 0; c < 8; c++)
-            if (px[r][c] == 1 || px[r][c] == 3)
+    for (int r = 0; r < 7; r++)
+        for (int c = 0; c < 4; c++)
+            if (kDigits[d][r] & (8 >> c))
                 Plot(x + c, y + r, fg);
-            else if (px[r][c] == 2)
-                Plot(x + c, y + r, 0x101010);
 }
 
 static void Number(int x, int y, unsigned n)
@@ -198,16 +196,18 @@ static void Number(int x, int y, unsigned n)
     char buf[8];
     int len = 0;
     do buf[len++] = (char)('0' + n % 10); while ((n /= 10) && len < 3);
-    /* A dark badge under the digits: on the light platform a bare outlined
-     * digit was hard to read. Corners left open so it is not a hard box. */
-    const int left = x - 6 * len - 2, right = x + 1, top = y - 1, bottom = y + 8;
+    /* A dark badge with a light rim, so it reads on both the light platform
+     * and the dark sea. Right-aligned on x, 5-pixel advance. */
+    const int left = x - 5 * len - 2, right = x + 1, top = y - 2, bottom = y + 8;
     for (int py = top; py <= bottom; py++)
-        for (int px = left; px <= right; px++)
-            if (!((py == top || py == bottom) && (px == left || px == right)))
-                Plot(px, py, 0x18203A);
-    /* Right-aligned on x; 6-pixel advance (the font's digits are narrow). */
+        for (int px = left; px <= right; px++) {
+            const bool edge = py == top || py == bottom || px == left || px == right;
+            const bool corner = (py == top || py == bottom) && (px == left || px == right);
+            if (!corner)
+                Plot(px, py, edge ? 0xB8C0D8 : 0x101828);
+        }
     for (int i = 0; i < len; i++)
-        Glyph(x - 6 * (i + 1), y, (uint8_t)buf[i], 0xF8F8F8);
+        Digit(x - 5 * (i + 1) + 1, y, (unsigned)(buf[i] - '0'), 0xFFFFFF);
 }
 
 static void Frame(int x0, int y0, int w, int h, uint32_t rgb)

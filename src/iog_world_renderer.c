@@ -1702,7 +1702,9 @@ static bool RoomPictureView(int camera_x,int camera_y,const PictureBounds *bound
  * `to` is the new window as it will be shown once the camera is inside. */
 static bool StairPanView(int camera_x,int camera_y,const PictureBounds *to)
 {
-    if(!s.pan.valid || s.pan.left!=to->left || s.pan.right!=to->right) return false;
+    /* The floors may differ in width (the Seaside Palace's do); the picture
+     * frames the new floor across and draws the span of both. */
+    if(!s.pan.valid) return false;
     int start=s.pan.camera_y,end;
     if(camera_y<to->top) end=to->top;
     else if(camera_y+224>to->bottom) end=to->bottom-224;
@@ -2450,6 +2452,8 @@ static bool RenderWorld(void)
         if(blank[logical]<0) {s.reason="no_verified_transparent_character";return false;}
     }
     memset(s.output,0,(size_t)s.width*s.height*4);
+    /* A per-line horizontal wave shifts the field's edge columns into view. */
+    bool wave_edge=water_wave || village_heat || transition_wave;
     bool finite_backdrop=scene==0x47 || scene==0x74;
     /* A plain finite backdrop with its own camera (the ship deck's sky)
      * has no model above its first row. */
@@ -2501,8 +2505,10 @@ static bool RenderWorld(void)
              * reach over the edge of this floor's window (bats hanging
              * from the ceiling of the floor below). The stock camera never
              * shows those rows; outside the original field they stay out. */
+            /* The flight's sky has one floor and repeats: the plane flies
+             * in from left of its window and out past the right. */
             bool other_floor=false;
-            if(authored && !authored_window_pan && !part->manual && !part->player &&
+            if(authored && !authored_window_pan && !story_sky && !part->manual && !part->player &&
                part->actor>=0x1000 && part->actor<0x1FC0) {
                 int ax=(int16_t)Word(s.active_ram,part->actor+0x14);
                 int ay=(int16_t)Word(s.active_ram,part->actor+0x16);
@@ -2705,8 +2711,7 @@ static bool RenderWorld(void)
                     bool repeat=(adrift_ocean && logical==1) || story_sky || ((effect || (logical==1 && underside_backdrop)) &&
                         !finite_horizon && !finite_wall && (!bounded || scene==0x85) && !classroom);
                     unsigned tile=MapTile(e,logical,sample_x,sample_y,repeat);
-                    if(tile==0xFFFFFFFFu) tile=(unsigned)blank[logical];
-                    /* Overlapping authentic cells use the actual uploaded
+                    if(tile==0xFFFFFFFFu) tile=(unsigned)blank[logical];                    /* Overlapping authentic cells use the actual uploaded
                      * VRAM entry, including partially updated scroll strips. */
                     int source_y=wy-camy;
                     int source_x=camx;
@@ -2715,7 +2720,14 @@ static bool RenderWorld(void)
                         uint16_t phase;
                         if(IogRasterParallaxSample(&wall_model,wy+1,wall_source_camera,&phase))source_x=phase;
                     }
-                    if(source_y>=-(int)mosaic_layer&&source_y<224 && x+8>source_x && x<source_x+256) {
+                    /* The tile columns at the field's left and right edges
+                     * are where the game streams the next strip while it
+                     * scrolls; mid-stream they hold stale cells that the wide
+                     * picture shows in the middle of the screen (a dotted
+                     * column under Mu's water wave, a flashing strip when
+                     * running back and forth). Those come from the map. */
+                    int edge=wave_edge?8:0;
+                    if(source_y>=-(int)mosaic_layer&&source_y<224 && x+8>source_x+edge && x<source_x+256-edge) {
                         unsigned tx=((unsigned)source_hscroll[physical]+(x-source_x))>>3;
                         unsigned ty=((unsigned)source_vscroll[physical]+source_y+1)>>3;
                         unsigned address=PPU_bgTilemapAdr(p,physical)+((ty&31)<<5)+(tx&31);
@@ -2794,12 +2806,29 @@ static bool RenderWorld(void)
                  * reached it: its window opens with filler rows (often a
                  * grey strip) that would otherwise sit detached at the
                  * picture's edge from the first frame of the stair. */
-                if(pan_union && ((worldx>=bounds.left && worldx<bounds.right &&
-                      worldy>=bounds.top && worldy<bounds.bottom &&
-                      (bounds.top>s.pan.top?worldy<camera_y+224:worldy>=camera_y)) ||
-                     (worldx>=s.pan.left && worldx<s.pan.right &&
-                      worldy>=s.pan.top && worldy<s.pan.bottom)))
+                /* The two floors' windows can differ in width; the map
+                 * between them is drawn too (it is the same building), so
+                 * no corner of the pan is left as an empty block. */
+                if(pan_union) {
+                    int ux0=bounds.left<s.pan.left?bounds.left:s.pan.left;
+                    int ux1=bounds.right>s.pan.right?bounds.right:s.pan.right;
+                    int uy0=bounds.top<s.pan.top?bounds.top:s.pan.top;
+                    int uy1=bounds.bottom>s.pan.bottom?bounds.bottom:s.pan.bottom;
+                    bool reached=bounds.top>s.pan.top?
+                        worldy<(camera_y+224>s.pan.bottom?camera_y+224:s.pan.bottom):
+                        worldy>=(camera_y<s.pan.top?camera_y:s.pan.top);
+                    if(worldx>=ux0 && worldx<ux1 && worldy>=uy0 && worldy<uy1 && reached)
+                        inside=true;
+                } else if((bounded || authored) && !inside && !castle_marker && worldy>=camera_y && worldy<camera_y+224 &&
+                          worldy<stock_bottom && worldx>=bounds.left && worldx<bounds.right) {
+                    /* The camera can move past the room's window before the
+                     * picture follows (a pan with no remembered floor: the
+                     * room was entered through a door mid-pan, or a state was
+                     * loaded). The rows the original camera shows are real;
+                     * continue them across the room's width instead of
+                     * leaving black blocks beside the original field. */
                     inside=true;
+                }
                 /* The classroom's own mask and the rest end at the same row. */
                 if(!native_pixel && worldy>=stock_bottom) inside=false;
                 if(inside || backdrop_only || story_sky)
