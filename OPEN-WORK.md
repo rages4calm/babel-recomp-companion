@@ -8,6 +8,47 @@ Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
 
+## Owner playtest of beta 2 (November 26): reported, being worked
+
+The owner played from the start to Freejia on the interpreter build. His save
+states are copied to `.local/batch-001/owner-playtest-1/saves` (`save0.sav`
+is his "slot 1", `save1.sav` slot 2, and so on; `save.srm` is the battery
+save). Remove an item here only when it is fixed and seen fixed.
+
+Picture:
+- The clubhouse at the start looks wrong: the bottom of the room seems pushed
+  up, and a textured wall shows at the bottom where Erik walks in through it
+  and past the stairs. He says interiors in general feel like this.
+- Going up or down stairs in some buildings: the screen flashes, and the wide
+  view drops to 4:3 for a split second.
+- Edward's Castle (slot 2, all over the castle): the Mode 7 background does
+  not move, though on the SNES it scrolls constantly; and running along a
+  hallway sends a solid red colour across the screen.
+- Edward's Castle basement (slot 3): the floor moves as he walks.
+- Learning Psycho Dash in Dark Space: the wide view drops to 4:3 briefly.
+- Slot 4: grass and an Inca statue appear at the bottom left.
+- The gold ship (slots 5 and 6, 6 is after he wakes): wide view off and black
+  everywhere.
+- Achievement toasts are drawn behind the status display.
+- In the intro classroom, walking toward the exit makes the area map (radar)
+  disappear until he walks on or back.
+
+Controls and menus:
+- Choosing SNES button prompts in the in-game settings did not change the
+  button pictures; they stayed Xbox.
+- Loading and saving a state need a confirmation. He lost progress to an
+  accidental load.
+- After Reset to the title screen, his in-game (battery) save was not there.
+- He reports LT+L3 opens both the Companion menu and the settings.
+- He finds the Companion menu pointless and wants it gone: achievements moved
+  into the settings menu, the map on a single button not used by the game
+  (right bumper or Select were his examples), and save state and load state
+  on their own keys. Not started; the hotkey collision comes first.
+
+Launcher:
+- Changing settings gives "Settings changed outside this window. Revert to
+  reload them before applying your changes."
+
 ## Decided, not built
 
 - **Optional edge-anchored status display.** In the wide view the status
