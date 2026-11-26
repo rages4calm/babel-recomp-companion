@@ -58,7 +58,9 @@ window's resolution; the others use the optional HD Mode 7 setting.
   the in-game settings.
 - **Optional MSU-1 orchestral soundtrack**, imported and verified on the
   launcher's Soundtrack page. The original SNES music is the default.
-- **Conveniences you can switch on:** hold to run, hold to advance dialogue,
+- **Conveniences you can switch on:** auto-run (walk to build speed; hold the
+  run button to start sooner) or hold to run, a text speed setting with the
+  run button to hurry any line, hold to advance dialogue,
   item stacking, quick item selection, an equipped-item marker, a status
   display at the screen edges, and save states with a confirmation before
   anything is overwritten.
@@ -120,7 +122,7 @@ on the launcher's Game page to **Open the setup screen**.
 | Input | Gamepad, deadzone, and **Button prompts**: Auto, SNES (classic) or Xbox |
 | Achievements | Your local progress |
 | Soundtrack | Import an optional MSU-1 music pack. Off until you import one; the game plays the original SNES music |
-| Cheats and Mods | Cheats, and the conveniences: **Enhanced world map**, **Status display at the screen edges**, hold to run, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
+| Cheats and Mods | Cheats, and the conveniences: **Enhanced world map**, **Status display at the screen edges**, run (auto-run or hold), text speed, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
 
 | Display page | Input page |
 | --- | --- |
@@ -128,7 +130,7 @@ on the launcher's Game page to **Open the setup screen**.
 
 ## Development status
 
-**Current build:** `0.2.0-beta.12`, Windows x64, pre-release for
+**Current build:** `0.2.0-beta.13`, Windows x64, pre-release for
 playtesting. Automated routes reach the ending and the credits; a full
 playthrough by a person is under way.
 
@@ -213,6 +215,11 @@ This port stands on the work of many people. Thank you all.
   of Gaia ROM-hacking toolkit, disassembly and database: symbols, text format,
   and the reference patches behind the run button, New Game+, music transitions
   and more. This port would not exist without these tools.
+- **[andrewclunn](https://www.romhacking.net/forum/index.php?action=profile;u=6346)**
+  — author of the *Gaia and Time* hack
+  ([source](https://github.com/Azarem/gaia-iog-baserom/tree/drew/gaia-and-time)).
+  The auto-run and the text speed setting (Cinematic, Instant, and the run
+  button to hurry text) follow his design, rebuilt here with his permission.
 - **Aleks** ([ALEKS Ultimate NX](https://github.com/Alexgg1014/The-Legend-of-Zelda-A-Link-To-The-Past-Alek-s-Ultimate-NX-Edition))
   — for the dual-screen companion (the Dual and Flip Grip layouts) and for
   their help throughout. Its safe boot and crash reporter were adapted here

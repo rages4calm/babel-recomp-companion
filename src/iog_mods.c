@@ -57,22 +57,77 @@ enum {
 static uint16_t Pad(void) { return g_snes->input1_currentState & 0x0FFF; }
 
 static uint16_t g_run_mask = kPadY;
+static bool g_run_on;     /* iog.enhancements/run */
+static bool g_auto_run;   /* run style "auto": Drewish's build-up auto-run */
+
+/* Auto-run, after Drewish's Gaia and Time (RunButtonCore.patch.asm, used as
+ * documentation; the code is this project's own). Each frame Will actually
+ * moves with a direction held earns 1 point, or 8 with the run button held.
+ * At 120 he runs in that direction for as long as he keeps moving. A sideways
+ * turn keeps the progress and redirects the run; reversing, stopping, a wall
+ * or a lock resets it. Host-side state only: nothing is stored in the game. */
+enum { kAutoRunFull = 120 };
+static uint16_t g_ar_progress, g_ar_dir = 0xFFFF, g_ar_x, g_ar_y;
+static bool g_ar_have_pos;
+
+static void AutoRunReset(void) { g_ar_progress = 0; }
+
+static void AutoRunTick(uint16_t pad)
+{
+    const uint16_t actor = Rd(0x09AA);
+    const uint16_t dirs = pad & (kPadRight | kPadLeft | kPadDown | kPadUp);
+    if (!actor || actor < 0x1000 || actor >= 0x1FC0) {
+        g_ar_have_pos = false; AutoRunReset(); return;
+    }
+    const uint16_t x = Rd(actor + 0x14), y = Rd(actor + 0x16);
+    const bool moved = g_ar_have_pos && (x != g_ar_x || y != g_ar_y);
+    g_ar_x = x; g_ar_y = y; g_ar_have_pos = true;
+    if (!dirs || !moved || (Rd(0x09AE) & 0x3A00)) {
+        AutoRunReset(); return;
+    }
+    /* 0 east, 1 west, 2 south, 3 north: opposites differ in bit 0. The same
+     * priority as the hold-to-run mode. */
+    const uint16_t dir = (dirs & kPadRight) ? 0 : (dirs & kPadLeft) ? 1 : (dirs & kPadDown) ? 2 : 3;
+    if (g_ar_dir != 0xFFFF && (dir ^ g_ar_dir) == 1) {
+        if (g_ar_progress >= kAutoRunFull) {
+            Wr(0x09B2, 0); Wr(0x09B4, 0); Wr(0x09B8, 0);
+        }
+        g_ar_progress = 0;
+    }
+    g_ar_dir = dir;
+    if (g_ar_progress < kAutoRunFull) {
+        g_ar_progress += (pad & g_run_mask) ? 8 : 1;
+        if (g_ar_progress < kAutoRunFull)
+            return;
+    }
+    g_ar_progress = kAutoRunFull;
+    const uint16_t speed = (dir & 1) ? 0xFFFD : 3;
+    if (dir & 2) { Wr(0x09B2, 0); Wr(0x09B4, speed); }
+    else         { Wr(0x09B4, 0); Wr(0x09B2, speed); }
+    Wr(0x09B8, 0);
+}
 
 /* Holding the run button with a direction starts the game's own dash (the
  * one Will uses after a charged step), in that direction, whenever the game
  * would let the player move. The dash ends by itself like any other. */
 static void RunFrame(void)
 {
-    if (!g_snes)
+    if (!g_snes || !g_run_on)
         return;
     const uint16_t pad = Pad();
-    if (!(pad & g_run_mask))
-        return;
     /* The host callback also runs in the inventory and during text.
      * Those paths can retain a player actor and unlocked09AE. Checking only
      * those fields is insufficient here. Never queue a dash to leak out
      * of a menu or let a held run button move the player during dialogue. */
-    if (Rd(0x0644) == 0x00FF || (Rd(0x09EC) & 0x2000))
+    if (Rd(0x0644) == 0x00FF || (Rd(0x09EC) & 0x2000)) {
+        AutoRunReset(); g_ar_have_pos = false;
+        return;
+    }
+    if (g_auto_run) {
+        AutoRunTick(pad);
+        return;
+    }
+    if (!(pad & g_run_mask))
         return;
     if (!Rd(0x09AA) || Rd(0x09B2) || Rd(0x09B4) || (Rd(0x09AE) & 0x3800))
         return;   /* no player, dashing already, or movement locked/ladder */
@@ -96,7 +151,93 @@ static void ActivateRun(void)
     snes_mod_runtime_feature_option_value_c("iog.enhancements", "run", "button", v, sizeof(v));
     /* L and R are the game's guard, which locks the dash; they are not offered. */
     g_run_mask = !strcmp(v, "X") ? kPadX : kPadY;
-    snes_mod_register_frame_callback(RunFrame);
+    char style[16] = "auto";
+    snes_mod_runtime_feature_option_value_c("iog.enhancements", "run", "style", style, sizeof(style));
+    g_auto_run = strcmp(style, "hold") != 0;
+    AutoRunReset(); g_ar_dir = 0xFFFF; g_ar_have_pos = false;
+    g_run_on = true;
+}
+
+/* In-game settings: 0 off, 1 hold to run, 2 auto-run. */
+int IogRunGet(void) { return !g_run_on ? 0 : g_auto_run ? 2 : 1; }
+void IogRunSet(int v)
+{
+    g_run_on = v != 0;
+    if (v) g_auto_run = v == 2;
+    AutoRunReset(); g_ar_dir = 0xFFFF;
+    snes_mod_runtime_persist_feature_c("iog.enhancements", "run", v != 0,
+                                       v ? "style" : NULL, v == 2 ? "auto" : "hold");
+}
+
+/* ---- text speed ------------------------------------------------------------ */
+
+/* After Drewish's Gaia and Time (TextSpeedOption.patch.asm, as documentation).
+ * The game's per-letter wait ($03:E7BA) waits $7E frames for each letter;
+ * scripts set $7E for paced lines and leave 0 for the usual instant text.
+ * While a message is up this keeps what the script asked for and writes the
+ * delay for the chosen speed instead, and puts the script's value back when
+ * the message closes:
+ *   normal     the script's pace; holding the run button halves it
+ *   cinematic  one frame per letter where the script sets no pace (held run:
+ *              none), the script's pace otherwise (held run: half)
+ *   instant    no waits at all
+ * Works the same in native code and the interpreter: it only touches $7E. */
+enum { kTextNormal, kTextCinematic, kTextInstant };
+static int g_text_speed = -1;   /* -1: feature off, the game's own pacing */
+static bool g_text_active;
+static uint8_t g_text_authored, g_text_written;
+
+static void TextSpeedFrame(void)
+{
+    if (!g_snes)
+        return;
+    uint8_t *delay = &g_snes->ram[0x7E];
+    const bool up = (Rd(0x09EC) & 0x2000) != 0;
+    if (g_text_speed < 0 || !up) {
+        if (g_text_active && *delay == g_text_written)
+            *delay = g_text_authored;
+        g_text_active = false;
+        return;
+    }
+    if (!g_text_active || *delay != g_text_written)
+        g_text_authored = *delay;   /* the script set a new pace */
+    g_text_active = true;
+    const bool hurry = (Pad() & g_run_mask) != 0;
+    uint8_t want;
+    if (g_text_speed == kTextInstant)
+        want = 0;
+    else if (g_text_speed == kTextCinematic && !g_text_authored)
+        want = hurry ? 0 : 1;
+    else
+        want = hurry ? (uint8_t)((g_text_authored + 1) >> 1) : g_text_authored;
+    *delay = want;
+    g_text_written = want;
+}
+
+static int TextSpeedFromName(const char *v)
+{
+    return !strcmp(v, "cinematic") ? kTextCinematic : !strcmp(v, "instant") ? kTextInstant : kTextNormal;
+}
+
+static void ActivateTextSpeed(void)
+{
+    char v[16] = "normal";
+    snes_mod_runtime_feature_option_value_c("iog.enhancements", "text_speed", "speed", v, sizeof(v));
+    g_text_speed = TextSpeedFromName(v);
+    /* The run button that hurries text is the run feature's choice. */
+    char b[16] = "Y";
+    snes_mod_runtime_feature_option_value_c("iog.enhancements", "run", "button", b, sizeof(b));
+    g_run_mask = !strcmp(b, "X") ? kPadX : kPadY;
+}
+
+/* In-game settings: 0 off (the game's pacing), 1 normal, 2 cinematic, 3 instant. */
+int IogTextSpeedGet(void) { return g_text_speed + 1; }
+void IogTextSpeedSet(int v)
+{
+    static const char *const kNames[] = {"normal", "normal", "cinematic", "instant"};
+    g_text_speed = (v & 3) - 1;
+    snes_mod_runtime_persist_feature_c("iog.enhancements", "text_speed", v != 0,
+                                       v ? "speed" : NULL, kNames[v & 3]);
 }
 
 /* ---- item hotswapping ---------------------------------------------------- */
@@ -346,6 +487,12 @@ static void ResetHd(void)
     /* The filter is always installed; it does nothing while the period is 0,
      * so the in-game settings can turn it on mid-session. */
     g_advance_period = 0;
+    g_run_on = g_auto_run = false;
+    g_run_mask = kPadY;
+    g_text_speed = -1;
+    g_text_active = false;
+    snes_mod_register_frame_callback(RunFrame);
+    snes_mod_register_frame_callback(TextSpeedFrame);
     g_world_map_enhanced = 0;
     g_edge_hud = 0;
     snes_mod_register_input_filter(HoldAdvanceFilter);
@@ -381,6 +528,7 @@ SNES_MOD_CONSTRUCTOR(register_iog_mods)
     snes_mod_register_presentation_plugin("iog.edge_hud", ActivateEdgeHud);
     snes_mod_register_activation_plugin("iog.run", ActivateRun);
     snes_mod_register_activation_plugin("iog.hold_advance", ActivateHoldAdvance);
+    snes_mod_register_activation_plugin("iog.text_speed", ActivateTextSpeed);
     snes_mod_register_activation_plugin("iog.hotswap", ActivateSwap);
     snes_mod_register_activation_plugin("iog.world_map", ActivateWorldMap);
     snes_mod_register_activation_plugin("iog.cheat.hp", ActivateInfiniteHp);

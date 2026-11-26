@@ -1,12 +1,38 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 26,
-2026 (tester build `v0.2.0-beta.12`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.13`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
+
+## From Gaia and Time (beta 13, November 26)
+
+andrewclunn (Drewish), author of the *Gaia and Time* hack, gave permission
+to use his features; the owner asked for the ones worth having. Rebuilt in C
+from his patches as documentation (`gaia-iog-baserom`, branch
+`drew/gaia-and-time`, `RunButtonCore` and `TextSpeedOption`), credited in
+the README:
+
+- **Auto-run** (`iog.enhancements/run`, option `style`, default `auto`; `hold`
+  is the old behaviour). Checked on a Mu mark: walking reaches run speed after
+  about two seconds, holding Y after about fifteen frames; native and the
+  interpreter give the same positions. Not played; not tried on slopes, ice,
+  ladders or in boss rooms.
+- **Text speed** (`iog.enhancements/text_speed`, on by default at Normal):
+  Normal, Cinematic, Instant; the run button hurries any line. Checked on the
+  Rama Statue message: Normal and Instant show the line at once, Cinematic
+  types it over about thirty frames, Cinematic with Y held at once; native and
+  the interpreter give identical frames. It writes `$7E` only while a message
+  is up; a state loaded mid-message can take the written value for the
+  script's own pace until the next line.
+- **Not taken, by choice:** his four items, item placements, ability and
+  control changes, options menu and HUD rewrite (they change game code and
+  rebalance the game), and his script (still in QA, written around his
+  items). **Worth doing next:** using key items automatically at their spot,
+  and the hidden Red Jewel sparkles (both GaiaLabs work he carries).
 
 ## Owner playtest of beta 11 (November 26)
 
@@ -296,7 +322,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.12`)
+## The tester build (`v0.2.0-beta.13`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

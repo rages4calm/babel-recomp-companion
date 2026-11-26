@@ -34,6 +34,21 @@ label = "Y"
 value = "X"
 label = "X"
 
+[[option]]
+feature = "run"
+id = "style"
+label = "Style"
+type = "choice"
+default = "auto"
+
+[[option.choice]]
+value = "auto"
+label = "Auto-run: walk to build speed, hold the run button to start sooner (from Drewish's Gaia and Time)"
+
+[[option.choice]]
+value = "hold"
+label = "Hold: hold the run button to sprint at once"
+
 [[plugin]]
 feature = "run"
 id = "iog.run"
@@ -150,6 +165,36 @@ label = "Fast"
 [[plugin]]
 feature = "hold_advance"
 id = "iog.hold_advance"
+
+[[feature]]
+id = "text_speed"
+name = "Text speed"
+description = "How fast dialogue types out. Hold the run button to hurry any line. Normal keeps the game's own pacing; Cinematic types plain lines one letter per frame; Instant shows every line at once. From Drewish's Gaia and Time."
+group = "Gameplay"
+default_enabled = true
+
+[[option]]
+feature = "text_speed"
+id = "speed"
+label = "Speed"
+type = "choice"
+default = "normal"
+
+[[option.choice]]
+value = "normal"
+label = "Normal"
+
+[[option.choice]]
+value = "cinematic"
+label = "Cinematic"
+
+[[option.choice]]
+value = "instant"
+label = "Instant"
+
+[[plugin]]
+feature = "text_speed"
+id = "iog.text_speed"
 
 [[feature]]
 id = "world_map"

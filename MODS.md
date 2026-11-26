@@ -12,7 +12,8 @@ play stays the stock USA ROM (the launcher verifies it).
 | Package | Feature | What it does |
 |---|---|---|
 | Languages (`iog.languages`) | Game language | Spanish, French or German text and font from your own *Illusion of Time* ROM |
-| Gameplay enhancements (`iog.enhancements`) | Run button | Hold **Y** (or X/L/R) with a direction to sprint |
+| Gameplay enhancements (`iog.enhancements`) | Run button | Auto-run: walk to build speed, hold **Y** (or X) to start sooner; or Hold: hold the button with a direction to sprint |
+| | Text speed | Normal, Cinematic or Instant; hold the run button to hurry any line |
 | | Item hotswapping | Hold **X** and press **L/R** to equip the previous/next item |
 | | MSU-1 soundtrack | CD-quality music from an MSU-1 pack |
 | | Item stacking | Red Jewels, Herbs and Crystals share one slot, with counters on the inventory screen |
@@ -77,8 +78,19 @@ written without accents.
 
 ## Run button, hotswapping, cheats
 
-- **Run**: hold the run button (default Y) and a direction; Will uses the
-  game's own dash whenever he can move.
+- **Run**, two styles. *Auto-run* (the default, after andrewclunn's
+  *Gaia and Time*): every frame Will actually moves earns a point, or eight
+  with the run button (default Y) held; at 120 (two seconds of walking, or
+  about a quarter second holding the button) he runs in that direction for
+  as long as he keeps moving. Turning sideways keeps the speed; reversing,
+  stopping or walking into a wall resets it. *Hold*: hold the run button and
+  a direction and Will uses the game's own dash at once.
+- **Text speed** (after *Gaia and Time*): *Normal* keeps the game's pacing,
+  *Cinematic* types lines that have no pace of their own one letter per frame,
+  *Instant* shows every line at once. In Normal and Cinematic, holding the run
+  button hurries the line (paced lines at half their delay). It changes only
+  the game's per-letter delay ($7E) while a message is up and puts the
+  script's value back when it closes.
 - **Hotswapping**: hold X and press L or R to cycle the equipped item
   through the inventory (past either end nothing is equipped). The game's
   item sound confirms it.
@@ -200,7 +212,7 @@ launcher's Hotkeys) opens the settings over the paused game:
 - Display: fullscreen (desktop), FPS counter
 - Audio: volume
 - Illusion of Gaia: HD scaling, language (only those whose ROM you have),
-  hold to advance text, MSU-1 soundtrack (next launch)
+  hold to advance text, text speed, run, MSU-1 soundtrack (next launch)
 - System: save states, reset (asks twice), quit (asks twice)
 
 Changes apply at once unless the menu says "applies on the next launch",

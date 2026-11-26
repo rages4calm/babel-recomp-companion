@@ -161,6 +161,18 @@ static void ScalingSet(void *ud, int v)
 static const char *const kAdvance[] = {"OFF", "SLOW", "NORMAL", "FAST"};
 static const char *const kAdvanceIds[] = {"normal", "slow", "normal", "fast"};
 
+/* ---- text speed and running (iog.enhancements/text_speed, run) ------------ */
+int IogTextSpeedGet(void);
+void IogTextSpeedSet(int v);
+int IogRunGet(void);
+void IogRunSet(int v);
+static const char *const kTextSpeeds[] = {"GAME'S OWN", "NORMAL + HURRY", "CINEMATIC", "INSTANT"};
+static const char *const kRunStyles[] = {"OFF", "HOLD TO RUN", "AUTO-RUN"};
+static int TextSpeedGet(void *ud) { (void)ud; return IogTextSpeedGet(); }
+static void TextSpeedSet(void *ud, int v) { (void)ud; IogTextSpeedSet(v); }
+static int RunGet(void *ud) { (void)ud; return IogRunGet(); }
+static void RunSet(void *ud, int v) { (void)ud; IogRunSet(v); }
+
 static int AdvanceGet(void *ud) { (void)ud; return IogHoldAdvanceGet(); }
 static void AdvanceSet(void *ud, int v)
 {
@@ -378,6 +390,24 @@ void IogSettingsInstall(void)
     it.count = 4;
     it.get = AdvanceGet;
     it.set = AdvanceSet;
+    snes_settings_menu_add(&it);
+
+    memset(&it, 0, sizeof(it));
+    it.kind = kSnesSetting_Choice;
+    it.label = "TEXT SPEED";
+    it.choices = kTextSpeeds;
+    it.count = 4;
+    it.get = TextSpeedGet;
+    it.set = TextSpeedSet;
+    snes_settings_menu_add(&it);
+
+    memset(&it, 0, sizeof(it));
+    it.kind = kSnesSetting_Choice;
+    it.label = "RUN";
+    it.choices = kRunStyles;
+    it.count = 3;
+    it.get = RunGet;
+    it.set = RunSet;
     snes_settings_menu_add(&it);
 
     if (msu1_available()) {
