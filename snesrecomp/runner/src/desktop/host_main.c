@@ -80,6 +80,7 @@
 #include "launcher.h"
 #include "launcher_cache.h"
 #include "host_paths.h"
+#include <time.h>
 #include "host_args.h"
 #include "headless_capture.h"
 #include "host_relaunch.h"
@@ -224,6 +225,7 @@ static void HandleInput(int keyCode, int keyMod, bool pressed);
 static void HandleCommand(uint32 j, bool pressed);
 static void PollLocalControls(const uint8_t *keys);
 static void RequestScreenshot(void);
+static bool DiagnosticKey(int key, int repeat);
 #if defined(__3DS__)
 void N3dsRenderer_Create(struct RendererFuncs *funcs);   /* n3ds_host.c */
 void N3ds_Startup(void);
@@ -6058,6 +6060,8 @@ error_reading:;
         }
         break;
       case SDL_KEYDOWN:
+        if (DiagnosticKey(SNESRECOMP_SDL_EVENT_KEY(event), SNESRECOMP_SDL_EVENT_REPEAT(event)))
+          break;
 #if SNESRECOMP_TRACE
         if (SNESRECOMP_SDL_EVENT_KEY(event) == SDLK_F10 &&
             (SNESRECOMP_SDL_EVENT_MOD(event) & KMOD_CTRL) &&
@@ -6895,12 +6899,46 @@ static void HandleInput(int keyCode, int keyMod, bool pressed) {
     HandleCommand(j, pressed);
 }
 
+/* Diagnostics (a file "diagnostics/on.txt" beside the executable): the
+ * B key (and the screenshot command) is a bug mark. It writes a save state
+ * of this moment to diagnostics/mark-<id>.sav, takes a screenshot and
+ * publishes the id, which the title puts in its own log. Play is not paused
+ * or changed. Without that file the B key does nothing here. */
+unsigned g_snesrecomp_diag_mark;
+static void DiagnosticMark(void) {
+  char on[1100], path[1100], leaf[64];
+  if (!snesrecomp_exe_dir_path("diagnostics/on.txt", on, sizeof(on))) return;
+  FILE *probe = fopen(on, "r");
+  if (!probe) return;
+  fclose(probe);
+  unsigned id = (unsigned)time(NULL);
+  if (id <= g_snesrecomp_diag_mark) id = g_snesrecomp_diag_mark + 1;
+  snprintf(leaf, sizeof(leaf), "diagnostics/mark-%u.sav", id);
+  if (snesrecomp_exe_dir_path(leaf, path, sizeof(path))) RtlSaveSnapshot(path);
+  g_snesrecomp_diag_mark = id;
+}
+
+static bool DiagnosticKey(int key, int repeat) {
+  static int on = -1;
+  if (key != (int)SDLK_b) return false;
+  if (on < 0) {
+    char path[1100];
+    FILE *probe = snesrecomp_exe_dir_path("diagnostics/on.txt", path, sizeof(path)) ? fopen(path, "r") : NULL;
+    on = probe != NULL;
+    if (probe) fclose(probe);
+  }
+  if (!on) return false;
+  if (!repeat) RequestScreenshot();
+  return true;
+}
+
 static void RequestScreenshot(void) {
   static double s_last_screenshot_time = -1000.0;
   double now = MonotonicSeconds();
   if (now - s_last_screenshot_time < 0.5)
     return;
   s_last_screenshot_time = now;
+  DiagnosticMark();
 
 #if !SNESRECOMP_HAS_GL_PRESENTER
   fprintf(stderr, "Screenshots require the OpenGL presenter.\n");

@@ -2074,6 +2074,78 @@ static InterpNativePollStep bridge_native_rdnmi_step(const Interp816 *in,
 #endif
 }
 
+/* Residual profile: the instructions the interpreter itself runs, i.e. what
+ * neither compiled code nor a native step covered. Two ways to ask for it:
+ *
+ *   SNESRECOMP_INTERP_RESIDUAL=<file>   one line per instruction,
+ *       "PC e m x frame rti sched" (rti: inside an interrupt handler,
+ *       sched: inside the scheduler). For tools; large.
+ *   a file "diagnostics/on.txt" beside the executable   a summary per
+ *       session, "PC e m x rti sched count", rewritten every half minute
+ *       and at exit as diagnostics/interpreter-<time>.txt. For play.
+ *
+ * Off unless asked. */
+enum { kResidualSlots = 1 << 17 };
+static struct { uint32_t key; uint64_t count; } *s_residual_table;
+static char s_residual_path[1100];
+static int s_residual_last_write;
+static void residual_write(void) {
+    if (!s_residual_table || !s_residual_path[0]) return;
+    FILE *f = fopen(s_residual_path, "w");
+    if (!f) return;
+    for (unsigned i = 0; i < kResidualSlots; i++) {
+        const uint32_t key = s_residual_table[i].key;
+        if (!key) continue;
+        const uint32_t v = key - 1u;
+        fprintf(f, "%06X %u %u %u %u %u %llu\n", (unsigned)(v >> 5), (v >> 4) & 1u, (v >> 3) & 1u,
+                (v >> 2) & 1u, (v >> 1) & 1u, v & 1u, (unsigned long long)s_residual_table[i].count);
+    }
+    fclose(f);
+}
+int snesrecomp_exe_dir_path(const char *leaf, char *out, size_t max_len);
+static void residual_note(uint32_t pc24, int e, int m, int x, int rti, int sched) {
+    extern int snes_frame_counter;
+    static FILE *lines;
+    static int asked;
+    if (!asked) {
+        asked = 1;
+        const char *file = getenv("SNESRECOMP_INTERP_RESIDUAL");
+        char on[1100];
+        if (file && *file) {
+            lines = fopen(file, "w");
+        } else if (snesrecomp_exe_dir_path("diagnostics/on.txt", on, sizeof(on))) {
+            FILE *probe = fopen(on, "r");
+            if (probe) {
+                fclose(probe);
+                char leaf[64];
+                snprintf(leaf, sizeof(leaf), "diagnostics/interpreter-%lld.txt", (long long)time(NULL));
+                if (snesrecomp_exe_dir_path(leaf, s_residual_path, sizeof(s_residual_path)))
+                    s_residual_table = calloc(kResidualSlots, sizeof(*s_residual_table));
+                if (s_residual_table) atexit(residual_write);
+            }
+        }
+    }
+    if (lines)
+        fprintf(lines, "%06X %d %d %d %d %d %d\n", (unsigned)pc24, e ? 1 : 0, m ? 1 : 0, x ? 1 : 0,
+                snes_frame_counter, rti ? 1 : 0, sched ? 1 : 0);
+    if (!s_residual_table) return;
+    const uint32_t key = ((pc24 << 5) | (e ? 16u : 0) | (m ? 8u : 0) | (x ? 4u : 0) |
+                          (rti ? 2u : 0) | (sched ? 1u : 0)) + 1u;
+    unsigned slot = (key * 2654435761u) >> 15;
+    for (unsigned n = 0; n < 64; n++, slot = (slot + 1u) & (kResidualSlots - 1u)) {
+        if (s_residual_table[slot].key == key) { s_residual_table[slot].count++; break; }
+        if (!s_residual_table[slot].key) {
+            s_residual_table[slot].key = key;
+            s_residual_table[slot].count = 1;
+            break;
+        }
+    }
+    if (snes_frame_counter - s_residual_last_write >= 1800 || snes_frame_counter < s_residual_last_write) {
+        s_residual_last_write = snes_frame_counter;
+        residual_write();
+    }
+}
+
 static NativeInstructionEntry *bridge_native_instruction_step(
         const Interp816 *in, uint32_t pc, int scheduler_frame, int stop_on_rti) {
 #ifdef SNES_COSIM
@@ -3739,22 +3811,7 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
             }
         }
         if (!native_poll && !native_continuation) {
-            /* SNESRECOMP_INTERP_RESIDUAL=<file>: one line per instruction the
-             * interpreter itself runs here ("PC e m x frame rti sched", the last two
-             * being whether it ran inside an interrupt handler and inside the
-             * scheduler): what neither
-             * compiled code nor a native step covered. Off unless set. */
-            static FILE *residual;
-            static int residual_asked;
-            if (!residual_asked) {
-                const char *e = getenv("SNESRECOMP_INTERP_RESIDUAL");
-                residual_asked = 1;
-                if (e && *e) residual = fopen(e, "w");
-            }
-            if (residual)
-                fprintf(residual, "%06X %d %d %d %d %d %d\n", (unsigned)(pc_before & 0xFFFFFFu),
-                        in.e ? 1 : 0, in.mf ? 1 : 0, in.xf ? 1 : 0, snes_frame_counter,
-                        stop_on_rti ? 1 : 0, auto_quiescent ? 1 : 0);
+            residual_note(pc_before & 0xFFFFFFu, in.e, in.mf, in.xf, stop_on_rti, auto_quiescent);
             _cyc = interp816_runOpcode(&in);
         }
         s_idle_poll_now = 0;

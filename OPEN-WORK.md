@@ -104,6 +104,29 @@ Edward's Castle, the lookout and the gold ship
 - Two smaller ideas were not built: hide the ENEMY label while there is no
   enemy, and a faint shadow behind the display over bright scenes.
 
+## Diagnostics in the owner's install (November 26)
+
+Three passive logs, on only where a file `diagnostics/on.txt` sits beside the
+executable. The owner's beta 8 folder has it and runs a build of the same
+source with these (`cb-diag`; the released executable is kept beside it as
+`babel-recomp.beta8-release.exe`). The public download has the code but not
+the file. All output goes to `diagnostics/`:
+
+- `interpreter-<time>.txt`: what the interpreter itself ran, summed per
+  session (`PC e m x rti sched count`), rewritten every half minute and at
+  exit. Input for `sdk-update/extend.py` and `grant.py` once converted to
+  their `PC:emx:rs` keys.
+- `renderer-<time>.txt`: one line whenever the scene or the way the picture
+  is presented changes (`frame scene reason width height player_x player_y
+  camera_x camera_y`). Any reason not starting with `ready` is a fallback.
+- **The B key marks a bug**: `mark-<id>.sav` (a save state of that moment), a
+  screenshot, a `MARK <id>` line in the renderer log and "MARKED" on screen
+  for two seconds. Play is not paused.
+
+Checked in one hidden run (mark, state, log lines, confirmation). Not
+checked: a long session, the screenshot file itself, and the exit write
+after a crash (the half-minute rewrite is the fallback).
+
 ## Decided, not built
 
 - **Native coverage.** The interpreter rise after the SDK update is explained

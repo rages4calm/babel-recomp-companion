@@ -381,6 +381,12 @@ static int IogDrawSceneView(uint8_t *dst, size_t pitch, const uint8_t *field,
     if(drawn) {
         IogMapHostDrawRadar(dst,pitch,width,height);
         IogAchievementUiToast(dst,pitch,width,height);
+        {   /* Diagnostics: confirm a bug mark for two seconds. */
+            extern unsigned g_snesrecomp_diag_mark;
+            static unsigned shown;static int frames;
+            if(g_snesrecomp_diag_mark!=shown) {shown=g_snesrecomp_diag_mark;frames=120;}
+            if(frames>0) {frames--;IogDrawWorldHint(dst,pitch,width,height,height-22,"MARKED");}
+        }
         IogToastAboveStatus(width,height);
         if(IogWalkableWorldActive() && IogWalkableWorldEnhanced()) {
             IogWalkableWorldDrawOverlay(dst,pitch,width,height);

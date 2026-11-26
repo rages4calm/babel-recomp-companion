@@ -23,6 +23,7 @@
 #include "snes/interp_bridge.h"
 #include "sha256.h"
 #include "host_paths.h"
+#include <time.h>
 #include "snesrecomp_rom_identity.h"
 #include <math.h>
 #include <stddef.h>
@@ -2798,6 +2799,42 @@ static bool RenderWorld(void)
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;
 }
 
+/* Play log (a file "diagnostics/on.txt" beside the executable). One line when
+ * the scene or the way the picture is presented changes, and one for every
+ * bug mark (the screenshot command), to diagnostics/renderer-<time>.txt:
+ *   frame scene reason width height player_x player_y camera_x camera_y
+ * A played session then shows where the wide view fell back and where the
+ * player saw something wrong, without recording every frame. */
+extern unsigned g_snesrecomp_diag_mark;
+static void PlayLog(void)
+{
+    static FILE *log;static int asked;static const char *last_reason;
+    static unsigned last_scene=0xffff,last_mark;static int last_width;
+    if(!asked) {
+        asked=1;char on[1100],path[1100],leaf[64];
+        if(snesrecomp_exe_dir_path("diagnostics/on.txt",on,sizeof(on))) {
+            FILE *probe=fopen(on,"r");
+            if(probe) {
+                fclose(probe);
+                snprintf(leaf,sizeof(leaf),"diagnostics/renderer-%lld.txt",(long long)time(NULL));
+                if(snesrecomp_exe_dir_path(leaf,path,sizeof(path))) log=fopen(path,"w");
+                last_mark=g_snesrecomp_diag_mark;
+            }
+        }
+    }
+    if(!log || !g_snes || !g_snes->ram) return;
+    const uint8_t *ram=g_snes->ram;
+    unsigned scene=Word(ram,0x644);
+    const char *reason=s.reason?s.reason:"none";
+    bool mark=g_snesrecomp_diag_mark!=last_mark;
+    if(!mark && scene==last_scene && s.width==last_width && last_reason && !strcmp(reason,last_reason)) return;
+    if(mark) fprintf(log,"MARK %u ",g_snesrecomp_diag_mark);
+    fprintf(log,"%u %02X %s %d %d %u %u %d %d\n",s.frame,scene,reason,s.width,s.height,
+        Word(ram,0x9a2),Word(ram,0x9a4),(int16_t)Word(ram,0x68A),(int16_t)Word(ram,0x68E));
+    fflush(log);
+    last_scene=scene;last_reason=reason;last_width=s.width;last_mark=g_snesrecomp_diag_mark;
+}
+
 void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count)
 {
     if(!s.enabled && !s.audit) return;
@@ -2817,6 +2854,7 @@ void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count
             memset(&s.wake,0,sizeof(s.wake));
     }
     if(!s.enabled) {s.reason="reference_renderer";s.width=256;s.height=224;}
+    PlayLog();
     if(s.audit) {
         const CpuState *c=&g_cpu;
         fprintf(s.audit,"{\"frame\":%u,\"resume_pc\":%u,\"A\":%u,\"X\":%u,\"Y\":%u,\"S\":%u,\"D\":%u,\"DB\":%u,\"PB\":%u,\"P\":%u,\"E\":%u,\"M\":%u,\"IX\":%u,\"N\":%u,\"V\":%u,\"Z\":%u,\"C\":%u,\"I\":%u,\"DF\":%u,\"cycles\":%llu,\"master_cycles\":%llu,\"hdma_lines\":%u,\"irq_count\":%u,\"simulation_width\":256,\"simulation_height\":224,\"width\":%d,\"height\":%d,\"compose\":%llu,\"publish\":%llu,\"epochs\":%d,\"parts\":%u,\"ready\":%s,\"reason\":\"%s\"}\n",
