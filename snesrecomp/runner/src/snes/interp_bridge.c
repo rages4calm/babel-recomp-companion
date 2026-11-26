@@ -3740,7 +3740,9 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
         }
         if (!native_poll && !native_continuation) {
             /* SNESRECOMP_INTERP_RESIDUAL=<file>: one line per instruction the
-             * interpreter itself runs here ("PC e m x frame"): what neither
+             * interpreter itself runs here ("PC e m x frame rti sched", the last two
+             * being whether it ran inside an interrupt handler and inside the
+             * scheduler): what neither
              * compiled code nor a native step covered. Off unless set. */
             static FILE *residual;
             static int residual_asked;
@@ -3750,8 +3752,9 @@ static int _interp_run_core(CpuState *cpu, uint32_t entry_pc24,
                 if (e && *e) residual = fopen(e, "w");
             }
             if (residual)
-                fprintf(residual, "%06X %d %d %d %d\n", (unsigned)(pc_before & 0xFFFFFFu),
-                        in.e ? 1 : 0, in.mf ? 1 : 0, in.xf ? 1 : 0, snes_frame_counter);
+                fprintf(residual, "%06X %d %d %d %d %d %d\n", (unsigned)(pc_before & 0xFFFFFFu),
+                        in.e ? 1 : 0, in.mf ? 1 : 0, in.xf ? 1 : 0, snes_frame_counter,
+                        stop_on_rti ? 1 : 0, auto_quiescent ? 1 : 0);
             _cyc = interp816_runOpcode(&in);
         }
         s_idle_poll_now = 0;

@@ -1,7 +1,7 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 25,
-2026 (tester build `v0.2.0-beta.7`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.8`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
@@ -137,10 +137,23 @@ Edward's Castle, the lookout and the gold ship
   - **The new contexts skipped the older process's extra checks:** no
     independent RomAtlas decode and no per-case witness, only the generator's
     own policy and the identical replays.
-  - **What is left:** about 191,000 instructions at registered sites that
-    decline at run time (cause not captured), about 30,000 that touch bytes
-    the game patches while running, and a few stack-pointer and reset
-    operations. `sdk-routes/residual-routes-ext3.json` has the list.
+  - **Interrupt permission (same day, in beta 8).** The profile now also says
+    whether an instruction ran inside an interrupt handler. All of the
+    roughly 192,000 declining instructions did: steps registered for normal
+    game code only, mostly the routine that sets the scroll registers on
+    Mode 7 scenes. `sdk-update/grant.py` gave 263 of them the NMI grant
+    (`sdk-update/ext4`). Scenes and routes are again identical with the same
+    CPU cycles; interpreted instructions are now 924 over the survey and
+    30,313 over the routes (92,710 cycles of 10.1 billion).
+  - **What is left on the routes:** 29,500 at the sprite-culling
+    instructions the wide view patches while the game runs (excluded on
+    purpose), 484 at an indirect jump the generator forbids inside an
+    interrupt (`808482`), 117 at the protected interrupt acknowledgement
+    (`828195`), and a few stack and reset operations.
+  - **Code the replays never reached is still interpreted.** Coverage is
+    what 198 scenes and 142 routes executed; a real playthrough reaches
+    more. Profile a played session with `SNESRECOMP_INTERP_RESIDUAL` and run
+    `extend.py` and `grant.py` on it.
   - **Not played by a person** on the extended build, and no speed
     measurement was taken.
   - **The four declarations are assertions.** They rest on the older
@@ -148,7 +161,7 @@ Edward's Castle, the lookout and the gold ship
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.7`)
+## The tester build (`v0.2.0-beta.8`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

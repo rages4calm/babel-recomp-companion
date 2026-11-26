@@ -280,7 +280,7 @@ ground uses it. The smooth (xBR) present filter in
 `runner/src/present_filter.*` and `desktop/opengl.c` is also local and
 absent upstream.
 
-The current public tester build is `v0.2.0-beta.7` (November 26, pre-release; beta 7 is the first download with the compiled native game code, by the owner's decision, packaged with `--native` from `sdk-update/build`; beta 6 added the optional status display at the screen edges, `iog.graphics/edge_hud`; beta 5 removed the paused Companion menu: Start opens the map, achievements open from the settings; it carries the fixes from the owner's first playtest,
+The current public tester build is `v0.2.0-beta.8` (November 26, pre-release; beta 8 adds interrupt grants for the Mode 7 scroll routine; beta 7 was the first download with the compiled native game code, by the owner's decision, packaged with `--native` from `sdk-update/build`; beta 6 added the optional status display at the screen edges, `iog.graphics/edge_hud`; beta 5 removed the paused Companion menu: Start opens the map, achievements open from the settings; it carries the fixes from the owner's first playtest,
 Windows x64). It is the interpreter-only build from
 `.local/batch-001/release/build`, packaged by `scripts/package_release.py`
 with `--companion` and `--gaialabs`: the Companion launcher, the generated
@@ -352,7 +352,7 @@ Three things to know after the update:
   the four. `OPEN-WORK.md` has the measurements.
   The same day the native step set grew by 8,494 contexts: the build
   directory's `IOG_NATIVE_EFFECTS_SOURCE` is now
-  `sdk-update/ext3/effects/native_continuations.c` (before:
+  `sdk-update/ext4/effects/native_continuations.c` (`ext3` plus interrupt grants from `grant.py`; before:
   `visual-fullgame-035/native/kress-next-effects`). `sdk-update/extend.py
   RESIDUAL.json OUTDIR [BASE-CONTEXTS]` makes the next one.
   The build directory is `.local/batch-001/sdk-update/build`;
