@@ -1209,6 +1209,109 @@ static void generic_authored_window(void){
   CHECK(s.output[y*598+x]==expected);
  }
 }
+static void republication(void){
+ IogWorldCaptureAtCompose(&g_cpu,0x83c714);
+ for(unsigned n=0;n<544;n++)ram[0x422+n]=(uint8_t)(n*7+11+s.compose_sequence);
+ IogWorldCaptureAfterCompose(&g_cpu,0x83c789);
+ IogWorldBeforeNmi();for(unsigned n=0;n<256;n++)g_ppu->oam[n]=(uint16_t)Word(ram,0x422+n*2);
+ memcpy(g_ppu->highOam,ram+0x622,32);g_ppu->oamWriteCount++;IogWorldAfterNmi();
+ CHECK(s.active&&s.publish_sequence==s.compose_sequence);
+}
+static void picture_at(unsigned camera_x,unsigned camera_y){
+ word(0x68a,camera_x);word(0x68e,camera_y);
+ g_ppu->hScroll[0]=g_ppu->hScroll[1]=(uint16_t)camera_x;g_ppu->vScroll[0]=g_ppu->vScroll[1]=(uint16_t)camera_y;
+ if(s.publish_sequence)republication();else publication();
+ IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);CHECK(s.complete);
+}
+/* The stock camera stops a 256-row frame on the window's edge and shows 224
+ * rows of it: the last 32 rows of a window are never on its screen. */
+static void stock_camera_bottom_rows(void){
+ /* No camera words (other fixtures): the whole map, as before. */
+ CHECK(StockBottomRow(ram,0)==INT32_MAX);
+ fixture();word(0x6DA,768);word(0x6DC,1024);word(0x6DE,1024);
+ CHECK(StockBottomRow(ram,256)==992&&StockBottomRow(ram,768)==992);
+ /* A camera a script has taken lower has shown those rows itself. */
+ CHECK(StockBottomRow(ram,780)==1004&&StockBottomRow(ram,900)==1124);
+ picture_at(256,768);
+ CHECK(!strcmp(s.reason,"ready")&&s.view.world_y==656&&s.view.native_y==112&&!s.view.padding_bottom);
+ for(int y=0;y<336;y++)CHECK(s.output[y*598+5]==(0xff000000u|((85u+5)&1023)|(((657u+y)&1023)<<10)));
+ /* A scene whose visible height is 224 keeps every row of its window. */
+ fixture();word(0x6DA,768);word(0x6DC,1056);word(0x6DE,1024);
+ CHECK(StockBottomRow(ram,256)==1024);
+ picture_at(256,800);CHECK(s.view.world_y==688&&s.view.native_y==112);
+ /* A room of one screen: the picture is the stock 224 rows, centred. */
+ fixture();word(0x692,256);word(0x696,256);word(0x694,256);word(0x698,256);
+ word(0x6DA,256);word(0x6DC,256);word(0x6DE,256);
+ picture_at(0,0);
+ CHECK(s.view.world_y==-56&&s.view.native_y==56&&s.view.padding_top==56&&s.view.padding_bottom==56);
+ for(int y=0;y<336;y++){
+  uint32_t expected=y>=56&&y<280?0xff000000u|((unsigned)(y-55)<<10):0;
+  CHECK(s.output[y*598+171]==expected);
+ }
+}
+/* A stair names the next floor at once and pans to it. The wide picture
+ * slides from one floor to the other and shows both on the way. */
+static void stair_pan_between_floors(void){
+ fixture();word(0x644,0x0D);word(0x692,1024);word(0x696,1024);word(0x694,1024);word(0x698,1024);
+ word(0x6D6,0);word(0x6DA,1024);word(0x6D8,512);word(0x6DC,768);word(0x6DE,768);
+ picture_at(256,512);
+ CHECK(!strcmp(s.reason,"ready")&&s.view.world_x==85&&s.view.world_y==456&&s.view.native_y==56);
+ CHECK(s.pan.valid&&s.pan.top==512&&s.pan.bottom==736&&s.pan.view_y==456);
+ CHECK(s.output[55*598+5]==0&&s.output[56*598+5]&&s.output[279*598+5]&&s.output[280*598+5]==0);
+ /* The floor above is announced; the camera has not moved yet. */
+ word(0x6D8,256);word(0x6DC,512);word(0x6DE,512);
+ picture_at(256,512);
+ CHECK(!strcmp(s.reason,"ready_authored_window_pan"));
+ CHECK(s.view.world_x==85&&s.view.world_y==456&&s.view.native_x==171&&s.view.native_y==56);
+ CHECK(s.pan.top==512&&s.pan.view_y==456); /* still the floor it left */
+ for(int y=0;y<336;y++)for(int x=0;x<598;x+=13){
+  /* The new floor above, the old floor to the bottom of its picture. */
+  uint32_t expected=y<280?0xff000000u|((85u+x)&1023)|(((457u+y)&1023)<<10):0;
+  CHECK(s.output[y*598+x]==expected);
+ }
+ /* Half way. The old floor leaves by the bottom of the original field. */
+ picture_at(256,384);
+ CHECK(s.view.world_y==328&&s.view.native_y==56&&s.view.padding_top==0);
+ for(int y=0;y<336;y++)for(int x=0;x<598;x+=13){
+  uint32_t expected=y<280?0xff000000u|((85u+x)&1023)|(((329u+y)&1023)<<10):0;
+  CHECK(s.output[y*598+x]==expected);
+ }
+ /* Near the end the usual view could frame the room, and would jump. */
+ picture_at(256,272);
+ CHECK(!strcmp(s.reason,"ready")&&s.view.world_y==216&&s.view.native_y==56);
+ /* Arrived: the new floor alone, at the same place in the frame. */
+ picture_at(256,256);
+ CHECK(!strcmp(s.reason,"ready")&&s.view.world_y==200&&s.view.native_y==56);
+ CHECK(s.pan.top==256&&s.pan.bottom==480&&s.pan.view_y==200);
+ CHECK(s.output[55*598+5]==0&&s.output[56*598+5]&&s.output[279*598+5]&&s.output[280*598+5]==0);
+ /* Without a remembered floor (a state loaded during the pan) the
+  * original field alone stays, as before. */
+ IogWorldReset();s.publish_sequence=0;word(0x6D8,512);word(0x6DC,768);word(0x6DE,768);
+ picture_at(256,256);
+ CHECK(!strcmp(s.reason,"ready_authored_window_pan")&&s.view.native_x==171&&s.view.native_y==56);
+ CHECK(s.output[100*598+5]==0&&s.output[100*598+300]);
+}
+/* Dark Space keeps its star ring while no HDMA runs: every row then has
+ * one scroll. Any row that differs is not that state. */
+static void held_star_ring_rows(void){
+ fixture();Ppu held=*g_ppu;held.hScroll[1]=300;held.vScroll[1]=40;held.cgwsel=2;held.cgadsub=0x31;
+ for(int line=0;line<=224;line++)memcpy(s.lines[line].registers,&held,PPU_SAVESTATE_REGS_SIZE);
+ CHECK(CapturedHeldScroll(&held,1));
+ Ppu moved=held;moved.hScroll[1]=301;memcpy(s.lines[100].registers,&moved,PPU_SAVESTATE_REGS_SIZE);
+ CHECK(!CapturedHeldScroll(&held,1));
+ moved=held;moved.vScroll[1]=41;memcpy(s.lines[100].registers,&moved,PPU_SAVESTATE_REGS_SIZE);
+ CHECK(!CapturedHeldScroll(&held,1));
+ moved=held;moved.cgadsub=0x21;memcpy(s.lines[100].registers,&moved,PPU_SAVESTATE_REGS_SIZE);
+ CHECK(!CapturedHeldScroll(&held,1));
+ moved=held;moved.bgXsc[1]=0x11;memcpy(s.lines[224].registers,&moved,PPU_SAVESTATE_REGS_SIZE);
+ memcpy(s.lines[100].registers,&held,PPU_SAVESTATE_REGS_SIZE);
+ CHECK(!CapturedHeldScroll(&held,1));
+ memcpy(s.lines[224].registers,&held,PPU_SAVESTATE_REGS_SIZE);
+ /* The other background may do what it likes. */
+ moved=held;moved.hScroll[0]=77;memcpy(s.lines[50].registers,&moved,PPU_SAVESTATE_REGS_SIZE);
+ CHECK(CapturedHeldScroll(&held,1));
+}
 static void mode7_fixture(void){
  fixture();g_ppu->bgmode=7;g_ppu->inidisp=15;g_ppu->screenEnabled[0]=21;
  g_ppu->screenEnabled[1]=1;g_ppu->cgwsel=0x82;g_ppu->cgadsub=1;
@@ -1891,7 +1994,7 @@ int main(int argc,char**argv){CHECK(argc==2);
   * world-map presentation is covered by test_iog_mode7_plane.py and
   * test_iog_mode7_perspective.py. */
  putenv("IOG_WORLD_MAP_FILTER=0");
- phase_queue();epochs_and_read_only();field_window_rebase();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+ phase_queue();epochs_and_read_only();field_window_rebase();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();stock_camera_bottom_rows();stair_pan_between_floors();held_star_ring_rows();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 

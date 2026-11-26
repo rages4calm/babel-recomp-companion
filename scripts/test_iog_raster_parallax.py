@@ -146,6 +146,76 @@ static void wall_bands(void){
  CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,224,&out));
  CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,(IogRasterParallax*)ram));
 }
+/* Band planes: the castle (type00, 256x1024, proportional and drifting bands)
+ * and the ship (type05, 512x512, twenty-nine drifting bands, delta x16). */
+static void band_fixture(unsigned scene){
+ memset(rom,0,sizeof rom);memset(ram,0,sizeof ram);
+ unsigned ship=scene!=0x0a,index=ship?5:0;
+ word(rom,0x1cc00+index*2,0x8000);word(rom,0x18000,ship?0x8000:0x7800);rom[0x18002]=0x7e;rom[0x18003]=ship?0x4f:0x0f;rom[0x18004]=8;
+ word(ram,0x644,scene);word(ram,0x694,ship?512:256);word(ram,0x698,ship?512:1024);word(ram,0x68a,402);
+ if(ship){
+  for(unsigned i=0;i<29;i++){
+   unsigned at=0x18005+i*8,height=i==0?78:i==28?1024:1+i/3;
+   word(rom,at,65536-height);word(rom,at+2,0x720+i*2);word(rom,at+4,0);word(rom,at+6,65536-16-2*i);
+   word(ram,0x720+i*2,0x1000+i*0x111);
+  }
+ } else {
+  const unsigned heights[]={127,128,80,32,144,75,1280},factors[]={0x0108,0,0x0108,0x0110,0,0x0108,0x0110};
+  for(unsigned i=0;i<7;i++){
+   unsigned at=0x18005+i*8;word(rom,at,65536-heights[i]);word(rom,at+2,0x720+i*2);word(rom,at+4,factors[i]);word(rom,at+6,factors[i]?0:1);
+   word(ram,0x720+i*2,factors[i]?0xdead:0x187c+i);
+  }
+ }
+ snapshot();
+}
+static void band_planes(void){
+ IogRasterParallax model,before;uint16_t h;int first,end;
+ band_fixture(0x0a);
+ CHECK(IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,&model));
+ CHECK(model.scene==0x0a&&model.width==256&&model.height==1024&&model.band_count==7&&model.delta_scale==1);
+ /* Half the camera above, the drift's own accumulator below it, then the
+  * full camera rate: never the stale words a proportional band leaves. */
+ CHECK(IogRasterParallaxSample(&model,0,402,&h)&&h==201);
+ CHECK(IogRasterParallaxSample(&model,126,402,&h)&&h==201);
+ CHECK(IogRasterParallaxSample(&model,127,402,&h)&&h==(0x187d>>4));
+ CHECK(IogRasterParallaxSample(&model,335,402,&h)&&h==402);
+ CHECK(IogRasterParallaxSample(&model,367,402,&h)&&h==(0x1880>>4));
+ CHECK(IogRasterParallaxSample(&model,1023,402,&h)&&h==402);
+ h=777;CHECK(!IogRasterParallaxSample(&model,1024,402,&h)&&h==777);
+ CHECK(IogRasterParallaxBandRows(&model,0,&first,&end)&&first==0&&end==127);
+ CHECK(IogRasterParallaxBandRows(&model,254,&first,&end)&&first==127&&end==255);
+ CHECK(IogRasterParallaxBandRows(&model,1000,&first,&end)&&first==586&&end==1866);
+ first=end=-5;CHECK(!IogRasterParallaxBandRows(&model,-1,&first,&end)&&first==-5&&end==-5);
+ CHECK(!IogRasterParallaxBandRows(&model,1024,&first,&end)&&!IogRasterParallaxBandRows(NULL,0,&first,&end));
+ CHECK(!IogRasterParallaxBandRows(&model,0,NULL,&end));immutable();
+ const unsigned scenes[]={0x2b,0x2c};
+ for(unsigned n=0;n<2;n++){
+  band_fixture(scenes[n]);
+  CHECK(IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,&model));
+  CHECK(model.scene==scenes[n]&&model.width==512&&model.height==512&&model.band_count==29&&model.delta_scale==16);
+  CHECK(IogRasterParallaxSample(&model,0,402,&h)&&h==(0x1000>>4));
+  CHECK(IogRasterParallaxSample(&model,77,402,&h)&&h==(0x1000>>4));
+  CHECK(IogRasterParallaxSample(&model,78,402,&h)&&h==(0x1111>>4));
+  CHECK(IogRasterParallaxSample(&model,511,402,&h)&&h==(((0x1000+28*0x111)>>4)&1023));
+  CHECK(IogRasterParallaxBandRows(&model,300,&first,&end)&&end>=512);immutable();
+ }
+ memset(&model,0xa5,sizeof model);before=model;
+ band_fixture(0x0a);CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,false,ram,sizeof ram,&model));
+ CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom-1,true,ram,sizeof ram,&model));
+ CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,65535,&model));
+ CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,NULL));
+ CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,(IogRasterParallax*)ram));
+ const unsigned scenes_out[]={0x0b,0x2d,0x2e,0x15};
+ for(unsigned n=0;n<4;n++){band_fixture(0x0a);word(ram,0x644,scenes_out[n]);snapshot();CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,&model));immutable();}
+ band_fixture(0x0a);word(ram,0x694,512);snapshot();CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,&model));
+ band_fixture(0x0a);ram[0x6ee]=128;snapshot();CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,&model));
+ band_fixture(0x0a);word(ram,0x690,801);snapshot();CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,&model));
+ band_fixture(0x0a);rom[0x18003]=0x4f;snapshot();CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,&model));
+ band_fixture(0x2b);rom[0x18003]=0x0f;snapshot();CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,&model));
+ band_fixture(0x0a);word(rom,0x18005+6*8,65536-100);snapshot();CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,&model)); /* bands end above the plane */
+ band_fixture(0x0a);word(rom,0x18005+2,0x71e);snapshot();CHECK(!IogRasterParallaxPrepareBands(rom,sizeof rom,true,ram,sizeof ram,&model));
+ CHECK(!memcmp(&model,&before,sizeof model));immutable();
+}
 static void load(const char*name,void*out,size_t n){FILE*f=fopen(name,"rb");CHECK(f);CHECK(fread(out,1,n,f)==n);CHECK(fgetc(f)==EOF);CHECK(!fclose(f));}
 int main(int argc,char**argv){
  if(argc==5){
@@ -156,7 +226,7 @@ int main(int argc,char**argv){
   if(ok)fprintf(f,",\"scene\":%u,\"source_camera_x\":%u,\"bands\":%u,\"previous_buffer\":%u",model.scene,model.source_camera_x,model.band_count,model.previous_buffer);
   fprintf(f,"}\n");CHECK(!fclose(f));immutable();return ok?0:3;
  }
- CHECK(argc==1);current_and_previous();fail_prepare();fixed_wrap();wall_bands();printf("raster parallax PASS %u assertions\n",checks);return 0;
+ CHECK(argc==1);current_and_previous();fail_prepare();fixed_wrap();wall_bands();band_planes();printf("raster parallax PASS %u assertions\n",checks);return 0;
 }
 '''
 

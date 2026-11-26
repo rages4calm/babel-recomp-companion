@@ -26,6 +26,7 @@
 #include "snesrecomp_rom_identity.h"
 #include <math.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,6 +73,9 @@ static struct {
     bool stock_wake;
     PpuExtraObject objects[kIogVisualMaxParts];
     uint16_t object_rows[kIogVisualMaxParts][16];
+    /* The last picture of an authored window that the camera was inside:
+     * what a stair's pan leaves behind. */
+    struct { bool valid; unsigned scene; int left,top,right,bottom,camera_y,view_y; } pan;
     uint32_t output[MaxWidth*MaxHeight], row[256], hud[256*224];
     FILE *audit;
     bool output_written;
@@ -660,6 +664,7 @@ void IogWorldReset(void)
     s.published_valid=s.repeated=false;
     s.fixed_plate=false;
     s.awaiting_restore=true;
+    s.pan.valid=false;
     s.publish_sequence=0;
     s.reason="reset_or_unpaired_upload";
     memset(&s.wake,0,sizeof(s.wake));
@@ -1084,6 +1089,22 @@ static bool CapturedHorizontalWave(const Ppu *p,unsigned layer,unsigned period,b
     return varied;
 }
 
+/* The same layer with one scroll on every row and nothing else changing. */
+static bool CapturedHeldScroll(const Ppu *p,unsigned layer)
+{
+    size_t h=offsetof(Ppu,hScroll)+layer*2,v=offsetof(Ppu,vScroll)+layer*2;
+    const uint8_t *first=s.lines[1].registers;
+    for(unsigned line=1;line<=224;line++) {
+        const uint8_t *regs=s.lines[line].registers;
+        if(Word(regs,h)!=Word(first,h) || Word(regs,v)!=Word(first,v) ||
+           regs[offsetof(Ppu,bgXsc)+layer]!=p->bgXsc[layer] ||
+           Word(regs,offsetof(Ppu,bgTileAdr))!=p->bgTileAdr ||
+           regs[offsetof(Ppu,cgwsel)]!=p->cgwsel || regs[offsetof(Ppu,cgadsub)]!=p->cgadsub)
+            return false;
+    }
+    return true;
+}
+
 /* Freejia's BG1 is the drifting secondary layer despite the PPU layer
  * numbering. Its slow-wave thinker repeats a single 64-line HDMA table.
  * Require agreement with the live raster and keep the uploaded tile ring. */
@@ -1158,8 +1179,12 @@ static bool DarkSpaceStarfield(const PictureEpoch *e,const Ppu *p)
         p->bgXsc[0]==0x11 && p->bgXsc[1]==0x19 &&
         !PPU_bigTiles(p,1) && PPU_bgTilemapWider(p,1) && !PPU_bgTilemapHigher(p,1) &&
         p->screenEnabled[0]==0x15 && p->screenEnabled[1]==2 &&
-        p->cgwsel==0x02 && p->cgadsub==0x31 && g_snesrecomp_last_hdmaen==2 &&
-        CapturedHorizontalWave(p,1,RingWavePeriod,true);
+        p->cgwsel==0x02 && p->cgadsub==0x31 &&
+        (g_snesrecomp_last_hdmaen==2?CapturedHorizontalWave(p,1,RingWavePeriod,true):
+         /* The wave stops for the frames in which no HDMA runs (the room's
+          * first lit frames, a music transfer). The ring is the same ring
+          * and every row then has one scroll. */
+         !g_snesrecomp_last_hdmaen && CapturedHeldScroll(p,1));
 }
 
 enum { WaterWavePeriod = 8 };
@@ -1500,6 +1525,22 @@ static bool AuthoredWindow(const PictureEpoch *e,PictureBounds *out)
         !((out->left|out->top|out->right|out->bottom)&255);
 }
 
+/* The stock camera stops when the bottom of a 256-row frame reaches the
+ * window's edge (camera_scroll_controller: target = cameraBoundsY - $100),
+ * and the picture is 224 rows. With the usual visible height of 256 the
+ * last 32 rows of every window are therefore never on screen: rooms end
+ * there in filler wall, a door strip that characters walk in through, or
+ * stored tiles. InitCameraBounds leaves the stop in $06DC and the window's
+ * own edge in $06DE. Return the first world row the stock camera cannot
+ * show, or INT32_MAX where this rule does not hold. A camera that a script
+ * has moved further down has shown those rows itself. */
+static int StockBottomRow(const uint8_t *ram,int camera_y)
+{
+    int edge=(int)Word(ram,0x6DE),stop=(int)Word(ram,0x6DC)-32;
+    if(edge<256 || (edge&255) || stop>edge || stop<edge-32) return INT32_MAX;
+    return stop<camera_y+224?camera_y+224:stop;
+}
+
 static bool RoomPictureBounds(const PictureEpoch *e,int camera_x,int camera_y,
     PictureBounds *out)
 {
@@ -1639,6 +1680,62 @@ static bool RoomPictureView(int camera_x,int camera_y,const PictureBounds *bound
         s.view.padding_bottom=(uint16_t)Clamp(s.view.world_y+s.height-bounds->bottom,0,s.height);
         return false;
     }
+}
+
+/* A forced-walk stair names the next floor's window at once and then pans
+ * the camera to it. Both floors are real rooms of the same map, so the wide
+ * picture keeps showing them: the view slides from where it stood on the
+ * old floor to where it will stand on the new one, in step with the camera.
+ * `to` is the new window as it will be shown once the camera is inside. */
+static bool StairPanView(int camera_x,int camera_y,const PictureBounds *to)
+{
+    if(!s.pan.valid || s.pan.left!=to->left || s.pan.right!=to->right) return false;
+    int start=s.pan.camera_y,end;
+    if(camera_y<to->top) end=to->top;
+    else if(camera_y+224>to->bottom) end=to->bottom-224;
+    else return false;
+    IogWorldView arrival;
+    if(end==start || !IogWorldViewCompute(camera_x-to->left,end-to->top,
+            (unsigned)(to->right-to->left),(unsigned)(to->bottom-to->top),
+            (uint16_t)s.width,(uint16_t)s.height,&arrival)) return false;
+    int span=end-start,done=camera_y-start;
+    if((span>0)!=(done>0)) done=0;
+    if(abs(done)>abs(span)) done=span;
+    int from_y=s.pan.view_y,to_y=arrival.world_y+to->top;
+    int view_y=from_y+(to_y-from_y)*done/span;
+    if(view_y>camera_y || view_y+s.height<camera_y+224) return false;
+    int top=s.pan.top<to->top?s.pan.top:to->top;
+    int bottom=s.pan.bottom>to->bottom?s.pan.bottom:to->bottom;
+    s.view=arrival;
+    s.view.world_x=arrival.world_x+to->left;s.view.world_y=view_y;
+    s.view.native_x=(uint16_t)(camera_x-s.view.world_x);
+    s.view.native_y=(uint16_t)(camera_y-view_y);
+    s.view.padding_top=(uint16_t)Clamp(top-view_y,0,s.height);
+    s.view.padding_bottom=(uint16_t)Clamp(view_y+s.height-bottom,0,s.height);
+    return true;
+}
+
+/* Remember the window while the camera rests in it; once a stair has named
+ * another and the camera is on its way, slide the view. `window` is the
+ * room's window as the scene states it and `framed` says whether the usual
+ * view could frame it. True: the stair view is in s.view. */
+static bool StairPan(unsigned scene,const uint8_t *ram,int camera_x,int camera_y,
+    PictureBounds window,bool framed)
+{
+    /* The window as the stock camera will rest in it. The pan is over
+     * when the camera is inside that, not when it first comes near. */
+    int rest=StockBottomRow(ram,INT16_MIN);
+    if(window.bottom>rest && rest-window.top>=224) window.bottom=rest;
+    if(framed && camera_y>=window.top && camera_y+224<=window.bottom) {
+        s.pan.valid=true;s.pan.scene=scene;
+        s.pan.left=window.left;s.pan.top=window.top;
+        s.pan.right=window.right;s.pan.bottom=window.bottom;
+        s.pan.camera_y=camera_y;s.pan.view_y=s.view.world_y;
+        return false;
+    }
+    return s.pan.valid && s.pan.scene==scene &&
+        (s.pan.top!=window.top || s.pan.bottom!=window.bottom) &&
+        StairPanView(camera_x,camera_y,&window);
 }
 
 static void Detach(Ppu *p)
@@ -2097,8 +2194,11 @@ static bool RenderWorld(void)
             camera_y=live_y;
         }
     }
+    const int stock_bottom=StockBottomRow(first->ram,camera_y);
+    int view_height=(int)Word(first->ram,0x696);
+    if(view_height>stock_bottom && stock_bottom>=224) view_height=stock_bottom;
     if(!IogWorldViewCompute(camera_x,camera_y,Word(first->ram,0x692),
-            Word(first->ram,0x696),(uint16_t)s.width,(uint16_t)s.height,&s.view)) {
+            (uint32_t)view_height,(uint16_t)s.width,(uint16_t)s.height,&s.view)) {
         s.reason="invalid_world_view";return false;
     }
     bool bounded=BoundedRoomScene(scene);
@@ -2131,6 +2231,28 @@ static bool RenderWorld(void)
                     first->ram,sizeof(first->ram),hscroll,225,&wall_model);
         }
     }
+    /* Edward's Castle scrolls its second plane with seven raster bands the
+     * camera actor knows nothing about: sky at half the camera's rate,
+     * clouds that drift, wall backdrops at the full rate. The Gold Ship
+     * does the same with twenty-nine bands of sky and sea. Both planes are
+     * one hardware tilemap wide and repeat in X. */
+    IogRasterParallax band_model={0};
+    bool band_plane=g_snes && g_snes->cart &&
+        IogRasterParallaxPrepareBands(g_snes->cart->rom,g_snes->cart->romImageSize,s.stock,
+            first->ram,sizeof(first->ram),&band_model);
+    /* The ship's plane holds a day picture in its upper half and a night
+     * one in its lower half, each a sky over 256 rows of sea, and the
+     * second camera rests on one of them. In both, the sea's last two
+     * metatile rows repeat the two before them: those continue below the
+     * field, and the plain first row of the plane continues above it. */
+    bool sea_tail=band_plane && band_model.scene!=0x0A;
+    if(sea_tail) {
+        unsigned map=Word(first->ram,0x6A0);
+        bool periodic=map<=65536-1024;
+        for(unsigned page=0;page<4 && periodic;page++)
+            periodic=!memcmp(first->ram+map+page*256+0xC0,first->ram+map+page*256+0xE0,32);
+        if(!periodic || !BackdropFlatHead(first,p)) band_plane=sea_tail=false;
+    }
     bool freejia_wave = tracked_effect && s.epoch_count == 1 &&
         FreejiaRingWave(first,p,&effect_camera);
     bool larai_mist=tracked_effect && s.epoch_count==1 && LaraiMist(first,p,&effect_camera);
@@ -2153,7 +2275,7 @@ static bool RenderWorld(void)
     bool deferred_raster_effect=false;
     /* A room transition wave moves both planes together. Keep the room's
      * ordinary camera projection so the margins do not shift as it begins. */
-    if(tracked_effect && !horizon && !wall_bands && !freejia_wave && !mansion_fog && !babel_stars &&
+    if(tracked_effect && !horizon && !wall_bands && !band_plane && !freejia_wave && !mansion_fog && !babel_stars &&
        !room_wave) {
         /* A camera actor does not describe per-band HDMA derivatives.
          * Keep those on their prior sampling policy until their actual
@@ -2201,19 +2323,26 @@ static bool RenderWorld(void)
     if(scene==0x2F && !adrift_ocean) {
         s.reason="unsupported_adrift_ocean";return false;
     }
-    bool authored_window_pan=false;
+    bool authored_window_pan=false,pan_union=false;
     if(bounded) {
         PictureBounds bounds;
         if(!RoomPictureBounds(first,camera_x,camera_y,&bounds)) {
             s.reason="unsupported_room_window";return false;
         }
-        RoomPictureView(camera_x,camera_y,&bounds);
+        PictureBounds shown=bounds;
+        if(shown.bottom>stock_bottom && stock_bottom-shown.top>=224) shown.bottom=stock_bottom;
+        bool framed=RoomPictureView(camera_x,camera_y,&shown);
+        pan_union=!source_plate && StairPan(scene,first->ram,camera_x,camera_y,bounds,framed);
     } else if(authored) {
         /* A stair can announce the new floor before the camera leaves the
          * old one. Preserve the visible field and HUD on that frame without
          * pulling cells from the destination floor into its margins. */
-        authored_window_pan=!RoomPictureView(camera_x,camera_y,&authored_bounds);
+        PictureBounds shown=authored_bounds;
+        if(shown.bottom>stock_bottom && stock_bottom-shown.top>=224) shown.bottom=stock_bottom;
+        authored_window_pan=!RoomPictureView(camera_x,camera_y,&shown);
+        pan_union=StairPan(scene,first->ram,camera_x,camera_y,authored_bounds,!authored_window_pan);
     }
+    if((!authored && !bounded) || source_plate || (s.pan.valid && s.pan.scene!=scene)) s.pan.valid=false;
     int left=s.view.native_x,top=s.view.native_y;
     const int mosaic=PPU_mosaicSize((&s.base));
     const int stock_mosaic_origin=(s.base.renderFlags&kPpuRenderFlags_NewRenderer)?0:1;
@@ -2375,6 +2504,29 @@ static bool RenderWorld(void)
                             wall_field_phase?wall_source_camera:s.view.world_x,&phase))
                         wx=(int)phase+chunk_x-(wall_field_phase?left:0);
                 }
+                if(logical==1&&band_plane) {
+                    /* Every row the raster described keeps its own scroll,
+                     * registered to the original field. A row outside it
+                     * takes the scroll of the nearest described row of the
+                     * same band, or the band's own value when none of that
+                     * band is in the field. */
+                    unsigned scroll=p->hScroll[physical];
+                    int first_row,end_row,plane_y=camy+native_y+1;
+                    if((native_y<0 || native_y>=224) &&
+                       IogRasterParallaxBandRows(&band_model,plane_y,&first_row,&end_row)) {
+                        int low=first_row>camy+1?first_row:camy+1;
+                        int high=end_row-1<camy+224?end_row-1:camy+224;
+                        uint16_t phase;
+                        if(low<=high)
+                            scroll=Word(s.lines[Clamp(plane_y,low,high)-camy].registers,
+                                offsetof(Ppu,hScroll)+physical*2);
+                        else if(IogRasterParallaxSample(&band_model,plane_y,
+                                band_model.source_camera_x,&phase))
+                            scroll=phase;
+                    }
+                    wx=(int)(scroll&1023)-left+chunk_x;
+                    wy=camy+native_y;
+                }
                 if(logical==1&&(freejia_wave||mansion_fog||larai_mist||
                    (star_plane&&!babel_victory_wave&&!babel_victory_setup))&&
                    (native_y<0 || native_y>=224)) {
@@ -2417,6 +2569,7 @@ static bool RenderWorld(void)
                  * the raster can wrap to ocean tiles during the mosaic. */
                 if(logical==1 && adrift_ocean && native_y<0 && wy<0) wy=0;
                 if(logical==1 && flat_head && native_y<0 && wy<-1) wy=-1;
+                if(logical==1 && sea_tail && native_y<0 && wy<(camy>=256?255:-1)) wy=-1;
                 p->hScroll[physical]=(uint16_t)wx&1023;
                 p->vScroll[physical]=(uint16_t)(wy+(mosaic_layer?1:0))&1023;
                 if(star_plane) continue;
@@ -2429,14 +2582,19 @@ static bool RenderWorld(void)
                 int sample_y=wy+1;
                 if(logical==1 && adrift_ocean && sample_y>=256)
                     sample_y=160+((sample_y-160)%32);
+                if(logical==1 && sea_tail) {
+                    int page=camy>=256?256:0;
+                    if(sample_y>=page+256) sample_y=page+224+((sample_y-page-256)%32);
+                }
                 for(int x=wx&~7;x<wx+width+skip;x+=8) {
                     /* BG sampling uses hardware line1 while OBJ evaluation
                      * uses line0 for the same first output row. */
                     int sample_x=x;
                     bool finite_horizon=logical==1&&horizon;
-                    bool finite_wall=logical==1&&wall_bands;
+                    bool finite_castle=logical==1&&band_plane;
+                    bool finite_wall=logical==1&&(wall_bands||finite_castle);
                     if(finite_horizon||finite_wall) {
-                        int repeat_width=finite_wall?wall_model.width:512;
+                        int repeat_width=finite_castle?band_model.width:finite_wall?wall_model.width:512;
                         sample_x%=repeat_width;if(sample_x<0)sample_x+=repeat_width;
                     }
                     bool repeat=(adrift_ocean && logical==1) || story_sky || ((effect || (logical==1 && underside_backdrop)) &&
@@ -2447,7 +2605,8 @@ static bool RenderWorld(void)
                      * VRAM entry, including partially updated scroll strips. */
                     int source_y=wy-camy;
                     int source_x=camx;
-                    if(finite_wall) {
+                    if(finite_castle) source_x=wx+left-chunk_x;
+                    else if(finite_wall) {
                         uint16_t phase;
                         if(IogRasterParallaxSample(&wall_model,wy+1,wall_source_camera,&phase))source_x=phase;
                     }
@@ -2511,10 +2670,12 @@ static bool RenderWorld(void)
                 /* The map fetch samples the following row. A final authored
                  * row at the edge must not expose the next page's tiles. */
                 int picture_bottom=bounds.bottom-(authored?1:0);
+                if(picture_bottom>stock_bottom) picture_bottom=stock_bottom;
                 /* The same holds for a whole map that ends inside the view:
                  * its last row would fetch the row after the map and show
                  * the backdrop colour as a line above the padding. */
                 int map_bottom=(int)Word(e->ram,0x696)-(s.view.padding_bottom?1:0);
+                if(map_bottom>stock_bottom) map_bottom=stock_bottom;
                 bool inside=(bounded||authored)?(native_pixel || (!authored_window_pan && worldx>=bounds.left && worldx<bounds.right &&
                    worldy>=bounds.top && worldy<picture_bottom)):
                    classroom?OriginalClassroomPixel(e,worldx,worldy):
@@ -2522,6 +2683,15 @@ static bool RenderWorld(void)
                    worldy>=0&&worldy<map_bottom));
                 if(castle_marker && !native_pixel && worldx>=480 && worldy>=735)
                     inside=false;
+                /* Both floors of a stair are shown, and so is the row
+                 * where one meets the other. */
+                if(pan_union && ((worldx>=bounds.left && worldx<bounds.right &&
+                      worldy>=bounds.top && worldy<bounds.bottom) ||
+                     (worldx>=s.pan.left && worldx<s.pan.right &&
+                      worldy>=s.pan.top && worldy<s.pan.bottom)))
+                    inside=true;
+                /* The classroom's own mask and the rest end at the same row. */
+                if(!native_pixel && worldy>=stock_bottom) inside=false;
                 if(inside || backdrop_only || story_sky)
                     s.output[row*s.width+start+x]=backdrop_only&&inside?composite[x]:s.row[x+skip];
                 else if(padding)
@@ -2548,6 +2718,7 @@ static bool RenderWorld(void)
         mansion_fog?"ready_mansion_fog":
         dark_space_stars?"ready_dark_space_starfield":
         babel_stars?"ready_babel_starfield":
+        band_plane?"ready_band_plane":
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;
 }
 
@@ -2769,6 +2940,31 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
     }
     const char *output=getenv("IOG_WORLD_OUTPUT");
     const char *frame=getenv("IOG_WORLD_OUTPUT_FRAME");
+    /* Diagnostic: "N" writes frame N to the path (with the source packet);
+     * "A,B,C" writes each listed frame beside it as <path>.<frame>.ppm. */
+    if(output && *output && frame && *frame && strchr(frame,',')) {
+        for(const char *at=frame;*at;) {
+            char *end=NULL;unsigned long wanted=strtoul(at,&end,10);
+            if(end==at) break;
+            if(wanted==s.frame) {
+                char path[4096];
+                int n=snprintf(path,sizeof(path),"%s.%u.ppm",output,s.frame);
+                FILE *file=n>0 && (size_t)n<sizeof(path)?fopen(path,"wb"):NULL;
+                if(file) {
+                    fprintf(file,"P6\n%d %d\n255\n",width,height);
+                    for(int y=0;y<height;y++) for(int x=0;x<width;x++) {
+                        const uint8_t *color=dst+y*pitch+x*4;
+                        const uint8_t rgb[3]={color[2],color[1],color[0]};
+                        fwrite(rgb,1,3,file);
+                    }
+                    fclose(file);
+                }
+                break;
+            }
+            at=*end==','?end+1:end;
+            if(*end && *end!=',') break;
+        }
+    } else
     if(!s.output_written && output && *output && frame && *frame) {
         char *end=NULL;unsigned long wanted=strtoul(frame,&end,10);
         if(end && !*end && wanted==s.frame) {

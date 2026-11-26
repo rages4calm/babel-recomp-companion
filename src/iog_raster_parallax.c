@@ -27,7 +27,7 @@ bool IogRasterParallaxSample(const IogRasterParallax *m,int y,int x,uint16_t *ou
 {
     if(!m || !out || !m->valid || !m->band_count ||
        m->band_count>kIogRasterParallaxBands ||
-       !((m->height==256 && m->width==512) ||
+       !((m->height==256 && m->width==512) || (m->height==512 && m->width==512) ||
          ((m->height==768 || m->height==1024 || m->height==2048) && m->width==256)) ||
        y<0 || y>=m->height || x < -2048 || x>4096)return false;
     const IogRasterParallaxBand *b=Band(m,(unsigned)y);
@@ -121,6 +121,60 @@ bool IogRasterParallaxPrepare(const uint8_t *rom,size_t size,bool verified,
     }
     if(matches!=1)return false;
     *out=chosen;return true;
+}
+
+bool IogRasterParallaxBandRows(const IogRasterParallax *m,int y,int *first,int *end)
+{
+    if(!m || !m->valid || !first || !end || y<0 || y>=m->height)return false;
+    const IogRasterParallaxBand *b=Band(m,(unsigned)y);
+    if(!b)return false;
+    *first=b->first_row;*end=b->end_row;return true;
+}
+
+bool IogRasterParallaxPrepareBands(const uint8_t *rom,size_t size,bool verified,
+    const uint8_t *ram,size_t ram_size,IogRasterParallax *out)
+{
+    if(!rom || size!=2097152 || !verified || !ram || ram_size<65536 || !out ||
+       Overlap(out,sizeof(*out),rom,size) || Overlap(out,sizeof(*out),ram,ram_size))return false;
+    unsigned scene=Word(ram,0x644),index,width,height,config;
+    switch(scene) {
+    case 0x0A:index=0;width=256;height=1024;config=0x0F;break;
+    case 0x2B: case 0x2C:index=5;width=512;height=512;config=0x4F;break;
+    default:return false;
+    }
+    if((ram[0x6EE]&128) || (ram[0x6EF]&8) ||
+       Word(ram,0x694)!=width || Word(ram,0x698)!=height ||
+       Word(ram,0x690)>height-224 || Word(ram,0x68A)>2048)return false;
+    unsigned pointer=Word(rom,0x1CC00+index*2);
+    if(pointer<0x8000 || pointer>0xFFF0)return false;
+    size_t at=0x10000u+pointer;
+    if(Word(rom,at)>0xF800 || rom[at+2]!=0x7E || rom[at+3]!=config ||
+       rom[at+4]!=8)return false;
+    IogRasterParallax base={0};
+    base.scene=(uint16_t)scene;base.source_camera_x=(uint16_t)Word(ram,0x68A);
+    base.width=(uint16_t)width;base.height=(uint16_t)height;
+    base.delta_scale=(uint8_t)(config&64?16:1);
+    unsigned rows=0;at+=5;
+    for(unsigned i=0;i<kIogRasterParallaxBands;i++,at+=8) {
+        if(at+8>0x20000u)return false;
+        unsigned n=Word(rom,at);if(!n || !(n&32768u))return false;
+        n=65536u-n;
+        unsigned accumulator=Word(rom,at+2),factor=Word(rom,at+4),speed=Word(rom,at+6);
+        if(n>4096 || accumulator<0x720 || accumulator>0x75E || (accumulator&1) ||
+           (factor && (!(factor>>8) ||
+            (factor&255u)*base.source_camera_x>65535u)))return false;
+        IogRasterParallaxBand *b=&base.bands[i];
+        b->first_row=(uint16_t)rows;b->end_row=(uint16_t)(rows+n);
+        b->factor=(uint16_t)factor;
+        /* A proportional band is its factor of the camera plus a base. A
+         * drifting band is whatever its accumulator has reached. */
+        b->fixed_phase=(uint16_t)(factor?Project(factor,base.source_camera_x)+speed:
+            Word(ram,accumulator));
+        rows+=n;base.band_count++;
+        if(rows>=height)break;
+    }
+    if(rows<height || !base.band_count)return false;
+    base.valid=1;*out=base;return true;
 }
 
 bool IogRasterParallaxPrepareWall(const uint8_t *rom,size_t size,bool verified,
