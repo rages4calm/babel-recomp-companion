@@ -12,18 +12,19 @@ internal static class NativeSettings
     private static Field Int(string id, string page, string label, string section, string key, int fallback, int min, int max, string help = "") =>
         new(section, key, new(id, page, label, OptionKind.Integer, OptionValue.From(fallback), help, min, max));
     private static readonly Field[] Fields = {
-        new("Graphics", "Fullscreen", new("video.fullscreen", "Display", "Window mode", OptionKind.Choice, OptionValue.From("0"), "Applies on next launch.", Choices: new[] {
+        new("Graphics", "Fullscreen", new("video.fullscreen", "Display", "Window mode", OptionKind.Choice, OptionValue.From("0"), "Takes effect the next time the game starts. Alt+Enter switches while playing.", Choices: new[] {
             new ChoiceItem("0", "Windowed"), new ChoiceItem("1", "Desktop fullscreen"), new ChoiceItem("2", "Exclusive fullscreen") })),
-        Int("video.scale", "Display", "Window scale", "Graphics", "WindowScale", 3, 1, 10),
-        Bool("video.widescreen", "Display", "Classic 16:9 widescreen", "Graphics", "Widescreen", false,
-            "The original Babel widescreen. Only used while Wide view is switched off under Cheats and Mods; Wide view replaces it."),
+        Int("video.scale", "Display", "Window size multiplier", "Graphics", "WindowScale", 3, 1, 10,
+            "For Classic 16:9 and Original 4:3 in a window. Wide view opens at 1280x720 instead; resize it or use fullscreen."),
+        // Written through the Picture choice; not shown on its own.
+        Bool("video.widescreen", "Hidden", "Classic 16:9 widescreen", "Graphics", "Widescreen", false),
         new("Graphics", "VSync", new("video.vsync", "Display", "Vertical sync", OptionKind.Choice, OptionValue.From("1"),
-            "Adaptive uses late-swap tearing where the graphics driver supports it. Restart after applying.", Choices: new[] {
+            "Stops tearing. Adaptive allows a late frame to tear rather than stutter, where the graphics driver supports it. Takes effect the next time the game starts.", Choices: new[] {
                 new ChoiceItem("0", "Off"), new ChoiceItem("1", "On"), new ChoiceItem("adaptive", "Adaptive") })),
-        Bool("video.filter", "Display", "Smooth pixel filtering", "Graphics", "LinearFiltering", false,
-            "Off preserves crisp pixels. This does not change gameplay zoom."),
+        // Written through the Scaling choice; not shown on its own.
+        Bool("video.filter", "Hidden", "Smooth pixel filtering", "Graphics", "LinearFiltering", false),
         Bool("video.mode7", "Display", "HD Mode 7", "Graphics", "Mode7Enabled", true,
-            "Shared Mode 7 presentation, enabled at the configured quality (default 8x). Preserves scale and sampling. Restart after applying."),
+            "Sharper rotating and zooming scenes. Used with Classic 16:9 and Original 4:3 only: Wide view draws the walkable world map its own way and ignores this."),
         Bool("audio.enabled", "Audio", "Enable audio", "Sound", "EnableAudio", true,
             "Original SNES audio works offline without optional music. MSU-1 packs remain user supplied in the game folder."),
         Int("audio.volume", "Audio", "Master volume (%)", "Sound", "Volume", 100, 0, 100,
@@ -33,7 +34,7 @@ internal static class NativeSettings
         Int("input.deadzone", "Input", "Analog deadzone", "GamepadMap", "GamepadDeadzone", 3277, 0, 32767,
             "How far a stick must move before it counts, from 0 to 32767. The default is 3277 (10%). Raise it if the character drifts."),
     };
-    internal static IEnumerable<OptionDefinition> Options => Fields.Select(x => x.Option);
+    internal static IEnumerable<OptionDefinition> Options => Fields.Where(x => x.Option.Section != "Hidden").Select(x => x.Option);
     internal static bool IsNative(string id) => Fields.Any(x => x.Option.Id == id);
     private static string Config(IReadOnlyDictionary<string, JsonElement> values) => System.IO.Path.Combine(System.IO.Path.GetDirectoryName(values["engine.path"].GetString()!)!, "config.ini");
     private static string Hash(byte[]? bytes) => bytes == null ? "missing" : Convert.ToHexString(SHA256.HashData(bytes));

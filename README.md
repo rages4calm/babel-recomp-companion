@@ -83,22 +83,23 @@ the stick clicks. Button names above are SNES buttons.
 | X | S | R | V |
 | Y | A | | |
 
-Controllers work without setup. To change keys or buttons, set **Launch
-destination** on the launcher's Game page to **Babel tools and remapping**.
+Controllers work without setup. To change keys or buttons, set **When you press Play**
+on the launcher's Game page to **Open the setup screen**.
 
 ### In the launcher
 
 | Page | What it does |
 | --- | --- |
-| Display, Audio | Window mode, VSync, filtering, volume |
+| Display | **Picture**: Wide view, Classic 16:9 or Original 4:3 (pick one). **Scaling**: sharp, smooth edges, soft or plain. Window mode and VSync |
+| Audio | Sound on or off, volume |
 | Input | Gamepad, deadzone, and **Button prompts**: Auto, SNES (classic) or Xbox |
 | Achievements | Your local progress |
 | Soundtrack | Import an optional MSU-1 music pack |
-| Cheats and Mods | Cheats, and the conveniences: **Wide view**, **Enhanced world map**, hold to run, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
+| Cheats and Mods | Cheats, and the conveniences: **Enhanced world map**, hold to run, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
 
-| Input page | Achievements page |
+| Display page | Input page |
 | --- | --- |
-| ![The launcher's Input page with gamepad, deadzone, button prompts and keyboard shortcuts](docs/images/launcher-input.png) | ![The launcher's Achievements page](docs/images/launcher-achievements.png) |
+| ![The launcher's Display page with one Picture choice and one Scaling choice](docs/images/launcher-display.png) | ![The launcher's Input page with gamepad, deadzone, button prompts and keyboard shortcuts](docs/images/launcher-input.png) |
 
 ## Development status
 

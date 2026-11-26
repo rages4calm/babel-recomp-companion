@@ -40,13 +40,26 @@ try {
     Check(!native.Values["video.mode7"].GetBoolean(), "shared Mode7Enabled controls visible setting rather than legacy EnhancedMode7");
     native.Values["video.mode7"] = OptionValue.From(true);
     native.Values["audio.volume"] = OptionValue.From(62); native.Values["video.vsync"] = OptionValue.From("1");
-    native.Values["video.filter"] = OptionValue.From(false);
+    Check(native.Values["video.picture"].GetString() == "wide" && native.Values["video.scaling"].GetString() == "sharp", "picture and scaling read the game defaults");
+    native.Values["video.scaling"] = OptionValue.From("plain");   // the hidden filter setting follows the visible choice
     adapter.ApplySettings(profile, native.Values, native.Revision);
     var text = File.ReadAllText(config);
     Check(text.Contains("Custom = untouched\r\n"), "preserve unknown key and CRLF");
     Check(text.Contains("Controls = custom mapping"), "preserve control bindings");
     Check(text.Contains("Widescreen = 1 # native view"), "preserve untouched inline comment");
     Check(text.Contains("Vsync = 1") && text.Contains("LinearFilter = 0"), "write effective aliases");
+    var afterScaling = adapter.ReadSettings(profile);
+    Check(afterScaling.Values["video.scaling"].GetString() == "plain" && !NativeModSettings.ReadDisplay(exeDir).Hd, "scaling choice turns the HD filter off");
+    afterScaling.Values["video.picture"] = OptionValue.From("original"); afterScaling.Values["video.scaling"] = OptionValue.From("smooth");
+    adapter.ApplySettings(profile, afterScaling.Values, afterScaling.Revision);
+    var shown = adapter.ReadSettings(profile); var mods = NativeModSettings.ReadDisplay(exeDir);
+    Check(shown.Values["video.picture"].GetString() == "original" && !mods.WideView && !shown.Values["video.widescreen"].GetBoolean(), "original picture turns both widescreens off");
+    Check(shown.Values["video.scaling"].GetString() == "smooth" && mods.Hd && mods.Filter == "smooth", "smooth scaling selects the xBR filter");
+    shown.Values["video.picture"] = OptionValue.From("classic"); adapter.ApplySettings(profile, shown.Values, shown.Revision);
+    shown = adapter.ReadSettings(profile);
+    Check(shown.Values["video.picture"].GetString() == "classic" && shown.Values["video.widescreen"].GetBoolean() && !NativeModSettings.ReadDisplay(exeDir).WideView, "classic picture is the old widescreen alone");
+    shown.Values["video.picture"] = OptionValue.From("wide"); adapter.ApplySettings(profile, shown.Values, shown.Revision);
+    Check(adapter.ReadSettings(profile).Values["video.picture"].GetString() == "wide", "wide view round trips");
     Check(adapter.ReadSettings(profile).Values["audio.volume"].GetInt32() == 62, "read applied native setting");
     Check(text.Contains("Mode7Enabled = 1") && text.Contains("EnhancedMode7 = 1"), "apply shared Mode 7 without changing legacy HD-pack setting");
     Check(text.Contains("Mode7Scale = 16") && text.Contains("Mode7Supersample = 2"), "Mode 7 toggle preserves quality and sampling");

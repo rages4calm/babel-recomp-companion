@@ -33,7 +33,6 @@ public static class NativeModSettings
         Toggle("mod.equipped", "Convenience", "Mark the equipped item", "iog.enhancements", "equipped", "Draw the equipped-item frame in the original inventory."),
         Toggle("mod.hotswap", "Convenience", "Quick item selection", "iog.enhancements", "hotswap", "Hold the configured modifier and press L/R. Existing modifier mapping is preserved (default X)."),
         Toggle("mod.advance", "Convenience", "Hold to advance dialogue", "iog.enhancements", "hold_advance", "Hold a confirm button through dialogue. Questions still require a fresh press; existing speed choice is preserved."),
-        Toggle("mod.wide-view", "Convenience", "Wide view", "iog.graphics", "wide_view", "Shows more of each area around the original picture, with the status display and dialogue at your screen's resolution. Off: the original picture. Takes effect the next time the game starts."),
         Toggle("mod.world-map", "Convenience", "Enhanced world map", "iog.enhancements", "world_map", "On the walkable world map: smoother map picture, higher camera, markers over the places you can visit, a small map and a clearer entry prompt. Off shows the plain walking view.", true)
     };
     private static readonly GameDefinition ValidationDefinition = new("gaia-mod-options", "Gaia mods", "", Fields.Select(x => x.Option).ToArray());
@@ -140,14 +139,38 @@ public static class NativeModSettings
     }
     public static void ApplyPrompts(string engineDirectory, string style) {
         if (style is not ("auto" or "snes" or "xbox")) throw new ArgumentException("Unknown button prompt style.");
+        Edit(engineDirectory, (text, newline) => {
+            text = Upsert(text, "package", new Dictionary<string,string> { ["id"] = "iog.enhancements" }, "version", "\"1.0.0\"", newline);
+            // Map controls are on by default; keep them on so the style is read.
+            text = Upsert(text, "feature", MapControls, "enabled", "true", newline);
+            return Upsert(text, "feature", MapControls, "prompts", JsonSerializer.Serialize(style), newline, nested: true);
+        });
+    }
+    /// <summary>The two graphics selections the Display page folds into Picture and Scaling.</summary>
+    public sealed record DisplayState(bool WideView, bool Hd, string Filter);
+    private static readonly Dictionary<string,string> WideViewKey = new() { ["package_id"] = "iog.graphics", ["id"] = "wide_view" };
+    private static readonly Dictionary<string,string> HdKey = new() { ["package_id"] = "iog.graphics", ["id"] = "hd" };
+    public static DisplayState ReadDisplay(string engineDirectory) {
+        var bytes = ReadBounded(StatePath(engineDirectory)); if (bytes == null) return new(true, true, "sharp");
+        var text = Decode(bytes); var wide = Find(text, "feature", WideViewKey); var hd = Find(text, "feature", HdKey);
+        // Both are on in the game's catalog until the state file says otherwise.
+        return new(wide == null || Enabled(wide), hd == null || Enabled(hd),
+            (hd == null ? null : Value(SplitValues(hd.Body).Values, "filter")) == "smooth" ? "smooth" : "sharp");
+    }
+    public static void ApplyDisplay(string engineDirectory, DisplayState state) {
+        if (state.Filter is not ("sharp" or "smooth")) throw new ArgumentException("Unknown scaling filter.");
+        Edit(engineDirectory, (text, newline) => {
+            text = Upsert(text, "package", new Dictionary<string,string> { ["id"] = "iog.graphics" }, "version", "\"1.0.0\"", newline);
+            text = Upsert(text, "feature", WideViewKey, "enabled", state.WideView ? "true" : "false", newline);
+            text = Upsert(text, "feature", HdKey, "enabled", state.Hd ? "true" : "false", newline);
+            return Upsert(text, "feature", HdKey, "filter", JsonSerializer.Serialize(state.Filter), newline, nested: true);
+        });
+    }
+    private static void Edit(string engineDirectory, Func<string,string,string> change) {
         var path = StatePath(engineDirectory); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         using var gate = new FileStream(path + ".companion-lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var original = ReadBounded(path); var text = original == null ? "format_version = 1\n" : Decode(original);
-        var newline = text.Contains("\r\n") ? "\r\n" : "\n";
-        text = Upsert(text, "package", new Dictionary<string,string> { ["id"] = "iog.enhancements" }, "version", "\"1.0.0\"", newline);
-        // Map controls are on by default; keep them on so the style is read.
-        text = Upsert(text, "feature", MapControls, "enabled", "true", newline);
-        text = Upsert(text, "feature", MapControls, "prompts", JsonSerializer.Serialize(style), newline, nested: true);
+        text = change(text, text.Contains("\r\n") ? "\r\n" : "\n");
         if (original != null && text == Decode(original)) return;
         var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try {
@@ -166,7 +189,7 @@ public static class NativeModSettings
     }
     public static void Apply(string engineDirectory, IReadOnlyDictionary<string,JsonElement> values, string expectedRevision) {
         var executable = Path.Combine(Path.GetFullPath(engineDirectory), "babel-recomp.exe");
-        if (!File.Exists(executable)) throw new FileNotFoundException("Select the built Babel executable first.");
+        if (!File.Exists(executable)) throw new FileNotFoundException("Set the game program on the Game page first.");
         if (IsEngineRunning(executable)) throw new InvalidOperationException("Close the game before applying launcher mods. In-game settings can change the live session.");
         var errors = OptionValidation.Validate(ValidationDefinition, values); if (errors.Count > 0) throw new SettingsValidationException(errors);
         var path = StatePath(engineDirectory); Directory.CreateDirectory(Path.GetDirectoryName(path)!);

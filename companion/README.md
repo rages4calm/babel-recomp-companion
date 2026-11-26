@@ -22,7 +22,7 @@ The local package source uses `COMPANION_LAUNCHER_FEED`; the build script resolv
 it from `-CompanionRoot` or the sibling checkout. Versions and dependency hashes
 are pinned in `packages.lock.json`. This does not install or edit the shared SDK.
 
-On **Game**, select an existing Babel executable and your own USA ROM, then Apply.
+On **Game**, set the game program (already filled in when the launcher sits beside it) and your own USA ROM, then Apply.
 Play verifies SHA-256 after stripping an optional 512-byte copier header and passes
 the ROM through structured `--rom` arguments. It never imports game bytes into
 the repository or launcher preferences. Direct Play uses `--no-launcher`.

@@ -91,7 +91,7 @@ internal static class Program
             }
             var engine = controller.Snapshot.Values["engine.path"].GetString() ?? "";
             if (!Path.IsPathFullyQualified(engine) || !File.Exists(engine)) {
-                MessageBox.Show(form, "Select the existing Babel executable on Game, then Apply.", "Select the game first", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
+                MessageBox.Show(form, "Set the game program on the Game page, then Apply.", "Select the game first", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
             }
             if (NativeModSettings.IsEngineRunning(engine)) {
                 MessageBox.Show(form, "Close the game before changing its soundtrack. In-game settings remain available during play.", "Game is running", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
@@ -114,7 +114,7 @@ internal static class Program
             try {
                 if (controller.HasChanges) throw new InvalidOperationException("Apply or Revert your settings before opening Cheats and Mods.");
                 var engine = controller.Snapshot.Values["engine.path"].GetString() ?? "";
-                if (!Path.IsPathFullyQualified(engine) || !File.Exists(engine)) throw new InvalidOperationException("Select the existing Babel executable on Game, then Apply.");
+                if (!Path.IsPathFullyQualified(engine) || !File.Exists(engine)) throw new InvalidOperationException("Set the game program on the Game page, then Apply.");
                 if (NativeModSettings.IsEngineRunning(engine)) throw new InvalidOperationException("Close the game before editing launcher mods. Use in-game settings for the live session.");
                 using var mods = new CheatsModsForm(Path.GetDirectoryName(engine)!) { Icon = form.Icon }; mods.ShowDialog(form);
             } catch (Exception error) { MessageBox.Show(form, error.Message, "Could not open Cheats and Mods", MessageBoxButtons.OK, MessageBoxIcon.Information); }

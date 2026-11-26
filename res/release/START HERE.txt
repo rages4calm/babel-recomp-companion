@@ -20,8 +20,8 @@ WHAT IS ON BY DEFAULT
 - Wide view: more of each area around the original picture.
 - The GaiaLabs Retranslation script.
 - The walkable world map, with the enhanced view.
-Each can be turned off: Wide view and Enhanced world map are under Cheats
-and Mods in the launcher. See i18n/GAIALABS-NOTICE.md for the other two.
+Each can be turned off: Wide view is the Picture choice on the launcher's
+Display page, and Enhanced world map is under Cheats and Mods. See i18n/GAIALABS-NOTICE.md for the other two.
 
 IN THE GAME
 - Esc (or Left Trigger + Right Stick click): settings
