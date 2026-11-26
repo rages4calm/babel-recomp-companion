@@ -60,6 +60,9 @@ uint32_t snes_savestate_menu_filter_guest_input(uint32_t inputs);
  * (bit 2 = Select, bit 11 = R). Returns 1 on the frame it opens. Safe to
  * call every frame; does nothing while already open. */
 int  snes_savestate_menu_poll_open(uint32_t inputs);
+/* Open on a host-owned shortcut edge. Prime actual held navigation buttons,
+ * so the opening chord cannot also load/save/close a slot. */
+int  snes_savestate_menu_open(uint32_t inputs);
 
 /* Gamepad navigation while open: Up/Down pick a slot (with key repeat),
  * A loads, X saves, B closes. ticks_ms is a free-running millisecond clock. */
@@ -91,6 +94,11 @@ void snes_savestate_menu_note_frame(const uint32_t *fb, int w, int h);
 /* A successful host save updates the same thumbnail/browser entry as a save
  * made in this menu. Accepts numbered slots and SNES_SAVESTATE_QUICK_SLOT. */
 void snes_savestate_menu_note_slot_saved(int slot);
+
+/* User-facing file save at a completed frame boundary: native snapshot plus
+ * matching composed preview. Does not run the guest; failed saves keep the
+ * prior preview. Internal/rollback snapshots continue to use RtlSaveSnapshot. */
+int snes_savestate_menu_write_slot(int slot);
 
 /* Center a 4:3 panel in physical display pixels. */
 void snes_savestate_menu_viewport(int width, int height,

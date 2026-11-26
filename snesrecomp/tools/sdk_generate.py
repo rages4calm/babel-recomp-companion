@@ -74,6 +74,7 @@ def _generate(
     region_paced: bool = False,
     region_live_immediates: bool = False,
     region_live_wram_addresses: bool = False,
+    aot_resume: bool = False,
     expected_crc32: Optional[str] = None,
     expected_sha256: Optional[str] = None,
     progress: Optional[ProgressReporter] = None,
@@ -100,6 +101,8 @@ def _generate(
         raise ValueError("region-live-immediates requires region-paced instruction-blocks")
     if region_live_wram_addresses and not (region_paced and instruction_blocks):
         raise ValueError("region-live-wram-addresses requires region-paced instruction-blocks")
+    if aot_resume and not region_paced:
+        raise ValueError("compiled resume requires region-paced emission")
     rom = pathlib.Path(rom).resolve()
     cfg_dir = pathlib.Path(cfg_dir).resolve()
     out_dir = pathlib.Path(out_dir).resolve()
@@ -145,6 +148,8 @@ def _generate(
         emit_args.append("--region-live-immediates")
     if region_live_wram_addresses:
         emit_args.append("--region-live-wram-addresses")
+    if aot_resume:
+        emit_args.append("--aot-resume")
     if no_host_root_scan:
         emit_args.append("--no-host-root-scan")
     for root in source_roots or ():
@@ -239,6 +244,7 @@ def _generate(
         "region_paced": bool(region_paced),
         "region_live_immediates": bool(region_live_immediates),
         **({"region_live_wram_addresses": True} if region_live_wram_addresses else {}),
+        "aot_resume": bool(aot_resume),
     }
     if _report_result:
         reporter.phase("done", pct=1.0, message="Generate complete")
@@ -279,7 +285,7 @@ def generate(**kwargs) -> dict:
         if supplied and supplied.lower() != verified["sha256"].lower():
             raise ValueError("legacy profile binding differs from verified recipe ROM")
         options["legacy_profile_rom_sha256"] = verified["sha256"]
-    for key in ("cfg_roots", "no_host_root_scan", "instruction_blocks", "region_paced", "region_live_immediates", "region_live_wram_addresses"):
+    for key in ("cfg_roots", "no_host_root_scan", "instruction_blocks", "region_paced", "region_live_immediates", "region_live_wram_addresses", "aot_resume"):
         options[key] = bool(options.get(key) or recipe.data.get(key))
     if options["region_paced"] and not options["instruction_blocks"]:
         raise ValueError("region-paced emission requires instruction-blocks")
@@ -287,6 +293,8 @@ def generate(**kwargs) -> dict:
         raise ValueError("region-live-immediates requires region-paced instruction-blocks")
     if options["region_live_wram_addresses"] and not (options["region_paced"] and options["instruction_blocks"]):
         raise ValueError("region-live-wram-addresses requires region-paced instruction-blocks")
+    if options["aot_resume"] and not options["region_paced"]:
+        raise ValueError("compiled resume requires region-paced emission")
     for key, recipe_key in (("profile_manifests", "profiles"),
                             ("historical_profile_manifests", "historical_profiles")):
         options[key] = list(dict.fromkeys(
@@ -297,7 +305,9 @@ def generate(**kwargs) -> dict:
          "\0instruction_blocks=" + str(int(options["instruction_blocks"])) +
          "\0region_paced=" + str(int(options["region_paced"])) +
          ("\0region_live_immediates=1" if options["region_live_immediates"] else "") +
-         ("\0region_live_wram_addresses=1" if options["region_live_wram_addresses"] else "")).encode("ascii")).hexdigest()
+         ("\0region_live_wram_addresses=1" if options["region_live_wram_addresses"] else "") +
+         # Only when on, so recipes without it keep their digest.
+         ("\0aot_resume=1" if options["aot_resume"] else "")).encode("ascii")).hexdigest()
     target = pathlib.Path(options["out_dir"]).resolve()
     header = pathlib.Path(options["funcs_h"]).resolve() if options.get("funcs_h") else None
     recipe.run("prepare", rom=rom, cfg_dir=cfg_dir, out_dir=target, reporter=reporter)
@@ -394,6 +404,7 @@ def generate_command(args: argparse.Namespace, progress: ProgressReporter) -> in
             region_paced=bool(getattr(args, "region_paced", False)),
             region_live_immediates=bool(getattr(args, "region_live_immediates", False)),
             region_live_wram_addresses=bool(getattr(args, "region_live_wram_addresses", False)),
+            aot_resume=bool(getattr(args, "aot_resume", False)),
             expected_crc32=args.expected_crc32,
             expected_sha256=args.expected_sha256,
             progress=progress,
@@ -493,6 +504,9 @@ def add_generate_parser(subparsers) -> None:
                                  help="opt in to paced mutable data-immediate fetches (requires --region-paced)")
     generate_parser.add_argument("--region-live-wram-addresses", action="store_true",
                                  help="opt in to guarded paced mutable ABS reads targeting WRAM (requires --region-paced)")
+    generate_parser.add_argument("--aot-resume", action="store_true",
+                                 help="every compiled instruction is also an entry, so code a deadline stopped in "
+                                      "goes on compiled (requires --region-paced)")
     generate_parser.add_argument("--instruction-blocks", action="store_true",
                                  help="check host deadlines at every guest instruction boundary")
     generate_parser.add_argument(

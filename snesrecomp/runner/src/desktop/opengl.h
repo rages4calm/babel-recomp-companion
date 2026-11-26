@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 #include "display_aspect.h"
 
 /* The shared desktop OpenGL presenter (desktop/opengl.c). util.h declares
@@ -19,8 +20,12 @@ extern "C" {
 /* Swap interval for the GL presenter: 0 immediate, 1 wait for the panel,
  * -1 late-swap-tearing ("Adaptive"). Call before OpenGLRenderer_Create. */
 void snesrecomp_opengl_set_vsync(int interval);
+void snesrecomp_opengl_capture_frame(uint32_t frame);
 void snesrecomp_opengl_set_viewport(void (*compute)(int, int, int, int,
                                                    SnesDisplayViewport *));
+/* Physical hi-res dots are half a logical column wide. This affects display
+ * geometry only, including custom viewport callbacks, never texture data. */
+void snesrecomp_opengl_set_horizontal_scale(int scale);
 
 /* Capture the next fully composited OpenGL frame to screenshots/*.bmp. */
 void OpenGLRenderer_RequestScreenshot(void);

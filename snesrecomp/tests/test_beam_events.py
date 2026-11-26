@@ -1,10 +1,25 @@
 import pathlib
 import shutil
 import subprocess
+import os
 
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize('mode', ['on', 'off'])
+def test_ppu_render_reads(tmp_path, mode):
+    cc = shutil.which('gcc') or shutil.which('cc')
+    if cc is None:
+        pytest.skip('C compiler unavailable')
+    exe = tmp_path / 'render-reads.exe'
+    subprocess.run([cc, '-std=c11', '-O1', '-DSNESRECOMP_REVERSE_DEBUG=0',
+        '-Irunner/src', '-Irunner/src/snes', 'tests/ppu/ppu_render_reads_test.c',
+        'runner/src/snes/ppu.c', 'runner/src/snes/hd_jobs.c',
+        'runner/src/snes/ppu_legacy.c', '-lm', '-o', str(exe)], cwd=ROOT, check=True)
+    env = dict(os.environ, SNESRECOMP_PPU_RENDER_READS='1' if mode == 'on' else '0')
+    subprocess.run([str(exe), mode], env=env, check=True)
 
 
 def test_beam_events_and_midspan_sync(tmp_path):
@@ -20,11 +35,24 @@ def test_beam_events_and_midspan_sync(tmp_path):
     subprocess.run([str(exe)], check=True)
 
 
-def test_render_hdma_first_slot(tmp_path):
+def test_live_hdma_cpu_stalls(tmp_path):
+    cc = shutil.which('gcc') or shutil.which('cc')
+    if cc is None:
+        pytest.skip('C compiler unavailable')
+    exe = tmp_path / 'hdma-cpu-stall.exe'
+    subprocess.run([cc, '-std=c11', '-O1', '-DSNESRECOMP_REVERSE_DEBUG=0',
+        '-ffunction-sections', '-fdata-sections', '-Irunner/src',
+        '-Irunner/src/snes', '-Itests/dma', 'tests/dma/hdma_cpu_stall_test.c',
+        'runner/src/snes/snes.c', 'runner/src/snes/dma.c',
+        'runner/src/snes/sdd1.c', '-lm', '-o', str(exe)], cwd=ROOT, check=True)
+    subprocess.run([str(exe)], check=True)
+
+
+def test_render_hdma_picture_ownership(tmp_path):
     cc=shutil.which('gcc') or shutil.which('cc')
     if cc is None:pytest.skip('C compiler unavailable')
     source=(ROOT/'runner/src/beam_frame_driver.c').read_text(encoding='utf-8')
-    parts=['#include "beam_frame_driver.h"\n#include "snes/snes.h"\n#include "snes/ppu.h"\n#include "snes/dma.h"\nextern Snes *g_snes;\nextern Ppu *g_ppu;\n']
+    parts=['#include "beam_frame_driver.h"\n#include "snes/snes.h"\n#include "snes/ppu.h"\n#include "snes/dma.h"\nextern Snes *g_snes;\nextern Ppu *g_ppu;\nextern bool g_fail;\n#include <stdio.h>\n']
     for name in ('void snes_beam_frame_driver_draw_ppu_frame(',
                  'void snes_beam_frame_driver_draw_ppu_frame_observed('):
         start=source.index(name);brace=source.index('{',start);depth=1;end=brace+1
@@ -32,9 +60,76 @@ def test_render_hdma_first_slot(tmp_path):
             depth+=(source[end]=='{')-(source[end]=='}');end+=1
         parts.append(source[start:end])
     driver=tmp_path/'render.c';driver.write_text('\n'.join(parts),encoding='utf-8')
-    exe=tmp_path/'frame-render.exe'
-    subprocess.run([cc,'-std=c11','-O1','-DSNESRECOMP_REVERSE_DEBUG=0',
-        '-Irunner/src','-Irunner/src/snes','-Itests/dma',
-        'tests/dma/frame_render_hdma_test.c',str(driver),'runner/src/snes/snes.c',
-        'runner/src/snes/dma.c','runner/src/snes/sdd1.c','-lm','-o',str(exe)],cwd=ROOT,check=True)
-    subprocess.run([str(exe)],check=True)
+    for name in ('frame_render_hdma_test','general_dma_beam_test'):
+        exe=tmp_path/(name+'.exe')
+        subprocess.run([cc,'-std=c11','-O1','-DSNESRECOMP_REVERSE_DEBUG=0',
+            '-Irunner/src','-Irunner/src/snes','-Itests/dma',
+            'tests/dma/'+name+'.c',str(driver),'runner/src/snes/snes.c',
+            'runner/src/snes/dma.c','runner/src/snes/sdd1.c',
+            'runner/src/snes/ppu.c','runner/src/snes/hd_jobs.c','runner/src/snes/ppu_legacy.c','-lm','-o',str(exe)],cwd=ROOT,check=True)
+        subprocess.run([str(exe)],check=True)
+
+
+@pytest.mark.parametrize('mode', ['on', 'off'])
+def test_short_line(tmp_path, mode):
+    cc = shutil.which('gcc') or shutil.which('cc')
+    if cc is None:
+        pytest.skip('C compiler unavailable')
+    exe = tmp_path / 'short_line.exe'
+    subprocess.run([cc, '-std=c11', '-O1', '-DSNESRECOMP_REVERSE_DEBUG=0',
+        '-ffunction-sections', '-fdata-sections', '-Irunner/src',
+        '-Irunner/src/snes', '-Itests/dma', 'tests/dma/short_line_test.c',
+        'runner/src/snes/snes.c', 'runner/src/snes/dma.c',
+        'runner/src/snes/sdd1.c', '-lm', '-o', str(exe)], cwd=ROOT, check=True)
+    subprocess.run([str(exe), mode], check=True)
+
+
+@pytest.mark.parametrize('test,extra', [
+    ('dma/hvbjoy_refresh_test.c', []),
+    ('dma/last_cycle_test.c', ['runner/src/snes/last_cycle.c']),
+    ('frame_driver/exact_rules_test.c', []),
+])
+def test_exact_rules(tmp_path, test, extra):
+    cc = shutil.which('gcc') or shutil.which('cc')
+    if cc is None:
+        pytest.skip('C compiler unavailable')
+    exe = tmp_path / 'exact.exe'
+    subprocess.run([cc, '-std=c11', '-O1', '-DSNESRECOMP_REVERSE_DEBUG=0',
+        '-ffunction-sections', '-fdata-sections', '-Irunner/src',
+        '-Irunner/src/snes', '-Itests/dma', 'tests/' + test, *extra,
+        'runner/src/snes/snes.c', 'runner/src/snes/dma.c',
+        'runner/src/snes/sdd1.c', '-lm', '-o', str(exe)], cwd=ROOT, check=True)
+    subprocess.run([str(exe)], check=True)
+
+
+@pytest.mark.parametrize('mode', ['plain', 'exact', 'exact-wai'])
+def test_field_end_short_line(tmp_path, mode):
+    cc = shutil.which('gcc') or shutil.which('cc')
+    if cc is None:
+        pytest.skip('C compiler unavailable')
+    exe = tmp_path / 'field_end.exe'
+    subprocess.run([cc, '-std=c11', '-O1', '-DSNESRECOMP_REVERSE_DEBUG=0',
+        '-ffunction-sections', '-fdata-sections', '-Irunner/src',
+        '-Irunner/src/snes', '-Itests/dma', 'tests/frame_driver/field_end_test.c',
+        'runner/src/snes/snes.c', 'runner/src/snes/dma.c',
+        'runner/src/snes/sdd1.c', '-lm', '-o', str(exe)], cwd=ROOT, check=True)
+    subprocess.run([str(exe), mode], check=True)
+
+
+@pytest.mark.parametrize('mode', ['on', 'off'])
+def test_refresh_charge(tmp_path, mode):
+    cc = shutil.which('gcc') or shutil.which('cc')
+    if cc is None:
+        pytest.skip('C compiler unavailable')
+    source = (ROOT / 'runner/src/common_cpu_infra.c').read_text(encoding='utf-8')
+    start = source.index('uint64_t g_refresh_charged_upto;')
+    end = source.index('\n}\n', source.index('void snes_refresh_charge(void) {')) + 3
+    charge = tmp_path / 'refresh_charge.c'
+    charge.write_text('#include "cpu_state.h"\n#include "snes/snes.h"\nextern CpuState g_cpu;\nextern Snes *g_snes;\n'
+                      + source[start:end], encoding='utf-8')
+    exe = tmp_path / 'refresh.exe'
+    subprocess.run([cc, '-std=c11', '-O1', '-DSNESRECOMP_REVERSE_DEBUG=0',
+        '-Irunner/src', '-Irunner/src/snes', '-Itests/dma',
+        'tests/dma/refresh_charge_test.c', str(charge), 'runner/src/snes/snes.c',
+        'runner/src/snes/dma.c', 'runner/src/snes/sdd1.c', '-lm', '-o', str(exe)], cwd=ROOT, check=True)
+    subprocess.run([str(exe), mode], check=True)

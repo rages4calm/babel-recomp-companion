@@ -166,9 +166,9 @@ static void Plot(int x, int y, uint32_t rgb)
         return;
     rgb = Shade(rgb);
     ((uint32_t *)(g_ppu->renderBuffer + (size_t)y * g_ppu->renderPitch))[bx] = rgb;
-    if (g_ppu->hiresBuffer && g_ppu->hiresLine[y])
+    if (g_ppu->m7hdBuffer && g_ppu->m7hdLine[y])
         for (int s = 0; s < 4; s++) {
-            uint32_t *d = g_ppu->hiresBuffer + (size_t)(4 * y + s) * g_ppu->hiresPitch + 4 * bx;
+            uint32_t *d = g_ppu->m7hdBuffer + (size_t)(4 * y + s) * g_ppu->m7hdPitch + 4 * bx;
             d[0] = d[1] = d[2] = d[3] = rgb;
         }
 }

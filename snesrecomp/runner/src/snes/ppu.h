@@ -381,22 +381,29 @@ struct Ppu {
   uint32_t renderPitch;
   uint8_t *renderBuffer;
   /* 4x4 Mode 7 (kPpuRenderFlags_4x4Mode7): host-owned ARGB rows, 4 per
-   * scanline, hiresPitch pixels apart; hiresLine[y] says which scanlines
+   * scanline, m7hdPitch pixels apart; m7hdLine[y] says which scanlines
    * of the last raster have a 4x4 version (reset as each line is drawn). */
-  uint32_t *hiresBuffer;
-  uint32_t hiresPitch;
-  uint8_t hiresLine[240];
+  uint32_t *m7hdBuffer;
+  uint32_t m7hdPitch;
+  uint8_t m7hdLine[240];
   /* HD tile replacement: lookup bound by the host (NULL: off) and, per OBJ
    * pixel of the current line, the character that drew it (bit 23 set). */
   PpuHdLookup *hdLookup;
   void *hdCtx;
-  /* Optional 4x emissive plane (same geometry as hiresBuffer): light that
+  /* Optional 4x emissive plane (same geometry as m7hdBuffer): light that
    * replaced art emits, for the host's bloom. Cleared line by line. */
   uint32_t *hdEmissive;
   uint32_t hdSerial, hdPackFrame;
   uint32_t objRef[kPpuBufWidth];
   SnesHdFrame *hdFrame; /* Optional presentation builder; never serialized. */
   SnesHdCapture *hdCapture; /* Optional host-owned lazy publisher. */
+  /* Optional hi-res surface (PpuBindHiresSurface): host memory, never guest
+   * state. hiresLines[y % 240] marks beam lines 1..240. Beginning a new
+   * drawing field clears these marks. Prefer PpuHiresLine to raw indexing. */
+  uint8_t *hiresBuffer;
+  uint32_t hiresPitch;
+  uint8_t hiresLines[240];
+  bool hiresAny;
   /* Optional host picture memory. Drawing only: CPU ports and save states
    * always use vram. The caller owns 32768 words until unbound. */
   const uint16_t *renderVram;
@@ -481,6 +488,9 @@ extern uint8_t g_snes_ppu_dbg_layer_mask;
 #define PPU_objSize(ppu) (ppu->obsel >> 5)
 #define PPU_objTileAdr1(ppu) ((ppu->obsel & 7) << 13)
 #define PPU_objTileAdr2(ppu) (PPU_objTileAdr1(ppu) + (((ppu->obsel & 0x18) + 8) << 9))
+static inline unsigned PpuObjPaletteBase(uint16_t attributes) {
+  return 0x80 + 16 * ((attributes >> 9) & 7);
+}
 
 #define PPU_objPriority(ppu) (ppu->oamaddh & 0x80)
 
@@ -634,9 +644,13 @@ void ppu_runLine(Ppu* ppu, int line);
 /* Native image producers still need the live PPU's line/status work. Omit
  * color rasterization only when the caller owns that line's final pixels. */
 void ppu_runLineState(Ppu* ppu, int line);
+/* BFD picture replay: guest line/status work already ran on the beam.
+ * Draw and publish this captured line without a second hardware-line event. */
+void ppu_renderRasterLine(Ppu *ppu, int line);
 /* Render an immutable caller-owned PPU copy, without recording another live
  * hardware line. Used for explicit reference-image/readback requests. */
 void ppu_drawCapturedLine(Ppu* ppu, int line, bool pixels);
+void ppu_drawInspectionLine(Ppu* ppu, int line, bool pixels);
 
 /* Render a private picture using the ordinary pixel algorithms, without
  * publishing live scanout/debug/write-journal/OAM-history or status effects.
@@ -666,6 +680,10 @@ void ppu_set_vram_write_log_hook(PpuVramWriteLogHook hook);
  * register write with the beam line. A host arms it with ppu_rasterBegin and
  * brackets its render loop with RenderBegin / ApplyLine per line / RenderEnd. */
 void ppu_rasterBegin(Ppu *ppu);
+/* Complete picture journal for CPU/beam-owned HDMA. Includes upload ports
+ * and their read side effects; legacy render-owned hosts keep Begin above. */
+void ppu_rasterBeginPicture(Ppu *ppu);
+bool ppu_rasterReplayReady(void);
 /* Isolated native loaders may change registers/beam time on a scratch
  * timeline. Keep those writes out of the live field replay and write log. */
 void ppu_setGuestScope(bool active);
@@ -819,6 +837,34 @@ void PpuSetWidescreenLineEnhancer(Ppu *ppu,
 void PpuClearOverlayBindings(Ppu *ppu);
 bool PpuBindOverlaySurface(Ppu *ppu, PpuOverlaySource source,
                            uint8_t *pixels, size_t pitch);
+
+// HI-RES SURFACE. In BG modes 5/6 and with pseudo hi-res ($2133 bit 3) each
+// column holds two dots: the sub screen in the even one, the main screen in
+// the odd one. renderBuffer always receives the main screen. A host that
+// binds this surface (passing renderBuffer's pitch; same layout, BGRX) also
+// receives the sub-screen dot of every hi-res line, and can interleave the two
+// into 512 columns. Lines that are not hi-res are not written;
+// PpuHiresLine/PpuHiresFrame say which rows were. renderBuffer is unchanged
+// for a host that binds nothing; with a surface bound, pseudo hi-res lines in
+// modes 0-3 are drawn by the compatibility renderer, which computes both
+// dots. NULL unbinds; reset preserves the binding, like renderBuffer.
+// Emulated state is unchanged.
+//
+// What the sub-screen dot holds: the sub-screen colour as resolved by the
+// compatibility renderer (layers, sub-screen windows, mosaic; an empty sub
+// screen shows the backdrop CGRAM[0], as hardware does in hi-res), at the
+// master brightness. The colour window's clip-to-black and colour math are
+// NOT applied to it. The main dot keeps both; where CGWSEL selects the sub
+// screen as operand, it uses this colour, or the fixed colour where the sub
+// dot is the backdrop. Mesen2 and bsnes also clip and blend the sub dot, but
+// gate it on different columns' window state; that is left for a later
+// change.
+bool PpuBindHiresSurface(Ppu *ppu, uint8_t *pixels, size_t pitch);
+// Row y (1..239) of the current frame was drawn in hi-res into the surface.
+bool PpuHiresLine(const Ppu *ppu, int y);
+// Any row of the current frame was. The marks are cleared when line 1 of the
+// next frame is drawn (a frame-model host never passes line 0).
+bool PpuHiresFrame(const Ppu *ppu);
 
 // Clear per-frame capture policy, then configure an arbitrary screen-space
 // rectangle from BG1-BG4 or OBJ. With RemoveFromGame, pixels inside the rect

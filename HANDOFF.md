@@ -280,26 +280,62 @@ ground uses it. The smooth (xBR) present filter in
 `runner/src/present_filter.*` and `desktop/opengl.c` is also local and
 absent upstream.
 
-SNESRecomp main is 70 commits past the pin (`4348bdb`, November 24). A
-read-only inventory found 71 locally modified and 129 added vendor files.
-Of 35 files changed on both sides, 21 merge textually and 14 need a manual
-merge, `runner/src/desktop/host_main.c` most of all. The range fixes
-SNESRecomp #293 and carries the upstream mosaic fix for #292, which the
-maintainer asked this project to confirm. It also moves save states to
-version 12 and makes `runner.cmake` refuse generated dispatch files without
-`g_aot_resume_count`, so the private native graphs must be regenerated.
-The pin has not been moved.
+SNESRecomp was updated on November 25 from `22c01ef1` to upstream main
+`627b2f27` (96 commits) by a three-way merge of the vendored tree against
+the old pin: 57 files taken from upstream, 37 added, 22 merged textually and
+14 merged by hand (`runner/src/desktop/host_main.c` had 25 hunks). Every
+local runner change listed above was carried: the frame layer, the
+`hd_frame` gate (now also skipped while upstream's hi-res dot scale is 2),
+the xBR present filter, the settings menu and companion keys, the live
+layouts and the controller defaults. `framework_pins.txt` records the new
+pin. `pre-snesrecomp-update-e70229f` is a local tag on the last commit
+before the merge.
+
+Three things to know after the update:
+
+- Upstream added a true hi-res (512-dot) surface under names the Babel 4x
+  Mode 7 buffer already used. The local ones are renamed: `m7hdBuffer`,
+  `m7hdPitch`, `m7hdLine` in the PPU, `g_m7hd_pixels` and
+  `ComposeM7HdFrame` in the host. `hiresBuffer`, `hiresPitch`,
+  `hiresLines` and `ComposeHiresFrame` are upstream's.
+- `runner.cmake` now refuses generated dispatch files without
+  `g_aot_resume_count`, so native graphs made before the update no longer
+  configure. The graph was regenerated with the recorded command of
+  `native-016/graph-world-v1` into `.local/batch-001/sdk-update/graph`
+  (415 roots, 1,339 variants, 1,229 AOT-eligible; before: 1,333 and 1,248).
+  The build directory is `.local/batch-001/sdk-update/build`;
+  `sdk-update/mk.py LABEL [--play]` builds the working tree there and links
+  `visual-fullgame-041/cb-LABEL`. The older `build-tree.py` and
+  `build-play.py` link against the pre-update graph and must not be used
+  for new builds.
+- Save states written by the pre-update builds still load.
+
+Checked against a pre-update build of the same source (`cb-wsl2` against
+`cb-sdk0`): the 198-scene entry survey is identical frame for frame; of 142
+route and staging replays (288,480 frames, including three cold boots, game
+over, the raft, the ending and the credits) 133 are identical and nine differ
+only by a scene finishing its load one or two frames earlier or later, with
+the same sequence of states, scene changes and end positions; 1080p GPU
+captures of a room with the status display and of the play build are
+pixel-identical; the walkable world map draws its ground on the GPU; the
+in-game dialogue page check gives the same result for 27 sampled strings.
+Native code still carries about 99.9 percent of CPU cycles. The ROM-free
+tests pass except `test_native_continuations` and `test_iog_map_controller`,
+which fail the same way before the update; four more need a ROM or a build
+directory and were not run. v42 has not been played by a person.
 
 The current Original test launcher is `Play Original 1.5x Test.cmd` in
 `.local/batch-001/visual-fullgame-009`. It selects `babel-originalv5.exe`.
 The main Original playtest launcher is `Play Original Walkable World Map.cmd` in
-`.local/batch-001/visual-fullgame-010`. Since November 25 it selects
-`visual-fullgame-042/babel-original-v41.exe` (HEAD 7a8a91f, linked with the
-real host rather than the test host) and dialogue pack `dialogue-v71.tsv`,
+`.local/batch-001/visual-fullgame-010`. Since the SNESRecomp update it selects
+`visual-fullgame-043/babel-original-v42.exe` (built by `sdk-update/mk.py
+sdkplay --play`, real host) and dialogue pack `dialogue-v71.tsv`,
 forces the Enhanced world map on (`plainmap` as the first argument turns
 it off) and continues the isolated test profile's save. The profile's mod
 manifest was left as it is, so the enhancement is set by the launcher
-there, not by the in-game toggle. `Play Original v40 Rollback.cmd`
+there, not by the in-game toggle. `Play Original v41 Rollback.cmd` selects
+the last pre-update build, `visual-fullgame-042/babel-original-v41.exe`.
+`Play Original v40 Rollback.cmd`
 selects batch 036's `babel-originalv40kress.exe` and its private cards
 pack. The v41 build ran 620 frames in six scenes and gave a correct 1080p
 world map capture; it has not been played by a person. The test executable has the
@@ -343,7 +379,7 @@ Both visible classroom exits were verified with controller input at 1.5×.
   behavior. Earlier failed receipts remain archived. Keep the private received
   image and integration data local.
 - Continue coherent Retranslation/content integration, remaining rooms and
-  transitions before returning to native gaps. SDK pin 22c01ef1 and the
+  transitions before returning to native gaps. SDK pin 627b2f27 and the
   existing Original native inputs remain in use. The integration preview's
   guest CPU is interpreted. Original and received saves stay isolated.
 

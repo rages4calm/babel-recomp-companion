@@ -44,6 +44,8 @@
 #include "display_aspect.h"
 #include "present_filter.h"
 #include "hd_gpu.h"
+#include "headless_capture.h"
+#include "host_report.h"
 #include "present_shader.h"
 #include "snes_overlay_draw.h"
 #if SNESRECOMP_SDL3
@@ -57,7 +59,14 @@
 static SDL_Window *g_window;
 static uint8 *g_screen_buffer;
 static size_t g_screen_buffer_size;
+static uint8 *g_capture_pixels;
+static size_t g_capture_pixels_size;
+static uint32_t g_capture_frame;
 static int g_draw_width, g_draw_height;
+static int g_horizontal_scale = 1;
+void snesrecomp_opengl_set_horizontal_scale(int scale) {
+  g_horizontal_scale = scale == 2 ? 2 : 1;
+}
 static unsigned int g_program, g_flash_program, g_VAO;
 /* PresentFilter programs (0 if they failed to build: plain program). */
 static unsigned int g_sharp_program, g_smooth_program;
@@ -175,6 +184,10 @@ void snesrecomp_opengl_set_hd(const SnesHdFrame *frame,
 static bool g_want_screenshot;
 static double g_screenshot_flash_start_time = -1.0;
 static const double kScreenshotFlashSeconds = 0.15;
+
+void snesrecomp_opengl_capture_frame(uint32_t frame) {
+  g_capture_frame = frame;
+}
 
 extern void MkDir(const char *s);
 
@@ -307,6 +320,42 @@ static void ApplySwapInterval(void) {
   if (!ok && interval < 0) SDL_GL_SetSwapInterval(1);
 }
 
+static void LogGlContext(SDL_Window *window) {
+  const char *vendor = (const char *)glGetString(GL_VENDOR);
+  const char *renderer = (const char *)glGetString(GL_RENDERER);
+  const char *version = (const char *)glGetString(GL_VERSION);
+  int interval = 0;
+#if SNESRECOMP_SDL3
+  const char *query = SDL_GL_GetSwapInterval(&interval) ? "ok" : "failed";
+#else
+  interval = SDL_GL_GetSwapInterval();
+  const char *query = "sdl2-value";
+#endif
+#if SNESRECOMP_SDL3
+  SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+  const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(display);
+#else
+  int display = SDL_GetWindowDisplayIndex(window);
+  SDL_DisplayMode current_mode;
+  const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(display, &current_mode) == 0
+      ? &current_mode : NULL;
+#endif
+  const char *display_name = SDL_GetDisplayName(display);
+  host_report_breadcrumb("video GL display: %s width=%d height=%d refresh_hz=%.3f",
+      display_name ? display_name : "<unavailable>", mode ? mode->w : 0,
+      mode ? mode->h : 0, mode ? (double)mode->refresh_rate : 0.0);
+  unsigned long long flags = (unsigned long long)SDL_GetWindowFlags(window);
+  host_report_breadcrumb("video GL vendor: %s", vendor ? vendor : "<unavailable>");
+  host_report_breadcrumb("video GL renderer: %s", renderer ? renderer : "<unavailable>");
+  host_report_breadcrumb("video GL version: %s", version ? version : "<unavailable>");
+  host_report_breadcrumb("video GL window: swap_interval=%d swap_query=%s "
+      "window_flags=0x%llx visible=%u minimized=%u focused=%u",
+      interval, query, flags,
+      (flags & SDL_WINDOW_HIDDEN) ? 0u : 1u,
+      (flags & SDL_WINDOW_MINIMIZED) ? 1u : 0u,
+      (flags & SDL_WINDOW_INPUT_FOCUS) ? 1u : 0u);
+}
+
 static void LoadShaderFromConfig(void) {
   const char *want = g_config.shader ? g_config.shader : "";
   if (g_shader_resolved && strcmp(want, g_shader_path) == 0)
@@ -344,6 +393,7 @@ static bool OpenGLRenderer_Init(SDL_Window *window) {
     DeleteGlContext(g_context); g_context = NULL;
     return false;
   }
+  LogGlContext(window);
 
   if (kDebugFlag && !g_gles) {
     glEnable(GL_DEBUG_OUTPUT);
@@ -488,6 +538,7 @@ static void OpenGLRenderer_Destroy(void) {
   snes_ovl_frame_layer_enable(0);
   if (g_layer_texture) { glDeleteTextures(1, &g_layer_texture); g_layer_texture = 0; }
   free(g_screen_buffer); g_screen_buffer = NULL; g_screen_buffer_size = 0;
+  free(g_capture_pixels); g_capture_pixels = NULL; g_capture_pixels_size = 0;
   DeleteGlContext(g_context); g_context = NULL;
 }
 
@@ -683,6 +734,31 @@ static void OpenGLRenderer_BeginDraw(int width, int height, uint8 **pixels, int 
   *pitch = width * 4;
 }
 
+static void CaptureBackBuffer(int width, int height, uint32_t frame) {
+  int wanted_width, wanted_height;
+  HeadlessCapture_OutputSize(&wanted_width, &wanted_height);
+  if (width == wanted_width && height == wanted_height) {
+    const size_t bytes = (size_t)width * (size_t)height * 4;
+    if (bytes > g_capture_pixels_size) {
+      uint8 *grown = realloc(g_capture_pixels, bytes);
+      if (grown) {
+        g_capture_pixels = grown;
+        g_capture_pixels_size = bytes;
+      }
+    }
+    if (g_capture_pixels_size >= bytes) {
+      glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, g_capture_pixels);
+      if (glGetError() == GL_NO_ERROR) {
+        const int pitch = width * 4;
+        HeadlessCapture_Present(g_capture_pixels + bytes - pitch, -pitch,
+                               width, height, 0, 0, width, height, frame);
+        return;
+      }
+    }
+  }
+  HeadlessCapture_Present(NULL, 0, 0, 0, 0, 0, 0, 0, frame);
+}
+
 static void OpenGLRenderer_EndDraw(void) {
   int drawable_width, drawable_height;
 
@@ -692,13 +768,14 @@ static void OpenGLRenderer_EndDraw(void) {
    * all three pixel aspects the config offers, and centres on both axes. */
   SnesDisplayViewport viewport;
   SnesDisplayAspect_ComputeViewport(
-      g_draw_width, g_draw_height, drawable_width, drawable_height,
+      g_draw_width / g_horizontal_scale, g_draw_height, drawable_width, drawable_height,
       SnesDisplayAspect_ForPresent(g_config.display_aspect),
       (g_config.ignore_aspect_ratio && !g_present_square_pixels) || g_present_square_pixels == 2,
       false, &viewport);
 
   if (g_compute_viewport)
-    g_compute_viewport(g_draw_width, g_draw_height, drawable_width, drawable_height, &viewport);
+    g_compute_viewport(g_draw_width / g_horizontal_scale, g_draw_height,
+                       drawable_width, drawable_height, &viewport);
 
   GlTextureWithSize image = g_texture;
   SnesHdGpuImage hd_image;
@@ -766,6 +843,13 @@ static void OpenGLRenderer_EndDraw(void) {
    * layer into the frame itself while one is loaded. */
   snes_ovl_frame_layer_enable(FrameLayerUsable());
   { const uint32_t *unused; int w, h, rect[4]; snes_ovl_frame_layer_take(&unused, &w, &h, rect); }
+
+  if (g_capture_frame) {
+    const uint32_t frame = g_capture_frame;
+    g_capture_frame = 0;
+    if (HeadlessCapture_FrameWanted(frame))
+      CaptureBackBuffer(drawable_width, drawable_height, frame);
+  }
 
 #if SNESRECOMP_TOUCH_PAD
   DrawTouchPad(drawable_width, drawable_height);

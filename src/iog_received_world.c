@@ -122,7 +122,7 @@ static void Detach(Ppu *p) {
   p->hdCtx = NULL;
   p->hdFrame = NULL;
   p->hdCapture = NULL;
-  p->hiresBuffer = NULL;
+  p->m7hdBuffer = NULL;
   p->hdEmissive = NULL;
   p->widescreenLineEnhancer = NULL;
   p->widescreenLineEnhancerContext = NULL;

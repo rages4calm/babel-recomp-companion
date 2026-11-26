@@ -8,11 +8,13 @@ CC="${CC:-gcc}"
 mkdir -p "$OUT"
 
 LAUNCHER_LIBS=""
+NET_LIBS=""
 GC_SECTIONS_LINKER="-Wl,--gc-sections"
 FIBER_PLATFORM_FLAGS=""
 case "$(uname -s)" in
     Darwin) GC_SECTIONS_LINKER="-Wl,-dead_strip"; FIBER_PLATFORM_FLAGS="-Wno-error=deprecated-declarations" ;;
-    MINGW*|MSYS*) LAUNCHER_LIBS="-lcomdlg32" ;;
+    # NET_LIBS: Winsock, the route table (rnet_platform.c) and BCryptGenRandom.
+    MINGW*|MSYS*) LAUNCHER_LIBS="-lcomdlg32"; NET_LIBS="-lws2_32 -liphlpapi -lbcrypt" ;;
 esac
 
 echo "=== launcher ==="
@@ -86,6 +88,34 @@ echo "=== PPU modes 4-6 fall back to the compatibility renderer ==="
 "$CC" -std=c11 -Wall -Wextra -O1     -DSNESRECOMP_REVERSE_DEBUG=0     -I "$ROOT/runner/src" -I "$ROOT/runner/src/snes"     "$ROOT/tests/ppu/ppu_hires_mode_test.c"     "$ROOT/runner/src/snes/hd_jobs.c" "$ROOT/runner/src/snes/ppu.c"     "$ROOT/runner/src/snes/ppu_legacy.c"     -lm -o "$OUT/ppu_hires_mode_test"
 "$OUT/ppu_hires_mode_test"
 
+echo "=== PPU hi-res surface (sub-screen column of modes 5/6 and pseudo hi-res) ==="
+"$CC" -std=c11 -Wall -Wextra -O1 \
+    -DSNESRECOMP_REVERSE_DEBUG=0 \
+    -I "$ROOT/runner/src" -I "$ROOT/runner/src/snes" \
+    "$ROOT/tests/ppu/ppu_hires_surface_test.c" \
+    "$ROOT/runner/src/snes/hd_jobs.c" "$ROOT/runner/src/snes/ppu.c" \
+    "$ROOT/runner/src/snes/ppu_legacy.c" \
+    -lm -o "$OUT/ppu_hires_surface_test"
+"$OUT/ppu_hires_surface_test"
+
+echo "=== PPU hi-res surface (native Mode7 line) ==="
+"$CC" -std=c11 -Wall -Wextra -O1 \
+    -DSNESRECOMP_REVERSE_DEBUG=0 -DSNESRECOMP_LEGACY_MODE7_NATIVE=1 \
+    -I "$ROOT/runner/src" -I "$ROOT/runner/src/snes" \
+    "$ROOT/tests/ppu/ppu_hires_surface_test.c" \
+    "$ROOT/runner/src/snes/hd_jobs.c" "$ROOT/runner/src/snes/ppu.c" \
+    "$ROOT/runner/src/snes/ppu_legacy.c" \
+    -lm -o "$OUT/ppu_hires_surface_native_mode7_test"
+"$OUT/ppu_hires_surface_native_mode7_test"
+
+echo "=== PPU mosaic source grid at clipped window edges ==="
+"$CC" -std=c11 -Wall -Wextra -O1 -DSNESRECOMP_REVERSE_DEBUG=0 \
+    -I "$ROOT/runner/src" -I "$ROOT/runner/src/snes" \
+    "$ROOT/tests/ppu/ppu_mosaic_window_test.c" \
+    "$ROOT/runner/src/snes/hd_jobs.c" "$ROOT/runner/src/snes/ppu_legacy.c" \
+    -lm -o "$OUT/ppu_mosaic_window_test"
+"$OUT/ppu_mosaic_window_test"
+
 echo "=== PPU sprite priority against BG1/BG2 in modes 1-3 ==="
 "$CC" -std=c11 -Wall -Wextra -O1     -DSNESRECOMP_REVERSE_DEBUG=0     -I "$ROOT/runner/src" -I "$ROOT/runner/src/snes"     "$ROOT/tests/ppu/ppu_obj_priority_test.c"     "$ROOT/runner/src/snes/hd_jobs.c" "$ROOT/runner/src/snes/ppu.c"     "$ROOT/runner/src/snes/ppu_legacy.c"     -lm -o "$OUT/ppu_obj_priority_test"
 "$OUT/ppu_obj_priority_test"
@@ -123,7 +153,16 @@ echo "=== HD Mode 7 sampling and composition ==="
 
 echo "=== PPU raster journal ==="
 "$CC" -std=c11 -Wall -Wextra -O1     -DSNESRECOMP_REVERSE_DEBUG=0     -I "$ROOT/runner/src" -I "$ROOT/runner/src/snes"     "$ROOT/tests/ppu/ppu_raster_journal_test.c"     "$ROOT/runner/src/snes/hd_jobs.c" "$ROOT/runner/src/snes/ppu.c"     "$ROOT/runner/src/snes/ppu_legacy.c"     -lm -o "$OUT/ppu_raster_journal_test"
+
 "$OUT/ppu_raster_journal_test"
+
+echo "=== complete beam picture memory and port replay ==="
+"$CC" -std=c11 -Wall -Wextra -O1 -DSNESRECOMP_REVERSE_DEBUG=0 \
+    -I "$ROOT/runner/src" -I "$ROOT/runner/src/snes" \
+    "$ROOT/tests/ppu/ppu_picture_journal_test.c" \
+    "$ROOT/runner/src/snes/hd_jobs.c" "$ROOT/runner/src/snes/ppu.c" \
+    "$ROOT/runner/src/snes/ppu_legacy.c" -lm -o "$OUT/ppu_picture_journal_test"
+"$OUT/ppu_picture_journal_test"
 
 echo "=== DMA / HDMA ==="
 # sdd1.c is upstream's vendored S-DD1 decoder and is not -Werror clean here:
@@ -154,6 +193,16 @@ echo "=== DMA / HDMA ==="
     "$ROOT/runner/src/snes/sdd1.c" \
     $GC_SECTIONS_LINKER -o "$OUT/hdma_timing_test"
 "$OUT/hdma_timing_test"
+
+echo "=== live HDMA CPU stalls and mid-field channel/table changes ==="
+"$CC" -std=c11 -Wall -Wextra -O1 -DSNESRECOMP_REVERSE_DEBUG=0 \
+    -ffunction-sections -fdata-sections \
+    -I "$ROOT/tests/dma" -I "$ROOT/runner/src" -I "$ROOT/runner/src/snes" \
+    "$ROOT/tests/dma/hdma_cpu_stall_test.c" \
+    "$ROOT/runner/src/snes/dma.c" "$ROOT/runner/src/snes/snes.c" \
+    "$ROOT/runner/src/snes/sdd1.c" \
+    $GC_SECTIONS_LINKER -o "$OUT/hdma_cpu_stall_test"
+"$OUT/hdma_cpu_stall_test"
 
 echo "=== fiber snapshot (rewindable execution position) ==="
 # Darwin exposes the POSIX context API but marks it deprecated.
@@ -444,7 +493,7 @@ echo "=== SNES lobby caps (widescreen keys over recomp-net's client) ==="
     "$ROOT/lib/recomp-net/src/nat/rnet_host_ice.c" \
     "$ROOT/lib/recomp-net/src/nat/rnet_sig_hold.c" \
     "$ROOT/lib/recomp-net/src/lobby/rnet_ice_rtt.c" \
-    -o "$OUT/snes_lobby_caps_test"
+    $NET_LIBS -o "$OUT/snes_lobby_caps_test"
 "$OUT/snes_lobby_caps_test"
 
 echo "=== keybinds: the runner-layout keyboard word ==="
@@ -460,13 +509,18 @@ elif pkg-config --exists sdl2 2>/dev/null; then
     KB_SDL_LIBS="$(pkg-config --libs sdl2)"
 fi
 if [ -n "$KB_SDL_LIBS" ]; then
-    "$CC" -std=c11 -Wall -Wextra -O1 $KB_SDL_DEF $KB_SDL_CFLAGS \
+    # SDL_MAIN_HANDLED: as for config.ini below, and for keybinds.c too, which
+    # is built with the same flags. On Windows sdl2.pc renames main to
+    # SDL_main and SDL_main.h declares SDL_main(int, char **), which clashes
+    # with these harnesses' int main(void); handled, it does not, and
+    # SDL2main's WinMain still calls it.
+    "$CC" -std=c11 -Wall -Wextra -O1 -DSDL_MAIN_HANDLED $KB_SDL_DEF $KB_SDL_CFLAGS \
         -I "$ROOT/runner/src" \
         "$ROOT/tests/joypad/keybinds_runner_layout_test.c" \
         "$ROOT/runner/src/keybinds.c" \
         $KB_SDL_LIBS -o "$OUT/keybinds_runner_layout_test"
     ( cd "$OUT" && ./keybinds_runner_layout_test )
-    "$CC" -std=c11 -Wall -Wextra -O1 $KB_SDL_DEF $KB_SDL_CFLAGS \
+    "$CC" -std=c11 -Wall -Wextra -O1 -DSDL_MAIN_HANDLED $KB_SDL_DEF $KB_SDL_CFLAGS \
         -I "$ROOT/runner/src" \
         "$ROOT/tests/joypad/keybinds_appimage_test.c" \
         "$ROOT/runner/src/keybinds.c" \
@@ -574,6 +628,15 @@ if [ -f "$RECOMP_UI_SRC/recomp_launcher.h" ]; then
         "$ROOT/runner/src/rom_identity.c" "$ROOT/runner/src/sha1.c" \
         -o "$OUT/mod_exclusive_plugin_test"
     "$OUT/mod_exclusive_plugin_test" "$OUT/mod_exclusive_plugin_fixture"
+    "${CXX:-g++}" -std=c++17 -Wall -Wextra -O1 -DRECOMP_LAUNCHER \
+        -I "$ROOT/runner/src" -I "$RECOMP_UI_SRC" \
+        "$ROOT/tests/mod_resources/msu_file_selection_test.cpp" \
+        -x c++ "$ROOT/runner/src/mod_runtime.cpp" \
+        "$ROOT/runner/src/sha256.c" "$ROOT/runner/src/snes/tier2_capture.c" \
+        "$ROOT/runner/src/crc32.c" \
+        "$ROOT/runner/src/rom_identity.c" "$ROOT/runner/src/sha1.c" \
+        -o "$OUT/mod_msu_file_selection_test"
+    "$OUT/mod_msu_file_selection_test" "$OUT/mod_msu_file_selection_fixture"
 else
     echo "  (skipped: no recomp-ui; set RECOMP_UI_DIR)"
 fi
@@ -596,7 +659,8 @@ elif pkg-config --exists sdl2 2>/dev/null; then
 fi
 if [ -n "$OSD_SDL_LIBS" ]; then
     # shellcheck disable=SC2086
-    "$CC" -std=c11 -Wall -Wextra -O1 \
+    # SDL_MAIN_HANDLED: as for the keybinds harnesses (main() on Windows).
+    "$CC" -std=c11 -Wall -Wextra -O1 -DSDL_MAIN_HANDLED \
         -I "$ROOT/runner/src" -I "$ROOT/runner/src/desktop" \
         $OSD_SDL_CFLAGS $OSD_SDL_BACKEND \
         "$ROOT/tests/osd/osd_test.c" \
@@ -616,7 +680,7 @@ echo "=== account secret path (rebuild must not sign you out) ==="
     "$ROOT/lib/recomp-net/src/auth/rnet_open_url.c" \
     "$ROOT/lib/recomp-net/src/auth/rnet_sha256.c" \
     "$ROOT/lib/recomp-net/src/platform/rnet_platform.c" \
-    -lpthread -o "$OUT/secret_path_test"
+    -lpthread $NET_LIBS -o "$OUT/secret_path_test"
 "$OUT/secret_path_test"
 
 echo "=== rewind ring (ordering, clamping, what commit discards) ==="
@@ -681,8 +745,11 @@ echo "=== Super FX PC hooks ==="
 
 # Both include common_rtl.c whole; -fwhole-program drops the host entry
 # points they do not exercise instead of linking the full runtime. Its
-# desktop config header needs SDL headers, not the library.
-RTL_UNIT_FLAGS="$(pkg-config --cflags sdl2) -std=c11 -O2 -flto -fwhole-program -ffunction-sections -fdata-sections -DSNESRECOMP_TRACE=0 -D_POSIX_C_SOURCE=200809L -I $ROOT/runner/src/desktop -I $ROOT/runner/src"
+# desktop config header needs SDL headers, not the library. -Umain undoes the
+# -Dmain=SDL_main that sdl2.pc carries on Windows (no SDL2main is linked here
+# to call SDL_main); SDL_MAIN_HANDLED keeps SDL_main.h from renaming main()
+# again.
+RTL_UNIT_FLAGS="$(pkg-config --cflags sdl2) -Umain -DSDL_MAIN_HANDLED -std=c11 -O2 -flto -fwhole-program -ffunction-sections -fdata-sections -DSNESRECOMP_TRACE=0 -D_POSIX_C_SOURCE=200809L -I $ROOT/runner/src/desktop -I $ROOT/runner/src"
 
 echo "=== audio delivery + console reset ==="
 "$CC" $RTL_UNIT_FLAGS "$ROOT/tests/audio_delivery_test.c" \

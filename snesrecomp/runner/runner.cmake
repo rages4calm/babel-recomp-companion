@@ -1,13 +1,9 @@
-# Qualified on Windows x64; retain the reference default on other targets.
-# An explicit cache selection always wins, including an existing LLE build.
-set(_SNESRECOMP_FRAME_DEFAULT "LLE")
+# Native HLE is the default on every host. An explicit reference selection
+# remains available for accuracy work; never choose it just from the host ABI.
+set(_SNESRECOMP_FRAME_DEFAULT "HLE")
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _SNESRECOMP_FRAME_PROCESSOR)
-if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND
-   _SNESRECOMP_FRAME_PROCESSOR MATCHES "^(amd64|x86_64|x64)$")
-    set(_SNESRECOMP_FRAME_DEFAULT "HLE")
-endif()
 set(SNESRECOMP_FRAME_IMPL "${_SNESRECOMP_FRAME_DEFAULT}" CACHE STRING
-    "Desktop frame composition (LLE or HLE; Windows x64 defaults to HLE)")
+    "Desktop frame composition (LLE or HLE; defaults to HLE)")
 set_property(CACHE SNESRECOMP_FRAME_IMPL PROPERTY STRINGS LLE HLE)
 if(NOT SNESRECOMP_FRAME_IMPL MATCHES "^(LLE|HLE)$")
     message(FATAL_ERROR "SNESRECOMP_FRAME_IMPL must be LLE or HLE")
@@ -16,12 +12,11 @@ set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/src/desktop/host_main.c"
     APPEND PROPERTY COMPILE_DEFINITIONS
     SNESRECOMP_FRAME_STAGING_HLE=$<STREQUAL:${SNESRECOMP_FRAME_IMPL},HLE>)
 message(STATUS "SNES desktop frame composition: ${SNESRECOMP_FRAME_IMPL}")
-# Game-by-game qualification covers Windows x64. Other targets keep the
-# portable reference defaults; both implementations remain selectable.
-set(_SNESRECOMP_APU_DEFAULT "LLE")
+# Portable native audio is independent of the host-specific CRC choice.
+set(_SNESRECOMP_APU_DEFAULT "NATIVE")
 set(_SNESRECOMP_CRC_DEFAULT "BYTE")
-if(_SNESRECOMP_FRAME_DEFAULT STREQUAL "HLE")
-    set(_SNESRECOMP_APU_DEFAULT "NATIVE")
+if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND
+   _SNESRECOMP_FRAME_PROCESSOR MATCHES "^(amd64|x86_64|x64)$")
     set(_SNESRECOMP_CRC_DEFAULT "SLICE8")
 endif()
 set(SNESRECOMP_APU_TIME_IMPL "${_SNESRECOMP_APU_DEFAULT}" CACHE STRING
@@ -34,7 +29,7 @@ set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/src/snes/apu.c"
     APPEND PROPERTY COMPILE_DEFINITIONS
     SNESRECOMP_APU_NATIVE=$<STREQUAL:${SNESRECOMP_APU_TIME_IMPL},NATIVE>)
 message(STATUS "SNES audio time advancement: ${SNESRECOMP_APU_TIME_IMPL}")
-set(SNESRECOMP_DSP_MIX_IMPL "LLE" CACHE STRING "DSP voice mixing (LLE or NATIVE)")
+set(SNESRECOMP_DSP_MIX_IMPL "NATIVE" CACHE STRING "DSP voice mixing (LLE or NATIVE)")
 set_property(CACHE SNESRECOMP_DSP_MIX_IMPL PROPERTY STRINGS LLE NATIVE)
 if(NOT SNESRECOMP_DSP_MIX_IMPL MATCHES "^(LLE|NATIVE)$")
     message(FATAL_ERROR "SNESRECOMP_DSP_MIX_IMPL must be LLE or NATIVE")
@@ -296,6 +291,7 @@ set(SNESRECOMP_RUNNER_SOURCES
     ${SNESRECOMP_RUNNER_ROOT}/src/diagnostics/trace_writer.c
     ${SNESRECOMP_RUNNER_ROOT}/src/diagnostics/replay_writer.c
     ${SNESRECOMP_RUNNER_ROOT}/src/host_args.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/desktop/headless_capture.c
     ${SNESRECOMP_RUNNER_ROOT}/src/launcher.c
     ${SNESRECOMP_RUNNER_ROOT}/src/launcher_cache.c
     ${SNESRECOMP_RUNNER_ROOT}/src/launcher_picker.c
@@ -338,6 +334,7 @@ set(SNESRECOMP_RUNNER_SOURCES
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/cart.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/cpu.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/dma.c
+    ${SNESRECOMP_RUNNER_ROOT}/src/snes/last_cycle.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/dsp.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/dsp_clock.c
     ${SNESRECOMP_RUNNER_ROOT}/src/snes/dsp1.c
@@ -410,10 +407,9 @@ endif()
 # reproducing a player's bug report.
 #
 # Vocabulary is recomp-ai-rules/OPTIMIZATION.md Â§2: off|on|force|verify|auto.
-# Dev builds want "off" (prove the floor). A port flips its release default to
-# "on" only after a replacement has cleared its promotion gates â€” and there is
-# nothing to promote until a port actually has an optimized path.
-set(SNESRECOMP_EXECUTION_DEFAULT "off" CACHE STRING
+# Development and release builds use native HLE by default. Required
+# provider gaps must be reported and fixed, not hidden by an old default.
+set(SNESRECOMP_EXECUTION_DEFAULT "on" CACHE STRING
     "Default execution policy: off|on|force|verify|auto (runtime-overridable)")
 set_property(CACHE SNESRECOMP_EXECUTION_DEFAULT PROPERTY STRINGS
     off on force verify auto)
@@ -1053,6 +1049,20 @@ function(snesrecomp_target_generated_code target gen_dir)
                 "A setup host must be built from a tree WITHOUT generated code, "
                 "so the zip cannot carry ROM-derived output by accident. Remove "
                 "${gen_dir}/*.c (and recomp/funcs.h) or configure without the option.")
+        endif()
+        set(_dispatch "${gen_dir}/dispatch_v2.c")
+        if(EXISTS "${_dispatch}")
+            # Every current v2 dispatcher defines this count, even when the
+            # program has no native continuations.
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_dispatch}")
+            file(STRINGS "${_dispatch}" _resume_count LIMIT_COUNT 1
+                REGEX "^const unsigned g_aot_resume_count[ \t]*=")
+            if(NOT _resume_count)
+                message(FATAL_ERROR
+                    "${_dispatch} was generated for an older snesrecomp runtime.\n"
+                    "Run bash tools/regen.sh with your verified ROM using the current "
+                    "snesrecomp checkout, then configure and build again.")
+            endif()
         endif()
         target_sources(${target} PRIVATE ${_gen_sources})
         # Generated C is machine output: it is not held to the runner's

@@ -1620,7 +1620,7 @@ static void Detach(Ppu *p)
 {
     p->renderBuffer=(uint8_t*)s.row; p->renderPitch=256*4;
     p->renderVram=NULL; p->hdLookup=NULL;p->hdCtx=NULL;p->hdFrame=NULL;
-    p->hdCapture=NULL;p->hiresBuffer=NULL;p->hdEmissive=NULL;
+    p->hdCapture=NULL;p->m7hdBuffer=NULL;p->hdEmissive=NULL;
     p->widescreenLineEnhancer=NULL;p->widescreenLineEnhancerContext=NULL;
     p->extraObjects=NULL;p->extraObjectCount=0;
     p->renderFlags=0;

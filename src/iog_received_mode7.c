@@ -40,7 +40,7 @@ static void Detach(Ppu *p)
 {
     p->renderBuffer=(uint8_t *)m.row;p->renderPitch=sizeof m.row;
     p->renderVram=NULL;p->hdLookup=NULL;p->hdCtx=NULL;p->hdFrame=NULL;
-    p->hdCapture=NULL;p->hiresBuffer=NULL;p->hdEmissive=NULL;
+    p->hdCapture=NULL;p->m7hdBuffer=NULL;p->hdEmissive=NULL;
     p->widescreenLineEnhancer=NULL;p->widescreenLineEnhancerContext=NULL;
     p->extraObjects=NULL;p->extraObjectCount=0;p->renderFlags=0;
     PpuClearOverlayBindings(p);PpuClearOverlayCaptures(p);

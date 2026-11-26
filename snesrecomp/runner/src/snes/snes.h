@@ -46,6 +46,17 @@ struct Snes {
   // Host read scope, not guest state. The caller has charged this access to
   // its master clock; HVBJOY must not add the legacy polling advance too.
   bool cpuReadClocked;
+  /* Transient recursion guard while a live event charges the host CPU.
+   * Never survives a synchronization call or belongs in a snapshot. */
+  bool cpuClockSyncing;
+  /* Host ownership: beam evaluates live PPU line/status state for BFD;
+   * its later picture replay must not become another hardware scanline. */
+  bool ppuBeamState;
+
+  // Field parity: toggles each time the beam wraps to V=0, false after reset.
+  // Line 240 of a field with it set is the short line (snes.c). Serialized
+  // explicitly in RTLS v12, outside the frozen hPos..divideResult blob.
+  bool fieldParity;
 
   // Host timing anchor; excluded from savestates and reconciled after load.
   uint64_t beamMasterLast;
@@ -139,7 +150,16 @@ uint32_t snes_saveload_get_version(void);
 void snes_saveload(Snes *snes, SaveLoadInfo *sli);
 void snes_catchupApu(Snes *snes);
 void snes_advance_master_cycles(Snes *snes, uint32_t clocks);
+/* CPU execution observer: live beam-owned HDMA charges the installed host
+ * clock hook and walks its additional elapsed time. The raw advance above
+ * instead walks an already-accounted physical interval. */
 void snes_sync_master_clock(Snes *snes, uint64_t master_clock);
+/* Walk physical waiting time without charging stalls again: WAI/idle parks
+ * already include the interval during which HDMA holds the CPU bus. */
+void snes_sync_master_clock_parked(Snes *snes, uint64_t master_clock);
+/* Settle executed CPU time up to a physical field boundary. New HDMA stalls
+ * are charged to the CPU but remain beam debt beyond that boundary. */
+void snes_sync_master_clock_boundary(Snes *snes, uint64_t master_clock);
 /* Scope an independently clocked CPU read. Restore the returned value after
  * dispatch. The caller must synchronize the beam to the charged read clock;
  * ReadRegOpenBus does this for HVBJOY when this scope is active. */
@@ -163,6 +183,7 @@ void snes_set_master_clock_charge_hook(SnesMasterClockChargeHook hook);
 void snes_set_wram_write_log_hook(SnesWramWriteLogHook hook);
 /* Next comparator edge for hosts that deliver each raster IRQ separately. */
 void snes_set_hdma_beam_enabled(Snes *snes, bool enabled);
+void snes_set_ppu_beam_enabled(Snes *snes, bool enabled);
 /* Raster-IRQ ownership. A frame-model host that runs the CPU half of a frame
  * first and then delivers every H/V IRQ from its own raster walk, at the line
  * the comparator names, owns the comparator: the CPU-half beam must not ALSO
@@ -193,7 +214,18 @@ uint32_t snes_master_clocks_until_irq(const Snes *snes);
  * frame boundary on the PPU's field boundary. See the implementation. */
 uint32_t snes_master_clocks_until_line(const Snes *snes, uint32_t line);
 
-/* Freeze (1) / release (0) the beam across an IRQ handler dispatch â€” see the
+/* Master clocks line v lasts in a field whose fieldParity is `parity`: 1364,
+ * or 1360 for the short line 240 (SNESRECOMP_SHORT_LINE). A field's parity
+ * is snes->fieldParity from its V=225 until the beam wraps to V=0. */
+uint32_t snes_line_clocks(const Snes *snes, uint32_t v, bool parity);
+
+/* DRAM refresh at the beam (SNESRECOMP_REFRESH_AT_BEAM): 40 master clocks at
+ * a fixed H of every line, charged per point the CPU crosses. */
+bool snes_refresh_at_beam(void);
+/* The first refresh point after master clock `after`. */
+uint64_t snes_next_refresh(const Snes *snes, uint64_t after);
+
+/* Freeze (1) / release (0) the beam across an IRQ handler dispatch — see the
  * comment on the implementation. The host's frame loop brackets
  * interp_bridge_run_interrupt with this for raster IRQs. */
 void snes_beam_hold(int hold);
