@@ -34,14 +34,6 @@ label = "Y"
 value = "X"
 label = "X"
 
-[[option.choice]]
-value = "L"
-label = "L"
-
-[[option.choice]]
-value = "R"
-label = "R"
-
 [[plugin]]
 feature = "run"
 id = "iog.run"

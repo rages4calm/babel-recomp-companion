@@ -94,7 +94,8 @@ static void ActivateRun(void)
 {
     char v[16] = "Y";
     snes_mod_runtime_feature_option_value_c("iog.enhancements", "run", "button", v, sizeof(v));
-    g_run_mask = !strcmp(v, "X") ? kPadX : !strcmp(v, "L") ? kPadL : !strcmp(v, "R") ? kPadR : kPadY;
+    /* L and R are the game's guard, which locks the dash; they are not offered. */
+    g_run_mask = !strcmp(v, "X") ? kPadX : kPadY;
     snes_mod_register_frame_callback(RunFrame);
 }
 
@@ -245,6 +246,7 @@ static void ActivateDp(void)
     IogCheatsMarkUsed();
     SnesRa_SetBlocked(kRaCheats);
     g_min_dp = (uint16_t)OptionInt("iog.cheats", "dp", "amount", 99);
+    if (g_min_dp > 999) g_min_dp = 999;   /* the game's own ceiling */
     g_cheat_dp = 1;
 }
 
@@ -253,8 +255,11 @@ static void ActivateStats(void)
     IogCheatsMarkUsed();
     SnesRa_SetBlocked(kRaCheats);
     g_min_str = (uint16_t)OptionInt("iog.cheats", "stats", "strength", 0);
+    if (g_min_str > 99) g_min_str = 99;   /* the game's own ceiling */
     g_min_def = (uint16_t)OptionInt("iog.cheats", "stats", "defense", 0);
+    if (g_min_def > 99) g_min_def = 99;   /* the game's own ceiling */
     g_min_maxhp = (uint16_t)OptionInt("iog.cheats", "stats", "max_hp", 0);
+    if (g_min_maxhp > 40) g_min_maxhp = 40;   /* the game's own ceiling */
     g_cheat_stats = 1;
 }
 

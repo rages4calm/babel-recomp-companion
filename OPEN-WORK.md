@@ -1,7 +1,7 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 25,
-2026 (commit `389e213`, tester build `v0.2.0-beta.2`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.3`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
@@ -28,7 +28,7 @@ played it.
   finding out why before choosing targets. The regenerated graph has 1,229
   AOT-eligible variants; the old one had 1,248.
 
-## The tester build (`v0.2.0-beta.2`)
+## The tester build (`v0.2.0-beta.3`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot
@@ -58,6 +58,32 @@ played it.
   to do himself.
 - **`docs/ROMATLAS-PLAN.md`** contains a local user path. It is already
   public in the repository and no longer ships in the zip.
+
+## Cheats and conveniences
+
+All eleven launcher options were run in the game on and off, against their
+help text (evidence in `visual-fullgame-041/cheatcheck`). Nine work as
+described. Two faults were fixed afterwards and not rerun: the run button's L
+and R choices never ran (they are the game's guard) and were removed; the
+game now caps minimum stats, max HP and DP itself instead of trusting the
+launcher. Still open or untested:
+
+- **Hold to advance with nothing equipped:** holding the item button keeps
+  dismissing and reopening "You're not equipped." Not fixed.
+- **Hold to advance** when a question arrives during held paging: not covered.
+- **Room rewards** on boss clears, and the New Game+, randomizer and
+  Apocalypse blocks: not run. The tested clears had the enemy counter set to 1
+  before a real kill.
+- **Stacking** for jewels handed to Gem and crystals in use: only herbs were
+  consumed for real.
+- **Enhanced world map:** "control sooner after leaving a town" not measured.
+- **Quick item selection** with a menu open, past the ends of the list, and
+  the Y and Select modifier choices: not run.
+- **Changing cheats from the in-game settings** during play, and "switching
+  off does not lower stats": not run.
+- **Wide view off with `Widescreen = 0`** in the config: not run.
+- **Launcher Input page:** Button prompts round-trips in tests and the page
+  was rendered and looked at; it was not clicked by hand.
 
 ## Widescreen and renderer
 
