@@ -352,7 +352,7 @@ Three things to know after the update:
   the four. `OPEN-WORK.md` has the measurements.
   The same day the native step set grew by 8,494 contexts: the build
   directory's `IOG_NATIVE_EFFECTS_SOURCE` is now
-  `sdk-update/ext4/effects/native_continuations.c` (`ext3` plus interrupt grants from `grant.py`; before:
+  `sdk-update/ext5/effects/native_continuations.c` (`ext4`, which had the interrupt grants from `grant.py`, plus 996 contexts from the owner's first diagnostics; before:
   `visual-fullgame-035/native/kress-next-effects`). `sdk-update/extend.py
   RESIDUAL.json OUTDIR [BASE-CONTEXTS]` makes the next one.
   The build directory is `.local/batch-001/sdk-update/build`;
