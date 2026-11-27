@@ -38,6 +38,31 @@ added. These definitions are not yet a shipped, stable achievement edition.
 | Red Jewels | Same function; `src/iog_inventory.c` stack stores: BCD `$0AB0`, item `$01` in `$0AB4..$0AC3`, stacked extras `$0B56` | Invalid BCD or total above 50 rejects the snapshot; handing jewels to Gem does not count twice |
 | Ending | Babel NG+ route: epilogue scene `$E5`, terminal END scene `$F0`, current scene `$0644` | Requires observing transition into epilogue and then END in the same generation; no normal gameplay-ready requirement at END |
 
+Catalog version 2 adds nine optional secrets. Eight are event flags
+(flag n is bit n&7 of `$0A00 + n/8`), each set by exactly one script in the
+USA disassembly and cleared by none; `secret.<name>` fires once when the flag
+is seen going from clear to set between two in-play observations of one
+generation. A flag already set at a baseline never fires, and a set flag
+seen clear again (a rewind) rebaselines silently.
+
+| Achievement | Signal | Only writer |
+|---|---|---|
+| A Strange Teapot | flag `$D7` | `sc01_fisherman` teapot pot (the fisherman's 1-in-16 spot) |
+| Behind the Hedge | flag `$E1` | `fr32_creep`, the man in Freejia's hedges |
+| Under the Rubble | flag `$D9` | `dm40_trapped_slave`, freed with a charged Psycho Dash |
+| An Apple a Day | flag `$E5` | `eu95_ann`, the third Red Apple |
+| A Door Unseen | flag `$A6` | `eu93_found`, Euro's hidden house (Strength +1) |
+| Worth the Wait | flag `$F0` | `eu97_life_medicine` (HP +1) |
+| A Tear of Thanks | flag `$E6` | `nvAE_stone_girl2`, the restored girl's gift |
+| Snake Smasher | flag `$E7` | `daC6_snake_panic`, 51 or more snakes |
+| The True Jeweler | scene `$EA` → `$E3` | `sEA_solid_arm`: the defeat warps to Babel; the lair has no other exit than the game-over return to `$E9` |
+
+Solid Arm sets no flag. The observer arms only on an in-play observation of
+his lair with an enemy standing (`$0AEC` nonzero), so a state saved after
+the defeat never arms it. The All Red Jewels cheat also sets `$D7 $E1 $E5
+$E6 $E7`; it taints the session. `IOG_TEST_ALL_JEWELS` and (outside
+`IOG_ACHIEVEMENT_TEST_INPUT` builds) `IOG_TEST_HUNT` switch recording off.
+
 The signal guards use the verified stock USA ROM and
 exclude Apocalypse Gaia, IoGR, New Game+, diagnostics, assisted validation and
 any session in which cheats were used. A current cheat toggle is insufficient;
@@ -102,7 +127,7 @@ cmake --build build-achievements-foundation
 ./build-achievements-foundation/gaia_achievement_progress_test.exe
 ```
 
-Windows Clang 22.1.8 Release build passed **100 checks**. The fixture exercises
+Windows Clang 22.1.8 Release build passed **1004 checks** (catalog version 2). The fixture exercises
 the actual shared core/presentation: silent baseline/restoration, no duplicate
 milestones, stacked/given jewels, unchanged RAM, epilogue/END ordering, generation
 changes, unsupported modes, bad snapshots, failed commits and queued notices.

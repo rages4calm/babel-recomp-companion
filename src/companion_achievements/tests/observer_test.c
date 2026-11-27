@@ -13,6 +13,7 @@ static ca_engine engine;
 static ca_ui ui;
 static unsigned commits, notices, events;
 static bool commit_ok=true;
+static const char *last_event;
 static bool commit(void *p, const ca_state *s, size_t n)
 { (void)p; (void)s; (void)n; commits++; return commit_ok; }
 static void notify(void *p, const ca_definition *d, const ca_state *s)
@@ -22,8 +23,16 @@ static void notify(void *p, const ca_definition *d, const ca_state *s)
     CHECK(ca_ui_notice(&ui,(size_t)(d-gaia_definitions)));
 }
 static bool event(void *p,const char *name,uint32_t amount)
-{ (void)p; events++; return ca_event(&engine,name,amount,1700000000); }
+{ (void)p; events++; last_event=name; return ca_event(&engine,name,amount,1700000000); }
 static void word(unsigned a,unsigned v) { ram[a]=(uint8_t)v;ram[a+1]=(uint8_t)(v>>8); }
+static void flag(unsigned n,bool on)
+{ if(on) ram[0x0A00+n/8]|=(uint8_t)(1u<<(n&7)); else ram[0x0A00+n/8]&=(uint8_t)~(1u<<(n&7)); }
+static bool earned(const char *event)
+{
+    for(size_t i=0;i<engine.count;i++)
+        if(!strcmp(gaia_definitions[i].event,event)) return engine.states[i].unlocked_at!=0;
+    return false;
+}
 static void setup(companion_gaia_observer *o,companion_gaia_frame *f)
 {
     memset(ram,0,sizeof ram); memset(rom,0,sizeof rom); rom[0x01AADE + 8]=1;
@@ -118,6 +127,105 @@ int main(void)
     f.ram_size=sizeof ram;CHECK(companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_OK);
     ram[0x0B56]=60;CHECK(!companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_TOO_MANY_JEWELS);
     f.cheats_used=true;CHECK(companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_OK && !events);
+    /* Secrets: every table flag fires exactly once on 0->1 during play, and
+     * every one has a catalog definition listening for its event. */
+    CHECK(companion_gaia_secret_flag_count==8);
+    for(size_t k=0;k<companion_gaia_secret_flag_count;k++){
+        const companion_gaia_secret_flag *s=&companion_gaia_secret_flags[k];
+        setup(&o,&f);CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+        CHECK(!earned(s->event));
+        flag(s->flag,true);memcpy(untouched,ram,sizeof ram);
+        CHECK(companion_gaia_observe(&o,&f));CHECK(events==1 && !strcmp(last_event,s->event));
+        CHECK(!memcmp(untouched,ram,sizeof ram));
+        CHECK(earned(s->event) && ca_unlocked(&engine)==1 && notices==1);
+        CHECK(companion_gaia_observe(&o,&f));CHECK(events==1);
+        /* No other table flag shares this flag's bit. */
+        for(size_t j=0;j<companion_gaia_secret_flag_count;j++)
+            CHECK(j==k || companion_gaia_secret_flags[j].flag!=s->flag);
+        /* Already set when a save or state is loaded: silent. */
+        setup(&o,&f);flag(s->flag,true);CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+        f.generation++;CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+        f.generation++;flag(s->flag,false);CHECK(companion_gaia_observe(&o,&f));
+        flag(s->flag,true);f.generation++;CHECK(companion_gaia_observe(&o,&f));CHECK(!events && !earned(s->event));
+        /* Set while not in play ($09AA clear): not awarded, then stays silent. */
+        setup(&o,&f);CHECK(companion_gaia_observe(&o,&f));word(0x09AA,0);flag(s->flag,true);
+        CHECK(companion_gaia_observe(&o,&f));word(0x09AA,1);CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+        /* Every unsupported or assisted mode: set meanwhile, never awarded. */
+        for(unsigned mode=0;mode<4;mode++){
+            setup(&o,&f);CHECK(companion_gaia_observe(&o,&f));
+            if(mode==0)f.verified_stock_rom=false;
+            if(mode==1)f.cheats_used=true;
+            if(mode==2)f.diagnostic=true;
+            if(mode==3)f.new_game_plus=true;
+            CHECK(companion_gaia_observe(&o,&f));flag(s->flag,true);
+            CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+            f.verified_stock_rom=true;f.cheats_used=f.diagnostic=f.new_game_plus=false;
+            CHECK(companion_gaia_observe(&o,&f));CHECK(companion_gaia_observe(&o,&f));CHECK(!events && !earned(s->event));
+        }
+        /* A rewind clearing the flag rebaselines silently (a jewel found in
+         * the same frame is not awarded either); setting it again in play
+         * reports it again, but the achievement is not earned twice. */
+        setup(&o,&f);CHECK(companion_gaia_observe(&o,&f));flag(s->flag,true);
+        CHECK(companion_gaia_observe(&o,&f));CHECK(events==1 && notices==1);
+        flag(s->flag,false);ram[0x0AB4]=1;CHECK(companion_gaia_observe(&o,&f));CHECK(events==1);
+        CHECK(companion_gaia_observe(&o,&f));CHECK(events==1 && !earned("jewels.collected"));
+        flag(s->flag,true);CHECK(companion_gaia_observe(&o,&f));CHECK(events==2 && notices==1 && ca_unlocked(&engine)==1);
+        /* Refused observations in between award nothing seen meanwhile. */
+        setup(&o,&f);CHECK(companion_gaia_observe(&o,&f));ram[0x0B56]=60;
+        CHECK(!companion_gaia_observe(&o,&f));flag(s->flag,true);CHECK(!companion_gaia_observe(&o,&f));
+        ram[0x0B56]=0;CHECK(companion_gaia_observe(&o,&f));CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+    }
+    /* Two secrets in one observation: both, once each. */
+    setup(&o,&f);CHECK(companion_gaia_observe(&o,&f));
+    flag(0xD7,true);flag(0xE7,true);CHECK(companion_gaia_observe(&o,&f));
+    CHECK(events==2 && earned("secret.teapot") && earned("secret.snakes"));
+    /* Neighbouring bits in the same bytes do not count. */
+    setup(&o,&f);CHECK(companion_gaia_observe(&o,&f));
+    flag(0xD6,true);flag(0xD8,true);flag(0xE3,true);flag(0xE4,true);flag(0xE8,true);flag(0xF1,true);
+    CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+    /* Solid Arm: armed in his lair ($EA) with an enemy standing ($0AEC),
+     * awarded on the scene change to Babel ($E3) once he falls. */
+    setup(&o,&f);word(0x0644,0xE9);CHECK(companion_gaia_observe(&o,&f));
+    word(0x0644,0xEA);word(0x0AEC,1);CHECK(companion_gaia_observe(&o,&f));CHECK(companion_gaia_observe(&o,&f));
+    word(0x0AEC,0);CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+    word(0x09AA,0);word(0x0644,0xE3);CHECK(companion_gaia_observe(&o,&f));
+    CHECK(events==1 && !strcmp(last_event,"secret.solid-arm") && earned("secret.solid-arm"));
+    word(0x09AA,1);CHECK(companion_gaia_observe(&o,&f));word(0x0644,0xEA);CHECK(companion_gaia_observe(&o,&f));
+    word(0x0644,0xE3);CHECK(companion_gaia_observe(&o,&f));CHECK(events==1);
+    /* A state loaded in the lair after his defeat ($0AEC 0) never arms. */
+    setup(&o,&f);word(0x0644,0xEA);word(0x0AEC,1);CHECK(companion_gaia_observe(&o,&f));
+    CHECK(companion_gaia_observe(&o,&f));word(0x0AEC,0);f.generation++;CHECK(companion_gaia_observe(&o,&f));
+    CHECK(companion_gaia_observe(&o,&f));word(0x0644,0xE3);CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+    /* Loaded straight into the lair: the baseline itself does not arm. */
+    setup(&o,&f);word(0x0644,0xEA);word(0x0AEC,1);CHECK(companion_gaia_observe(&o,&f));
+    word(0x0AEC,0);CHECK(companion_gaia_observe(&o,&f));word(0x0644,0xE3);CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+    /* Game over: the lair's other exit (back to the mansion) disarms. */
+    setup(&o,&f);word(0x0644,0xEA);word(0x0AEC,1);CHECK(companion_gaia_observe(&o,&f));CHECK(companion_gaia_observe(&o,&f));
+    word(0x0644,0xE9);CHECK(companion_gaia_observe(&o,&f));word(0x0644,0xE3);CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+    /* Babel reached from anywhere else is the story, not the secret. */
+    setup(&o,&f);word(0x0644,0xDF);word(0x0AEC,1);CHECK(companion_gaia_observe(&o,&f));CHECK(companion_gaia_observe(&o,&f));
+    word(0x0644,0xE3);CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+    /* Cheats or a new generation while armed: nothing. */
+    for(unsigned mode=0;mode<3;mode++){
+        setup(&o,&f);word(0x0644,0xEA);word(0x0AEC,1);CHECK(companion_gaia_observe(&o,&f));CHECK(companion_gaia_observe(&o,&f));
+        if(mode==0)f.cheats_used=true;
+        if(mode==1)f.generation++;
+        if(mode==2)companion_gaia_observer_invalidate(&o);
+        word(0x0AEC,0);CHECK(companion_gaia_observe(&o,&f));word(0x0644,0xE3);
+        CHECK(companion_gaia_observe(&o,&f));CHECK(!events && !earned("secret.solid-arm"));
+    }
+    /* Every title fits the unlock toast whole: its title line is 132 px of
+     * the 8-px font (toolkit ca_ui_draw_toast; presentation.c Text()). */
+    for(size_t i=0;i<GAIA_ACHIEVEMENT_COUNT;i++){
+        CHECK(strlen(gaia_definitions[i].title)<=(CA_TOAST_WIDTH-12)/8);
+    }
+    /* Every catalog event is one the observer can emit. */
+    for(size_t i=0;i<GAIA_ACHIEVEMENT_COUNT;i++){
+        const char *e=gaia_definitions[i].event;bool known=!strcmp(e,"rooms.cleared")||!strcmp(e,"jewels.collected")||
+            !strcmp(e,"story.finished")||!strcmp(e,"secret.solid-arm");
+        for(size_t k=0;k<companion_gaia_secret_flag_count;k++) known|=!strcmp(e,companion_gaia_secret_flags[k].event);
+        CHECK(known);
+    }
     /* A saved earned achievement restores silently through the actual core/UI. */
     setup(&o,&f);CHECK(ca_restore(&engine,"gaia.first-jewel",1,1700000000));
     CHECK(ca_ui_snapshot(&ui,engine.states,engine.count));CHECK(!notices && !commits);

@@ -2,14 +2,23 @@
   "schemaVersion": 1,
   "gameId": "illusion-of-gaia",
   "editionId": "stock-companion",
-  "catalogVersion": 1,
+  "catalogVersion": 2,
   "title": "Illusion of Gaia Companion",
   "achievements": [
-    {"id":"gaia.first-room","title":"A Little Stronger","description":"Earn a room-clear reward during play.","event":"rooms.cleared","rule":"milestone","target":1},
+    {"id":"gaia.first-room","title":"A Bit Stronger","description":"Earn a room-clear reward during play.","event":"rooms.cleared","rule":"milestone","target":1},
     {"id":"gaia.first-jewel","title":"A Flash of Red","description":"Find your first Red Jewel during play.","event":"jewels.collected","rule":"milestone","target":1},
-    {"id":"gaia.ten-jewels","title":"A Growing Collection","description":"Find ten Red Jewels in one adventure.","event":"jewels.collected","rule":"milestone","target":10},
+    {"id":"gaia.ten-jewels","title":"Ten and Counting","description":"Find ten Red Jewels in one adventure.","event":"jewels.collected","rule":"milestone","target":10},
     {"id":"gaia.thirty-jewels","title":"Careful Explorer","description":"Find thirty Red Jewels in one adventure.","event":"jewels.collected","rule":"milestone","target":30},
     {"id":"gaia.fifty-jewels","title":"Every Red Jewel","description":"Find all fifty Red Jewels in one adventure.","event":"jewels.collected","rule":"milestone","target":50},
-    {"id":"gaia.ending","title":"A New Morning","description":"Reach the END screen after the epilogue.","event":"story.finished","rule":"milestone","target":1}
+    {"id":"gaia.ending","title":"A New Morning","description":"Reach the END screen after the epilogue.","event":"story.finished","rule":"milestone","target":1},
+    {"id":"gaia.teapot","title":"A Strange Teapot","description":"Some days the South Cape fisherman finds more than fish. Look beside him.","event":"secret.teapot","rule":"milestone","target":1},
+    {"id":"gaia.hedge-stranger","title":"Behind the Hedge","description":"Follow a hidden path through Freejia's hedges to a quiet stranger.","event":"secret.hedge","rule":"milestone","target":1},
+    {"id":"gaia.buried-laborer","title":"Under the Rubble","description":"Where a breeze stirs Will's hair in the Diamond Mine, someone waits.","event":"secret.buried","rule":"milestone","target":1},
+    {"id":"gaia.ann-apples","title":"An Apple a Day","description":"Ann in Euro loves Red Apples. Keep bringing them.","event":"secret.apples","rule":"milestone","target":1},
+    {"id":"gaia.hidden-house","title":"A Door Unseen","description":"Somewhere in Euro's alleys is a house with no door you can see.","event":"secret.hidden-house","rule":"milestone","target":1},
+    {"id":"gaia.life-medicine","title":"Worth the Wait","description":"Stand in Euro's longest line and try what they sell.","event":"secret.life-medicine","rule":"milestone","target":1},
+    {"id":"gaia.stone-girls","title":"A Tear of Thanks","description":"Once the stone girls in the Natives' Village wake, one has a gift for you.","event":"secret.stone-girls","rule":"milestone","target":1},
+    {"id":"gaia.snake-game","title":"Snake Smasher","description":"Win the prize in Dao's game of snakes and pots.","event":"secret.snakes","rule":"milestone","target":1},
+    {"id":"gaia.solid-arm","title":"The True Jeweler","description":"Learn who the Jeweler really is, and defeat him.","event":"secret.solid-arm","rule":"milestone","target":1}
   ]
 }

@@ -56,8 +56,8 @@ internal static class AchievementProviderTests
         ReadOnly(() =>
         {
             var locked = adapter.ReadAchievements(profile);
-            Check(locked.Title == "Illusion of Gaia Companion" && locked.Entries.Count == 6,
-                "packaged Gaia catalog loads with its six definitions");
+            Check(locked.Title == "Illusion of Gaia Companion" && locked.Entries.Count == 15,
+                "packaged Gaia catalog loads with its fifteen definitions");
             Check(locked.Entries.All(row => row.Progress == 0 && row.UnlockedAt == 0),
                 "a missing progress file locks every achievement even when other profiles have data");
             Check(!Directory.Exists(Path.Combine(Path.GetDirectoryName(one)!, "UserData")),

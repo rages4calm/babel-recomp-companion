@@ -14,9 +14,13 @@
 #include <string.h>
 
 static ca_ui ui;
-static const ca_ui_metadata metadata[GAIA_ACHIEVEMENT_COUNT] = {
-    [GAIA_ACHIEVEMENT_COUNT - 1] = {true, "Hidden achievement", "Keep exploring to learn more."},
-};
+/* The ending stays masked until earned; found by ID so catalog order is free. */
+static ca_ui_metadata metadata[GAIA_ACHIEVEMENT_COUNT];
+static void Mask(void) {
+    for (size_t i = 0; i < GAIA_ACHIEVEMENT_COUNT; ++i)
+        if (!strcmp(gaia_definitions[i].id, "gaia.ending"))
+            metadata[i] = (ca_ui_metadata){true, "Hidden achievement", "Keep exploring to learn more."};
+}
 static const char *status;
 static bool initialized, pointer_down;
 /* The browser is laid out on a 598x336 grid (narrower windows: down to 448)
@@ -56,6 +60,7 @@ static void Refresh(void) {
 
 static void Initialize(void) {
     if (initialized) return;
+    Mask();
     initialized = ca_ui_init(&ui, gaia_definitions, metadata, GAIA_ACHIEVEMENT_COUNT);
     if (initialized) ca_chime_generate(chime, CA_CHIME_FRAMES);
 }
@@ -74,6 +79,13 @@ void IogAchievementUiOpen(uint32_t held) {
     Refresh();
     pointer_down = false;
     ca_ui_open(&ui, Directions(held));
+    /* IOG_ACHIEVEMENT_TEST_SELECT=<row>: test only. Open on that row (and
+     * its page) so a capture can show any entry; progress is untouched. */
+    const char *row = getenv("IOG_ACHIEVEMENT_TEST_SELECT");
+    if (row && *row) {
+        const long n = strtol(row, NULL, 0);
+        if (n >= 0 && (size_t)n < ui.count) ui.selected = (size_t)n;
+    }
 }
 
 void IogAchievementUiClose(void) { ca_ui_close(&ui); }

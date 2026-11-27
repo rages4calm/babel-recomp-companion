@@ -62,6 +62,13 @@ void IogAchievementAuditStart(int argc, char **argv)
         "SNESRECOMP_RUN_FRAMES", "SNESRECOMP_DEBUG_PORT", "SNESRECOMP_OVERLAY_SELFTEST_PAD",
         "SNESRECOMP_COMPANION_SELFTEST_PAD", "SNESRECOMP_CLASSROOM_PAD_ROUTE",
         "SNES_NET_MENU_SELFTEST", "SNESRECOMP_CAPTURE_OUT",
+        /* Test hooks that change the game without marking the session as
+         * cheated: every Red Jewel giver's flag (iog_inventory.c), and
+         * enemies held at 1 HP with Will moved beside them (iog_mods.c). */
+        "IOG_TEST_ALL_JEWELS",
+#ifndef IOG_ACHIEVEMENT_TEST_INPUT
+        "IOG_TEST_HUNT",
+#endif
     };
     for (size_t i = 0; i < sizeof(diagnostics) / sizeof(*diagnostics); ++i)
         if (getenv(diagnostics[i])) return;

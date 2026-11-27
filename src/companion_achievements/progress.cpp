@@ -216,8 +216,14 @@ bool write_profile(const fs::path &file, const std::string &data) {
 #endif
 }
 
-const char *const Events[] = {"rooms.cleared", "jewels.collected", "story.finished"};
-struct Event { size_t id; uint32_t value; };
+/* An event is accepted when some definition listens for it; the queue keeps
+ * the catalog's own string, so new catalog events need no list here. */
+const char *known_event(std::string_view name) {
+    for (size_t i = 0; i < GAIA_ACHIEVEMENT_COUNT; ++i)
+        if (name == gaia_definitions[i].event) return gaia_definitions[i].event;
+    return nullptr;
+}
+struct Event { const char *name; uint32_t value; };
 } // namespace
 
 struct IogAchievementStore {
@@ -298,7 +304,7 @@ struct IogAchievementStore {
                 --pending;
             }
             const auto now = std::time(nullptr);
-            if (now <= 0 || !ca_event(&engine, Events[event.id], event.value, static_cast<uint64_t>(now))) {
+            if (now <= 0 || !ca_event(&engine, event.name, event.value, static_cast<uint64_t>(now))) {
                 publish(kIogAchievementWriteFailure);
                 return;
             }
@@ -332,13 +338,12 @@ void IogAchievementStoreClose(IogAchievementStore *store) {
 
 bool IogAchievementStoreEvent(IogAchievementStore *store, const char *event, uint32_t value) {
     if (!store || !event || !value) return false;
-    size_t id = 0;
-    while (id < std::size(Events) && std::string_view(event) != Events[id]) ++id;
-    if (id == std::size(Events)) return false;
+    const char *name = known_event(event);
+    if (!name) return false;
     {
         std::lock_guard<std::mutex> guard(store->mutex);
         if (store->status > kIogAchievementReady || store->stopping || store->pending == store->queue.size()) return false;
-        store->queue[(store->next + store->pending) % store->queue.size()] = {id, value};
+        store->queue[(store->next + store->pending) % store->queue.size()] = {name, value};
         ++store->pending;
     }
     store->ready.notify_one();

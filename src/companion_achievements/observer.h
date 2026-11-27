@@ -29,12 +29,27 @@ typedef enum {
     COMPANION_GAIA_TOO_MANY_JEWELS,  /* more than 50 Red Jewels in total */
     COMPANION_GAIA_EVENT_LOST,       /* an event could not be delivered */
 } companion_gaia_problem;
+/* Optional content with no story route through it: each event flag below is
+ * set by exactly one game script, the one that rewards that secret (writers
+ * checked in the disassembly; see docs/ACHIEVEMENTS-INTEGRATION.md). Flag n
+ * is bit n&7 of $0A00 + n/8. The event fires once when the flag is seen
+ * going from clear to set between two in-play observations of one
+ * generation; a flag already set at a baseline never fires. */
+typedef struct { const char *event; uint16_t flag; } companion_gaia_secret_flag;
+extern const companion_gaia_secret_flag companion_gaia_secret_flags[];
+extern const size_t companion_gaia_secret_flag_count;
+/* Solid Arm sets no flag when beaten: his script warps from his lair ($EA)
+ * to Babel's upper floors ($E3), the lair's only way out besides the
+ * game-over return to the mansion. "secret.solid-arm" fires on that scene
+ * change, armed only by an in-play lair observation with an enemy still
+ * standing ($0AEC), so a state saved after the defeat never arms it. */
 typedef struct {
     uint64_t generation;
     unsigned jewels, rooms;
     uint16_t scene;
     uint8_t clear_flags[32];
-    bool baseline, active, epilogue, finished, failed;
+    uint32_t secrets;  /* companion_gaia_secret_flags seen set, by index */
+    bool baseline, active, epilogue, finished, failed, solid_arm;
     companion_gaia_problem problem;
     companion_gaia_event event;
     void *context;

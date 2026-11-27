@@ -5,15 +5,24 @@
 #include "companion_achievements.h"
 #define GAIA_GAME_ID "illusion-of-gaia"
 #define GAIA_EDITION_ID "stock-companion"
-#define GAIA_CATALOG_VERSION 1u
-#define GAIA_CATALOG_SHA256 "c4907a61e7d36c9745f9c411d7d8ace4785294f28a43a427456d9672f2a469f0"
-#define GAIA_ACHIEVEMENT_COUNT 6u
+#define GAIA_CATALOG_VERSION 2u
+#define GAIA_CATALOG_SHA256 "4be124933ded63ea90bfb8ae79146f16a2c9e2c276211e3dc6a015560f75c656"
+#define GAIA_ACHIEVEMENT_COUNT 15u
 static const ca_definition gaia_definitions[] = {
-    {"gaia.first-room", "A Little Stronger", "Earn a room-clear reward during play.", "rooms.cleared", 1u, CA_MILESTONE},
+    {"gaia.first-room", "A Bit Stronger", "Earn a room-clear reward during play.", "rooms.cleared", 1u, CA_MILESTONE},
     {"gaia.first-jewel", "A Flash of Red", "Find your first Red Jewel during play.", "jewels.collected", 1u, CA_MILESTONE},
-    {"gaia.ten-jewels", "A Growing Collection", "Find ten Red Jewels in one adventure.", "jewels.collected", 10u, CA_MILESTONE},
+    {"gaia.ten-jewels", "Ten and Counting", "Find ten Red Jewels in one adventure.", "jewels.collected", 10u, CA_MILESTONE},
     {"gaia.thirty-jewels", "Careful Explorer", "Find thirty Red Jewels in one adventure.", "jewels.collected", 30u, CA_MILESTONE},
     {"gaia.fifty-jewels", "Every Red Jewel", "Find all fifty Red Jewels in one adventure.", "jewels.collected", 50u, CA_MILESTONE},
     {"gaia.ending", "A New Morning", "Reach the END screen after the epilogue.", "story.finished", 1u, CA_MILESTONE},
+    {"gaia.teapot", "A Strange Teapot", "Some days the South Cape fisherman finds more than fish. Look beside him.", "secret.teapot", 1u, CA_MILESTONE},
+    {"gaia.hedge-stranger", "Behind the Hedge", "Follow a hidden path through Freejia's hedges to a quiet stranger.", "secret.hedge", 1u, CA_MILESTONE},
+    {"gaia.buried-laborer", "Under the Rubble", "Where a breeze stirs Will's hair in the Diamond Mine, someone waits.", "secret.buried", 1u, CA_MILESTONE},
+    {"gaia.ann-apples", "An Apple a Day", "Ann in Euro loves Red Apples. Keep bringing them.", "secret.apples", 1u, CA_MILESTONE},
+    {"gaia.hidden-house", "A Door Unseen", "Somewhere in Euro's alleys is a house with no door you can see.", "secret.hidden-house", 1u, CA_MILESTONE},
+    {"gaia.life-medicine", "Worth the Wait", "Stand in Euro's longest line and try what they sell.", "secret.life-medicine", 1u, CA_MILESTONE},
+    {"gaia.stone-girls", "A Tear of Thanks", "Once the stone girls in the Natives' Village wake, one has a gift for you.", "secret.stone-girls", 1u, CA_MILESTONE},
+    {"gaia.snake-game", "Snake Smasher", "Win the prize in Dao's game of snakes and pots.", "secret.snakes", 1u, CA_MILESTONE},
+    {"gaia.solid-arm", "The True Jeweler", "Learn who the Jeweler really is, and defeat him.", "secret.solid-arm", 1u, CA_MILESTONE},
 };
 #endif
