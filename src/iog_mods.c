@@ -451,21 +451,51 @@ static void ActivateRoomRewards(void)
  * ($09EC & $2000) and no choice is being asked (COP BE sets $065C = $0F00
  * for its menu and clears it after), the held confirm buttons are let go for
  * one frame in every `g_advance_period`, timed by the NMI counter $36: the
- * next frame is a fresh press and the page turns. A pure function of the
- * pad word and RAM, so run-ahead and netplay frames see the same thing. */
+ * next frame is a fresh press and the page turns.
+ *
+ * Those generated presses belong to the paging, and nothing else. A button
+ * whose hold produced one is latched: once the message closes or a choice
+ * menu arrives, it is hidden from the game until it is physically released.
+ * Otherwise the press that closes a page carries on as a gameplay press (the
+ * item button reopens "You're not equipped." or uses the next herb) or
+ * confirms a question nobody read. A deliberate tap never crosses a release
+ * frame while held, so it is never latched and passes through as before.
+ * The pad word here is the game's, after the configured button mapping.
+ *
+ * The latch is saved with the game state (game_rtl.c), so run-ahead and
+ * netplay rollbacks restore it exactly. A real state load, rewind or reset
+ * cannot know what the hands were doing, so after one every advance button
+ * already held must be released before it counts again. */
 static uint8_t g_advance_period;   /* 0: off */
+static uint16_t g_adv_latched;     /* buttons held since a generated press */
+static bool g_adv_rearm;           /* a timeline jump: latch whatever is held */
 
 static uint32_t HoldAdvanceFilter(uint32_t in)
 {
-    if (!g_advance_period || !g_snes || !Rd(0x09AA))
+    if (!g_advance_period || !g_snes) {
+        g_adv_latched = 0;
+        g_adv_rearm = false;
         return in;
+    }
     const uint32_t adv = in & (kPadA | kPadB | kPadY);
-    if (!adv || !(Rd(0x09EC) & 0x2000) || Rd(0x065C) != 0)
-        return in;
-    if ((g_snes->ram[0x36] % g_advance_period) == 0)
-        in &= ~adv;
+    if (g_adv_rearm) {
+        g_adv_latched = (uint16_t)adv;
+        g_adv_rearm = false;
+    }
+    g_adv_latched &= (uint16_t)adv;            /* released: free again */
+    const bool paging = Rd(0x09AA) && (Rd(0x09EC) & 0x2000) && Rd(0x065C) == 0;
+    if (!paging)
+        return in & ~(uint32_t)g_adv_latched;
+    if (adv && (g_snes->ram[0x36] % g_advance_period) == 0) {
+        in &= ~adv;                            /* next frame is a generated press */
+        g_adv_latched |= (uint16_t)adv;
+    }
     return in;
 }
+
+uint16_t IogHoldAdvanceStateSave(void) { return g_adv_latched; }
+void IogHoldAdvanceStateLoad(uint16_t latched) { g_adv_latched = latched & (kPadA | kPadB | kPadY); }
+void IogHoldAdvanceTimelineJump(void) { g_adv_rearm = true; }
 
 static void ActivateHoldAdvance(void)
 {

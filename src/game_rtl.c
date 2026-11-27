@@ -364,6 +364,19 @@ typedef struct GameState {
     uint8_t DB, PB, P, emulation;
 } GameState;
 
+/* Host state that has to rewind with the guest, after GameState: input
+ * filter latches (iog_mods.c hold to advance). Optional on load, so states
+ * made before it existed still load. */
+enum { kStateTailMagic = 0x32474F49u /* "IOG2" */ };
+typedef struct GameStateTail { uint32_t magic; uint16_t hold_advance_latched, pad; } GameStateTail;
+#ifndef IOG_RECEIVED_REFERENCE
+uint16_t IogHoldAdvanceStateSave(void);
+void IogHoldAdvanceStateLoad(uint16_t latched);
+void IogHoldAdvanceTimelineJump(void);
+#else   /* the reference build has no input filters and keeps its old format */
+static void IogHoldAdvanceTimelineJump(void) {}
+#endif
+
 static void GameStateSave(SaveLoadInfo *sli)
 {
     GameState st;
@@ -376,6 +389,10 @@ static void GameStateSave(SaveLoadInfo *sli)
     st.A = g_cpu.A, st.X = g_cpu.X, st.Y = g_cpu.Y, st.S = g_cpu.S, st.D = g_cpu.D;
     st.DB = g_cpu.DB, st.PB = g_cpu.PB, st.P = tmp.P, st.emulation = g_cpu.emulation;
     sli->func(sli, &st, sizeof(st));
+#ifndef IOG_RECEIVED_REFERENCE
+    GameStateTail tail = {kStateTailMagic, IogHoldAdvanceStateSave(), 0};
+    sli->func(sli, &tail, sizeof(tail));
+#endif
 }
 
 static void GameStateLoad(SaveLoadInfo *sli, uint32_t version)
@@ -390,6 +407,16 @@ static void GameStateLoad(SaveLoadInfo *sli, uint32_t version)
     g_cpu.A = st.A, g_cpu.X = st.X, g_cpu.Y = st.Y, g_cpu.S = st.S, g_cpu.D = st.D;
     g_cpu.DB = st.DB, g_cpu.PB = st.PB, g_cpu.P = st.P, g_cpu.emulation = st.emulation;
     cpu_p_to_mirrors(&g_cpu);
+#ifndef IOG_RECEIVED_REFERENCE
+    const size_t remaining = RtlStateBytesRemaining(sli);
+    if (remaining != SIZE_MAX && remaining >= sizeof(GameStateTail)) {
+        GameStateTail tail;
+        memset(&tail, 0, sizeof(tail));
+        sli->func(sli, &tail, sizeof(tail));
+        if (tail.magic == kStateTailMagic)
+            IogHoldAdvanceStateLoad(tail.hold_advance_latched);
+    }
+#endif
 #ifndef IOG_RECEIVED_REFERENCE
     IogWorldReset();
     IogAchievementAuditInvalidate();
@@ -426,6 +453,10 @@ static bool GameSnapshotPreflight(const void *data, size_t size)
 static void GameStateLoaded(uint32_t version)
 {
     (void)version;
+    /* A rollback (run-ahead, netplay) restored the filter latch with the
+     * state; a real load or rewind jumped, and held buttons must be let go. */
+    if (!RtlIsRollbackLoad())
+        IogHoldAdvanceTimelineJump();
     const int size = s_battery_keep_size;
     s_battery_keep_size = -1;
     if (RtlIsRollbackLoad() || size <= 0 || size != g_sram_size || !g_sram)
@@ -453,6 +484,7 @@ static void GameStateLoaded(uint32_t version)
 static void GameHardwareReset(void)
 {
     g_resume_pc = 0;
+    IogHoldAdvanceTimelineJump();
 #ifndef IOG_RECEIVED_REFERENCE
     IogWorldReset();
     IogAchievementAuditInvalidate();
