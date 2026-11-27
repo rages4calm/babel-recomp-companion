@@ -2030,12 +2030,86 @@ static void identity_and_source_packet(const char*path){
  IogWorldInitialize();CHECK(!s.stock&&!s.active&&!s.pending&&!s.complete);
  IogWorldCaptureAtCompose(&g_cpu,0x83c714);CHECK(!s.pending);
 }
+static void ring_strip_past_map_edge(void){
+ /* A scripted camera88 pixels past the right map edge (the Euro arrival):
+  * the original field's columns beyond the map are the hardware ring. Rows
+  * above and below the field in those columns continue that ring; they
+  * were padding, the black corners beside the strip. */
+ for(int pass=0;pass<2;pass++){
+  fixture();word(0x68a,600);word(0x68c,600);
+  g_ppu->hScroll[0]=g_ppu->hScroll[1]=600;
+  if(pass)g_ppu->bgXsc[0]=0x13; /* a 64-row ring does not wrap at256 rows */
+  publication();IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+  IogWorldEndRaster(0x828051,225,0);CHECK(s.complete&&!strcmp(s.reason,"ready"));
+  CHECK(s.view.world_x==258&&s.view.native_x==342&&s.view.native_y==56&&s.view.padding_right==88);
+  int edge=768-s.view.world_x; /* output column of the map's right edge */
+  CHECK(edge==510);
+  for(int y=0;y<s.height;y+=5){
+   bool field_row=y>=56&&y<280;
+   for(int x=edge;x<598;x+=7){
+    bool lit=s.output[y*s.width+x]!=0;
+    CHECK(lit==(field_row||!pass));
+   }
+   /* Inside the map nothing changes; past the field nothing is shown. */
+   CHECK(s.output[y*s.width+edge-1]!=0);
+  }
+ }
+ /* A camera inside the map has no strip: the map's end stays padding. */
+ fixture();word(0x68a,400);g_ppu->hScroll[0]=g_ppu->hScroll[1]=400;
+ publication();IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0x828051,225,0);CHECK(s.complete&&s.view.padding_right==0);
+}
+static void hud_fixed_color_math(void){
+ /* Dark Gaia's defeat: COLDATA ramps to white with math on every layer,
+  * BG3 included (CGADSUB $3F, CGWSEL $80, no colour window), then the
+  * brightness falls over the saturated picture. The status plane is
+  * extracted before math and must fade with the field. */
+ #define L(c,b) ppu_brightness_level((c),(b))
+ fixture();s.valid=true;s.mode7=false;
+ Ppu regs;memset(&regs,0,sizeof(regs));regs.inidisp=15;regs.cgadsub=0x3f;regs.cgwsel=0x80;
+ regs.fixedColor=(uint16_t)(10|10<<5|10<<10);
+ for(int line=0;line<=224;line++)memcpy(s.lines[line].registers,&regs,PPU_SAVESTATE_REGS_SIZE);
+ const uint32_t base=0xff000000u|(uint32_t)L(4,15)<<16|(uint32_t)L(8,15)<<8|L(25,15);
+ s.hud[20*256+10]=base;s.hud[20*256+11]=0;s.hud[200*256+100]=base;
+ HudColorMath();
+ CHECK(s.hud[20*256+10]==(0xff000000u|(uint32_t)L(14,15)<<16|(uint32_t)L(18,15)<<8|L(31,15)));
+ CHECK(s.hud[20*256+11]==0);
+ /* Each row reads its own registers: a row with math off keeps the plane. */
+ s.lines[201].registers[offsetof(Ppu,cgadsub)]=0x3b;s.hud[200*256+100]=base;
+ HudColorMath();CHECK(s.hud[200*256+100]==base);
+ /* Subtraction and halving follow the PPU's own tables. */
+ s.lines[201].registers[offsetof(Ppu,cgadsub)]=0x84|0x40;HudColorMath();
+ CHECK(s.hud[200*256+100]==(0xff000000u|(uint32_t)L(7,15)));
+ /* The fade after the flash: brightness8 over white plus a saturated add. */
+ s.lines[201].registers[offsetof(Ppu,cgadsub)]=0x3f;s.lines[201].registers[offsetof(Ppu,inidisp)]=8;
+ s.lines[201].registers[offsetof(Ppu,fixedColor)]=0xff;s.lines[201].registers[offsetof(Ppu,fixedColor)+1]=0x7f;
+ s.hud[200*256+100]=0xff000000u|(uint32_t)L(4,8)<<16|(uint32_t)L(8,8)<<8|L(25,8);HudColorMath();
+ CHECK(s.hud[200*256+100]==(0xff000000u|(uint32_t)L(31,8)*0x010101u));
+ memcpy(s.lines[201].registers,&regs,PPU_SAVESTATE_REGS_SIZE);
+ /* Not modelled, so left as extracted: the subscreen as addend, an enabled
+  * colour window, math prevented outside the window, forced blank. */
+ const uint8_t cgwsel[]={0x82,0x80,0x90,0x80};
+ const uint32_t window[]={0,0x200000u,0,0};
+ for(unsigned n=0;n<4;n++){
+  s.lines[201].registers[offsetof(Ppu,cgwsel)]=cgwsel[n];
+  s.lines[201].registers[offsetof(Ppu,inidisp)]=n==3?0x8f:15;
+  memcpy(s.lines[201].registers+offsetof(Ppu,windowsel),&window[n],4);
+  s.hud[200*256+100]=base;HudColorMath();CHECK(s.hud[200*256+100]==base);
+ }
+ /* Through the frame: the composed status display is the faded one. */
+ fixture();g_ppu->inidisp=15;
+ g_ppu->cgadsub=0x3f;g_ppu->cgwsel=0x80;g_ppu->fixedColor=(uint16_t)(31|31<<5|31<<10);
+ publication();IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ s.hud[0]=base;IogWorldEndRaster(0x828051,225,0);CHECK(s.complete);
+ CHECK(s.hud[0]==0xffffffffu&&s.output[107]==0xffffffffu);
+ #undef L
+}
 int main(int argc,char**argv){CHECK(argc==2);
  /* These fixtures are the point-sampled hardware reference. The filtered
   * world-map presentation is covered by test_iog_mode7_plane.py and
   * test_iog_mode7_perspective.py. */
  putenv("IOG_WORLD_MAP_FILTER=0");
- phase_queue();epochs_and_read_only();field_window_rebase();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();stock_camera_bottom_rows();stair_pan_between_floors();held_star_ring_rows();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+ phase_queue();epochs_and_read_only();field_window_rebase();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();stock_camera_bottom_rows();stair_pan_between_floors();held_star_ring_rows();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);ring_strip_past_map_edge();hud_fixed_color_math();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 

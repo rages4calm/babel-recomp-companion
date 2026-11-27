@@ -2463,6 +2463,17 @@ static bool RenderWorld(void)
         if(blank[logical]<0) {s.reason="no_verified_transparent_character";return false;}
     }
     memset(s.output,0,(size_t)s.width*s.height*4);
+    /* A scripted camera can run past the map's left or right edge (the Euro
+     * arrival pans 88 pixels past it). The original field then shows the
+     * hardware tilemap ring beyond the map: whatever cells the ring holds
+     * there. Above and below the field those columns were padding, which
+     * left black corners beside that strip. Show what a taller screen
+     * would: the same ring, wrapping at its 256 rows, for the map's rows.
+     * Only plain one-to-one layers on a 32-row ring qualify. */
+    const bool ring_strip=!bounded && !authored && !classroom && !source_plate &&
+        !flight_field && mosaic<=1 && !s.absent_secondary &&
+        !(p->bgXsc[0]&2) && !(p->bgXsc[1]&2) &&
+        (camera_x<0 || camera_x>(int)Word(first->ram,0x692)-256);
     /* A per-line horizontal wave shifts the field's edge columns into view. */
     bool wave_edge=water_wave || village_heat || transition_wave;
     bool finite_backdrop=scene==0x47 || scene==0x74;
@@ -2738,7 +2749,11 @@ static bool RenderWorld(void)
                      * column under Mu's water wave, a flashing strip when
                      * running back and forth). Those come from the map. */
                     int edge=wave_edge?8:0;
-                    if(source_y>=-(int)mosaic_layer&&source_y<224 && x+8>source_x+edge && x<source_x+256-edge) {
+                    const int layer_width=(int)Word(e->ram,0x692+logical*2);
+                    const bool ring_cell=ring_strip && !effect && !star_plane &&
+                        !(logical==1 && (horizon || wall_bands || band_plane)) &&
+                        (x<0 || x>=layer_width) && x+8>source_x && x<source_x+256;
+                    if(ring_cell || (source_y>=-(int)mosaic_layer&&source_y<224 && x+8>source_x+edge && x<source_x+256-edge)) {
                         unsigned tx=((unsigned)source_hscroll[physical]+(x-source_x))>>3;
                         unsigned ty=((unsigned)source_vscroll[physical]+source_y+1)>>3;
                         unsigned address=PPU_bgTilemapAdr(p,physical)+((ty&31)<<5)+(tx&31);
@@ -2811,6 +2826,11 @@ static bool RenderWorld(void)
                    worldy>=0&&worldy<map_bottom));
                 if(castle_marker && !native_pixel && worldx>=480 && worldy>=735)
                     inside=false;
+                /* The ring strip past the map edge continues over the map's
+                 * rows, in the original field's columns only. */
+                if(ring_strip && !native_pixel && worldx>=camera_x && worldx<camera_x+256 &&
+                   (worldx<0 || worldx>=(int)Word(e->ram,0x692)) && worldy>=0 && worldy<map_bottom)
+                    inside=true;
                 /* Both floors of a stair are shown, and so is the row
                  * where one meets the other. */
                 /* The next floor appears only as far as the camera has
@@ -2909,6 +2929,67 @@ static void PlayLog(void)
     last_scene=scene;last_reason=reason;last_width=s.width;last_mark=g_snesrecomp_diag_mark;
 }
 
+/* The status plane is extracted before colour math. The original field adds
+ * (or subtracts) the fixed colour to BG3 like every other layer when the
+ * game asks for it: Dark Gaia's defeat ramps COLDATA to white with math on
+ * all layers, and the status display fades with the field. Apply the same
+ * math to the plane, row by row from that row's registers, so the display
+ * drawn beside or over the wide picture fades too. Only the fixed-colour
+ * case without a colour window is modelled; anything else is left as it
+ * was extracted. Returns the number of pixels changed. The white-out ends
+ * by lowering the brightness over the saturated picture; the same rule
+ * follows it. */
+static int HudMathRow(int y)
+{
+    const uint8_t *regs=s.lines[y+1].registers;
+    unsigned cgadsub=regs[offsetof(Ppu,cgadsub)],cgwsel=regs[offsetof(Ppu,cgwsel)];
+    uint32_t windowsel;memcpy(&windowsel,regs+offsetof(Ppu,windowsel),sizeof(windowsel));
+    unsigned fixed=Word(regs,offsetof(Ppu,fixedColor));
+    unsigned clip=(cgwsel>>6)&3,prevent=(cgwsel>>4)&3;
+    if(!(cgadsub&4) || (cgwsel&3) || ((windowsel>>20)&0xA) ||
+       (clip!=0 && clip!=2) || (prevent!=0 && prevent!=2)) return 0;
+    bool half=(cgadsub&0x40)!=0,subtract=(cgadsub&0x80)!=0;
+    if(!fixed && !half) return 0;
+    /* The extracted colour is after this row's brightness (the PPU's own
+     * table). Read back the smallest level that gives it, add the fixed
+     * colour, and apply the same brightness again. Where brightness merges
+     * two levels the result can differ by one level; at full brightness it
+     * is exact. Forced blank shows nothing either way. */
+    unsigned inidisp=regs[offsetof(Ppu,inidisp)];
+    if(inidisp&0x80) return 0;
+    uint8_t mult[64];
+    for(unsigned i=0;i<64;i++) {
+        unsigned level=half?i/2:i;
+        mult[i]=ppu_brightness_level(level>31?31:level,inidisp&15);
+    }
+    const uint8_t *map=mult;
+    int changed=0;
+    for(int x=0;x<256;x++) {
+        uint32_t *color=&s.hud[y*256+x];
+        if(!(*color>>24)) continue;
+        int c5[3];
+        for(int k=0;k<3;k++) {
+            unsigned v=(*color>>(16-8*k))&255;
+            c5[k]=-1;
+            for(int i=0;i<32;i++) if(ppu_brightness_level((unsigned)i,inidisp&15)==v) {c5[k]=i;break;}
+            if(c5[k]<0) return changed;
+        }
+        const int f5[3]={(int)(fixed&31),(int)((fixed>>5)&31),(int)((fixed>>10)&31)};
+        uint32_t out=*color&0xff000000u;
+        for(int k=0;k<3;k++) {
+            int v=subtract?(c5[k]>=f5[k]?c5[k]-f5[k]:0):c5[k]+f5[k];
+            out|=(uint32_t)map[v]<<(16-8*k);
+        }
+        if(out!=*color) {*color=out;changed++;}
+    }
+    return changed;
+}
+static void HudColorMath(void)
+{
+    if(!s.valid || s.mode7) return;
+    for(int y=0;y<224;y++) HudMathRow(y);
+}
+
 static void WorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count);
 /* minimal HUD (iog_minimal_hud.c): the raster is finished, put the HUD rows back. */
 void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count)
@@ -2919,7 +3000,9 @@ void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count
 static void WorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count)
 {
     if(!s.enabled && !s.audit) return;
-    ++s.frame;s.complete=s.enabled && (s.fixed_plate || RenderWorld());
+    ++s.frame;
+    if(s.enabled && !s.fixed_plate) HudColorMath();
+    s.complete=s.enabled && (s.fixed_plate || RenderWorld());
     if(s.complete && s.reason && !strcmp(s.reason,"ready") && g_snes && g_snes->ram) {
         const Ppu *b=&s.base;
         s.good.valid=true;s.good.scene=Word(g_snes->ram,0x644);
@@ -3169,6 +3252,13 @@ int IogWorldDraw(uint8_t *dst,size_t pitch,const uint8_t *field,int width,int he
                         fwrite(rgb,1,3,file);
                     }
                     fclose(file);
+                }
+                /* With the source packet asked for, the status plane of
+                 * the same frame too: it is left out of a layered picture,
+                 * and a comparison with the original field must mask it. */
+                if(s.source_packet && n>0 && (size_t)n<sizeof(path)) {
+                    PacketFile(path,".hud.bgra",s.hud,sizeof(s.hud));
+                    PacketFile(path,".field.bgra",field,256*224*4);
                 }
                 break;
             }
