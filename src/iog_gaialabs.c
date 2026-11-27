@@ -57,7 +57,7 @@ typedef struct {
 
 static const char *const kFeatures[] = {
     "jp_edward", "jp_itory", "jp_wall", "red_fountain", "jp_church", "jp_mines", "jp_prologue",
-    "jp_viper", "crystal_ring",
+    "jp_viper", "crystal_ring", "no_shira",
 };
 enum { kNumFeatures = sizeof(kFeatures) / sizeof(kFeatures[0]) };
 
@@ -584,6 +584,7 @@ DATA_PLUGIN(jp_church)
 DATA_PLUGIN(jp_mines)
 DATA_PLUGIN(jp_viper)
 DATA_PLUGIN(crystal_ring)
+DATA_PLUGIN(no_shira)
 DATA_PLUGIN(jp_prologue)
 
 static void ActivateHerb(void) { g_full_herb = true; g_herbs = 0xFFFF; }
@@ -639,6 +640,7 @@ SNES_MOD_CONSTRUCTOR(register_iog_gaialabs)
     snes_mod_register_activation_plugin("iog.gaialabs.jp_prologue", Activate_jp_prologue);
     snes_mod_register_activation_plugin("iog.gaialabs.jp_viper", Activate_jp_viper);
     snes_mod_register_activation_plugin("iog.gaialabs.crystal_ring", Activate_crystal_ring);
+    snes_mod_register_activation_plugin("iog.gaialabs.no_shira", Activate_no_shira);
     snes_mod_register_activation_plugin("iog.gaialabs.full_herb", ActivateHerb);
     snes_mod_register_activation_plugin("iog.gaialabs.portal_exit", ActivatePortal);
     snes_mod_register_activation_plugin("iog.gaialabs.elevator", ActivateElevator);

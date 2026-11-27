@@ -261,6 +261,31 @@ def crystal_ring(src, pack):
     pack.write("crystal_ring", group + 18, struct.pack("<H", int(part.group(1), 16)))
 
 
+def no_shira(src, pack):
+    """Shira's dream (scene $2A) without the closing spotlight. Her talk
+    handler ($05:9484) sets flag $0E, which the dream's zoom controller waits
+    on to close in, then asks the comet question. The module drops the flag.
+    The handler is reached through the inline operand of SetInteractHandler,
+    which the game's COP handler reads as data, so a copy without the flag
+    goes into bank $05's padding (an address with no native body runs in the
+    interpreter) and the operand points there. The string is printed from its
+    start, not +2 as the module does, so the dialogue pack's text (keyed by
+    the string's address) still applies; it opens with the same pause."""
+    patch = src.module("no-shira-spotlight/NoShiraSpotlight.patch.asm").decode()
+    if "SetFlagByte" in patch or not re.search(r"COP \[BF\] \( &dialogstring_0594B8\+2 \)", patch) or \
+            not re.search(r"COP \[BE\] \( #02, #01, &code_list_059491 \)", patch):
+        raise SystemExit("no-shira-spotlight: the module is not the expected change")
+    stock = bytes.fromhex("02cc0e02bfb89402be02019194")      # SetFlagByte #0E; print; options
+    handler, operand, at = 0x059484, 0x05947D, 0x05FEF0
+    if src.rom[handler:handler + len(stock)] != stock or src.rom[operand - 2:operand + 2] != b"\x02\xc0\x84\x94":
+        raise SystemExit("no-shira-spotlight: stock handler differs")
+    code = stock[3:]                                            # print + options, without the flag
+    if any(b != 0xFF for b in src.rom[at - 16:at + len(code) + 16]):
+        raise SystemExit("no-shira-spotlight: bank $05 padding is not free")
+    pack.write("no_shira", at, code)
+    pack.write("no_shira", operand, struct.pack("<H", at & 0xFFFF))
+
+
 def words(block):
     return [int(v, 16) for v in re.findall(r"#\$([0-9A-Fa-f]{4})", block)]
 
@@ -336,6 +361,7 @@ def main():
     red_fountain(src, pack)
     spritemap(src, pack, "jp_viper", "jp-viper", "spm_viper.spm", relocated)
     crystal_ring(src, pack)
+    no_shira(src, pack)
     # stock words must be replaced one for one
     for kind, feature, offset, data, _ in pack.records:
         if kind == b"W" and offset + len(data) > len(rom): raise SystemExit("record past the ROM")

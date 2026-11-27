@@ -112,6 +112,17 @@ feature = "crystal_ring"
 id = "iog.gaialabs.crystal_ring"
 
 [[feature]]
+id = "no_shira"
+name = "Shira's dream: no spotlight"
+description = "In Will's dream of his mother on the Gold Ship, the picture does not close in to a spotlight while she talks."
+group = "Extras"
+default_enabled = false
+
+[[plugin]]
+feature = "no_shira"
+id = "iog.gaialabs.no_shira"
+
+[[feature]]
 id = "full_herb"
 name = "Herbs heal fully"
 description = "A herb refills all of Will's HP instead of 8."

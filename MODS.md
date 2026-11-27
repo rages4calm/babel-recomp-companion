@@ -30,6 +30,7 @@ play stays the stock USA ROM (the launcher verifies it).
 | | Herbs heal fully | A herb refills all of Will's HP |
 | | Pyramid portals | Portals lead to the entrance hall's lower area |
 | | Pyramid moving floors 2x | The Pyramid's moving floors travel twice as fast |
+| | Shira's dream: no spotlight | Will's dream of his mother stays fully lit (off by default) |
 | *(any data-only package)* | HD graphics | Replacement art, see `snesrecomp/docs/HD_PACKS.md` |
 
 ## MSU-1 soundtrack
@@ -150,15 +151,21 @@ the launcher's Mods page (GaiaLabs section).
   you to the lower main area of the entrance hall instead of its top.
 - **Pyramid moving floors: 2x**: the Pyramid's moving floors travel twice as
   fast; they cover the same distance and stop in the same place.
+- **Shira's dream: no spotlight** (off by default, as in GaiaLabs): in Will's
+  dream of his mother on the Gold Ship the room stays lit while they talk.
+  Her lines open with the same short pause as before, so the Retranslation
+  text still applies.
 
 GaiaLabs' patches change game code, which the native build cannot take
-over; these three do the same to the game's state from the host instead.
+over; these three do the same to the game's state from the host instead,
+and Shira's talk handler is a copy without the spotlight cue, placed in free
+space and run by the interpreter.
 Options that overlap this port's own features (map, minimap, widescreen,
 walkable world map, run button, text speed) are not taken over. Not yet
 available: the title screens, the
 shortcuts (Mines to Freejia, Mt. Kress, Angkor Wat), the cut content (Sky
 Delivery Man, Blue Journal) and extras (borderless epilogue and adrift text,
-Thankful Flower, South Cape return, Freejia slave return, Shira spotlight,
+Thankful Flower, South Cape return, Freejia slave return,
 minimal HUD, plain borders) and the Portuguese translation.
 
 ## Apocalypse Gaia
