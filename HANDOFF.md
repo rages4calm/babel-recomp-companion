@@ -11,6 +11,36 @@ floor/room bounds, menus and transitions; integrate approved GaiaLabs maps with
 Retranslation as built-in main content. Stock USA is the internal reference.
 Keep performance checks focused on visible smoothness, not repeated benchmarks.
 
+## Test harness notes (November 27)
+
+The game-driving harness is `.local/batch-001/owner-playtest-4/mark.py`
+(one run from a state, with the owner's config and mods) and
+`.local/batch-001/latesweep/sweep.py` (staging and checked runs on top of
+it). Learned the hard way; each of these once produced a false result:
+
+- `stage_script` writes a preset's story flags exactly: 0x000-0x1FF and
+  0x500-0x57F (boss defeats, abilities) set and cleared, 0x200-0x4FF (chests,
+  rewards, kills) kept from the base save. It used to only add flags, so a
+  boss already beaten in the owner's save stayed beaten. It dumps `staged`;
+  check it with `check_staged`.
+- A script line is at most 255 characters; a longer `poke` is dropped whole
+  without an error. `stage_script` writes in 32-byte pieces.
+- `SNESRECOMP_CLASSROOM_PAD_ROUTE` is no longer read: hold buttons with script
+  `hold` lines. `dump` takes no frame, so `held_timeline` holds a button
+  while dumping every 4 frames.
+- `mark.py` strips every `IOG_*`, `SDL_*` and `SNESRECOMP_*` variable from the
+  environment; pass them with `--env` (`sweep.mark(env_extra=...)`).
+- `sweep.mark` raises on a failed run or a missing snapshot, starts from an
+  empty run folder, and `SWEEP_BUILD` picks the build (`frozen-agents` is a
+  frozen copy for parallel agents). `not_wide(label)` counts renderer
+  fallback from frame 0, entry and exit included.
+- Warping straight into a cutscene room can leave the camera somewhere the
+  scene never shows (Shira's dream rendered black); enter as the game does
+  and walk, or compare with the original 4:3 picture before calling a
+  renderer bug.
+- The owner's install has Refill HP on: turn `infinite_hp` off with
+  `STATESUB` (several edits joined by `||`) when HP matters.
+
 ## ACTIVE: Original-based Companion and selected GaiaLabs features
 
 The Original-based Companion is the game build. Integrate the approved

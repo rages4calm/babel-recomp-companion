@@ -8,47 +8,65 @@ Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
 
-## GaiaLabs options (beta 18, November 26)
+## GaiaLabs options (betas 18 and 19, November 26 and 27)
 
 The optional modules of GaiaLabs' Retranslated patcher (gaiahack.ing,
 IOGRetranslation `1bedfbad`, manifest "1.45"), package `iog.gaialabs`.
 GaiaLabs ships them as assembly patches and art for its own ROM rebuild;
 code patches cannot run on the native build, so each was redone.
 
-**Done and tested** (each room through a real doorway, option on and off,
-native and interpreter; reports in `.local/batch-001/gaiamods/r4`):
+**Done and played through the real game path** (option on and off, native
+and interpreter; scripts in `.local/batch-001/gaiamods`):
 
 - JP Edward Castle, Itory (six rooms) and Great Wall (four) backgrounds, the
   church cross (four South Cape rooms), purple mines (two rooms), red
   fountain (scene $5D with flag $70 clear) and the prologue palettes (the
-  title's attract demo through $8C-$8F). The art is GaiaLabs' module data,
-  recompressed (minimum-bit QuintetLZ) into the stock spans after the
-  startup identity checks; one tilemap goes to the $FF padding at the end of
-  bank $06, and the two longer JP parallax tables to the end of bank $01 or
-  the stock slots they free. Native = interpreter WRAM in every room; no new
-  renderer fallback; the wide view, its margins and the 4:3 picture all show
-  the JP art. Compared with GaiaLabs' own preview images: Great Wall, Itory,
-  Edward, church, mines and fountain match.
-- Save states made with the other setting: the stock (or JP) art they hold is
-  swapped in VRAM/WRAM/CGRAM within half a second, including the palette copy
-  the game keeps in WRAM and uploads again (all four directions tested in the
-  Great Wall, art and palette). Without this the JP palette landed on stock
-  art (blue bands at the Great Wall) until the area was left, or stock
-  colours stayed on JP art after loading a state with no room change.
+  title's attract demo through $8C-$8F): each room entered through a real
+  doorway (reports `r4`, `r5`). Native = interpreter WRAM in every room; no
+  new renderer fallback; the wide view, its margins and the 4:3 picture all
+  show the JP art, and they match GaiaLabs' preview images.
+- JP Viper (beta 19, off by default): a live Viper fight in scene $55 staged
+  with the exact `before_viper` story flags (`viper_validate.py`, `vv2.json`):
+  Viper's actor and arena spawned and attacked from the first snapshot;
+  native = interpreter at all 26 snapshots on and off; the wide-view sheets
+  show GaiaLabs' bird Viper on and the stock one off. The JP sprite layout is
+  52 bytes shorter; it is padded with the stock tail (scene size words and
+  WRAM layout unchanged) and moved to bank $06's padding.
+- Crystal Ring palette (beta 19): the ring in the inventory, captured on the
+  presented frame (`ringtest.py`): rose-silver band and pale-blue stone on,
+  stock gold off. GaiaLabs has no preview image of it; the colours are the
+  menu's own crystal palette, as the module specifies.
 - Herbs heal fully (5 -> 40 HP; stock 13), native = interpreter.
-- Pyramid portal exit: lands in the lower hall ($01F8,$0380) from room $CE,
-  native = interpreter. Tested with the portal's request written directly,
-  not by walking into a portal.
+- Pyramid portal exit, played (`portaltest3.py`): Will stands on the portal
+  in room $D7, presses A, picks "Jump in"; on he lands in the lower hall
+  ($01F8,$0380), off at the top ($01F8,$0130); pictures of both halls;
+  native = interpreter throughout.
+- Pyramid moving floors 2x (beta 19, `elevtest2.py`, `elevsheet.py`): the
+  floor at $D7 starts with Will on it; on it takes 2 steps a frame and stops
+  at the same place (`$1086` = $0100) after about 128 frames, off after 256;
+  native = interpreter; the wide view shows the floor rising cleanly.
+- Shira's dream without the spotlight (beta 19, off by default,
+  `shira2.py`): Will drops into the dream at the left of the cabin, walks to
+  his mother and talks; on, flag $0E is never set and the room stays lit
+  (presented frames), off the spotlight closes in; the comet question works
+  either way; native = interpreter. The talk handler is a copy in bank $05's
+  padding, reached through SetInteractHandler's inline operand and run by the
+  interpreter: the first GaiaLabs option done this way.
+- Save states made with the other setting: the art they hold is swapped in
+  VRAM/WRAM/CGRAM within half a second (all four directions, Great Wall).
 
-**Not done:** Pyramid elevator 2x (written, but the floor never started in a
-test, so it was taken out), title screens, JP Viper (needs a spritemap
-rebuild), crystal ring palette (needs a new sprite loader), shortcuts
+**Not done:** title screens (new actor code and HDMA thinkers), shortcuts
 (Freejia, Mt. Kress, Angkor Wat), Sky Delivery Man, Blue Journal, borderless
 epilogue/adrift text, Thankful Flower, South Cape return, Freejia slave
-return, Shira spotlight, minimal HUD, plain borders, Portuguese. Most need a
-host way to add dialogue choices and warps to existing people; that is the
-next piece of work. Debug menu, dungeon map, minimap, widescreen and walkable
-world map are not taken over: this port has its own.
+return, plain borders, Portuguese. The Shira route (relocated script code
+reached through a data pointer) is the way to most of them; they also need
+new dialogue strings in the game's text encoding.
+**Minimal HUD:** not done. The game's own per-scene HUD-off bit (display
+preset byte +7) cannot express it as data: 10 of the presets are shared by
+combat and non-combat rooms and only 3 preset slots are free. It needs the
+HUD loader and per-frame update to consult the combat lock, i.e. a
+regenerated native routine. Debug menu, dungeon map, minimap, widescreen
+and walkable world map are not taken over: this port has its own.
 
 **Not played** by a person. No in-game settings rows: the options are on the
 launcher's Mods page (GaiaLabs section); a data option shows the next time
@@ -446,11 +464,22 @@ after a crash (the half-minute rewrite is the fallback).
 - **The launcher was not clicked through.** It starts and its adapter tests
   pass (57 + 47 + 9 + 26 checks). No page was opened by hand, including the
   new Wide view toggle under Cheats and Mods.
-- **Achievement unlocking was not seen end to end.** Recording is now on by
-  default and the module tests pass (observer 100 checks, progress store).
-  The store only opens once play begins, and every way of driving input
-  automatically also switches recording off by design, so no unlock, toast or
-  saved `progress.json` has been observed in a real session.
+- **Achievement unlocking, end to end** (November 27, evidence in
+  `.local/batch-001/agents/achievements`): a real Red Jewel pickup in Lance's
+  house unlocked "A Flash of Red" through the game's own observer, in a
+  disposable profile; the toast shows once the pickup dialogue closes;
+  `progress.json` is written; a restart keeps it, and a second pickup gives
+  no second toast. This ran on a build configured with the new developer
+  option `IOG_ACHIEVEMENT_TEST_INPUT` (packaging refuses it). The same run on
+  the normal build records nothing: `--input-script`, `--load-state`,
+  `--exit-at-frame`, `--paused`, `--framedump`, `--capture-*` and
+  `SNESRECOMP_CAPTURE_OUT` now switch recording off (before, the first three
+  did not, so automated input could earn achievements). Not tested: sound,
+  the achievements browser, the room-reward and ending achievements.
+- **A save over 50 Red Jewels** (only possible through the old cheat) stops
+  every achievement in that session, not only the jewel ones, with no
+  message saying why (`observer.c`). Not changed; the cheat no longer makes
+  such saves.
 - **Native since beta 7.** The owner decided on November 26 to publish the
   compiled game code in the download (`package_release.py --native`, from
   `.local/batch-001/sdk-update/build`). The package was run from a clean
@@ -483,9 +512,25 @@ and R choices never ran (they are the game's guard) and were removed; the
 game now caps minimum stats, max HP and DP itself instead of trusting the
 launcher. Still open or untested:
 
-- **Hold to advance with nothing equipped:** holding the item button keeps
-  dismissing and reopening "You're not equipped." Not fixed.
-- **Hold to advance** when a question arrives during held paging: not covered.
+- **Hold to advance** (fixed November 27): a button whose hold produced a
+  generated page press is hidden from the game, once the message closes or a
+  choice menu arrives, until it is released. Tested on native and
+  interpreter (`ha_cases.py`): the item button held through "You're not
+  equipped." pages once and never reopens it, a tap after release opens it
+  again; deliberate taps open and close as before; A held into the Pyramid
+  portal's question leaves it up until release, then Down and A jump in;
+  the herb's question is not answered by a held button; the same with
+  run-ahead 2 gives identical timelines. The earlier "keeps reopening" loop
+  did not reproduce in the current build in 24 setups (town, dungeon, three
+  forms, three speeds, four phases); its evidence folder no longer exists.
+  Not tested: a real state load or rewind with a button held (the script
+  runner releases buttons on the load frame), netplay.
+- **All Red Jewels cheat** (fixed November 27): it gave 50 minus those
+  given, so later finds pushed the total past 50 (the owner's save held 54,
+  which the achievement observer refuses). It now collects exactly the
+  jewels still out (46 on a clean save; the trapped slaves' 3 and the
+  slaver's 1 are left to be earned) and never passes 50. Tested through
+  `IOG_TEST_ALL_JEWELS` on a clean and a partial save, not through the menu.
 - **Room rewards** on boss clears, and the New Game+, randomizer and
   Apocalypse blocks: not run. The tested clears had the enemy counter set to 1
   before a real kill.
@@ -543,12 +588,18 @@ launcher. Still open or untested:
 - **Round 3 of the scene sweep saw 364 of 772 authored rows in their scenes.**
   The remaining 408 were checked by the engine-level page check, not in their
   own scenes.
-- **The page check tool reads a stale pack** (`recheck64/v53.tsv`), so 4 of
-  27 sampled strings fail in it on both old and new builds. The tool needs to
-  be pointed at the current pack (`v71.tsv`) before its failures mean
-  anything.
-- **Kara's five-row pages and a continuous campaign** were left to
-  playtesters.
+- **The four "failing" page-check samples pass in their own scenes** on the
+  beta 18 pack (`08FBC8`, `0BD70E`, `0BDD34`, `0BE075`; November 27, evidence
+  in `.local/batch-001/agents/translation`). The tool had read the current
+  pack under an old name; it has since been deleted. Its failures were its
+  own limits with slow typing and timed cards.
+- **Kara's five-row pages:** Angel Village and the epilogue fit and leave her
+  visible. The Dao hotel page now uses the original's four-row box (it was
+  five rows); the box still covers Kara and the boy there, exactly as in the
+  original English game.
+- **Two GaiaLabs typos** fixed in the pack ("I want to experiencing",
+  "like this this"); the first was seen in its scene, the second (Gold Ship
+  bed) was not.
 - **`04EA77`** is a typo found after the upstream comment on
   Azarem/IOGRetranslation#35; it is corrected locally only.
 
@@ -557,15 +608,15 @@ launcher. Still open or untested:
 - **Nine of 142 route replays shift a scene load by one or two frames.**
   States, scene changes and end positions match. I attribute this to
   upstream's timing corrections but did not trace any of the nine to a commit.
-- **`test_native_continuations` and `test_iog_map_controller` fail**, the
-  same way before the update. Not investigated.
-- **Four tests were not run** because they need a ROM or a build directory:
-  `test_iog_received_content`, `test_iog_received_map_input`,
-  `test_iog_virtual_controller`, `test_received_reference`.
-- **Two of upstream's own tests fail against this tree**
-  (`test_host_overlay_keys`, `test_host_deadline_wait`) because their stubs do
-  not know two older local changes (`SnesRa_Idle` in the rewind loop,
-  `frame_skip`). Not merge errors; not fixed.
+- **All eight formerly skipped or failing tests pass** (November 27). Five
+  needed test-only updates for deliberate changes (stubs for functions added
+  in `812f480`, the native-default rule of `3ebc857`, the paused menu removed
+  in `650c757`, the map canvas of `bb17cdf`, stubs for this fork's
+  `SnesRa_Idle` and `FrameSkipNext`); no assertion was loosened. The two
+  received-ROM tests ran against the pinned GaiaLabs reference ROM, kept
+  apart from the Original build. Not covered: the WRAM-copy native path in
+  `test_native_continuations`. pytest is not installed; the upstream host
+  tests ran through a small stand-in runner.
 - **Upstream's new hi-res (512-dot) surface is unused here.** The game owns
   `draw_frame` and does not provide `draw_hires_frame`.
 - **`build-tree.py` and `build-play.py`** still exist and link against the
