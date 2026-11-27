@@ -462,16 +462,22 @@ static void ActivateRoomRewards(void)
  * frame while held, so it is never latched and passes through as before.
  * The pad word here is the game's, after the configured button mapping.
  *
- * The latch is saved with the game state (game_rtl.c), so run-ahead and
- * netplay rollbacks restore it exactly. A real state load, rewind or reset
- * cannot know what the hands were doing, so after one every advance button
- * already held must be released before it counts again. */
+ * A real state load, rewind or reset cannot know what the hands were doing,
+ * so after one, every advance button already down is hidden from the game, in
+ * play, in a message and in a question alike, until it is physically
+ * released: a hand still on A from before the load must not turn the page it
+ * lands on or start the paging. This jump mask is kept apart from the paging
+ * latch above, which deliberately lets a held button go on paging.
+ *
+ * Both are saved with the game state (game_rtl.c), so run-ahead and netplay
+ * rollbacks restore them exactly; a rollback is not a jump. */
 static uint8_t g_advance_period;   /* 0: off */
 static uint16_t g_adv_latched;     /* buttons held since a generated press */
 /* Bit 15: an advance button is down; low byte: the game's frame counter ($36)
  * when it went down or at the last generated press. */
 static uint16_t g_adv_held;
-static bool g_adv_rearm;           /* a timeline jump: latch whatever is held */
+static uint16_t g_adv_jumped;      /* held across a timeline jump: hidden until released */
+static bool g_adv_rearm;           /* a timeline jump: take what is held on the next frame */
 
 /* Each page stays up a whole period: the next generated press comes a full
  * period after the button went down or after the previous generated press,
@@ -482,15 +488,18 @@ static uint32_t HoldAdvanceFilter(uint32_t in)
     if (!g_advance_period || !g_snes) {
         g_adv_latched = 0;
         g_adv_held = 0;
+        g_adv_jumped = 0;
         g_adv_rearm = false;
         return in;
     }
-    const uint32_t adv = in & (kPadA | kPadB | kPadY);
     if (g_adv_rearm) {
-        g_adv_latched = (uint16_t)adv;
+        g_adv_jumped = (uint16_t)(in & (kPadA | kPadB | kPadY));
         g_adv_rearm = false;
     }
-    g_adv_latched &= (uint16_t)adv;            /* released: free again */
+    g_adv_jumped &= (uint16_t)in;              /* released: free again */
+    in &= ~(uint32_t)g_adv_jumped;             /* not down, as far as anything below knows */
+    const uint32_t adv = in & (kPadA | kPadB | kPadY);
+    g_adv_latched &= (uint16_t)adv;
     const uint8_t now = g_snes->ram[0x36];
     if (!adv)
         g_adv_held = 0;
@@ -507,12 +516,23 @@ static uint32_t HoldAdvanceFilter(uint32_t in)
     return in;
 }
 
-/* Saved with the game state (game_rtl.c): latched buttons and the hold time. */
-uint16_t IogHoldAdvanceStateSave(void) { return g_adv_latched; }
+/* Saved with the game state (game_rtl.c GameStateTail). The first word keeps
+ * the paging latch in the A|B|Y bits, where beta 19 and 20 wrote and read it
+ * (they load it masked to those bits, so they ignore the rest); the jump mask
+ * rides in bits no pad layout of A|B|Y uses, shifted left by 4 (B $0010,
+ * Y $0020, A $1000), and bit 15 is a jump taken but not yet applied. Tails
+ * from beta 19/20 have those bits clear. The second word is the hold time. */
+enum { kAdvJumpShift = 4, kAdvRearmBit = 0x8000 };
+uint16_t IogHoldAdvanceStateSave(void)
+{
+    return (uint16_t)(g_adv_latched | g_adv_jumped << kAdvJumpShift | (g_adv_rearm ? kAdvRearmBit : 0));
+}
 uint16_t IogHoldAdvanceHeldSave(void) { return g_adv_held; }
 void IogHoldAdvanceStateLoad(uint16_t latched, uint16_t held)
 {
     g_adv_latched = latched & (kPadA | kPadB | kPadY);
+    g_adv_jumped = (latched >> kAdvJumpShift) & (kPadA | kPadB | kPadY);
+    g_adv_rearm = (latched & kAdvRearmBit) != 0;
     g_adv_held = held;
 }
 void IogHoldAdvanceTimelineJump(void) { g_adv_rearm = true; }

@@ -366,7 +366,17 @@ typedef struct GameState {
 
 /* Host state that has to rewind with the guest, after GameState: input
  * filter latches (iog_mods.c hold to advance). Optional on load, so states
- * made before it existed still load. */
+ * made before it existed still load. 8 bytes, little-endian:
+ *   +0 u32 magic "IOG2"
+ *   +4 u16 hold_advance_latched  bits $0103 (A|B|Y): the paging latch
+ *                                bits $1030 (A|B|Y << 4): held across a
+ *                                  timeline jump, hidden until released
+ *                                bit $8000: a jump not yet applied
+ *   +6 u16 hold_advance_held     bit 15 an advance button down, low byte $36
+ *                                  when it went down / last generated press
+ * Beta 19 wrote +6 as 0 and both betas wrote only the $0103 bits of +4; they
+ * read +4 masked to $0103, so the jump bits are invisible to them and their
+ * tails load here with no jump pending. Size and magic are unchanged. */
 enum { kStateTailMagic = 0x32474F49u /* "IOG2" */ };
 typedef struct GameStateTail { uint32_t magic; uint16_t hold_advance_latched, hold_advance_held; } GameStateTail;
 #ifndef IOG_RECEIVED_REFERENCE
