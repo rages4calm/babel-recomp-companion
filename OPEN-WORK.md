@@ -68,9 +68,14 @@ and interpreter; scripts in `.local/batch-001/gaiamods`):
   - Angkor shortcut: after the Gorgon Flower (also on the full-inventory
     path) the voice asks, "Yes" lands at the temple entrance ($B0). The
     vision routine, which reaches the replaced one by falling through, is
-    copied byte for byte from the ROM. The arrival title card shows 145
-    frames of 4:3 mosaic fallback; the room's stock vision warp shows the
-    same kind (70 frames), but a stock arrival into $B0 was not compared.
+    copied byte for byte from the ROM. Beta 21: both mosaics stay wide.
+    The stock arrival into $B0 (world map, B) was compared: same display
+    registers, but a plain fade with no mosaic, so the shortcut's arrival
+    mosaic (75 frames) is its own and gets one exact layout row; the
+    departure (70 frames, the same as the stock vision warp) failed because
+    the vision check wanted a 768-wide second map where the room has 256.
+    Wide output equals the 4:3 picture outside the status/title area in
+    every compared frame; the stock world-map arrival is byte-identical.
   - South Cape: five of the 17 people (town, Erik's, Seth's, the chef's,
     the church) say "Welcome back Will!" once flag $8D is set, in their own
     colours; stock lines otherwise. The other 12 were not talked to.
@@ -78,6 +83,16 @@ and interpreter; scripts in `.local/batch-001/gaiamods`):
     could not be staged).
   - Blue Journal: all branches (letter, return, already held, full
     inventory, neither) and reading the journal.
+  - Freejia laborer return (beta 21, bank $07; his room's actor records
+    point there): with flag $5A clear and $8D set, talking to him in $3A
+    plays the return line, adds one Red Jewel (35 to 36) and sets $107;
+    talking again gives the farewell; on the next visit he is gone. With
+    $5A set (given away) he is absent and nothing is paid. The harborer
+    talks from the left and from above. In Freejia ($32) the locked door
+    becomes the stock town door (Will walks through to $3A's arrival at
+    $0030,$008E; locked with the option off) and both slavers are gone.
+    Native WRAM equals interpreter in every case. Not played: the
+    full-inventory line, and $8D set without $B6 (slavers still there).
   Found and fixed by playing them: names and GaiaLabs' speaker themes are
   commands of the Retranslation's own text engine (the stock one froze or
   drew garbage), questions need the stock $CA terminator, the box must open
@@ -86,21 +101,45 @@ and interpreter; scripts in `.local/batch-001/gaiamods`):
   tap could turn two and flash the second past), and a held button gives
   each page a full period. Tested on the journal's full-inventory branch
   and the earlier cases, run-ahead included.
+- Held button across a load (beta 21): a button held through a state load,
+  rewind or reset is masked until released, everywhere (gameplay, message,
+  question), separately from the paging latch; run-ahead rollbacks restore
+  the mask exactly. Before: loading into the Pyramid portal message with A
+  held went straight to its question, and B held closed "You're not
+  equipped." at once; after: both stay up and a tap after release turns
+  one page. Played native and interpreter through the debug server's held
+  pad; 16 cases in `scripts/test_hold_advance.py` (8 failed before). Not
+  driven: the rewind panel by hand, run-ahead in the real game.
 
-**Not done:** title screens (new actor code and HDMA thinkers), Mt. Kress
-shortcut (built and tested: the spirit spawns and the room's camera works,
-but scene $A9 is a combat room whose sprite tiles hold Will's abilities, so
-the spirit drew as garbage, and talking to it did not start), Freejia slave
-return (its routines fall through into stock code, one string jumps into
-another, and it gives a 51st Red Jewel), borderless epilogue/adrift text
+  - Mt. Kress shortcut (beta 21): $A9 is a combat room, which keeps effect
+    and ability art where the props sheet would be, so the spirit draws
+    from OBJ name table 1 (only the absent Kress enemies' art there) and
+    copies its own tiles from the stock ROM with the game's AdhocVramDma
+    when the room's sprite art has just loaded (also after the inventory),
+    clearing that VRAM's cache slot so the next room reloads its enemies.
+    It stands as the stock Angkor guide does (two solid tiles, nudged),
+    leaning left so Will stops beside it on the vine instead of half inside
+    it. Played: Yes lands in $A0 at ($02D0,$01C0), No keeps him, flag $223
+    clear leaves the spirit waiting; Will's ability tiles (name table 0)
+    byte-identical with and without the pack while attacking; native WRAM
+    equals interpreter. Earlier "talking did not start" was the test
+    standing too far away. Not played: the charged abilities next to it.
+
+**Not done:** title screens (new actor code and HDMA thinkers), borderless epilogue/adrift text
 (font changes by direct DMA), plain borders (changes the native dialogue
 renderer), Sky Delivery Man (part of GaiaLabs' base, not a module),
 Portuguese.
-**Minimal HUD:** not done. The game's own per-scene HUD-off bit (display
-preset byte +7) cannot express it as data: 10 of the presets are shared by
-combat and non-combat rooms and only 3 preset slots are free. It needs the
-HUD loader and per-frame update to consult the combat lock, i.e. a
-regenerated native routine. Debug menu, dungeon map, minimap, widescreen
+**Minimal HUD** (beta 21, off by default): presentation only. Around each
+frame's raster the status display's BG3 rows are drawn blank while the
+combat lock ($09AE bit 3) is set and all 41 fixed HUD tiles are in place;
+the game (UpdateHUD, herb healing, BG3, save states) is untouched. Played:
+Euro hidden and Mt. Kress shown in Wide, Classic and Original; herbs heal
+the same with it on and off (all WRAM identical, native = interpreter);
+Great Wall to the Sand Fanger lair and back; Dao's snake game lifting the
+lock shows the HUD the next frame; save/load. Below the HUD rows every
+frame is pixel-identical on vs off. Not played: the lock set mid-scene by
+game code (only by poke), the Freejia kidnapper, boss rooms, run-ahead.
+Debug menu, dungeon map, minimap, widescreen
 and walkable world map are not taken over: this port has its own.
 
 **Not played** by a person. No in-game settings rows: the options are on the
@@ -511,10 +550,21 @@ after a crash (the half-minute rewrite is the fallback).
   `SNESRECOMP_CAPTURE_OUT` now switch recording off (before, the first three
   did not, so automated input could earn achievements). Not tested: sound,
   the achievements browser, the room-reward and ending achievements.
-- **A save over 50 Red Jewels** (only possible through the old cheat) stops
-  every achievement in that session, not only the jewel ones, with no
-  message saying why (`observer.c`). Not changed; the cheat no longer makes
-  such saves.
+- **Why achievements are not recording** (beta 21): the view says so
+  ("Paused: save shows over 50 Red Jewels", "Paused: Red Jewel count
+  unreadable", "Not recorded: cheats used this session", per mode, storage
+  failures as before). A refused reading still records nothing; the next
+  valid one becomes a new baseline, so nothing earlier is awarded. Seen in
+  the game (test-input build, disposable install copies): over 50, bad
+  BCD, corrupt/unwritable/locked profile, cheats, and a restart with a
+  valid save unlocking only the new pickup. Unit tests only: recovery
+  inside one session, a full event queue, New Game+/Randomizer/Apocalypse.
+- **Test runners** (beta 21): `test_native_continuations.py` now covers
+  builds with the native WRAM continuations (on by default, only "0"
+  disables, a failed registration clears everything, interpreter-only
+  builds never enable it; seven source mutations caught), and the host
+  test runner reports PASS/SKIP/FAIL separately and fails on any skip or a
+  missing case (18 of 18).
 - **Native since beta 7.** The owner decided on November 26 to publish the
   compiled game code in the download (`package_release.py --native`, from
   `.local/batch-001/sdk-update/build`). The package was run from a clean

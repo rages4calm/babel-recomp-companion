@@ -28,13 +28,15 @@ play stays the stock USA ROM (the launcher verifies it).
 | Graphics effects (`iog.graphics`) | HD scaling | Crisp pixels at any resolution, or smooth redrawn edges (xBR), up to 4K |
 | GaiaLabs options (`iog.gaialabs`) | JP content | The Japanese release's Edward Castle, Itory and Great Wall backgrounds, red fountain, church cross, prologue palettes and recoloured Crystal Ring; off by default, the purple Diamond Mine and the JP Viper |
 | | Herbs heal fully | A herb refills all of Will's HP |
+| | Minimal HUD | The status display shows only where you can fight (off by default) |
 | | Pyramid portals | Portals lead to the entrance hall's lower area |
 | | Pyramid moving floors 2x | The Pyramid's moving floors travel twice as fast |
 | | Shira's dream: no spotlight | Will's dream of his mother stays fully lit (off by default) |
-| | Shortcuts | Sam takes you from the Diamond Mine to Freejia; a voice in Angkor Wat takes you back to its entrance |
+| | Shortcuts | Sam takes you from the Diamond Mine to Freejia; a voice in Angkor Wat takes you back to its entrance; a spirit at the top of Mt. Kress takes you back down |
 | | South Cape: welcome back | South Cape's people greet you when you return later in the story |
 | | Thankful Flower | The aqueduct flower thanks you once you have played the melody |
 | | Blue Journal | Lance's father gives you his journal when you visit him |
+| | Freejia: the runaway laborer returns | Keep the laborer's secret and he later pays the Red Jewel the slaver would have |
 | *(any data-only package)* | HD graphics | Replacement art, see `snesrecomp/docs/HD_PACKS.md` |
 
 ## MSU-1 soundtrack
@@ -163,6 +165,8 @@ the launcher's Mods page (GaiaLabs section).
   offers to take you straight to Freejia. GaiaLabs plays a world-map trip on
   the way; here he takes you directly, because the mine room has no
   world-map name in the original game.
+- **Shortcut: Mt. Kress**: once you have climbed it, a spirit at the top of
+  the mountain offers to take you back down.
 - **Shortcut: Angkor Wat**: after the Gorgon Flower, a voice offers to take
   you back to the temple's entrance.
 - **South Cape: welcome back**: once you have reached Watermia, South Cape's
@@ -173,6 +177,11 @@ the launcher's Mods page (GaiaLabs section).
 - **Blue Journal**: Lance's father gives you his journal when you have read
   his letter (or when you return), if you have room for it. The journal's
   own text is the Retranslation's.
+- **Freejia: the runaway laborer returns**: if you did not give the laborer
+  away, the house he hid in is open once you have reached Watermia, he
+  thanks you with the Red Jewel the slaver pays in the other branch (once;
+  either way there are 50), the woman who hid him has new lines and the
+  slavers are gone from the street.
 
 GaiaLabs' patches change game code, which the native build cannot take
 over; these three do the same to the game's state from the host instead,
@@ -182,9 +191,8 @@ journal) are GaiaLabs' own script code, assembled for the original game
 interpreter; their new lines are spelled for the original text engine.
 Options that overlap this port's own features (map, minimap, widescreen,
 walkable world map, run button, text speed) are not taken over. Not yet
-available: the title screens, the Mt. Kress shortcut (its spirit cannot be
-drawn in that room), the Sky Delivery Man, the borderless epilogue and
-adrift text, the Freejia slave return, minimal HUD, plain borders and the
+available: the title screens, the Sky Delivery Man, the borderless epilogue and
+adrift text, plain borders and the
 Portuguese translation.
 
 ## Apocalypse Gaia

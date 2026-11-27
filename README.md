@@ -60,12 +60,15 @@ window's resolution; the others use the optional HD Mode 7 setting.
   palettes and recoloured Crystal Ring (and, optionally, the purple Diamond
   Mine and the JP Viper), herbs that heal fully, Pyramid portals that lead to
   the lower hall, Pyramid moving floors at twice the speed, shortcuts from
-  the Diamond Mine to Freejia and back to Angkor Wat's entrance, South Cape's
-  welcome back, the Thankful Flower, the Blue Journal, and (optionally)
-  Shira's dream without the spotlight. The JP art loads through the
-  game's own code, so it works natively and in the wide view.
+  the Diamond Mine to Freejia, back to Angkor Wat's entrance and down from
+  the top of Mt. Kress, South Cape's welcome back, the Thankful Flower,
+  the Blue Journal, the runaway laborer's return, and (optionally) Shira's
+  dream without the spotlight and a status display shown only where you
+  can fight. The JP art loads through the game's own code, so it works
+  natively and in the wide view.
 - **Achievements**, saved on your PC, with a controller-friendly browser in
-  the in-game settings.
+  the in-game settings that also says why progress is not being recorded
+  (cheats used, a save with over 50 Red Jewels, an unusable profile).
 - **Optional MSU-1 orchestral soundtrack**, imported and verified on the
   launcher's Soundtrack page. The original SNES music is the default.
 - **Conveniences you can switch on:** auto-run (walk to build speed; hold the
@@ -142,7 +145,7 @@ on the launcher's Game page to **Open the setup screen**.
 
 ## Development status
 
-**Current build:** `0.2.0-beta.20`, Windows x64, pre-release for
+**Current build:** `0.2.0-beta.21`, Windows x64, pre-release for
 playtesting. Automated routes reach the ending and the credits; a full
 playthrough by a person is under way.
 
