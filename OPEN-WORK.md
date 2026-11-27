@@ -77,7 +77,8 @@ Find the audit reason over the ride and admit that exact layout (as the
 Angkor $B0 mosaic row did). Also queued: widen Dark Gaia's arena ($E8) by
 extending its backdrop sideways, if the seams look right in both phases.
 Owner report (Scene Picker recording, beta 23): some boss scenes had frame
-drops at points (not all of them; which ones not yet named). Measure frame
+drops at points: the Vampires fight, and generally wherever many enemies
+are on screen at once or a boss plays a large animation. Measure frame
 times per boss scene (Showcase sessions 12-17, plus the GPU path and Wide
 view), find the slow frames and their cause (renderer, interpreter
 fallback, effects), and fix them; Console CPU cost (span planning, render
