@@ -26,11 +26,29 @@ static const uint8_t *verified_rom;
 static uint64_t generation;
 static unsigned observed_frame;
 static bool read_only;
+static companion_gaia_problem reported_problem;
 #ifdef IOG_ACHIEVEMENT_STORAGE
 static bool save_progress;
 static IogAchievementStore *store;
+static bool store_failed;
 static bool eligible;
+/* Why this session or save is not eligible; NULL before the first frame. */
+static const char *ineligible;
 #endif
+
+/* Every status fits the browser's status line in a 4:3 picture (40 columns
+ * of the 8-pixel font; 50 in wide views). */
+static const char *ProblemText(companion_gaia_problem problem)
+{
+    switch (problem) {
+    case COMPANION_GAIA_OK: break;
+    case COMPANION_GAIA_BAD_FRAME: return "Paused: game memory unavailable";
+    case COMPANION_GAIA_BAD_JEWEL_DIGITS: return "Paused: Red Jewel count unreadable";
+    case COMPANION_GAIA_TOO_MANY_JEWELS: return "Paused: save shows over 50 Red Jewels";
+    case COMPANION_GAIA_EVENT_LOST: return "Stopped: progress could not be recorded";
+    }
+    return NULL;
+}
 
 void IogAchievementAuditStart(int argc, char **argv)
 {
@@ -76,11 +94,15 @@ const char *IogAchievementAuditSnapshot(ca_state states[CA_MAX_ACHIEVEMENTS], ui
     if (read_only) return "Read-only audit";
 #ifdef IOG_ACHIEVEMENT_STORAGE
     if (!save_progress) return "Progress disabled in this session";
-    if (!eligible) return "Progress unavailable for this game session";
-    if (!store) return "Progress unavailable";
+    if (!eligible)
+        return ineligible ? ineligible : verified_rom ? "Starts when a game is loaded" : "Progress unavailable";
+    if (!store) return store_failed ? "Progress folder unavailable" : "Starts when a game is loaded";
+    /* A storage failure outranks an observation problem: it is the cause of
+     * a lost event, and it lasts for the session. */
+    const char *problem = ProblemText(observer.problem);
     switch (IogAchievementStoreSnapshot(store, states, notices)) {
-    case kIogAchievementLoading: return "Loading local progress";
-    case kIogAchievementReady: return "Local progress";
+    case kIogAchievementLoading: return problem ? problem : "Loading local progress";
+    case kIogAchievementReady: return problem ? problem : "Local progress";
     case kIogAchievementInUse: return "Profile open in another game window";
     case kIogAchievementInvalidProfile: return "Profile could not be read";
     case kIogAchievementWriteFailure: return "Unable to save progress";
@@ -94,6 +116,7 @@ void IogAchievementAuditShutdown(void)
 #ifdef IOG_ACHIEVEMENT_STORAGE
     IogAchievementStoreClose(store);
     store = NULL;
+    store_failed = false;
 #endif
 }
 
@@ -119,8 +142,11 @@ static bool Report(void *context, const char *event, uint32_t amount)
 void IogAchievementAuditBind(void)
 {
     verified_rom = NULL;
+    reported_problem = COMPANION_GAIA_OK;
+    companion_gaia_observer_init(&observer, Report, NULL);
 #ifdef IOG_ACHIEVEMENT_STORAGE
     eligible = false;
+    ineligible = "Not recorded: ROM not verified";
 #endif
     const Cart *cart = g_snes ? g_snes->cart : NULL;
     bool enabled = read_only;
@@ -141,7 +167,9 @@ void IogAchievementAuditBind(void)
         return;
 
     verified_rom = cart->rom;
-    companion_gaia_observer_init(&observer, Report, NULL);
+#ifdef IOG_ACHIEVEMENT_STORAGE
+    ineligible = NULL;
+#endif
     ++generation;
     if (read_only) fputs("[iog_achievement_audit] observing stock signals in read-only mode\n", stderr);
 }
@@ -175,7 +203,13 @@ void IogAchievementAuditFrame(unsigned frame)
     };
 #ifdef IOG_ACHIEVEMENT_STORAGE
     if (!read_only) {
-        eligible = sample.verified_stock_rom && !sample.cheats_used && !sample.new_game_plus;
+        ineligible = !sample.verified_stock_rom ?
+                (cart->rom != verified_rom ? "Not recorded: ROM not verified" :
+                 IogRandomizerActive() ? "Not recorded with the Randomizer" :
+                 "Not recorded with Apocalypse Gaia") :
+            sample.cheats_used ? "Not recorded: cheats used this session" :
+            sample.new_game_plus ? "Not recorded in New Game+" : NULL;
+        eligible = !ineligible;
         if (!eligible) {
             IogAchievementAuditInvalidate();
             return;
@@ -187,11 +221,32 @@ void IogAchievementAuditFrame(unsigned frame)
             if (snesrecomp_exe_dir_path("UserData/Achievements/illusion-of-gaia/stock-companion/unseeded",
                                         directory, sizeof(directory)))
                 store = IogAchievementStoreOpen(directory);
-            if (!store) { verified_rom = NULL; return; }
+            if (!store) {
+                fputs("[iog_achievements] progress folder unavailable; not recording this session\n", stderr);
+                store_failed = true;
+                verified_rom = NULL;
+                return;
+            }
         }
         const unsigned scene = ram[0x0644] | (unsigned)ram[0x0645] << 8;
         if (scene == 0xfa) { IogAchievementAuditInvalidate(); return; }
     }
 #endif
     (void)companion_gaia_observe(&observer, &sample);
+    /* The browser shows the reason (IogAchievementAuditSnapshot); the log
+     * records each change once, with the values that caused it. */
+    if (observer.problem != reported_problem) {
+        const char *text = ProblemText(observer.problem);
+        if (observer.problem == COMPANION_GAIA_BAD_JEWEL_DIGITS ||
+            observer.problem == COMPANION_GAIA_TOO_MANY_JEWELS)
+            fprintf(stderr, "[iog_achievements] frame=%u %s ($0AB0=%02X $0B56=%u)\n",
+                frame, text, ram[0x0ab0], ram[0x0b56]);
+        else if (text)
+            fprintf(stderr, "[iog_achievements] frame=%u %s\n", frame, text);
+        else
+            fprintf(stderr, "[iog_achievements] frame=%u recording again from a new baseline "
+                "(jewels=%u rooms=%u); nothing earlier is awarded\n",
+                frame, observer.jewels, observer.rooms);
+        reported_problem = observer.problem;
+    }
 }

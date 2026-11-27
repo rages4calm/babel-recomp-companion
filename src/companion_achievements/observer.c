@@ -21,10 +21,14 @@ void companion_gaia_observer_invalidate(companion_gaia_observer *o)
     if (!o) return;
     o->baseline=false; o->active=false; o->epilogue=false; o->finished=false;
 }
+static bool refuse(companion_gaia_observer *o, companion_gaia_problem why)
+{
+    companion_gaia_observer_invalidate(o); o->problem=why; return false;
+}
 static bool emit(companion_gaia_observer *o, const char *event, unsigned amount)
 {
     if (!o->event || !o->event(o->context,event,amount)) {
-        o->failed=true; return false;
+        o->failed=true; o->problem=COMPANION_GAIA_EVENT_LOST; return false;
     }
     return true;
 }
@@ -32,20 +36,17 @@ bool companion_gaia_observe(companion_gaia_observer *o, const companion_gaia_fra
 {
     if (!o || !f || o->failed) return false;
     if (!f->ram || !f->rom || f->ram_size<=EXTRA_JEWELS ||
-        f->rom_size<REWARD_TABLE+256) {
-        companion_gaia_observer_invalidate(o); return false;
-    }
+        f->rom_size<REWARD_TABLE+256)
+        return refuse(o,COMPANION_GAIA_BAD_FRAME);
     if (!f->verified_stock_rom || f->cheats_used || f->diagnostic || f->new_game_plus) {
-        companion_gaia_observer_invalidate(o); return true;
+        companion_gaia_observer_invalidate(o); o->problem=COMPANION_GAIA_OK; return true;
     }
     const uint8_t *r=f->ram;
     unsigned scene=word(r+SCENE), bcd=r[GIVEN_JEWELS];
-    if ((bcd&15)>9 || (bcd>>4)>5) {
-        companion_gaia_observer_invalidate(o); return false;
-    }
+    if ((bcd&15)>9 || (bcd>>4)>5) return refuse(o,COMPANION_GAIA_BAD_JEWEL_DIGITS);
     unsigned jewels=(bcd>>4)*10+(bcd&15)+r[EXTRA_JEWELS], rooms=0;
     for (unsigned i=0;i<16;i++) jewels+=r[INVENTORY+i]==1;
-    if (jewels>50) { companion_gaia_observer_invalidate(o); return false; }
+    if (jewels>50) return refuse(o,COMPANION_GAIA_TOO_MANY_JEWELS);
     for (unsigned i=0;i<256;i++)
         if (f->rom[REWARD_TABLE+i] && (r[CLEAR_FLAGS+i/8]&(1u<<(i&7)))) rooms++;
     bool active=word(r+GAME_LOADED)!=0;
@@ -56,6 +57,8 @@ bool companion_gaia_observe(companion_gaia_observer *o, const companion_gaia_fra
         if (jewels<o->jewels) reset=true;
         for (unsigned i=0;i<32;i++) if (o->clear_flags[i] & ~r[CLEAR_FLAGS+i]) reset=true;
     }
+    /* After a refusal `baseline` is false, so recovery lands here: the
+     * current valid observation becomes the new baseline and emits nothing. */
     if (reset) {
         o->epilogue=false; o->finished=false;
     } else {
@@ -74,6 +77,7 @@ bool companion_gaia_observe(companion_gaia_observer *o, const companion_gaia_fra
     }
     o->generation=f->generation; o->scene=(uint16_t)scene;
     o->jewels=jewels; o->rooms=rooms; o->active=active; o->baseline=true;
+    o->problem=COMPANION_GAIA_OK;
     memcpy(o->clear_flags,r+CLEAR_FLAGS,32);
     return true;
 }

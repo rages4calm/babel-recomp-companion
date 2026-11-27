@@ -86,6 +86,38 @@ int main(void)
     CHECK(!companion_gaia_observe(&o,&f));CHECK(o.failed);
     CHECK(!notices && ca_unlocked(&engine)==0 && commits==1);
     commit_ok=true;CHECK(!companion_gaia_observe(&o,&f));CHECK(commits==1);
+    CHECK(o.problem==COMPANION_GAIA_EVENT_LOST);
+    ram[0x0AB0]=0xFA;CHECK(!companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_EVENT_LOST);
+    /* Refusals say why, and recovery rebaselines from the current valid
+     * observation: what happened while refused is never awarded. */
+    setup(&o,&f);ram[0x0B56]=3;CHECK(companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_OK);
+    ram[0x0B56]=51;CHECK(!companion_gaia_observe(&o,&f));
+    CHECK(o.problem==COMPANION_GAIA_TOO_MANY_JEWELS && !o.baseline);
+    ram[0x0B56]=52;ram[0x0A61]=1;CHECK(!companion_gaia_observe(&o,&f));CHECK(!events);
+    CHECK(o.problem==COMPANION_GAIA_TOO_MANY_JEWELS);
+    ram[0x0B56]=49;CHECK(companion_gaia_observe(&o,&f));
+    CHECK(o.problem==COMPANION_GAIA_OK && !events && o.jewels==49 && o.rooms==1 && !ca_unlocked(&engine));
+    CHECK(companion_gaia_observe(&o,&f));CHECK(!events);
+    ram[0x0B56]=50;CHECK(companion_gaia_observe(&o,&f));CHECK(events==1 && ca_unlocked(&engine)==4);
+    /* Exactly 50 is valid; 50 given plus one carried is not. */
+    setup(&o,&f);ram[0x0AB0]=0x50;CHECK(companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_OK);
+    ram[0x0AB4]=1;CHECK(!companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_TOO_MANY_JEWELS);
+    /* Every malformed BCD byte is refused with its own reason. */
+    setup(&o,&f);CHECK(companion_gaia_observe(&o,&f));
+    static const uint8_t bad_digits[]={0x0A,0x0F,0x1A,0x60,0x99,0xFF};
+    for(unsigned i=0;i<sizeof bad_digits;i++){
+        ram[0x0AB0]=bad_digits[i];CHECK(!companion_gaia_observe(&o,&f));
+        CHECK(o.problem==COMPANION_GAIA_BAD_JEWEL_DIGITS && !o.baseline);
+    }
+    ram[0x0AB0]=0x59;CHECK(!companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_TOO_MANY_JEWELS);
+    ram[0x0AB0]=0x12;CHECK(companion_gaia_observe(&o,&f));
+    CHECK(o.problem==COMPANION_GAIA_OK && o.jewels==12 && !events && !ca_unlocked(&engine));
+    ram[0x0AB0]=0x13;CHECK(companion_gaia_observe(&o,&f));CHECK(events==1 && ca_unlocked(&engine)==2);
+    /* A frame without memory, and a noneligible mode, replace a stale reason. */
+    setup(&o,&f);f.ram_size=10;CHECK(!companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_BAD_FRAME);
+    f.ram_size=sizeof ram;CHECK(companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_OK);
+    ram[0x0B56]=60;CHECK(!companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_TOO_MANY_JEWELS);
+    f.cheats_used=true;CHECK(companion_gaia_observe(&o,&f));CHECK(o.problem==COMPANION_GAIA_OK && !events);
     /* A saved earned achievement restores silently through the actual core/UI. */
     setup(&o,&f);CHECK(ca_restore(&engine,"gaia.first-jewel",1,1700000000));
     CHECK(ca_ui_snapshot(&ui,engine.states,engine.count));CHECK(!notices && !commits);
