@@ -156,6 +156,24 @@ static bool MapArt(const MapLayer *layer, int x, int y)
         (int)(MapTile(layer, (unsigned)x, (unsigned)y) & 0x3FF) != layer->blank;
 }
 
+/* A second layer exactly as wide as its tilemap repeats in hardware, the
+ * Great Wall sky among them (256px, scrolled to 256 and 512 by HDMA, still
+ * x 0..255 on screen). Its margins continue that repeat, as the Great Wall's
+ * left margin always did; returns the repeat width, or 0. */
+static int RepeatWidth(const MapLayer *layer)
+{
+    int span = PPU_bgTilemapWider(g_ppu, layer->physical) ? 512 : 256;
+    return layer->logical == 1 && layer->width == span ? span : 0;
+}
+
+/* MapArt, with x taken modulo a repeating layer's width. */
+static bool LayerArt(const MapLayer *layer, int x, int y)
+{
+    int w = RepeatWidth(layer);
+    if (w) x = ((x % w) + w) % w;
+    return MapArt(layer, x, y);
+}
+
 /* World span [s_art_left, s_art_right) of the main layer that the margins may
  * show this frame. The declared width ($0692) is storage, not art: the Great
  * Wall declares 1024px while every cell from x 800 is empty, so a margin
@@ -188,6 +206,11 @@ static void MeasureArt(int cam, int budget, int bounds)
     int reach[2] = {0, 0};
     for (int i = 0; i < 2; i++) {
         const MapLayer *layer = &s_map_layers[i];
+        /* A repeating layer has no edge of its own and does not extend the
+         * map: past the Great Wall's last wall column (x 800) the sky's lower
+         * rows, normally hidden behind the wall, would show as loose
+         * cobbles. Inside the span it still fills the margins line by line. */
+        if (RepeatWidth(layer)) continue;
         int wx = ScrollWorld(0x068A + i * 2, g_ppu->hScroll[layer->physical]);
         int wy = ScrollWorld(0x068E + i * 2, g_ppu->vScroll[layer->physical]);
         for (int side = 0; side < 2; side++) {
@@ -200,33 +223,54 @@ static void MeasureArt(int cam, int budget, int bounds)
     if (cam + 256 + reach[1] < s_art_right) s_art_right = cam + 256 + reach[1];
 }
 
-/* One line's margin on one side (side < 0: left). Where the second layer has
- * art at the native edge but cannot continue past it (a fixed 256px sky,
- * camera 0), only the main layer's art may fill the margin on this line;
- * past that the line stays black instead of the backdrop colour. */
+/* One line's margin on one side (side < 0: left). Where some layer has art
+ * at the native edge column on this line, the margin ends after the last
+ * column that a layer can fill with art; past it the line stays black
+ * rather than showing the backdrop colour (the Great Wall's is green) next
+ * to art. A line whose native edge already shows the backdrop keeps it. A
+ * second layer counts where the margin fill reaches it: by repeat, or inside
+ * its world when its scroll can be placed. */
 static int LineMargin(int line, int cam, int margin, int side, bool placed)
 {
     const MapLayer *main = &s_map_layers[0], *second = &s_map_layers[1];
-    if (!margin || !placed || !second->valid || !LayerEnabled(second->physical)) return margin;
-    int wx = ScrollWorld(0x068C, g_ppu->hScroll[second->physical]);
-    int wy = ScrollWorld(0x0690, g_ppu->vScroll[second->physical]);
-    if (wx < 0 || wy < 0) return margin;
-    /* Whether the margin fill (which reads only x inside the layer) has
-     * nothing for this side: its world span misses [0, width) entirely. */
-    bool fixed = side > 0 ? wx + 256 >= second->width
-                          : wx <= 0 || wx - margin >= second->width;
-    /* The native edge column. A layer exactly as wide as its tilemap repeats
-     * in hardware: the Great Wall sky scrolls to 256 and 512 by HDMA and
-     * still shows x 0..255 natively. */
-    int edge = side > 0 ? wx + 255 : wx;
-    if (second->width == (PPU_bgTilemapWider(g_ppu, second->physical) ? 512 : 256))
-        edge %= second->width;
-    if (!fixed || !MapArt(second, edge, wy + line)) return margin;
-    int y = ScrollWorld(0x068E, g_ppu->vScroll[main->physical]);
-    if (y < 0) return 0;
+    if (!margin) return margin;
+    int my = ScrollWorld(0x068E, g_ppu->vScroll[main->physical]);
+    if (my < 0) return margin;
+    int sx0 = -1, sy = -1;   /* second layer world at screen x 0, and its row */
+    if (second->valid && LayerEnabled(second->physical)) {
+        int wy = ScrollWorld(0x0690, g_ppu->vScroll[second->physical]);
+        if (wy >= 0 && RepeatWidth(second)) {
+            sx0 = g_ppu->hScroll[second->physical] & 0x3FF; sy = wy + line;
+        } else if (wy >= 0 && placed) {
+            sx0 = ScrollWorld(0x068C, g_ppu->hScroll[second->physical]); sy = wy + line;
+        }
+    }
+    #define ART_AT(sx) (MapArt(main, cam + (sx), my + line) || \
+                        (sx0 >= 0 && LayerArt(second, sx0 + (sx), sy)))
+    if (!ART_AT(side > 0 ? 255 : 0)) return margin;
     for (int k = margin - 1; k >= 0; k--)
-        if (MapArt(main, side > 0 ? cam + 256 + k : cam - 1 - k, y + line)) return k + 1;
+        if (ART_AT(side > 0 ? 256 + k : -1 - k)) return k + 1;
+    #undef ART_AT
     return 0;
+}
+
+/* A repeating second layer shows through the main layer somewhere on this
+ * line of the native picture (the Great Wall's sky and dunes rows). Such a
+ * line may continue it into the margin past the main layer's last art column
+ * (x 800 there), up to the declared width; on other lines the second layer's
+ * row is hidden filler (loose cobbles behind the wall) and stays out. */
+static bool SecondShowsOnLine(int line, int cam)
+{
+    const MapLayer *main = &s_map_layers[0], *second = &s_map_layers[1];
+    if (!second->valid || !LayerEnabled(second->physical) || !RepeatWidth(second)) return false;
+    int my = ScrollWorld(0x068E, g_ppu->vScroll[main->physical]);
+    int sy = ScrollWorld(0x0690, g_ppu->vScroll[second->physical]);
+    if (my < 0 || sy < 0) return false;
+    int sx0 = g_ppu->hScroll[second->physical] & 0x3FF;
+    for (int x = 0; x < 256; x += 4)
+        if (!MapArt(main, cam + x, my + line) && LayerArt(second, sx0 + x, sy + line))
+            return true;
+    return false;
 }
 
 /* Refresh after simulation, and again after each line's HDMA/IRQ. A frame
@@ -269,6 +313,10 @@ void IogWidescreenBeforeLine(int line)
     } else if (!s_map_frame || (g_ppu->bgmode & 7) != 1) {
         left = right = 0;
     } else {
+        if (SecondShowsOnLine(line, cam)) {
+            left = Clamp(cam, 0, budget);
+            right = Clamp((int)WramWord(kWramMapBoundsX) - cam - 256, 0, budget);
+        }
         left = LineMargin(line, cam, left, -1, placed[1]);
         right = LineMargin(line, cam, right, 1, placed[1]);
     }
@@ -282,19 +330,19 @@ void IogWidescreenBeforeLine(int line)
         int wy = ScrollWorld(0x068E + i * 2, g_ppu->vScroll[physical]);
         int wrap = 0;
         bool fill = true;
-        if (i == 1 && !placed[1]) {
-            /* The second layer's raster scroll has left its camera words (Itory's
-             * cliffs scroll to 532 by HDMA with the camera word at 0). A layer
-             * exactly as wide as its tilemap repeats in hardware, so its world
-             * is the scroll modulo that width; the margins continue the repeat.
-             * Otherwise it is keyed far past every map: its margins read the
-             * transparent tile, and only the two edge cells (below) keep their
-             * real entries so the native columns are untouched. */
-            int span = PPU_bgTilemapWider(g_ppu, physical) ? 512 : 256;
-            if (layer->width == span && wy >= 0) {
-                wrap = span;
-                wx = (g_ppu->hScroll[physical] & (span - 1)) + span;
-            } else if (layer->width > kFarWorldX) {
+        if (i == 1 && RepeatWidth(layer) && wy >= 0) {
+            /* A repeating second layer is placed by its raster scroll alone,
+             * one repeat in, so both margins read the repeat. This also covers
+             * a scroll that has left its camera words (Itory's cliffs scroll
+             * to 532 by HDMA with the camera word at 0). */
+            wrap = RepeatWidth(layer);
+            wx = (g_ppu->hScroll[physical] & (wrap - 1)) + wrap;
+        } else if (i == 1 && !placed[1]) {
+            /* The second layer's scroll has left its camera words and it does
+             * not repeat: it is keyed far past every map, so its margins read
+             * the transparent tile, and only the two edge cells (below) keep
+             * their real entries so the native columns are untouched. */
+            if (layer->width > kFarWorldX) {
                 continue;
             } else {
                 fill = false;

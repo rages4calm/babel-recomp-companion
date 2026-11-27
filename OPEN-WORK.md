@@ -618,9 +618,10 @@ launcher. Still open or untested:
   margins (the sky's own scroll cancelled the frame) and the walkable world
   map's streaks (a stale HUD split stopped HD Mode 7) are gone, through the
   GPU path; wide view and Original 4:3 frames are byte-identical before and
-  after on the same routes. The right margin at the Great Wall is now black
-  where the 256-wide sky ends; it could repeat the dunes instead (owner's
-  choice).
+  after on the same routes. In beta 20 both margins at the Great Wall repeat
+  the sky and dunes (no green in 14 staged runs, no seams at 4x zoom). Left:
+  an 11-pixel black strip below the sky at the wall's right end, where the
+  map itself ends; filling it from the sky layer showed loose cobblestones.
 - **Walkable world map with Enhanced off, wide view:** the streaks are the
   original's coarse 1x ground, which this setting deliberately shows; the
   help text now says so. Classic and Original smooth it either way.

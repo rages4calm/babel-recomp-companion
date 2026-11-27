@@ -238,6 +238,25 @@ static void check_art_bounds(void) {
     CHECK(g_ppu->extraLeftCur==43 && g_ppu->extraRightCur==0);
     IogWidescreenBeforeLine(100);
     CHECK(g_ppu->extraLeftCur==43 && g_ppu->extraRightCur==43);
+    /* The same 256px layer on a 256px tilemap repeats in hardware (the Great
+     * Wall sky, scrolled to 256 by HDMA): both margins continue the repeat. */
+    g_ppu->bgXsc[1]=0x18; g_ppu->hScroll[1]=256;
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(10);
+    CHECK(WsShadowLayerActive(0) && g_ppu->extraLeftCur==43 && g_ppu->extraRightCur==43);
+    {unsigned y=64+10, x=256+256+8, mx=x%256; uint16_t e;
+     unsigned byte=g_snes->ram[0xc000+(((y>>8)<<8)+(((y>>4)&15)<<4)+((mx>>4)&15))];
+     CHECK(WsShadowLookupWorldTile(1,x>>3,y>>3,&e) && e==readword(0x2800+byte*8+((y>>3)&1)*4+((mx>>3)&1)*2));
+     x=256-16; mx=x%256; byte=g_snes->ram[0xc000+(((y>>8)<<8)+(((y>>4)&15)<<4)+((mx>>4)&15))];
+     CHECK(WsShadowLookupWorldTile(1,x>>3,y>>3,&e) && e==readword(0x2800+byte*8+((y>>3)&1)*4+((mx>>3)&1)*2));}
+    /* A line whose native edge already shows the backdrop keeps the margin. */
+    for (unsigned x=0;x<256;x+=16) cell(1,x,64,0);
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(10);
+    CHECK(g_ppu->extraRightCur==43);
+    /* Art at the native edge, then nothing in either layer past x 368 on that
+     * row: the margin ends there, black rather than the backdrop colour. */
+    for (unsigned y=0;y<128;y+=16) cell(0,352,y,1);
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(10);
+    CHECK(g_ppu->extraRightCur==8);
 }
 int main(void) {
     g_snes=calloc(1,sizeof(*g_snes)); g_ppu=calloc(1,sizeof(*g_ppu));
