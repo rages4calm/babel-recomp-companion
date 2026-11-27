@@ -553,8 +553,7 @@ def slave_return(src, pack):
     reached with long jumps, and an actor that jumps into stock code which
     yields first sets its resume bank ($02) to that code's bank (the runner
     resumes at $00 in bank $02: left at $07, the locked door and both
-    slavers crashed the room whenever none of the flags was set). The
-    module's text is used as written (its one
+    slavers crashed the room whenever none of the flags was set). The module's text is used as written (its one
     [JMP] into another string is expanded)."""
     import gaialabs_asm as ga
     db = ga.Db(src.baserom, src.rom, gaia_names(src), gaia_themes(src))
@@ -728,17 +727,40 @@ UPLOAD = ("    COP [4F] ( @%s+%X, #$%04X, #$%04X )\n"
           "    STZ $%04X\n") % (FX_SOURCE, (SPIRIT_TILES[0] - 0x40) * 32, NAME_TABLE_1 + SPIRIT_TILES[0] * 16,
                                (SPIRIT_TILES[1] - SPIRIT_TILES[0]) * 32, CACHE_SLOT_BG_D + 1)
 KRESS_FIXUPS = [
-    # name table 1 for every sub-sprite, before the first frame is staged
+    # name table 1 for every sub-sprite, before the first frame is staged;
+    # then the inventory watcher (kress_watch), told which actor it hides
+    # (SpawnThinker returns the new thinker in Y; its $0E is free)
     ("    COP [88] ( @spriteset_npc_props )\n",
-     "    COP [88] ( @spriteset_npc_props )\n    LDA #$0100\n    TSB $0E\n"),
-    # idle loop, every frame: when the scene's sprite art has been loaded since
+     "    COP [88] ( @spriteset_npc_props )\n    LDA #$0100\n    TSB $0E\n"
+     "    COP [3C] ( @kress_watch )\n    TXA\n    STA $000E,Y\n"),
+    # idle loop, every frame: shown again (kress_watch may have hidden it);
+    # when the scene's sprite art has been loaded since
     # the last upload (the cache slot holds a source again: entering the room,
     # or the room reloaded after the inventory screen), upload the tiles;
     # AdhocVramDma yields until the NMI has run it and leaves the entry point
     # on itself, so the loop head is set again afterwards
     ("    COP [C1]\n    COP [C1]\n    COP [89]\n",
-     "  kress_upload:\n    COP [C1]\n    LDA $%04X\n    BEQ kress_anim\n" % (CACHE_SLOT_BG_D + 1) + UPLOAD
+     "  kress_upload:\n    COP [C1]\n    LDA #$2000\n    TRB $10\n    LDA $%04X\n    BEQ kress_anim\n" % (CACHE_SLOT_BG_D + 1) + UPLOAD
      + "    BRA kress_upload\n  kress_anim:\n    COP [89]\n"),
+    # Closing the inventory composes the restored sprites twice with the NMI
+    # off (UpdateFrameRender, no actor pass) right after the scene reload, and
+    # the spirit's sub-sprites made that run past the vblank, so the room came
+    # back one frame later than without the option ($0036 one behind, the
+    # palette cycles a step out of phase). The inventory opens from
+    # GlobalInputHandler, before the actors run, so the spirit cannot hide
+    # itself in time; this thinker runs only in the main loop's general pass
+    # (filter word 0), which comes just before GlobalInputHandler, and hides
+    # the spirit ($10 bit 13) when Select is about to open the inventory (the
+    # handler's own tests: Start first, Select, playerFlags $2A00, no
+    # sceneNext). The saved state then holds a hidden spirit, and its next
+    # tick shows it again.
+    ("shortcut_interact {\n",
+     "kress_watch {\n    LDA #$0000\n    STA $7F000E,X\n    LDA $7E0656\n    BIT #$1000\n"
+     "    BNE kress_watch_done\n    BIT #$2000\n    BEQ kress_watch_done\n    LDA $7E09AE\n"
+     "    BIT #$2A00\n    BNE kress_watch_done\n    LDA $7E0642\n    AND #$00FF\n"
+     "    BNE kress_watch_done\n    PHX\n    LDA $0E\n    TAX\n    LDA $7E0010,X\n"
+     "    ORA #$2000\n    STA $7E0010,X\n    PLX\n  kress_watch_done:\n    RTL\n}\n\n"
+     "shortcut_interact {\n"),
     # stand as the stock spirit guide does (awBF_spirit_guide): solid on two
     # tiles and drawn between them, so Will stops beside it instead of
     # walking half into it (GaiaLabs marks one tile and does not nudge). The
