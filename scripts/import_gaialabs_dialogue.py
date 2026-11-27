@@ -72,6 +72,12 @@ CORRECTIONS = {
     "08963C": (("[TPL:1][TPL:10]", "[TPL:1][TPL:F]"), ("northwest and[N]were", "northwest and[FIN]were"),
                ("selling children when[N]there's", "selling children when[FIN]there's")),
     "059DCD": (("[::][TPL:12]", "[::][TPL:B]"), ("in books, but I[N]would", "in books, but I[FIN]would")),
+    # Dao hotel, Kara: the five-row top box covered her and the boy next to
+    # her; the original asks this in the four-row box.
+    "08A51E": (("[TPL:1][TPL:12]", "[TPL:1][TPL:B]"), ("slave merchants, it[N]somehow", "slave merchants, it[FIN]somehow")),
+    # Slips in GaiaLabs' source (chapter07.patch.asm:147, chapter10.patch.asm:71).
+    "04E223": (("I want to experiencing", "I want to experience"),),
+    "058759": (("like this this", "like this"),),
     # The script leaves one row above these choices, as stock asks them in
     # one row. A two-row question went to a page of its own, and the
     # choices then sat under a blank row with nothing asked.
