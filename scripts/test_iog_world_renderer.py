@@ -870,8 +870,12 @@ static void village_heat(void){
  CHECK(!VillageHeat(&s.epochs[0],&probe)); /* A shared but aperiodic row still fails. */
  s.lines[99].registers[offsetof(Ppu,vScroll)]^=1;
  s.lines[99].registers[offsetof(Ppu,vScroll)+2]^=1;
+ /* A running step (3 pixels) is accepted since beta 17 (the village fell
+  * back while running); a seven-pixel camera disagreement still fails. */
  s.epochs[0].ram[0x68a]++;s.epochs[0].ram[0x68c]++;
- CHECK(!VillageHeat(&s.epochs[0],&probe)); /* A three-pixel camera disagreement fails. */
+ CHECK(VillageHeat(&s.epochs[0],&probe));
+ s.epochs[0].ram[0x68a]+=4;s.epochs[0].ram[0x68c]+=4;
+ CHECK(!VillageHeat(&s.epochs[0],&probe));
 }
 static void larai_mist(void){
  fixture();word(0x644,0x1d);word(0x6ee,0x85);

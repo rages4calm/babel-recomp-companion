@@ -1,12 +1,48 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 26,
-2026 (tester build `v0.2.0-beta.16`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.17`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
+
+## Late-game sweep, Great Wall to Dark Gaia (beta 17, November 26)
+
+The owner asked for the rest of the game to be played through quickly with
+native code and visuals checked. Tool: `.local/batch-001/latesweep`
+(`sweep.py`, `bosses.py`, `chapters.py`). Every room from scene `$82` to `$EA`
+is entered through the game's own warp fields (`scene_warps` + scripted map
+changes, up to two entrances each) on the owner's save with that chapter's
+story flags and items (gaia-iog-baserom `flag-presets.json`), maxed stats,
+then explored for about 20 s; the same inputs run on native and the
+interpreter and WRAM is compared at the end.
+
+- **143 room entries: no native/interpreter difference anywhere.**
+- **Native Village (`$AC`) fell back to 4:3 while running** (409 of ~1,140
+  frames): `VillageHeat` allowed the raster 2 px ahead of the composed camera,
+  a walking step; running is 3. Now 6. Rerun: no fallback frames.
+- **Native coverage (ext6):** the sweep's and the owner's interpreter logs
+  (474,785 instructions at 3,812 sites) gave `sdk-update/ext6` 3,539 new
+  contexts (`extend.py` now drops mirrored-bank duplicates). The build uses
+  `ext6/effects/native_continuations.c`. Second sweep: still no difference
+  anywhere; interpreted instructions in the late game 183,824 -> 4,396,
+  sites 4,323 -> 253. Left: the sprite-cull sites the widescreen patch edits
+  at run time (`$83:C8E4`.. `C9C6`, kept interpreted on purpose) and NMI code.
+- **Bosses** (Sand Fanger, Mummy Queen, Solid Arm, Babel rematches `$F2`-`$F6`,
+  comet flight, Dark Gaia): ~100 s each, no native/interpreter difference,
+  no wide-view fallback. **No boss was defeated**: a fixed script does not
+  meet their vulnerability rules (a test-only `IOG_TEST_HUNT` helper in
+  `iog_mods.c` keeps enemies at 1 HP and places Will under the nearest one;
+  ordinary enemies die with it, these bosses do not). Their defeats were
+  covered by earlier controller replays, before ext6. Sand Fanger's run left
+  the lair through its entrance corridor and never started the fight.
+- **Not covered:** rooms with no warp entrance (`$84 $9E $9F $AA $AB $AF $C1
+  $C2 $CA $CB`), the prologue/ending cutscenes, and full story order (the
+  flags are staged, not earned).
+- **Chapter saves** for the owner (staged, with every ability): Sand Fanger,
+  Mt. Kress, Angkor Wat, Pyramid, Babel Tower, Dark Gaia.
 
 ## Jeweler takes stacked jewels at once (beta 16, November 26)
 
@@ -356,7 +392,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.16`)
+## The tester build (`v0.2.0-beta.17`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

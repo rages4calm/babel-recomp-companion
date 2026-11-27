@@ -1404,14 +1404,16 @@ static bool VillageHeat(const PictureEpoch *e,const Ppu *p)
        Word(ram,0x692)!=512 || Word(ram,0x694)!=512 ||
        Word(ram,0x696)!=512 || Word(ram,0x698)!=512)
         return false;
-    /* The raster can be one walking step ahead of the composed camera.
-     * Horizontal scroll still follows composition. The sine table is
-     * centered on the raster's vertical camera. */
+    /* The raster can be one step ahead of the composed camera: a walking
+     * step (2 pixels) or a running/dashing one (3 and more; the sweep of
+     * November 26 saw the village fall back while running). Horizontal
+     * scroll still follows composition. The sine table is centered on the
+     * raster's vertical camera. */
     int camera_x=(int16_t)Word(s.active_ram,0x68A);
     int camera_y=(int16_t)Word(ram,0x68E);
     int delta_x=(int16_t)Word(ram,0x68A)-camera_x;
     int delta_y=camera_y-(int16_t)Word(s.active_ram,0x68E);
-    if(delta_x < -2 || delta_x > 2 || delta_y < -2 || delta_y > 2 ||
+    if(delta_x < -6 || delta_x > 6 || delta_y < -6 || delta_y > 6 ||
        Word(ram,0x68C)!=Word(ram,0x68A) || Word(ram,0x690)!=Word(ram,0x68E))
         return false;
     bool varied=false;

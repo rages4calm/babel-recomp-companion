@@ -285,6 +285,38 @@ static void ActivateSwap(void)
     snes_mod_register_frame_callback(SwapFrame);
 }
 
+/* ---- test-only boss hunter (IOG_TEST_HUNT=1; never set in play) ------------
+ * For automated boss passes: every enemy is kept at 1 HP ($7F:actor+$26), and
+ * once a second Will is placed just below the nearest live enemy, so the
+ * next attack lands and the game's own defeat sequence runs. */
+static bool g_test_hunt;
+static void TestHuntFrame(void)
+{
+    if (!g_test_hunt || !g_snes) return;
+    uint8_t *ram = g_snes->ram;
+    const unsigned player = Rd(0x09AA);
+    if (!player) return;
+    unsigned a = Rd(0x56), n = 0, best = 0;
+    int best_d = 0x7FFFFFFF;
+    const int px = (int16_t)Rd(player + 0x14), py = (int16_t)Rd(player + 0x16);
+    while (a >= 0x1000 && a < 0x1FC0 && n++ < 84) {
+        const unsigned hp_at = 0x10000 + a + 0x26;
+        const uint16_t hp = (uint16_t)(ram[hp_at] | ram[hp_at + 1] << 8);
+        const uint16_t flags = Rd(a + 0x10);
+        if (a != player && hp && hp < 0x8000 && !(flags & 0x8000)) {
+            if (hp > 1) { ram[hp_at] = 1; ram[hp_at + 1] = 0; }
+            const int dx = (int16_t)Rd(a + 0x14) - px, dy = (int16_t)Rd(a + 0x16) - py;
+            if (dx * dx + dy * dy < best_d) { best_d = dx * dx + dy * dy; best = a; }
+        }
+        a = Rd(a + 6);
+    }
+    if (best && (ram[0x36] % 60) == 0 && !(Rd(0x09EC) & 0x6000)) {
+        const int x = (int16_t)Rd(best + 0x14), y = (int16_t)Rd(best + 0x16) + 20;
+        Wr(player + 0x14, (uint16_t)x); Wr(player + 0x16, (uint16_t)y);
+        Wr(player + 0x22, (uint16_t)(x * 4)); Wr(player + 0x26, (uint16_t)(y * 4));
+    }
+}
+
 /* ---- cheats -------------------------------------------------------------- */
 
 /* Live switches (the in-game settings): the frame callbacks are always
@@ -611,6 +643,8 @@ static void ResetHd(void)
     g_text_active = false;
     snes_mod_register_frame_callback(RunFrame);
     snes_mod_register_frame_callback(TextSpeedFrame);
+    g_test_hunt = getenv("IOG_TEST_HUNT") != NULL;
+    snes_mod_register_frame_callback(TestHuntFrame);
     g_auto_use = g_au_latched = g_au_restore = false;
     snes_mod_register_input_filter(AutoUseFilter);
     snes_mod_register_frame_callback(AutoUseFrame);
