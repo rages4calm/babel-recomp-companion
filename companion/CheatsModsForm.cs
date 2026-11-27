@@ -117,15 +117,21 @@ internal sealed class CheatsModsForm : Form
     private void Reload() {
         try {
             var next = NativeModSettings.Read(engineDirectory); syncing = true;
+            // Picture is chosen on the Display page; a control the current picture ignores is shown but not editable.
+            bool wideView = true;
+            try { wideView = NativeModSettings.ReadDisplay(engineDirectory).WideView; }
+            catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException) { }
             foreach (var field in NativeModSettings.Fields) {
-                var editor = editors[field.Option.Id]; var value = next.Values[field.Option.Id]; editor.Enabled = next.Available.Contains(field.Option.Id);
+                var editor = editors[field.Option.Id]; var value = next.Values[field.Option.Id];
+                editor.Enabled = next.Available.Contains(field.Option.Id) && NativeModSettings.AppliesToPicture(field.Option.Id, wideView);
                 if (editor is CheckBox check) check.Checked = value.GetBoolean();
                 else if (editor is NumericUpDown number) number.Value = value.GetInt32();
                 else if (editor is ComboBox choice) choice.SelectedItem = choice.Items.Cast<Choice>().Single(item => item.Item.Value == value.GetString());
             }
             saved = next; syncing = false; apply.Enabled = revert.Enabled = false;
-            Report(next.Available.Count == NativeModSettings.Fields.Count ? "Native mod settings loaded. Changes apply on the next launch. All 50 Red Jewels remains an in-game action." :
-                "Some controls are unavailable in this engine's catalog. Build its matching engine and catalog to use those features.");
+            Report((next.Available.Count == NativeModSettings.Fields.Count ? "Native mod settings loaded. Changes apply on the next launch. All 50 Red Jewels remains an in-game action." :
+                "Some controls are unavailable in this engine's catalog. Build its matching engine and catalog to use those features.") +
+                (wideView ? "" : " Status display at the screen edges works in Wide view only; Picture is on the Display page."));
         } catch (Exception ex) { syncing = false; apply.Enabled = false; Report(ex.Message, true); }
     }
     private void Apply() {

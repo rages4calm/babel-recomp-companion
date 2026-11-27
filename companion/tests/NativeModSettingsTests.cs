@@ -25,6 +25,9 @@ internal static class NativeModSettingsTests
             Check(first.Values["cheat.strength"].GetInt32() == 10, "native feature.values reads established stats");
             Check(first.Values["mod.run"].GetBoolean(), "launcher reads the existing native run selection");
             Check(first.Values["mod.world-map"].GetBoolean() && !first.Values["mod.stacking"].GetBoolean(), "a feature the state never named reads its manifest default");
+            Check(NativeModSettings.AppliesToPicture("mod.edge-hud", true) && !NativeModSettings.AppliesToPicture("mod.edge-hud", false) &&
+                NativeModSettings.Fields.Where(f => f.Option.Id != "mod.edge-hud").All(f => NativeModSettings.AppliesToPicture(f.Option.Id, false)),
+                "only the edge status display is locked outside the wide view");
             first.Values["cheat.hp"] = OptionValue.From(true); first.Values["cheat.dp"] = OptionValue.From(true); first.Values["cheat.dp-min"] = OptionValue.From(250);
             first.Values["cheat.room-rewards"] = OptionValue.From("3"); first.Values["mod.stacking"] = OptionValue.From(true);
             NativeModSettings.Apply(root, first.Values, first.Revision);

@@ -336,8 +336,9 @@ static void ActAchievements(void *ud)
 
 void IogSettingsInstall(void)
 {
-    /* The wide view fills a 16:9 window; the host's automatic size is 4:3. */
-    if (IogWorldEnabled() && (!g_config.window_width || !g_config.window_height)) {
+    /* The wide view and Classic 16:9 fill a 16:9 window; the host's
+     * automatic size is 4:3, which letterboxed Classic at 960x720. */
+    if ((IogWorldEnabled() || g_config.widescreen) && (!g_config.window_width || !g_config.window_height)) {
         g_config.window_width = 1280;
         g_config.window_height = 720;
     }

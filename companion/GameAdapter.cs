@@ -121,7 +121,7 @@ public sealed class GameAdapter : JsonGameAdapterBase
         var displayChanged = picture != current.Values[PictureId].GetString() || scaling != current.Values[ScalingId].GetString();
         var engineDirectory = Path.GetDirectoryName(values["engine.path"].GetString()!)!;
         if ((promptsChanged || displayChanged) && NativeModSettings.IsEngineRunning(values["engine.path"].GetString()!))
-            throw new InvalidOperationException("Close the game before changing Picture, Scaling or Button prompts here. The in-game settings can change them while you play.");
+            throw new InvalidOperationException("Close the game before changing Picture, Scaling or Button prompts here. While you play, the in-game settings can change HD scaling and Button prompts; Picture changes only here.");
         // The two hidden game settings follow the visible choices; an unchanged choice leaves them alone.
         var effective = values.ToDictionary(pair => pair.Key, pair => pair.Value.Clone());
         effective["video.widescreen"] = picture == current.Values[PictureId].GetString() ? current.Values["video.widescreen"].Clone() : OptionValue.From(picture != "original");

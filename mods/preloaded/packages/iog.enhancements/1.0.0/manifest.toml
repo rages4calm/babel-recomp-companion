@@ -221,7 +221,7 @@ id = "iog.jewel_sparkles"
 [[feature]]
 id = "world_map"
 name = "Enhanced world map"
-description = "On the walkable world map: a smoother map picture with a hazed horizon, a higher camera that shows more of the land, markers over the places you can visit, a small map with your position, and a clearer entry prompt. You also get control sooner after leaving a town. Off: the plain walking view."
+description = "On the walkable world map: a smoother map picture with a hazed horizon, a higher camera that shows more of the land, markers over the places you can visit, a small map with your position, and a clearer entry prompt. You also get control sooner after leaving a town. Off: the original walking view; in Wide view that includes the original's coarse ground with its horizontal streaks."
 group = "Presentation"
 default_enabled = true
 

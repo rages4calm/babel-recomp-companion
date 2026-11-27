@@ -15,7 +15,7 @@ internal static class NativeSettings
         new("Graphics", "Fullscreen", new("video.fullscreen", "Display", "Window mode", OptionKind.Choice, OptionValue.From("0"), "Takes effect the next time the game starts. Alt+Enter switches while playing.", Choices: new[] {
             new ChoiceItem("0", "Windowed"), new ChoiceItem("1", "Desktop fullscreen"), new ChoiceItem("2", "Exclusive fullscreen") })),
         Int("video.scale", "Display", "Window size multiplier", "Graphics", "WindowScale", 3, 1, 10,
-            "For Classic 16:9 and Original 4:3 in a window. Wide view opens at 1280x720 instead; resize it or use fullscreen."),
+            "For Original 4:3 in a window. Wide view and Classic 16:9 open at 1280x720 instead; resize them or use fullscreen."),
         // Written through the Picture choice; not shown on its own.
         Bool("video.widescreen", "Hidden", "Classic 16:9 widescreen", "Graphics", "Widescreen", false),
         new("Graphics", "VSync", new("video.vsync", "Display", "Vertical sync", OptionKind.Choice, OptionValue.From("1"),

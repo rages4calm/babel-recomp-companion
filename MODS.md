@@ -344,7 +344,8 @@ a steady rhythm), so it behaves the same with run-ahead and netplay.
 settings) changes the walkable world map: a higher camera, smoother ground,
 pins with names over the places you can travel to, a small minimap, a
 clearer "Enter" prompt and control a little sooner after leaving a town.
-Turn it off for the original walking view.
+Turn it off for the original walking view; in the wide view that includes
+the original's coarse ground with its horizontal streaks.
 
 ## Logs and crash reports (all platforms)
 
