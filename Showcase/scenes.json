@@ -1,190 +1,355 @@
 [
   {
-    "Id": "01", "Title": "Launcher / PC features", "Slug": "Launcher", "Kind": "launcher",
+    "Id": "01",
+    "Title": "Launcher / PC features",
+    "Slug": "Launcher",
+    "Kind": "launcher",
     "Shot": "Opens your installed Companion launcher. Move slowly through Display (Picture, Scaling), Input and the Controls window, Cheats and Mods, Soundtrack and Achievements; open the Update window to show it, then close it. 3-5 s per page. Do not press Apply, Play or Update.",
     "Caption": "The Companion Launcher: picture, scaling, controls, mods, soundtrack and updates in one place.",
     "Settings": "Your installed launcher as it is (not a private copy): leave every setting unchanged."
   },
   {
-    "Id": "02", "Title": "Edward Castle rampart / wide view", "Slug": "Edward_Castle_Wide", "Kind": "game", "Baseline": "castle",
+    "Id": "02",
+    "Title": "Edward Castle rampart / wide view",
+    "Slug": "Edward_Castle_Wide",
+    "Kind": "game",
+    "Baseline": "castle",
     "Shot": "Will stands on the castle rampart under the mountain sky. Wait 3 s for the room title to fade, then walk slowly left to the guard and back right to the wall, 20-30 s. No fighting here.",
     "Caption": "True widescreen drawn from the game's own scenery: Edward Castle, with the Japanese release's sky (GaiaLabs option).",
-    "Settings": "Standard set: Wide view, HD scaling (smooth), HD Mode 7, MSU-1 music, status display at the edges, cheats off. GaiaLabs JP Edward Castle background on (default)."
+    "Settings": "Standard set: Wide view, HD scaling (smooth), HD Mode 7, MSU-1 music, status display at the edges, cheats off. GaiaLabs JP Edward Castle background on (default). Checkpoint: a new game with no story flags, warped here with a new game's stats; one flag: $3F (the gate guard has already seen the letter; otherwise the intrusion scene plays)."
   },
   {
-    "Id": "03", "Title": "Great Wall / wide view", "Slug": "Great_Wall_Wide", "Kind": "game", "Baseline": "wall",
-    "Shot": "Will arrives at the left end of the wall walk. Walk right past the gatehouse and along the rampart under the desert sky, 20-30 s; hold A (run) for a stretch.",
+    "Id": "03",
+    "Title": "Great Wall / wide view",
+    "Slug": "Great_Wall_Wide",
+    "Kind": "game",
+    "Baseline": "wall",
+    "Shot": "Will stands a few steps from the west end of the wall walk. Walk right past the gatehouse and along the rampart under the desert sky, 20-30 s; hold A (run) for a stretch.",
     "Caption": "The Great Wall stretching across the wide view, with the Japanese release's background (GaiaLabs option).",
-    "Settings": "Standard set. GaiaLabs JP Great Wall background on (default)."
+    "Settings": "Standard set. GaiaLabs JP Great Wall background on (default). Checkpoint: a new game with no story flags, warped here with life 40 and STR/DEF 99 (with a new game's 8 life and no defence, enemies in the Diamond Mine and Mu ended a take within seconds)."
   },
   {
-    "Id": "04", "Title": "Sky Garden / wide view", "Slug": "Sky_Garden_Wide", "Kind": "game", "Baseline": "skygarden",
+    "Id": "04",
+    "Title": "Sky Garden / wide view",
+    "Slug": "Sky_Garden_Wide",
+    "Kind": "game",
+    "Baseline": "skygarden",
     "Shot": "Will stands at the right edge of the Sky Garden's central platform. Walk left along the edge and around the pools, 20-30 s. The skull enemies wander; avoid them or swing at one (X).",
     "Caption": "Sky Garden: a platform floating over open sky, filling the wide view.",
-    "Settings": "Standard set."
+    "Settings": "Standard set. Checkpoint: a new game with no story flags, warped here with life 40 and STR/DEF 99 (with a new game's 8 life and no defence, enemies in the Diamond Mine and Mu ended a take within seconds); one flag: $6B (arrival narration seen)."
   },
   {
-    "Id": "05", "Title": "Inca Ruins / Larai Cliff", "Slug": "Inca_Ruins_Wide", "Kind": "game", "Baseline": "inca",
+    "Id": "05",
+    "Title": "Inca Ruins / Larai Cliff",
+    "Slug": "Inca_Ruins_Wide",
+    "Kind": "game",
+    "Baseline": "inca",
     "Shot": "Will is at the top right of Larai Cliff beside the giant stone head. Cross the bridge to the left and walk down the cliff paths, 20-30 s.",
     "Caption": "Inca Ruins in the wide view: more of each area around the original picture, with square pixels.",
-    "Settings": "Standard set."
+    "Settings": "Standard set. Checkpoint: a new game with no story flags, warped here with life 40 and STR/DEF 99 (with a new game's 8 life and no defence, enemies in the Diamond Mine and Mu ended a take within seconds); one flag: $6C (Larai Cliff monologue seen)."
   },
   {
-    "Id": "06", "Title": "Diamond Mine / enemies in the wide view", "Slug": "Diamond_Mine_Wide", "Kind": "game", "Baseline": "mine",
-    "Shot": "Will enters the mine at the bottom left; two lizard guards patrol. Walk up between the fences, fight one with X (stand still a moment to show the swing), 30-40 s.",
+    "Id": "06",
+    "Title": "Diamond Mine / enemies in the wide view",
+    "Slug": "Diamond_Mine_Wide",
+    "Kind": "game",
+    "Baseline": "mine",
+    "Shot": "Will stands just inside the mine (do not walk back out of the door below him); two lizard guards patrol. Walk up between the fences, fight one with X (stand still a moment to show the swing), 30-40 s.",
     "Caption": "The Diamond Mine, fences and enemies spread across the wide view.",
-    "Settings": "Standard set."
+    "Settings": "Standard set. Checkpoint: a new game with no story flags, warped here with life 40 and STR/DEF 99 (with a new game's 8 life and no defence, enemies in the Diamond Mine and Mu ended a take within seconds)."
   },
   {
-    "Id": "07", "Title": "Angkor Wat / path to the main shrine", "Slug": "Angkor_Wat_Wide", "Kind": "game", "Baseline": "angkor",
+    "Id": "07",
+    "Title": "Angkor Wat / path to the main shrine",
+    "Slug": "Angkor_Wat_Wide",
+    "Kind": "game",
+    "Baseline": "angkor",
     "Shot": "Will stands at the gate below the overgrown courtyard. Walk up toward the temple steps, then across the courtyard, 20-30 s.",
     "Caption": "Angkor Wat's courtyard in the wide view.",
-    "Settings": "Standard set."
+    "Settings": "Standard set. Checkpoint: a new game with no story flags, warped here with life 40 and STR/DEF 99 (with a new game's 8 life and no defence, enemies in the Diamond Mine and Mu ended a take within seconds)."
   },
   {
-    "Id": "08", "Title": "Mu / wide view", "Slug": "Mu_Wide", "Kind": "game", "Baseline": "mu",
-    "Shot": "Will stands at the top left of Mu beside the colonnade. Walk right and down past the stone faces and the water, 20-30 s.",
+    "Id": "08",
+    "Title": "Mu / wide view",
+    "Slug": "Mu_Wide",
+    "Kind": "game",
+    "Baseline": "mu",
+    "Shot": "Will stands just below the colonnade at the top left of Mu (the door behind him leads out). Walk right and down past the stone faces and the water, 20-30 s.",
     "Caption": "The ruins of Mu in the wide view.",
-    "Settings": "Standard set."
+    "Settings": "Standard set. Checkpoint: a new game with no story flags, warped here with life 40 and STR/DEF 99 (with a new game's 8 life and no defence, enemies in the Diamond Mine and Mu ended a take within seconds); flags $77 and $7D (arrival monologue and the water remark seen)."
   },
   {
-    "Id": "09", "Title": "Babel Tower / exterior", "Slug": "Babel_Tower_Wide", "Kind": "game", "Baseline": "babel",
+    "Id": "09",
+    "Title": "Babel Tower / exterior",
+    "Slug": "Babel_Tower_Wide",
+    "Kind": "game",
+    "Baseline": "babel",
     "Shot": "Will is on Babel Tower's outer walkway beside the winged statue. Walk right along the walkway and up the tower, 20-30 s.",
     "Caption": "The outside of Babel Tower, arches and walkways across the wide view.",
-    "Settings": "Standard set."
+    "Settings": "Standard set. Checkpoint: a new game with no story flags, warped here with life 40 and STR/DEF 99 (with a new game's 8 life and no defence, enemies in the Diamond Mine and Mu ended a take within seconds)."
   },
   {
-    "Id": "10", "Title": "Walkable world map (Mode 7)", "Slug": "World_Map_Walk", "Kind": "game", "Baseline": "worldmap",
+    "Id": "10",
+    "Title": "Walkable world map (Mode 7)",
+    "Slug": "World_Map_Walk",
+    "Kind": "game",
+    "Baseline": "worldmap",
     "Shot": "Will has just left Freejia onto the world map. Up walks, Left / Right turn: turn slowly to show the horizon, walk toward another place until its name shows, 20-30 s. Do not press X (it would enter a town).",
     "Caption": "The walkable world map from the GaiaLabs project, its ground drawn by the GPU at window resolution, with a higher camera, place markers and a minimap.",
-    "Settings": "Standard set. Enhanced world map on."
+    "Settings": "Standard set. Enhanced world map on. Checkpoint: a new game with no story flags, warped here with a new game's stats, then out of Freejia's south gate; one flag: $64 (Freejia arrival scene done)."
   },
   {
-    "Id": "11", "Title": "Flight over the ocean (Mode 7)", "Slug": "Ocean_Flight_Mode7", "Kind": "game", "Baseline": "flight",
+    "Id": "11",
+    "Title": "Flight over the ocean (Mode 7)",
+    "Slug": "Ocean_Flight_Mode7",
+    "Kind": "game",
+    "Baseline": "flight",
     "Shot": "A cutscene: Neil's plane over the ocean after the Sky Garden. Start OBS, press nothing; it plays for about 20 s (the plane flies on, then the scene drops to the sky with parachutes). Stop when it fades.",
     "Caption": "The flight over the ocean: a Mode 7 scene that reaches the horizon of the wide view, with HD Mode 7.",
-    "Settings": "Standard set. HD Mode 7 on."
+    "Settings": "Standard set. HD Mode 7 on. Checkpoint: a new game with no story flags, warped here with a new game's stats (the cutscene plays on its own)."
   },
   {
-    "Id": "12", "Title": "Boss / Castoth", "Slug": "Boss_Castoth", "Kind": "game", "Baseline": "castoth", "Mods": { "iog.cheats/infinite_hp": true },
+    "Id": "12",
+    "Title": "Boss / Castoth",
+    "Slug": "Boss_Castoth",
+    "Kind": "game",
+    "Baseline": "castoth",
+    "Mods": {
+      "iog.cheats/infinite_hp": true
+    },
     "Shot": "Freedan stands in Castoth's chamber; the boss rises after a few seconds. Fight: hit the hands and then the head with X, move between them, 40-60 s.",
     "Caption": "Boss fight: Castoth, Inca Ruins.",
-    "Settings": "Standard set + Refill HP cheat ON, so a take never ends in a game over (the life bar refills). The checkpoint has maximum life, strength and defence (staged). Achievements pause because of the cheat."
+    "Settings": "Standard set + Refill HP cheat ON, so a take never ends in a game over (the life bar refills). Achievements pause because of the cheat. The chapter's story flags are set so the boss is there, with Freedan (or Shadow) and maximum life, strength and defence."
   },
   {
-    "Id": "13", "Title": "Boss / Vampires", "Slug": "Boss_Vampires", "Kind": "game", "Baseline": "vampires", "Mods": { "iog.cheats/infinite_hp": true },
+    "Id": "13",
+    "Title": "Boss / Vampires",
+    "Slug": "Boss_Vampires",
+    "Kind": "game",
+    "Baseline": "vampires",
+    "Mods": {
+      "iog.cheats/infinite_hp": true
+    },
     "Shot": "Freedan is at the foot of the Vampires' hall. Walk up until Erik shouts and the Vampires appear, advance their lines with X, then fight, 40-60 s.",
     "Caption": "Boss fight: the Vampires, Mu.",
-    "Settings": "Standard set + Refill HP cheat ON (the life bar refills). The checkpoint has maximum life, strength and defence (staged)."
+    "Settings": "Standard set + Refill HP cheat ON (the life bar refills). The chapter's story flags are set so the boss is there, with Freedan (or Shadow) and maximum life, strength and defence."
   },
   {
-    "Id": "14", "Title": "Boss / Sand Fanger", "Slug": "Boss_Sand_Fanger", "Kind": "game", "Baseline": "fanger", "Mods": { "iog.cheats/infinite_hp": true },
+    "Id": "14",
+    "Title": "Boss / Sand Fanger",
+    "Slug": "Boss_Sand_Fanger",
+    "Kind": "game",
+    "Baseline": "fanger",
+    "Mods": {
+      "iog.cheats/infinite_hp": true
+    },
     "Shot": "Freedan is at the left end of the wall top. Walk right and down the wall to wake Sand Fanger, then fight it in the open, 40-60 s.",
     "Caption": "Boss fight: Sand Fanger on the Great Wall.",
-    "Settings": "Standard set + Refill HP cheat ON (the life bar refills). The checkpoint has maximum life, strength and defence (staged)."
+    "Settings": "Standard set + Refill HP cheat ON (the life bar refills). The chapter's story flags are set so the boss is there, with Freedan (or Shadow) and maximum life, strength and defence."
   },
   {
-    "Id": "15", "Title": "Boss / Mummy Queen", "Slug": "Boss_Mummy_Queen", "Kind": "game", "Baseline": "mummy", "Mods": { "iog.cheats/infinite_hp": true },
+    "Id": "15",
+    "Title": "Boss / Mummy Queen",
+    "Slug": "Boss_Mummy_Queen",
+    "Kind": "game",
+    "Baseline": "mummy",
+    "Mods": {
+      "iog.cheats/infinite_hp": true
+    },
     "Shot": "Freedan enters the Mummy Queen's hall; she descends at once. Fight her with X while moving around the hall, 40-60 s.",
     "Caption": "Boss fight: the Mummy Queen, Pyramid.",
-    "Settings": "Standard set + Refill HP cheat ON (the life bar refills). The checkpoint has maximum life, strength and defence (staged)."
+    "Settings": "Standard set + Refill HP cheat ON (the life bar refills). The chapter's story flags are set so the boss is there, with Freedan (or Shadow) and maximum life, strength and defence."
   },
   {
-    "Id": "16", "Title": "Boss / Solid Arm", "Slug": "Boss_Solid_Arm", "Kind": "game", "Baseline": "solidarm", "Mods": { "iog.cheats/infinite_hp": true },
+    "Id": "16",
+    "Title": "Boss / Solid Arm",
+    "Slug": "Boss_Solid_Arm",
+    "Kind": "game",
+    "Baseline": "solidarm",
+    "Mods": {
+      "iog.cheats/infinite_hp": true
+    },
     "Shot": "Freedan faces Solid Arm. Advance his opening lines with X, then fight from below, stepping left and right, 40-60 s.",
     "Caption": "Boss fight: Solid Arm.",
-    "Settings": "Standard set + Refill HP cheat ON (the life bar refills). The checkpoint has maximum life, strength and defence (staged)."
+    "Settings": "Standard set + Refill HP cheat ON (the life bar refills). The chapter's story flags are set so the boss is there, with Freedan (or Shadow) and maximum life, strength and defence."
   },
   {
-    "Id": "17", "Title": "Final boss / Dark Gaia (Shadow)", "Slug": "Boss_Dark_Gaia", "Kind": "game", "Baseline": "darkgaia", "Mods": { "iog.cheats/infinite_hp": true },
+    "Id": "17",
+    "Title": "Final boss / Dark Gaia (Shadow)",
+    "Slug": "Boss_Dark_Gaia",
+    "Kind": "game",
+    "Baseline": "darkgaia",
+    "Mods": {
+      "iog.cheats/infinite_hp": true
+    },
     "Shot": "Shadow stands on the comet as Dark Gaia appears. Fight with X, moving around the arena, 40-60 s. Spoiler: the final boss; use sparingly in the edit.",
     "Caption": "The final battle: Shadow against Dark Gaia.",
-    "Settings": "Standard set + Refill HP cheat ON (the life bar refills). The checkpoint has maximum life, strength and defence (staged)."
+    "Settings": "Standard set + Refill HP cheat ON (the life bar refills). The chapter's story flags are set so the boss is there, with Freedan (or Shadow) and maximum life, strength and defence."
   },
   {
-    "Id": "18", "Title": "Dark Space / Will becomes Freedan", "Slug": "Dark_Space_Freedan", "Kind": "game", "Baseline": "darkspace",
+    "Id": "18",
+    "Title": "Dark Space / Will becomes Freedan",
+    "Slug": "Dark_Space_Freedan",
+    "Kind": "game",
+    "Baseline": "darkspace",
     "Shot": "Will stands below a Dark Space portal in the Sky Garden. Press Up to step in. Inside, walk left, then up onto the tile in front of the knight statue; press X through the lines (pick the first answer) and watch the transformation, about 30 s in all.",
     "Caption": "A Dark Space: Gaia's statue turns Will into the dark knight Freedan.",
-    "Settings": "Standard set."
+    "Settings": "Standard set. Checkpoint: a new game with no story flags, warped here with life 40 and STR/DEF 99 (with a new game's 8 life and no defence, enemies in the Diamond Mine and Mu ended a take within seconds) (no flag is needed for the Freedan statue)."
   },
   {
-    "Id": "19", "Title": "Retranslated text / hold to advance", "Slug": "Retranslation_Text", "Kind": "game", "Baseline": "dialogue", "Mods": { "iog.enhancements/hold_advance/speed": "normal" },
+    "Id": "19",
+    "Title": "Retranslated text / hold to advance",
+    "Slug": "Retranslation_Text",
+    "Kind": "game",
+    "Baseline": "dialogue",
+    "Mods": {
+      "iog.enhancements/hold_advance/speed": "normal"
+    },
     "Shot": "Will arrives at the right end of the Great Wall and his narration opens at once. Hold X: hold to advance turns each page at reading speed; let go and tap X for single pages, 20-30 s.",
     "Caption": "The GaiaLabs Retranslation is built in: 1,133 retranslated dialogue entries, menus and room titles. Hold a button to advance text.",
-    "Settings": "Standard set. Hold to advance on at Normal pace (instead of Fast) so each page can be read; text speed Normal."
+    "Settings": "Standard set. Hold to advance on at Normal pace (instead of Fast) so each page can be read; text speed Normal. Checkpoint: a new game with no story flags, warped here with a new game's stats; the narration's flag $9D is clear on purpose so it plays."
   },
   {
-    "Id": "20", "Title": "Area map and radar", "Slug": "Area_Map_Radar", "Kind": "game", "Baseline": "areamap",
+    "Id": "20",
+    "Title": "Area map and radar",
+    "Slug": "Area_Map_Radar",
+    "Kind": "game",
+    "Baseline": "areamap",
     "Shot": "Walk a few steps so the radar in the corner shows, then press Enter (Start) for the area map: C / V zoom, wait 3 s, Z to return. Walk into the courtyard and open it again, 20-30 s.",
     "Caption": "Area map (Start): a map of the scenery that fills in as you explore, with exits and chests, and a small radar while you play.",
-    "Settings": "Standard set + radar ON. The explored-area records are a private copy of your own (read only), so the map is already partly revealed.",
-    "Maps": true, "Mods": { "iog.enhancements/map_controls/radar": "on" }
+    "Settings": "Standard set + radar ON. The explored-area records are a private copy of your own (read only), so the map is already partly revealed. Checkpoint: the Angkor Wat one from scene 07.",
+    "Maps": true,
+    "Mods": {
+      "iog.enhancements/map_controls/radar": "on"
+    }
   },
   {
-    "Id": "21", "Title": "Save states / browser and rewind", "Slug": "Save_States_Rewind", "Kind": "game", "Baseline": "mu",
+    "Id": "21",
+    "Title": "Save states / browser and rewind",
+    "Slug": "Save_States_Rewind",
+    "Kind": "game",
+    "Baseline": "mu",
     "Shot": "Walk around Mu for 10 s. Press F12 and rewind a few seconds, then resume. Press F11: the browser shows this session's six states (other scenes' places); move through them, load one (confirm), 30-40 s. Shift+F2 saves; F1 returns to the start (asks first).",
     "Caption": "Save states with a browser and pictures (F11), and rewind (F12); loading and overwriting ask first.",
-    "Settings": "Standard set. Six private states: slot 1 is this scene, slots 2-6 are the castle, Great Wall, Sky Garden, Diamond Mine and Babel checkpoints.",
-    "Slots": [ "castle", "wall", "skygarden", "mine", "babel" ]
+    "Settings": "Standard set. Six private states: slot 1 is this scene, slots 2-6 are the castle, Great Wall, Sky Garden, Diamond Mine and Babel checkpoints. Checkpoint: the Mu one from scene 08.",
+    "Slots": [
+      "castle",
+      "wall",
+      "skygarden",
+      "mine",
+      "babel"
+    ]
   },
   {
-    "Id": "22", "Title": "Status display at the screen edges", "Slug": "Edge_Status_Display", "Kind": "game", "Baseline": "mine",
+    "Id": "22",
+    "Title": "Status display at the screen edges",
+    "Slug": "Edge_Status_Display",
+    "Kind": "game",
+    "Baseline": "mine",
     "Shot": "Starts with the original centred status display. Walk 5 s, press Esc, choose Status display and switch it to the screen edges, close the menu; walk on and hit a lizard (X) so its life shows at the right, 30-40 s.",
     "Caption": "Optional status display at the screen edges in the wide view: player life at the left, DP centred, enemy life at the right.",
-    "Settings": "Standard set, but the status display at the edges starts OFF (you switch it on in the in-game settings).",
-    "Mods": { "iog.graphics/edge_hud": false }
+    "Settings": "Standard set, but the status display at the edges starts OFF (you switch it on in the in-game settings). Checkpoint: the Diamond Mine one from scene 06.",
+    "Mods": {
+      "iog.graphics/edge_hud": false
+    }
   },
   {
-    "Id": "23", "Title": "Picture / Original 4:3", "Slug": "Picture_Original_43", "Kind": "game", "Baseline": "castle", "Picture": "original",
+    "Id": "23",
+    "Title": "Picture / Original 4:3",
+    "Slug": "Picture_Original_43",
+    "Kind": "game",
+    "Baseline": "castle",
+    "Picture": "original",
     "Shot": "Same rampart as scene 02. Wait 3 s, walk left to the guard and back, 15 s. Record 24 and 25 the same way for a side-by-side.",
     "Caption": "Original 4:3: the SNES picture.",
-    "Settings": "Picture: Original 4:3 (Wide view off, widescreen off); centred status display (the edge display is a wide-view option). Otherwise the standard set.",
-    "Mods": { "iog.graphics/edge_hud": false }
+    "Settings": "Picture: Original 4:3 (Wide view off, widescreen off); centred status display (the edge display is a wide-view option). Otherwise the standard set. Checkpoint: the castle one from scene 02.",
+    "Mods": {
+      "iog.graphics/edge_hud": false
+    }
   },
   {
-    "Id": "24", "Title": "Picture / Classic 16:9", "Slug": "Picture_Classic_169", "Kind": "game", "Baseline": "castle", "Picture": "classic",
+    "Id": "24",
+    "Title": "Picture / Classic 16:9",
+    "Slug": "Picture_Classic_169",
+    "Kind": "game",
+    "Baseline": "castle",
+    "Picture": "classic",
     "Shot": "Same walk as scene 23: wait 3 s, left to the guard and back, 15 s.",
     "Caption": "Classic 16:9: the older, simpler widescreen.",
-    "Settings": "Picture: Classic 16:9 (Wide view off, widescreen on); centred status display. Otherwise the standard set.",
-    "Mods": { "iog.graphics/edge_hud": false }
+    "Settings": "Picture: Classic 16:9 (Wide view off, widescreen on); centred status display. Otherwise the standard set. Checkpoint: the castle one from scene 02.",
+    "Mods": {
+      "iog.graphics/edge_hud": false
+    }
   },
   {
-    "Id": "25", "Title": "Picture / Wide view", "Slug": "Picture_Wide_View", "Kind": "game", "Baseline": "castle", "Picture": "wide",
+    "Id": "25",
+    "Title": "Picture / Wide view",
+    "Slug": "Picture_Wide_View",
+    "Kind": "game",
+    "Baseline": "castle",
+    "Picture": "wide",
     "Shot": "Same walk as scene 23: wait 3 s, left to the guard and back, 15 s.",
     "Caption": "Wide view: more of each area around the original picture, with square pixels.",
-    "Settings": "Picture: Wide view; centred status display, so it compares directly with 23 and 24. Otherwise the standard set.",
-    "Mods": { "iog.graphics/edge_hud": false }
+    "Settings": "Picture: Wide view; centred status display, so it compares directly with 23 and 24. Otherwise the standard set. Checkpoint: the castle one from scene 02.",
+    "Mods": {
+      "iog.graphics/edge_hud": false
+    }
   },
   {
-    "Id": "26", "Title": "GaiaLabs / Mt. Kress spirit shortcut", "Slug": "GaiaLabs_Kress_Shortcut", "Kind": "game", "Baseline": "kress",
+    "Id": "26",
+    "Title": "GaiaLabs / Mt. Kress spirit shortcut",
+    "Slug": "GaiaLabs_Kress_Shortcut",
+    "Kind": "game",
+    "Baseline": "kress",
     "Shot": "Will is on the vine at the top of Mt. Kress. Walk left until he stops beside the spirit, press X, answer Yes, and ride down to the mountain's foot, 20-30 s.",
     "Caption": "GaiaLabs option: once you have climbed Mt. Kress, a spirit at the top offers to take you back down.",
-    "Settings": "Standard set. GaiaLabs Mt. Kress shortcut on (default)."
+    "Settings": "Standard set. GaiaLabs Mt. Kress shortcut on (default). Checkpoint: a new game with no story flags, warped here with life 40 and STR/DEF 99 (with a new game's 8 life and no defence, enemies in the Diamond Mine and Mu ended a take within seconds); one flag: $223 (top of Mt. Kress reached, the option's condition for the spirit)."
   },
   {
-    "Id": "27", "Title": "GaiaLabs / Freejia laborer returns", "Slug": "GaiaLabs_Laborer_Returns", "Kind": "game", "Baseline": "laborer",
+    "Id": "27",
+    "Title": "GaiaLabs / Freejia laborer returns",
+    "Slug": "GaiaLabs_Laborer_Returns",
+    "Kind": "game",
+    "Baseline": "laborer",
     "Shot": "Will stands beside the laborer whose secret he kept. Press Right once to face him, then X; advance his thanks with X until the Red Jewel is given, 20-30 s.",
     "Caption": "GaiaLabs option: keep the runaway laborer's secret and he later returns to thank you with a Red Jewel.",
-    "Settings": "Standard set. GaiaLabs Freejia laborer return on (default). Story: the laborer was not given away."
+    "Settings": "Standard set. GaiaLabs Freejia laborer return on (default). Story: the laborer was not given away. Checkpoint: a new game with no story flags, warped here with a new game's stats; flag $8D set (Watermia reached, the option's condition) and $5A clear (the laborer was not given away)."
   },
   {
-    "Id": "28", "Title": "GaiaLabs / purple Diamond Mine (JP)", "Slug": "GaiaLabs_JP_Diamond_Mine", "Kind": "game", "Baseline": "jpmine",
+    "Id": "28",
+    "Title": "GaiaLabs / purple Diamond Mine (JP)",
+    "Slug": "GaiaLabs_JP_Diamond_Mine",
+    "Kind": "game",
+    "Baseline": "jpmine",
     "Shot": "Will is in the purple-crystal mine. Walk left past the lizard and along the cave, 20-30 s.",
     "Caption": "GaiaLabs option: the Japanese release's purple Diamond Mine.",
-    "Settings": "Standard set + GaiaLabs JP purple Diamond Mine ON (off by default).",
-    "Mods": { "iog.gaialabs/jp_mines": true }
+    "Settings": "Standard set + GaiaLabs JP purple Diamond Mine ON (off by default). Checkpoint: a new game with no story flags, warped here with life 40 and STR/DEF 99 (with a new game's 8 life and no defence, enemies in the Diamond Mine and Mu ended a take within seconds).",
+    "Mods": {
+      "iog.gaialabs/jp_mines": true
+    }
   },
   {
-    "Id": "29", "Title": "GaiaLabs / JP Viper", "Slug": "GaiaLabs_JP_Viper", "Kind": "game", "Baseline": "jpviper",
+    "Id": "29",
+    "Title": "GaiaLabs / JP Viper",
+    "Slug": "GaiaLabs_JP_Viper",
+    "Kind": "game",
+    "Baseline": "jpviper",
     "Shot": "Freedan stands at the foot of a pillar in Viper's sky arena. Walk Up the pillar onto the floating floor; Viper swoops in. Fight with X, 40-60 s.",
     "Caption": "GaiaLabs option: Viper with the Japanese release's boss sprites.",
-    "Settings": "Standard set + GaiaLabs JP Viper ON (off by default) + Refill HP cheat ON (the life bar refills). The checkpoint has maximum life, strength and defence (staged).",
-    "Mods": { "iog.gaialabs/jp_viper": true, "iog.cheats/infinite_hp": true }
+    "Settings": "Standard set + GaiaLabs JP Viper ON (off by default) + Refill HP cheat ON (the life bar refills). The chapter's story flags are set so the boss is there, with Freedan (or Shadow) and maximum life, strength and defence.",
+    "Mods": {
+      "iog.gaialabs/jp_viper": true,
+      "iog.cheats/infinite_hp": true
+    }
   },
   {
-    "Id": "30", "Title": "Achievement / Behind the Hedge", "Slug": "Achievement_Hedge", "Kind": "game", "Baseline": "hedge",
+    "Id": "30",
+    "Title": "Achievement / Behind the Hedge",
+    "Slug": "Achievement_Hedge",
+    "Kind": "game",
+    "Baseline": "hedge",
     "Shot": "Will stands below Freejia's hedges. Walk Up into the hedge while tapping X until the hidden man speaks; advance his lines with X. The achievement notice appears; keep recording 5 s. Then Esc > Achievements to show it unlocked, 30 s.",
     "Caption": "Achievements, saved on your PC: a secret unlocks with an in-game notice.",
-    "Settings": "Standard set, no cheats, so achievements record. They go to this session's own folder: a throwaway profile, never your real progress."
+    "Settings": "Standard set, no cheats, so achievements record. They go to this session's own folder: a throwaway profile, never your real progress. Checkpoint: a new game with no story flags, warped here with a new game's stats; one flag: $64 (Freejia arrival scene done); the secret's own flag $E1 is clear."
   }
 ]
