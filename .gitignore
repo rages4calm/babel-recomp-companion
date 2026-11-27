@@ -63,3 +63,11 @@ desktop.ini
 
 # Pasted screenshots dropped in the repository root
 /image-*.png
+
+# --- Showcase (trailer Scene Picker): only source/, scenes.json and the guide are tracked.
+# Runtime is a copy of the game, Baselines are ROM-derived save states, Sessions and
+# Recordings are private; the built picker and its intermediates are rebuilt from source/.
+/Showcase/*
+!/Showcase/source/
+!/Showcase/scenes.json
+!/Showcase/RECORDING-GUIDE.md

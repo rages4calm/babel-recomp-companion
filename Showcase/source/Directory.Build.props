@@ -1,0 +1,6 @@
+<Project>
+ <!-- obj/ and bin/ go to Showcase/.build (ignored), not beside the source -->
+ <PropertyGroup>
+  <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)../.build/obj/</BaseIntermediateOutputPath>
+ </PropertyGroup>
+</Project>
