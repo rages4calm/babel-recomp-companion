@@ -16,12 +16,19 @@ internal static class Program
             form.Icon = launcherIcon;
             AddSoundtrackButton(form, controller);
             AddCheatsModsButton(form, controller);
+            InputForm.AddLauncherButton(form, controller);
+            UpdateFeature.Attach(form, controller);
             ReloadWhenReturning(form, controller);
             var smoke = Array.IndexOf(args, "--smoke-test");
             if (smoke >= 0) {
                 if (smoke + 1 >= args.Length) throw new ArgumentException("Supply a fresh smoke-test directory.");
                 var images = form.RenderSmokeTest(args[smoke + 1]);
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { passed = true, pages = images.Count }));
+            } else if (Array.IndexOf(args, "--input-smoke") is var input && input >= 0) {
+                if (input + 2 >= args.Length) throw new ArgumentException("Usage: --input-smoke <babel-recomp.exe> <fresh output directory>");
+                var layout = new[] { 1f, 1.5f, 2f }.SelectMany(scale => InputForm.RenderSmoke(args[input + 1], args[input + 2], scale)).ToList();
+                Console.WriteLine(layout.Count == 0 ? "Controls window: no clipped or overlapping controls at 100, 150 and 200%" : string.Join("\n", layout));
+                if (layout.Count != 0) throw new InvalidOperationException("Controls window layout check failed.");
             } else if (args.Contains("--soundtrack-preview")) {
                 var index = Array.IndexOf(args, "--soundtrack-preview");
                 var engineDirectory = index + 1 < args.Length ? Path.GetFullPath(args[index + 1])
@@ -31,8 +38,9 @@ internal static class Program
             } else Application.Run(form);
             return 0;
         } catch (Exception error) {
-            Console.Error.WriteLine(error.Message);
-            if (!args.Contains("--smoke-test")) MessageBox.Show(error.Message, "Companion could not start", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            var headless = args.Contains("--smoke-test") || args.Contains("--input-smoke");   // automated runs never show UI
+            Console.Error.WriteLine(headless ? error.ToString() : error.Message);
+            if (!headless) MessageBox.Show(error.Message, "Companion could not start", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
     }

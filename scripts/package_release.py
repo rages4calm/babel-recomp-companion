@@ -6,6 +6,7 @@ on November 26, 2026 to publish those as binaries. Generated source, ROMs and
 player data stay out of the package either way."""
 from __future__ import annotations
 import argparse
+import hashlib
 from pathlib import Path
 import re
 import shutil
@@ -156,8 +157,20 @@ def package(build: Path, tag: str, root: Path = ROOT, companion: Path | None = N
             for source in sorted(stage.rglob("*")):
                 if source.is_file():
                     z.write(source, source.relative_to(stage.parent).as_posix())
+        # The launcher's updater checks the download against this file (and
+        # GitHub's own asset digest): attach it to the release next to the zip.
+        digest = hashlib.sha256()
+        with archive.open("rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
+        checksum = destination.with_name(destination.name + ".sha256")
+        checksum.unlink(missing_ok=True)
         archive.replace(destination)
+        staged_sum = Path(tmp) / "verified.sha256"
+        staged_sum.write_bytes(f"{digest.hexdigest()} *{destination.name}\n".encode("ascii"))
+        staged_sum.replace(checksum)
     print(f"{destination} ({notice_count} dependency notices)")
+    print(f"{checksum} (sha256 {digest.hexdigest()})")
     return destination
 
 

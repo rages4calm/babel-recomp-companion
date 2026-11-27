@@ -49,7 +49,7 @@ public sealed class GameAdapter : JsonGameAdapterBase
                 "Which button names the game shows. Auto uses SNES letters and colours on an SNES-style pad (8BitDo, Switch Online) and Xbox letters otherwise. The same setting is in the in-game settings.",
                 Choices: new[] { new ChoiceItem("auto", "Auto"), new ChoiceItem("snes", "SNES (classic)"), new ChoiceItem("xbox", "Xbox") }),
             new OptionDefinition(KeysId, "Input", "Keyboard shortcuts", OptionKind.Choice, OptionValue.From("list"),
-                "Esc settings (achievements are there) · Enter (Start) area map · F1-F10 load state, Shift+F1-F10 save state · F11 all save states · F12 rewind · Tab fast forward · P pause · Alt+Enter fullscreen · PrtSc screenshot. To change buttons or keys, set When you press Play on the Game page to Open the setup screen.",
+                "Esc settings (achievements are there) · Enter (Start) area map · F1-F10 load state, Shift+F1-F10 save state · F11 all save states · F12 rewind · Tab fast forward · P pause · Alt+Enter fullscreen · PrtSc screenshot. These are the defaults. To change keys, controller buttons and shortcuts, use Controls in the left column.",
                 Choices: new[] { new ChoiceItem("list", "Reference") })
         }).ToArray(),
         HasAchievements: true,

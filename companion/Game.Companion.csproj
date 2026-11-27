@@ -9,6 +9,9 @@
     <AssemblyName>illusion-of-gaia.Companion</AssemblyName>
     <ApplicationIcon>../res/branding/gaia-launcher.ico</ApplicationIcon>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- The updater compares this stamp with GitHub releases. -->
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../VERSION').Trim())</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="tests/**/*.cs" />

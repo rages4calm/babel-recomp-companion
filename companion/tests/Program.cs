@@ -2,7 +2,9 @@ using System.Text.Json;
 using Companion.Launcher.Core;
 
 if (args.Contains("--engine")) { await EngineSmoke.Run(args); return; }
+if (InputBindingsTests.Command(args)) return;
 if (args.Contains("--mods-tests")) { NativeModSettingsTests.Run(); return; }
+if (args.Contains("--update-tests")) { await UpdateTests.RunAsync(); return; }
 if (args.Contains("--activation")) { ActivationTests.Run(); return; }
 if (args.Contains("--soundtrack-tests")) { await SoundtrackTests.RunAsync(); return; }
 if (args.Length == 2 && args[0] == "--list-soundtracks") {
@@ -28,6 +30,7 @@ void Check(bool yes, string name) { if (!yes) throw new Exception(name); checks+
 void Throws<T>(Action action, string name) where T : Exception { try { action(); } catch (T) { checks++; return; } throw new Exception(name); }
 try {
     checks += AchievementProviderTests.Run(Path.Combine(root, "achievements"));
+    checks += InputBindingsTests.Run(Path.Combine(root, "input"));
     var adapter = new GameAdapter(Path.Combine(root, "preferences")); var profile = adapter.Profiles.Single();
     var exeDir = Path.Combine(root, "game with spaces"); Directory.CreateDirectory(exeDir);
     var exe = Path.Combine(exeDir, "babel-recomp.exe"); File.WriteAllText(exe, "synthetic engine; never executed");

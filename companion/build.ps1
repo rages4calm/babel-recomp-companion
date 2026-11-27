@@ -20,4 +20,6 @@ if ($Test) {
     if ($LASTEXITCODE -ne 0) { throw 'Native soundtrack activation tests failed.' }
     dotnet run --project (Join-Path $PSScriptRoot 'tests/Gaia.Companion.Tests.csproj') -c Release --no-restore -- --mods-tests
     if ($LASTEXITCODE -ne 0) { throw 'Native mod settings tests failed.' }
+    dotnet run --project (Join-Path $PSScriptRoot 'tests/Gaia.Companion.Tests.csproj') -c Release --no-restore -- --update-tests
+    if ($LASTEXITCODE -ne 0) { throw 'Updater tests failed.' }
 }

@@ -1,5 +1,6 @@
 """Synthetic packaging gates: no real game inputs or executables required."""
 import contextlib
+import hashlib
 import io
 from pathlib import Path
 import tempfile
@@ -43,6 +44,12 @@ class PackageTests(unittest.TestCase):
         self.assertTrue(any(n.endswith("licenses/dependencies/sdl3-src/LICENSE.txt") for n in names))
         self.assertFalse(any(n.endswith("config.ini") for n in names))
         self.assertFalse(any(n.endswith("state.toml") for n in names))
+
+    def test_checksum_written_next_to_zip(self):
+        archive = self.pack()
+        checksum = archive.with_name(archive.name + ".sha256")
+        expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+        self.assertEqual(checksum.read_bytes(), f"{expected} *{archive.name}\n".encode("ascii"))
 
     def test_aot_cache_rejected(self):
         (self.build / "CMakeCache.txt").write_text("SNESRECOMP_INTERPRETER_ONLY:BOOL=OFF\n")

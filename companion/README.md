@@ -88,6 +88,36 @@ background transfer. Music bytes are never bundled. See
 [MSU-1 setup and credits](../docs/MSU1.md). Babel's original SNES fallback remains
 in the engine, including when a selected optional pack has moved or disappeared.
 
+## Updates
+
+`UpdateService.cs` and `UpdateForm.cs` add the **Update** rail button. The launcher's
+version is stamped from `VERSION` (`Game.Companion.csproj`); an unstamped launcher falls
+back to the version string release engines embed. The check reads
+`api.github.com/repos/rages4calm/babel-recomp-companion/releases` (pre-releases
+included, drafts ignored), picks the highest SemVer release carrying
+`babel-recomp-<version>-windows-x86_64.zip`, and is optional on start
+(`UserData/Companion/updates.json`, default on). Only HTTPS to GitHub hosts is
+allowed; the download must match the asset's `digest` and/or the `<zip>.sha256`
+asset, and is refused when neither exists.
+
+Install is side by side: the zip is checked (one top folder, no `..`/absolute
+paths, both programs present) and unpacked in a `.companion-update-*` folder beside
+the install, moved to `v<version>`, then player data is copied in (files not in the new
+package; with a `.companion-package.json` from an earlier update, files the old package
+shipped are left out). `config.ini`, `rom.cfg` and `mods/preloaded/state.toml` have
+old-folder paths rewritten; `state.toml` is written without a BOM. `msu1`, other
+player folders over 64 MB and links are moved last by rename. Any failure moves them
+back and deletes the new folder. Shortcuts on the user's Desktop and Start-menu
+Programs that target the old folder are retargeted. The new launcher, on its first
+start (`.companion-update.json` marker), points the saved engine/ROM paths at the new
+folder and deletes the old folder only if every file left in it is a package file or
+an identical copy.
+
+Test hooks: `GAIA_UPDATE_FEED` (URL or file path of a releases JSON; enables
+loopback HTTP), `GAIA_UPDATE_SHORTCUT_DIRS`, `GAIA_UPDATE_LOG`,
+`GAIA_UPDATE_EXIT_AFTER_FINISH=1`, and `--update-unattended` (honoured only with
+`GAIA_UPDATE_FEED` set). `--update-tests` runs the updater suite.
+
 ## Verification
 
 `./companion/build.ps1 -Test` builds the adapter and runs isolated synthetic

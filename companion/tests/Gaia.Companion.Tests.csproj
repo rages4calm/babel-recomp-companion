@@ -9,8 +9,10 @@
     <Compile Include="../GameAdapter.cs" Link="GameAdapter.cs" />
     <Compile Include="../NativeSettings.cs" Link="NativeSettings.cs" />
     <Compile Include="../NativeModSettings.cs" Link="NativeModSettings.cs" />
+    <Compile Include="../InputBindings.cs" Link="InputBindings.cs" />
     <Compile Include="../SoundtrackActivation.cs" Link="SoundtrackActivation.cs" />
     <Compile Include="../SoundtrackService.cs" Link="SoundtrackService.cs" />
+    <Compile Include="../UpdateService.cs" Link="UpdateService.cs" />
     <EmbeddedResource Include="../soundtrack-catalog.json" LogicalName="soundtrack-catalog.json" />
     <Content Include="../../src/companion_achievements/catalog.json" Link="assets/achievements/catalog.json"
              CopyToOutputDirectory="PreserveNewest" />
