@@ -2652,10 +2652,127 @@ static void SelftestPadBinding(int binding) {
     for (int b = 0; b < 15; ++b)
       if ((unsigned)(binding - 1000) & (1u << b)) SelftestPadSet(b, true);
 }
+/* SNESRECOMP_PAD_PROBE=<frame>[,<seat>] (off by default): prove what the
+ * bindings the game loaded actually do. At <frame> it prints every keyboard
+ * binding of keybinds.ini and the guest bits it produces, and every [KeyMap]
+ * hotkey; then it presses each control of a virtual SDL gamepad seated as
+ * player <seat>+1 (0 default) -- 15 buttons, both triggers, the left stick --
+ * one at a time and prints what reached the guest (RtlGetPadState) and which
+ * config.ini command the press resolved to. A command that is not an SNES
+ * button is recorded, not run, so a probe never opens a menu. */
+static bool g_pad_probe;
+static int g_pad_probe_seat;
+static uint32 g_pad_probe_cmd;
+static void PadProbeBits(uint16 bits, char *out, size_t cap) {
+  static const char *const kNames[12] = {"B", "Y", "Select", "Start", "Up", "Down",
+                                         "Left", "Right", "A", "X", "L", "R"};
+  size_t n = 0;
+  out[0] = 0;
+  for (int i = 0; i < 12; i++)
+    if ((bits & (1u << i)) && n < cap)
+      n += (size_t)snprintf(out + n, cap - n, "%s%s", n ? "+" : "", kNames[i]);
+  if (!n) snprintf(out, cap, "-");
+}
+static void PadProbeKeys(void) {
+  static const char *const kButtons[12] = {"a", "b", "x", "y", "l", "r", "start", "select",
+                                           "up", "down", "left", "right"};
+  char bits[96], name[64];
+  for (int player = 1; player <= 2; player++)
+    for (int b = 0; b < keybinds_button_count() && b < 12; b++) {
+      const SDL_Scancode sc = keybinds_get_button(player, b);
+      uint8_t keys[SDL_SCANCODE_COUNT] = {0};
+      uint16 word = 0;
+      if (sc > SDL_SCANCODE_UNKNOWN && sc < SDL_SCANCODE_COUNT) {
+        keys[sc] = 1;
+        word = keybinds_read_player_desktop(keys, 0, player);
+      }
+      PadProbeBits(word, bits, sizeof(bits));
+      fprintf(stderr, "[key_probe] player%d %s = %s -> %s\n", player, kButtons[b],
+              sc == SDL_SCANCODE_UNKNOWN ? "None" : (int)sc >= SDL_SCANCODE_COUNT ? "Mouse" :
+              SDL_GetScancodeName(sc), bits);
+    }
+  static const struct { SDL_Keymod mod; const char *name; } kMods[] = {
+    { 0, "" }, { KMOD_SHIFT, "Shift+" }, { KMOD_CTRL, "Ctrl+" }, { KMOD_ALT, "Alt+" },
+  };
+  for (int sc = 1; sc < SDL_SCANCODE_COUNT; sc++) {
+#if SNESRECOMP_SDL3
+    const SDL_Keycode key = SDL_GetKeyFromScancode((SDL_Scancode)sc, SDL_KMOD_NONE, false);
+#else
+    const SDL_Keycode key = SDL_GetKeyFromScancode((SDL_Scancode)sc);
+#endif
+    if (key == SDLK_UNKNOWN) continue;
+    for (size_t m = 0; m < sizeof(kMods) / sizeof(kMods[0]); m++) {
+      const int cmd = FindCmdForSdlKey(key, kMods[m].mod);
+      if (cmd <= 0 || ConfigSeatForControl(cmd) >= 0) continue;
+      fprintf(stderr, "[hotkey_probe] %s = %s%s\n", ConfigCommandName(cmd, name, sizeof(name)),
+              kMods[m].name, SDL_GetKeyName(key));
+    }
+  }
+}
+static void PadProbeTick(unsigned frame) {
+  static const struct { const char *name; int kind, id; } kControls[] = {
+    {"a", 0, SDL_CONTROLLER_BUTTON_A}, {"b", 0, SDL_CONTROLLER_BUTTON_B},
+    {"x", 0, SDL_CONTROLLER_BUTTON_X}, {"y", 0, SDL_CONTROLLER_BUTTON_Y},
+    {"back", 0, SDL_CONTROLLER_BUTTON_BACK}, {"guide", 0, SDL_CONTROLLER_BUTTON_GUIDE},
+    {"start", 0, SDL_CONTROLLER_BUTTON_START},
+    {"leftstick", 0, SDL_CONTROLLER_BUTTON_LEFTSTICK}, {"rightstick", 0, SDL_CONTROLLER_BUTTON_RIGHTSTICK},
+    {"leftshoulder", 0, SDL_CONTROLLER_BUTTON_LEFTSHOULDER},
+    {"rightshoulder", 0, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER},
+    {"dpup", 0, SDL_CONTROLLER_BUTTON_DPAD_UP}, {"dpdown", 0, SDL_CONTROLLER_BUTTON_DPAD_DOWN},
+    {"dpleft", 0, SDL_CONTROLLER_BUTTON_DPAD_LEFT}, {"dpright", 0, SDL_CONTROLLER_BUTTON_DPAD_RIGHT},
+    {"lefttrigger", 1, SDL_CONTROLLER_AXIS_TRIGGERLEFT}, {"righttrigger", 1, SDL_CONTROLLER_AXIS_TRIGGERRIGHT},
+    {"leftstick-up", 2, SDL_CONTROLLER_AXIS_LEFTY}, {"leftstick-down", 3, SDL_CONTROLLER_AXIS_LEFTY},
+    {"leftstick-left", 2, SDL_CONTROLLER_AXIS_LEFTX}, {"leftstick-right", 3, SDL_CONTROLLER_AXIS_LEFTX},
+    /* Chords with the left trigger (ZL), the function button of the pad hotkeys. */
+    {"lefttrigger+start", 4, SDL_CONTROLLER_BUTTON_START}, {"lefttrigger+back", 4, SDL_CONTROLLER_BUTTON_BACK},
+    {"lefttrigger+x", 4, SDL_CONTROLLER_BUTTON_X}, {"lefttrigger+y", 4, SDL_CONTROLLER_BUTTON_Y},
+    {"lefttrigger+leftstick", 4, SDL_CONTROLLER_BUTTON_LEFTSTICK},
+    {"lefttrigger+rightstick", 4, SDL_CONTROLLER_BUTTON_RIGHTSTICK},
+    {"lefttrigger+leftshoulder", 4, SDL_CONTROLLER_BUTTON_LEFTSHOULDER},
+    {"lefttrigger+rightshoulder", 4, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER},
+  };
+  const long count = (long)(sizeof(kControls) / sizeof(kControls[0]));
+  const long offset = (long)frame - g_selftest_pad_frame;
+  if (offset == 0) {
+    PadProbeKeys();
+    fprintf(stderr, "[pad_probe] virtual gamepad on player %d: %s\n", g_pad_probe_seat + 1,
+            g_gamepad[g_pad_probe_seat].joystick_id != (SDL_JoystickID)-1 ? "seated" : "NOT seated");
+  }
+  if (offset < 0 || offset >= count * 6) {
+    if (offset == count * 6) fprintf(stderr, "[pad_probe] done\n");
+    return;
+  }
+  const int i = (int)(offset / 6), phase = (int)(offset % 6);
+  if (phase == 0) {
+    g_pad_probe_cmd = 0;
+    if (kControls[i].kind == 0) SelftestPadSet(kControls[i].id, true);
+    else if (kControls[i].kind == 1 || kControls[i].kind == 4)
+      SelftestPadAxis(kControls[i].kind == 1 ? kControls[i].id : SDL_CONTROLLER_AXIS_TRIGGERLEFT, 32767);
+    else SelftestPadAxis(kControls[i].id, kControls[i].kind == 2 ? -32768 : 32767);
+  } else if (phase == 1 && kControls[i].kind == 4) {
+    g_pad_probe_cmd = 0;   /* the chord's own command, not the trigger's */
+    SelftestPadSet(kControls[i].id, true);
+  } else if (phase == 3) {
+    char bits[96], name[64];
+    PadProbeBits(RtlGetPadState(g_pad_probe_seat), bits, sizeof(bits));
+    fprintf(stderr, "[pad_probe] player%d %s -> guest %s, command %s\n", g_pad_probe_seat + 1,
+            kControls[i].name, bits, ConfigCommandName((int)g_pad_probe_cmd, name, sizeof(name)));
+  } else if (phase == 4) {
+    if (kControls[i].kind == 0 || kControls[i].kind == 4) SelftestPadSet(kControls[i].id, false);
+    if (kControls[i].kind == 1 || kControls[i].kind == 4)
+      SelftestPadAxis(kControls[i].kind == 1 ? kControls[i].id : SDL_CONTROLLER_AXIS_TRIGGERLEFT, -32768);
+    else if (kControls[i].kind != 0) SelftestPadAxis(kControls[i].id, 0);
+  }
+}
 static void OverlaySelftestPadAttach(void) {
   const char *v = HostGetenv("COMPANION_SELFTEST_PAD");
   g_selftest_companion = v != NULL;
   if (!v) v = HostGetenv("OVERLAY_SELFTEST_PAD");
+  if (!v && (v = HostGetenv("PAD_PROBE")) != NULL) {
+    const char *seat = strchr(v, ',');
+    g_pad_probe = true;
+    g_pad_probe_seat = seat && atoi(seat + 1) == 1 ? 1 : 0;
+  }
   g_selftest_pad_frame = v ? strtol(v, NULL, 0) : -1;
   if (g_selftest_pad_frame < 0) return;
 #if SNESRECOMP_SDL3
@@ -2694,6 +2811,7 @@ static void OverlaySelftestPadMainTick(unsigned frame) {
    * paces; act once per frame. */
   if (frame == last_frame) return;
   last_frame = frame;
+  if (g_pad_probe) { PadProbeTick(frame); return; }
   if (g_selftest_companion) {
     bool gesture=HostGetenv("COMPANION_SELFTEST_GESTURE")!=NULL;
     if (gesture && (long)frame >= g_selftest_pad_frame-2 &&
@@ -7002,7 +7120,7 @@ static void OpenOneGamepad(int i) {
   for (int k = 0; k < kSnesHostPadSeats; ++k) scan_order[1 + k] = (uint8)k;
   /* The self-test pad must be player 1: the overlay gestures read seat 0. */
   if (g_selftest_pad && SDL_JoystickInstanceID(g_selftest_pad) == joystick_id)
-    scan_order[0] = 0;
+    scan_order[0] = (uint8)(g_pad_probe ? g_pad_probe_seat : 0);
 
   int found_idx = -1;
   const int seats = HostConfiguredSeats();
@@ -7090,6 +7208,7 @@ static int RemapSdlButton(int button) {
  * via [GamepadMap]) fall through to HandleCommand so things like state
  * save/load on a gamepad button still work. */
 static void SetPadButtonOrFallthrough(uint32 j, bool pressed) {
+  if (g_pad_probe && pressed) g_pad_probe_cmd = j;
   static const uint8 kKbdRemap[] = { 4, 5, 6, 7, 2, 3, 8, 0, 9, 1, 10, 11 };
   if (j >= kKeys_Controls && j <= kKeys_Controls_Last) {
     uint32 m = 1u << kKbdRemap[j - kKeys_Controls];
@@ -7110,6 +7229,7 @@ static void SetPadButtonOrFallthrough(uint32 j, bool pressed) {
       return;
     }
   }
+  if (g_pad_probe) return;   /* recorded above; a probe runs no hotkey */
   if (g_overlay_modal) {
     /* Local: the chord that asked, pressed again, answers the prompt. */
     if (pressed && g_prompt.open && g_prompt.again && j == g_prompt.again && PromptArmed())

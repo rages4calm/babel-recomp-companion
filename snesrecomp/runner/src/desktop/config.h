@@ -313,3 +313,6 @@ void ConfigEnableStateMenuPadBinding(void);
 void WriteConfigFile(const char *filename);
 int FindCmdForSdlKey(SDL_Keycode code, SDL_Keymod mod);
 int FindCmdForGamepadButton(int button, uint32 modifiers);
+/* Diagnostics: config.ini name of a command ("Pause", "Load[3]",
+ * "ControlsP2[6]"), written into buf. */
+const char *ConfigCommandName(int cmd, char *buf, size_t cap);

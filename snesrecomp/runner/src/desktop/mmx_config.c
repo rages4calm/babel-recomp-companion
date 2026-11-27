@@ -128,6 +128,20 @@ static const KeyNameId kKeyNameId[] = {
 };
 #undef S
 #undef M
+/* The config.ini name of command `cmd`, e.g. "Pause", "Load[3]" or
+ * "ControlsP2[6]" (index within a positional array), for diagnostics. */
+const char *ConfigCommandName(int cmd, char *buf, size_t cap) {
+  for (int i = 1; i < (int)countof(kKeyNameId); i++) {
+    const int id = kKeyNameId[i].id, size = kKeyNameId[i].size;
+    if (cmd < id || cmd >= id + size) continue;
+    if (size == 1) snprintf(buf, cap, "%s", kKeyNameId[i].name);
+    else snprintf(buf, cap, "%s[%d]", kKeyNameId[i].name, cmd - id);
+    return buf;
+  }
+  snprintf(buf, cap, cmd ? "cmd%d" : "none", cmd);
+  return buf;
+}
+
 typedef struct KeyMapHashEnt {
   uint16 key, cmd, next;
 } KeyMapHashEnt;
@@ -516,6 +530,11 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
           int id = kKeyNameId[i].id;
           int seat = ConfigSeatForControl(id);
           if (seat >= 0) has_assigned_joypad_controls |= (uint8)(1u << seat);
+          /* A pad hotkey named here (even cleared, with an empty value)
+           * replaces its built-in ZL default; see PadCommandConfigured. The
+           * flag was declared and read but never set, so "SettingsMenu = R3"
+           * added R3 and kept ZL+R3, and a default could not be removed. */
+          else has_pad_keynameid[i] = true;
           ParseGamepadArray(seat > 0 ? seat : 0, value, kKeyNameId[i].id, kKeyNameId[i].size);
           return true;
         }
