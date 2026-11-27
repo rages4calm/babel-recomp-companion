@@ -40,6 +40,7 @@ FEATURES = {
     "jp_church":   ("jp-church-cross", ["gfx_southcape_effect.bin"]),
     "jp_mines":    ("jp-mines", ["pal_mine.pal"]),
     "jp_prologue": ("jp-prologue-palettes", ["pal_prologue_legends.pal", "pal_prologue_missing.pal"]),
+    "jp_viper":    ("jp-viper", ["gfx_viper.bin"]),
 }
 PARALLAX_TABLE = 0x1CC00          # 16-bit pointers into bank $01, one per index
 RELOCATE_SPACE = (0x06DCD8, 0x070000)   # $FF padding at the end of bank $06
@@ -207,6 +208,59 @@ def asset(src, pack, feature, module, name, relocated):
     relocated[0] = lo + len(blob)
 
 
+def spritemap(src, pack, feature, module, name, relocated):
+    """A spritemap (sprite layout, expanded into WRAM). The JP Viper's is 52
+    bytes shorter than stock: it is padded with the stock tail so the scene's
+    size word and every WRAM address after it stay as they are, then moved to
+    bank $06's padding (its stream is longer than the stock span)."""
+    rom = src.rom
+    s = src.files[name.split(".")[0]]
+    start, end = s["start"], s["end"]
+    stock, _ = expand(rom, start)
+    data = src.module("%s/%s" % (module, name))
+    if len(data) > len(stock): raise SystemExit("%s is longer than stock" % name)
+    data = data + stock[len(data):]
+    packed = compact(data)
+    pack.swap(feature, b"z", start, packed)
+    if len(packed) <= end - start:
+        pack.write(feature, start, packed); return
+    lo, hi = relocated
+    if lo + len(packed) > hi or lo & 0xFFFF < 0x8000: raise SystemExit("no room for %s" % name)
+    sites = []
+    for bank in (0x80, 0xC0):
+        pointer = bytes([start & 255, start >> 8 & 255, bank | start >> 16])
+        sites += [(m.start(), bank) for m in re.finditer(re.escape(pointer), rom)
+                  if 0x0D8000 <= m.start() < 0x0E0000]
+    if not sites: raise SystemExit("%s: no scene_meta references" % name)
+    for p, bank in sites:
+        if rom[p - 4] != 0x10 or rom[p - 1] != 0: raise SystemExit("%s: unexpected reference at %x" % (name, p))
+    pack.write(feature, lo, packed)
+    for p, bank in sites:
+        pack.write(feature, p, bytes([lo & 255, lo >> 8 & 255, bank | lo >> 16]))
+    relocated[0] = lo + len(packed)
+
+
+def crystal_ring(src, pack):
+    """The inventory's crystal ring: new art in the (uncompressed) inventory
+    sprite sheet and its sprite part moved to palette 5, which the stock
+    inventory palette already holds (the module's own exprite palette is for
+    GaiaLabs' equipped-item icon, which this port does not have)."""
+    module = "crystal-ring-palette"
+    sheet = src.files["gfx_inventory_sprites"]["start"]
+    if src.rom[sheet:sheet + 2] != b"\0\0": raise SystemExit("inventory sprites are not stored raw")
+    data = src.module(module + "/gfx_inventory_sprites.bin")
+    stock = src.rom[sheet + 2:sheet + 2 + len(data)]
+    diff = [i for i in range(len(data)) if data[i] != stock[i]]
+    lo, hi = diff[0] & ~31, (diff[-1] | 31) + 1
+    pack.write("crystal_ring", sheet + 2 + lo, data[lo:hi])
+    patch = src.module(module + "/CrystalRingPalette.patch.asm").decode()
+    part = re.search(r"sprite_part\s*<\s*#01,\s*#00,\s*#00,\s*#00,\s*#00,\s*#\$([0-9A-Fa-f]{4})\s*>", patch)
+    group = 0x10898C
+    if src.rom[group + 13] != 1 or struct.unpack_from("<H", src.rom, group + 18)[0] != 0x0760 or not part:
+        raise SystemExit("crystal ring: sprite group does not match the stock layout")
+    pack.write("crystal_ring", group + 18, struct.pack("<H", int(part.group(1), 16)))
+
+
 def words(block):
     return [int(v, 16) for v in re.findall(r"#\$([0-9A-Fa-f]{4})", block)]
 
@@ -280,6 +334,8 @@ def main():
     itory = src.module("jp-itory-mountains/JpItoryMountains.patch.asm").decode()
     parallax(src, pack, "jp_itory", itory, "binary_01CC89")
     red_fountain(src, pack)
+    spritemap(src, pack, "jp_viper", "jp-viper", "spm_viper.spm", relocated)
+    crystal_ring(src, pack)
     # stock words must be replaced one for one
     for kind, feature, offset, data, _ in pack.records:
         if kind == b"W" and offset + len(data) > len(rom): raise SystemExit("record past the ROM")

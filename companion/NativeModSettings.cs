@@ -51,8 +51,11 @@ public static class NativeModSettings
         Toggle("gaialabs.jp-church", "GaiaLabs", "Church cross: JP", "iog.gaialabs", "jp_church", "The Japanese release's cross in the church instead of the North American statue (GaiaLabs).", true),
         Toggle("gaialabs.jp-mines", "GaiaLabs", "Diamond Mine colours: JP (purple)", "iog.gaialabs", "jp_mines", "The Japanese release's purple Diamond Mine (GaiaLabs). Off: the North American brown."),
         Toggle("gaialabs.jp-prologue", "GaiaLabs", "Prologue palettes: JP (dark)", "iog.gaialabs", "jp_prologue", "The Japanese release's darker palettes for the prologue's legends (GaiaLabs). Off: the lighter North American ones.", true),
+        Toggle("gaialabs.jp-viper", "GaiaLabs", "Viper: JP", "iog.gaialabs", "jp_viper", "The Japanese release's Viper boss sprites (GaiaLabs). Off: the North American Viper."),
+        Toggle("gaialabs.crystal-ring", "GaiaLabs", "Crystal Ring: new palette", "iog.gaialabs", "crystal_ring", "GaiaLabs' recoloured Crystal Ring in the inventory.", true),
         Toggle("gaialabs.full-herb", "GaiaLabs", "Herbs heal fully", "iog.gaialabs", "full_herb", "A herb refills all of Will's HP instead of 8 (GaiaLabs).", true),
-        Toggle("gaialabs.portal-exit", "GaiaLabs", "Pyramid portals: lower hall", "iog.gaialabs", "portal_exit", "The portals in the Pyramid's rooms take you to the lower main area of the entrance hall instead of its top (GaiaLabs).", true)
+        Toggle("gaialabs.portal-exit", "GaiaLabs", "Pyramid portals: lower hall", "iog.gaialabs", "portal_exit", "The portals in the Pyramid's rooms take you to the lower main area of the entrance hall instead of its top (GaiaLabs).", true),
+        Toggle("gaialabs.elevator", "GaiaLabs", "Pyramid moving floors: 2x", "iog.gaialabs", "elevator", "The Pyramid's moving floors travel twice as fast, over the same distance (GaiaLabs).", true)
     };
     private static readonly GameDefinition ValidationDefinition = new("gaia-mod-options", "Gaia mods", "", Fields.Select(x => x.Option).ToArray());
     private static readonly Regex Tables = new(@"(?m)^[ \t]*\[\[([\w.-]+)\]\][ \t]*(?:#.*)?\r?$", RegexOptions.Compiled);

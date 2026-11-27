@@ -57,6 +57,7 @@ typedef struct {
 
 static const char *const kFeatures[] = {
     "jp_edward", "jp_itory", "jp_wall", "red_fountain", "jp_church", "jp_mines", "jp_prologue",
+    "jp_viper", "crystal_ring",
 };
 enum { kNumFeatures = sizeof(kFeatures) / sizeof(kFeatures[0]) };
 
@@ -507,6 +508,61 @@ static void PortalFrame(void)
     }
 }
 
+/* ---- Pyramid elevator 2x (pyramid-elevator-speed/PyramidElevatorSpeed.patch.asm)
+ * The moving floors in the Pyramid (pyD7_sliding_wall, $08:C4ED) step the
+ * layer offset at $1086 ($1060 + $26) by one per tick for the count in the
+ * actor's own $26, resuming at $08:C555 (down) or $08:C566 (up). The module
+ * takes two steps per tick and stops the moment the count runs out. Here the
+ * host adds the second step right after a tick the game just took, only while
+ * at least two remain, so the distance and the stop are the stock ones. */
+static bool g_elevator;
+static const uint8_t kElevatorStep[] = {   /* $08:C549..$08:C574, stock */
+    0xbf, 0x10, 0x00, 0x7f, 0x85, 0x26, 0xa5, 0x24, 0x10, 0x11, 0x02, 0xc1, 0xa0, 0x60, 0x10,
+    0xb9, 0x26, 0x00, 0x3a, 0x99, 0x26, 0x00, 0xc6, 0x26, 0xf0, 0x12, 0x6b, 0x02, 0xc1, 0xa0,
+    0x60, 0x10, 0xb9, 0x26, 0x00, 0x1a, 0x99, 0x26, 0x00, 0xc6, 0x26, 0xf0, 0x01, 0x6b,
+};
+static struct { unsigned actor, count; } g_elev_last[8];
+
+static void ElevatorFrame(void)
+{
+    if (!g_elevator || !g_snes || !g_snes->cart)
+        return;
+    uint8_t *ram = g_snes->ram;
+    const Cart *cart = g_snes->cart;
+    if (cart->romImageSize != 0x200000 ||
+        memcmp(cart->rom + 0x08C549, kElevatorStep, sizeof(kElevatorStep)))
+        return;
+    unsigned seen[8], counts[8], n = 0;
+    unsigned a = ram[0x56] | ram[0x57] << 8;
+    for (int guard = 0; a >= 0x1000 && a < 0x1FC0 && guard < 96 && n < 8; guard++) {
+        const unsigned pc = ram[a] | ram[a + 1] << 8;
+        if ((ram[a + 2] & 0x3F) == 0x08 && (pc == 0xC555 || pc == 0xC566)) {
+            unsigned count = ram[a + 0x26] | ram[a + 0x27] << 8;
+            /* the game just took a step: its count dropped by one since last frame */
+            for (int k = 0; k < 8; k++) {
+                if (g_elev_last[k].actor != a || g_elev_last[k].count != count + 1 || count < 2)
+                    continue;
+                unsigned v = ram[0x1086] | ram[0x1087] << 8;
+                v = (pc == 0xC566 ? v + 1 : v - 1) & 0xFFFF;
+                ram[0x1086] = (uint8_t)v;
+                ram[0x1087] = (uint8_t)(v >> 8);
+                count--;
+                ram[a + 0x26] = (uint8_t)count;
+                ram[a + 0x27] = (uint8_t)(count >> 8);
+                break;
+            }
+            seen[n] = a;
+            counts[n++] = count;
+        }
+        a = ram[a + 6] | ram[a + 7] << 8;
+    }
+    memset(g_elev_last, 0, sizeof(g_elev_last));
+    for (unsigned k = 0; k < n; k++) {
+        g_elev_last[k].actor = seen[k];
+        g_elev_last[k].count = counts[k];
+    }
+}
+
 /* ---- activation ------------------------------------------------------------ */
 
 static void ActivateData(const char *id)
@@ -526,10 +582,13 @@ DATA_PLUGIN(jp_wall)
 DATA_PLUGIN(red_fountain)
 DATA_PLUGIN(jp_church)
 DATA_PLUGIN(jp_mines)
+DATA_PLUGIN(jp_viper)
+DATA_PLUGIN(crystal_ring)
 DATA_PLUGIN(jp_prologue)
 
 static void ActivateHerb(void) { g_full_herb = true; g_herbs = 0xFFFF; }
 static void ActivatePortal(void) { g_portal_exit = true; }
+static void ActivateElevator(void) { g_elevator = true; memset(g_elev_last, 0, sizeof(g_elev_last)); }
 
 static void Reset(void)
 {
@@ -537,7 +596,8 @@ static void Reset(void)
     memset(g_wanted, 0, sizeof(g_wanted));
     memset(g_usable, 0, sizeof(g_usable));
     g_last_scene = 0xFFFF;
-    g_full_herb = g_portal_exit = false;
+    g_full_herb = g_portal_exit = g_elevator = false;
+    memset(g_elev_last, 0, sizeof(g_elev_last));
     g_herbs = 0xFFFF;
     /* Plugin activation clears frame callbacks and then runs this: register
      * them here. The resident check runs with every option off too, to put
@@ -549,6 +609,7 @@ static void Reset(void)
     }
     snes_mod_register_frame_callback(HerbFrame);
     snes_mod_register_frame_callback(PortalFrame);
+    snes_mod_register_frame_callback(ElevatorFrame);
     snes_mod_register_frame_callback(ResidentFrame);
 }
 
@@ -561,6 +622,8 @@ bool IogGaiaLabsOn(const char *feature)
         return g_full_herb;
     if (!strcmp(feature, "portal_exit"))
         return g_portal_exit;
+    if (!strcmp(feature, "elevator"))
+        return g_elevator;
     return false;
 }
 
@@ -574,6 +637,9 @@ SNES_MOD_CONSTRUCTOR(register_iog_gaialabs)
     snes_mod_register_activation_plugin("iog.gaialabs.jp_church", Activate_jp_church);
     snes_mod_register_activation_plugin("iog.gaialabs.jp_mines", Activate_jp_mines);
     snes_mod_register_activation_plugin("iog.gaialabs.jp_prologue", Activate_jp_prologue);
+    snes_mod_register_activation_plugin("iog.gaialabs.jp_viper", Activate_jp_viper);
+    snes_mod_register_activation_plugin("iog.gaialabs.crystal_ring", Activate_crystal_ring);
     snes_mod_register_activation_plugin("iog.gaialabs.full_herb", ActivateHerb);
     snes_mod_register_activation_plugin("iog.gaialabs.portal_exit", ActivatePortal);
+    snes_mod_register_activation_plugin("iog.gaialabs.elevator", ActivateElevator);
 }

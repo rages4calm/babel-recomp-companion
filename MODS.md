@@ -26,9 +26,10 @@ play stays the stock USA ROM (the launcher verifies it).
 | Apocalypse Gaia (`iog.apocalypse`) | Apocalypse Gaia boss | The restored, unfinished final boss (bring your own patch) |
 | Randomizer (`iog.randomizer`) | Randomizer seed | Play an Illusion of Gaia Randomizer (IoGR) seed |
 | Graphics effects (`iog.graphics`) | HD scaling | Crisp pixels at any resolution, or smooth redrawn edges (xBR), up to 4K |
-| GaiaLabs options (`iog.gaialabs`) | JP content | The Japanese release's Edward Castle, Itory and Great Wall backgrounds, red fountain, church cross, prologue palettes and (off by default) purple Diamond Mine |
+| GaiaLabs options (`iog.gaialabs`) | JP content | The Japanese release's Edward Castle, Itory and Great Wall backgrounds, red fountain, church cross, prologue palettes and recoloured Crystal Ring; off by default, the purple Diamond Mine and the JP Viper |
 | | Herbs heal fully | A herb refills all of Will's HP |
 | | Pyramid portals | Portals lead to the entrance hall's lower area |
+| | Pyramid moving floors 2x | The Pyramid's moving floors travel twice as fast |
 | *(any data-only package)* | HD graphics | Replacement art, see `snesrecomp/docs/HD_PACKS.md` |
 
 ## MSU-1 soundtrack
@@ -135,8 +136,9 @@ the launcher's Mods page (GaiaLabs section).
 
 - **JP content**: Edward Castle, Itory and Great Wall backgrounds (with the
   Japanese parallax layers), the red fountain in the Seaside Palace, the
-  cross in the church, darker prologue palettes; the purple Diamond Mine is
-  off by default, as in GaiaLabs. The art is GaiaLabs' module data
+  cross in the church, darker prologue palettes and the recoloured Crystal
+  Ring in the inventory; the purple Diamond Mine and the JP Viper (the
+  Japanese release's boss sprites) are off by default, as in GaiaLabs. The art is GaiaLabs' module data
   (`i18n/gaialabs-mods.bin`, GPL-3.0), recompressed into the game's own
   format and laid into the ROM image in memory, so the game loads it
   itself: it shows the same in the wide view, its margins and the 4:3
@@ -146,12 +148,14 @@ the launcher's Mods page (GaiaLabs section).
 - **Herbs heal fully**: a herb refills all of Will's HP instead of 8.
 - **Pyramid portals: lower hall**: the portals in the Pyramid's rooms take
   you to the lower main area of the entrance hall instead of its top.
+- **Pyramid moving floors: 2x**: the Pyramid's moving floors travel twice as
+  fast; they cover the same distance and stop in the same place.
 
 GaiaLabs' patches change game code, which the native build cannot take
-over; these two do the same to the game's state from the host instead.
+over; these three do the same to the game's state from the host instead.
 Options that overlap this port's own features (map, minimap, widescreen,
 walkable world map, run button, text speed) are not taken over. Not yet
-available: the Pyramid elevator speed, the title screens, the JP Viper, the crystal ring palette, the
+available: the title screens, the
 shortcuts (Mines to Freejia, Mt. Kress, Angkor Wat), the cut content (Sky
 Delivery Man, Blue Journal) and extras (borderless epilogue and adrift text,
 Thankful Flower, South Cape return, Freejia slave return, Shira spotlight,

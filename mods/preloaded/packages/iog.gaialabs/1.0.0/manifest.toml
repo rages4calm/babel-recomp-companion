@@ -90,6 +90,28 @@ feature = "jp_prologue"
 id = "iog.gaialabs.jp_prologue"
 
 [[feature]]
+id = "jp_viper"
+name = "Viper: JP"
+description = "The Japanese release's Viper boss sprites. Off: the North American Viper."
+group = "JP content"
+default_enabled = false
+
+[[plugin]]
+feature = "jp_viper"
+id = "iog.gaialabs.jp_viper"
+
+[[feature]]
+id = "crystal_ring"
+name = "Crystal Ring: new palette"
+description = "GaiaLabs' recoloured Crystal Ring in the inventory, in the crystal palette the menu already has."
+group = "JP content"
+default_enabled = true
+
+[[plugin]]
+feature = "crystal_ring"
+id = "iog.gaialabs.crystal_ring"
+
+[[feature]]
 id = "full_herb"
 name = "Herbs heal fully"
 description = "A herb refills all of Will's HP instead of 8."
@@ -111,3 +133,14 @@ default_enabled = true
 feature = "portal_exit"
 id = "iog.gaialabs.portal_exit"
 
+
+[[feature]]
+id = "elevator"
+name = "Pyramid moving floors: 2x"
+description = "The Pyramid's moving floors travel twice as fast; they still go the same distance and stop in the same place."
+group = "Quality of life"
+default_enabled = true
+
+[[plugin]]
+feature = "elevator"
+id = "iog.gaialabs.elevator"
