@@ -116,5 +116,45 @@ try {
     fresh = freshAdapter.ReadSettings(profile); fresh.Values["audio.volume"] = OptionValue.From(65);
     Throws<InvalidOperationException>(() => freshAdapter.ApplySettings(profile, fresh.Values, fresh.Revision), "native edits require complete engine initialization");
     Check(!File.Exists(Path.Combine(freshDir, "config.ini")), "blocked native edit cannot create partial config");
+
+    // A saved game program in a folder that is gone (a manual install beside it, the old folder deleted)
+    // falls back to the babel-recomp.exe next to the launcher, and that is saved. The ROM path stays.
+    {
+        var games = Path.Combine(root, "Games"); var current = Path.Combine(games, "v0.2.0-beta.22"); Directory.CreateDirectory(current);
+        var own = Path.Combine(current, "babel-recomp.exe"); File.WriteAllText(own, "synthetic only");
+        File.WriteAllText(Path.Combine(current, "config.ini"), "[Graphics]\nWidescreen = 1\n");
+        var gone = Path.Combine(games, "v0.2.0-beta.20", "babel-recomp.exe");
+        var rom = Path.Combine(games, "v0.2.0-beta.20", "Illusion of Gaia (USA).sfc");
+        var data = Path.Combine(root, "moved-preferences");
+        var moved = new GameAdapter(data) { OwnEngineOverride = own };
+        var settingsFile = Path.Combine(moved.ProfileDirectory(profile), "settings.json");
+        void Saved(object values) { Directory.CreateDirectory(Path.GetDirectoryName(settingsFile)!); File.WriteAllText(settingsFile, JsonSerializer.Serialize(values)); }
+        string? OnDisk(string key) => JsonDocument.Parse(File.ReadAllText(settingsFile)).RootElement.TryGetProperty(key, out var v) ? v.GetString() : null;
+
+        Saved(new Dictionary<string, string> { ["engine.path"] = gone, ["rom.path"] = rom, ["launch.mode"] = "game" });
+        var read = moved.ReadSettings(profile);
+        Check(read.Values["engine.path"].GetString() == own, "deleted install folder: engine path falls back to the launcher's own folder");
+        Check(OnDisk("engine.path") == own, "the fallback is saved");
+        Check(OnDisk("rom.path") == rom && read.Values["rom.path"].GetString() == rom, "ROM path is kept as saved");
+        Check(OnDisk("launch.mode") == "game", "other preferences are kept");
+        Check(moved.CheckReady(profile, read.Values).Summary != "Set the game program on the Game page, then Apply.", "Play no longer says the game program is missing");
+        read.Values["audio.volume"] = OptionValue.From(42); moved.ApplySettings(profile, read.Values, read.Revision);
+        Check(File.ReadAllText(Path.Combine(current, "config.ini")).Contains("Volume = 42"), "Apply works after the fallback (revision consistent)");
+
+        foreach (var invalid in new[] { "babel-recomp.exe", "", Path.Combine(games, "v0.2.0-beta.20") }) {
+            Saved(new Dictionary<string, string> { ["engine.path"] = invalid, ["rom.path"] = rom });
+            Check(moved.ReadSettings(profile).Values["engine.path"].GetString() == own && OnDisk("engine.path") == own, "invalid saved engine path replaced: '" + invalid + "'");
+        }
+        var elsewhere = Path.Combine(root, "elsewhere"); Directory.CreateDirectory(elsewhere);
+        var other = Path.Combine(elsewhere, "babel-recomp.exe"); File.WriteAllText(other, "synthetic only");
+        Saved(new Dictionary<string, string> { ["engine.path"] = other, ["rom.path"] = rom });
+        Check(moved.ReadSettings(profile).Values["engine.path"].GetString() == other && OnDisk("engine.path") == other, "a saved game program that exists elsewhere is respected");
+        Saved(new Dictionary<string, string> { ["engine.path"] = gone, ["rom.path"] = rom });
+        var noOwn = new GameAdapter(data) { OwnEngineOverride = null };   // the test host's folder has no babel-recomp.exe
+        Check(noOwn.ReadSettings(profile).Values["engine.path"].GetString() == gone && OnDisk("engine.path") == gone, "without a game beside the launcher, nothing is changed");
+        File.Delete(settingsFile);
+        moved.ReadSettings(profile);
+        Check(!File.Exists(settingsFile), "never-chosen path: nothing is written");
+    }
     Console.WriteLine(JsonSerializer.Serialize(new { passed = true, checks, synthetic = true, gameLaunched = false }));
 } finally { Directory.Delete(root, true); }

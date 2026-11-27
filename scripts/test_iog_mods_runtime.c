@@ -5,7 +5,7 @@
 #undef IogCheatRateSourceSupported
 
 static uint8_t test_ram[0x20000],test_rom[0x200000],expected_ram[0x20000];
-static Cart test_cart={test_rom,sizeof test_rom};
+static Cart test_cart={test_rom,sizeof test_rom,NULL,0};
 static Snes test_snes={test_ram,&test_cart,0};
 Snes *g_snes=&test_snes;
 static uint64_t generation=1;
@@ -14,11 +14,24 @@ static unsigned assertions,source_checks,persist_calls;
 static SNESModActivationCallback reset_callback;
 static SNESModFrameCallback frame_callbacks[16];
 static unsigned frame_count;
+static SNESModInputFilter input_filters[8];
+static unsigned filter_count;
+/* What iog_mods.c registers, and the commits that changed it since this
+ * fixture was last updated (c82ff02, 9 plugins / 4 reset frame callbacks):
+ *   plugins (activation + presentation), 9 -> 13:
+ *     c7a4bf4 iog.wide_view, 7c36c59 iog.edge_hud, ab880ea iog.text_speed,
+ *     133ccc8 iog.auto_use
+ *   frame callbacks registered by the reset callback, 4 -> 8:
+ *     ab880ea RunFrame moved from ActivateRun to reset + TextSpeedFrame,
+ *     133ccc8 AutoUseFrame, 97d68ba TestHuntFrame
+ *   input filters registered by the reset callback: 133ccc8 AutoUseFilter,
+ *     HoldAdvanceFilter (2). iog.hotswap adds its own when activated. */
+enum { kExpectedPlugins = 13, kExpectedResetFrames = 8, kExpectedResetFilters = 2 };
 static struct {const char*id;SNESModActivationCallback fn;} plugins[16];
 static unsigned plugin_count;
 static int configured_multiplier=1;
 static int configured_dp=-1,configured_str=-1,configured_def=-1,configured_hp=-1;
-static const char *configured_run_button="Y";
+static const char *configured_run_button="Y",*configured_run_style="hold";
 static char persisted_feature[40],persisted_option[40],persisted_value[40];
 static int persisted_enabled;
 #define CHECK(v) do {assertions++;if(!(v)){fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#v);exit(1);}}while(0)
@@ -34,7 +47,8 @@ int snes_mod_register_presentation_plugin(const char*id,SNESModActivationCallbac
 {return snes_mod_register_activation_plugin(id,fn);}
 int snes_mod_register_frame_callback(SNESModFrameCallback fn)
 {CHECK(frame_count<16);frame_callbacks[frame_count++]=fn;return 1;}
-int snes_mod_register_input_filter(SNESModInputFilter fn){(void)fn;return 1;}
+int snes_mod_register_input_filter(SNESModInputFilter fn)
+{CHECK(filter_count<8);input_filters[filter_count++]=fn;return 1;}
 int snes_mod_runtime_feature_enabled_c(const char*pkg,const char*feature)
 {return !strcmp(pkg,"iog.apocalypse")&&!strcmp(feature,"apocalypse_gaia")&&apocalypse;}
 int snes_mod_runtime_feature_option_value_c(const char*pkg,const char*feature,const char*option,char*out,size_t cap)
@@ -53,6 +67,8 @@ int snes_mod_runtime_feature_option_value_c(const char*pkg,const char*feature,co
     if(value>=0)return snprintf(out,cap,"%d",value)>0;
     if(!strcmp(pkg,"iog.enhancements")&&!strcmp(feature,"run")&&!strcmp(option,"button"))
         return snprintf(out,cap,"%s",configured_run_button)>0;
+    if(!strcmp(pkg,"iog.enhancements")&&!strcmp(feature,"run")&&!strcmp(option,"style"))
+        return snprintf(out,cap,"%s",configured_run_style)>0;
     if(cap)out[0]=0;return 0;
 }
 int snes_mod_runtime_persist_feature_c(const char*pkg,const char*feature,int enabled,const char*option,const char*value)
@@ -72,7 +88,8 @@ static void reset_fixture(unsigned reward)
 {
     memset(test_ram,0,sizeof test_ram);memset(test_rom,0,sizeof test_rom);
     g_snes=&test_snes;generation++;source_supported=true;randomizer=apocalypse=false;
-    frame_count=0;CHECK(reset_callback!=NULL);reset_callback();CHECK(frame_count==4);
+    frame_count=filter_count=0;CHECK(reset_callback!=NULL);reset_callback();
+    CHECK(frame_count==kExpectedResetFrames);CHECK(filter_count==kExpectedResetFilters);
     Wr(0x0644,0x10);Wr(0x09AA,0x1000);Wr(0x0ACE,5);Wr(0x0ACA,8);Wr(0x0ADE,4);Wr(0x0ADC,3);
     test_rom[0x01AADE + 0x10]=(uint8_t)reward;
 }
@@ -175,14 +192,19 @@ static void live_cheat_suite(void)
 }
 static void run_suite(void)
 {
+    /* 291f952: L and R are the game's guard and are not offered; a config
+     * that still names them runs on Y (the default), and L/R never dash. */
     static const char*buttons[]={"Y","X","L","R"};
-    static const unsigned masks[]={kPadY,kPadX,kPadL,kPadR};
+    static const unsigned masks[]={kPadY,kPadX,kPadY,kPadY};
     static const unsigned directions[]={kPadRight,kPadLeft,kPadDown,kPadUp};
     for(unsigned b=0;b<4;b++)for(unsigned d=0;d<4;d++) {
-        reset_fixture(1);configured_run_button=buttons[b];activate("iog.run");CHECK(frame_count==5);
+        reset_fixture(1);configured_run_button=buttons[b];activate("iog.run");CHECK(frame_count==kExpectedResetFrames);
         test_snes.input1_currentState=masks[b]|directions[d];Wr(0x09B8,17);tick();
         CHECK(Rd(d<2?0x09B2:0x09B4)==(d&1?0xFFFD:3));CHECK(Rd(0x09B8)==0);
         CHECK(Rd(d<2?0x09B4:0x09B2)==0);
+        if(b>=2){reset_fixture(1);configured_run_button=buttons[b];activate("iog.run");
+            test_snes.input1_currentState=(b==2?kPadL:kPadR)|directions[d];
+            memcpy(expected_ram,test_ram,sizeof expected_ram);tick();CHECK(!memcmp(expected_ram,test_ram,sizeof test_ram));}
     }
     for(unsigned gate=0;gate<8;gate++) {
         reset_fixture(1);configured_run_button="Y";activate("iog.run");
@@ -202,9 +224,48 @@ static void run_suite(void)
     reset_fixture(1);configured_run_button="Y";activate("iog.run");Wr(0x0644,0x00F2);
     test_snes.input1_currentState=kPadY|kPadRight;tick();CHECK(Rd(0x09B2)==3);
 }
+/* auto_use (PadForLogical): the talk and item buttons are whatever the game's
+ * button type maps to logical $8000 (attack/talk) and $4000 (item), read from
+ * the remap words at $0DA6. Rama's Statue spot: scene $66, tile (36,8). */
+static void remap_type(int type)
+{
+    Wr(0x0DA6,0x0010);Wr(0x0DA8,0x0020);Wr(0x0DB2,0x1000);Wr(0x0DB4,0x2000);
+    if(type==1){Wr(0x0DAC,0x8000);Wr(0x0DAA,0x4000);Wr(0x0DAE,0x0040);Wr(0x0DB0,0);}
+    else       {Wr(0x0DAC,0x0080);Wr(0x0DAA,0x8000);Wr(0x0DAE,0x4000);Wr(0x0DB0,0);}  /* Type 2 after a boot */
+}
+static void auto_use_spot(void)
+{
+    Wr(0x0644,0x66);Wr(0x09A6,36);Wr(0x09A8,8);Wr(0x09AA,0x1000);Wr(0x09AE,0);Wr(0x09EC,0);
+    memset(&test_ram[0x0AB4],0,16);test_ram[0x0AB4+2]=0x13;Wr(0x0AC4,0xFFFF);Wr(0x0AC6,0);
+}
+static void auto_use_suite(void)
+{
+    reset_fixture(1);activate("iog.auto_use");
+    /* Type 1: A becomes B with Rama's Statue equipped, for as long as A is held. */
+    remap_type(1);auto_use_spot();
+    CHECK(AutoUseFilter(kPadA)==kPadB);CHECK(Rd(0x0AC4)==2&&Rd(0x0AC6)==0x13);
+    CHECK(AutoUseFilter(kPadA|kPadRight)==(kPadB|kPadRight));
+    CHECK(AutoUseFilter(0)==0);AutoUseFrame();CHECK(Rd(0x0AC4)==0xFFFF&&Rd(0x0AC6)==0);
+    /* Type 2: B talks and Y uses items; B becomes Y, and A (unused) is left alone. */
+    reset_fixture(1);activate("iog.auto_use");remap_type(2);auto_use_spot();
+    CHECK(AutoUseFilter(kPadA)==kPadA);CHECK(Rd(0x0AC4)==0xFFFF);
+    CHECK(AutoUseFilter(kPadB)==kPadY);CHECK(Rd(0x0AC4)==2&&Rd(0x0AC6)==0x13);
+    CHECK(AutoUseFilter(kPadB)==kPadY);CHECK(AutoUseFilter(0)==0);AutoUseFrame();CHECK(Rd(0x0AC4)==0xFFFF);
+    /* No button produces the item bit: nothing is handed over. */
+    reset_fixture(1);activate("iog.auto_use");remap_type(1);Wr(0x0DAA,0x8000);auto_use_spot();
+    CHECK(AutoUseFilter(kPadA)==kPadA);CHECK(Rd(0x0AC4)==0xFFFF);
+    /* Off the spot, in a message, without the item, or with the option off: unchanged. */
+    for(unsigned gate=0;gate<4;gate++){
+        reset_fixture(1);if(gate!=3)activate("iog.auto_use");remap_type(2);auto_use_spot();
+        if(gate==0)Wr(0x09A6,30);
+        if(gate==1)Wr(0x09EC,0x2001);
+        if(gate==2)test_ram[0x0AB4+2]=0;
+        CHECK(AutoUseFilter(kPadB)==kPadB);CHECK(Rd(0x0AC4)==0xFFFF);
+    }
+}
 int main(int argc,char**argv)
 {
-    CHECK(argc==2);register_iog_mods();CHECK(plugin_count==9);
+    CHECK(argc==2);register_iog_mods();CHECK(plugin_count==kExpectedPlugins);
     /* Enhanced world map: off until its feature activates, cleared by reset. */
     {extern int IogWorldMapEnhancedGet(void);
      CHECK(!IogWorldMapEnhancedGet());activate("iog.world_map");CHECK(IogWorldMapEnhancedGet()==1);
@@ -212,6 +273,7 @@ int main(int argc,char**argv)
     if(!strcmp(argv[1],"rewards"))reward_suite();
     else if(!strcmp(argv[1],"live-cheats"))live_cheat_suite();
     else if(!strcmp(argv[1],"run"))run_suite();
+    else if(!strcmp(argv[1],"auto-use"))auto_use_suite();
     else taint_suite(argv[1]);
     printf("PASS %u actual iog_mods callback integration assertions: %s; ROM-free host/source-gate stubs\n",assertions,argv[1]);
     return 0;

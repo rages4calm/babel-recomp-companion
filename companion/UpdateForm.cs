@@ -182,6 +182,8 @@ internal static class UpdateFeature
         rail.Controls.Add(button);
 
         var unattended = UpdateService.UsingTestFeed && Environment.GetCommandLineArgs().Contains("--update-unattended");
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GAIA_UPDATE_LOG")))
+            UpdateService.Trace = (requested, final, status) => Log(new { step = "http", requested = requested.ToString(), final = final?.ToString(), status });
         form.Shown += async (_, _) => {
             if (UpdateService.HasPendingFinish(install)) await FinishAsync(form, controller, install, unattended);
             if (unattended) { await RunUnattendedAsync(form, install); return; }

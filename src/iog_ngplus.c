@@ -74,6 +74,12 @@ static void StartNewGamePlus(void)
     memset(r + 0x0A00, 0, 0x60);     /* story flags */
     memset(r + 0x0A80, 0, 0x22);     /* dungeon flags */
     memset(r + 0x0AB4, 0, 0x10);     /* inventory */
+    /* and the stacked extras (iog_inventory.c: herbs $0B55, Red Jewels
+     * $0B56, crystals $0B57). Kept, the stacker brought them out into the
+     * emptied inventory: New Game+ began holding the last game's stacked
+     * Red Jewels and herbs. The jewel tally ($0AB0, given to the Gem Man)
+     * stays. */
+    memset(r + 0x0B55, 0, 3);
     Wr(0x0AD4, 0);
     Wr(0x0AC6, 0);
     Wr(0x0AC4, 0xFFFF);

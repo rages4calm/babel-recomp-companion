@@ -18,12 +18,23 @@ internal static class XInputPad
     [DllImport("xinput9_1_0.dll", EntryPoint = "XInputGetState")] private static extern int GetState910(int user, out State state);
     private static bool? modern;
 
+    /// <summary>One XINPUT_GAMEPAD report: button bits, triggers 0..255, left stick.</summary>
+    internal readonly record struct Report(ushort Buttons, byte LeftTrigger = 0, byte RightTrigger = 0, short ThumbLX = 0, short ThumbLY = 0);
+    /// <summary>
+    /// Test hook: when set, replaces XInputGetState (slot -> report, or null for "nothing connected").
+    /// Only test programs set it; the launcher never does, so it always reads the real devices.
+    /// </summary>
+    internal static Func<int, Report?>? Source { get; set; }
+
     /// <summary>Held controls of XInput slot <paramref name="user"/> (0..3) as kGamepadBtn indices, or null when nothing is connected there.</summary>
     public static int[]? Read(int user, out short stickX, out short stickY)
     {
         stickX = stickY = 0;
         State s;
-        try {
+        if (Source is { } source) {
+            if (source(user) is not { } r) return null;
+            s = new State { Pad = new Gamepad { Buttons = r.Buttons, LeftTrigger = r.LeftTrigger, RightTrigger = r.RightTrigger, ThumbLX = r.ThumbLX, ThumbLY = r.ThumbLY } };
+        } else try {
             int rc;
             if (modern != false) { try { rc = GetState14(user, out s); modern = true; } catch (DllNotFoundException) { modern = false; rc = GetState910(user, out s); } }
             else rc = GetState910(user, out s);

@@ -1,7 +1,7 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 27,
-2026 (tester build `v0.2.0-beta.22`; later sections are dated by the beta
+2026 (tester build `v0.2.0-beta.23`; later sections are dated by the beta
 they describe, and a later entry supersedes an earlier one on the same
 point). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
@@ -9,6 +9,68 @@ how things are built and where the evidence lives; this file is only the list.
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
+
+Play by a person is handled by testers the owner recruits (decided November
+27); it is no longer listed as a gap. What needs physical hardware (a real
+controller, real display scaling) says so, with a short checklist for testers.
+
+## Beta 23 (November 27): open gaps closed
+
+Evidence for each item is under `.local/batch-001/agents/` (launcher, achcheat,
+gapmods, picture, campaign). Where an older entry below says "not tested" for
+one of these, this section supersedes it. Suites on the release build: world
+renderer 23,253,764, visual objects 107,133, widescreen 82,292, scene view
+325,491, raster parallax, Minimal HUD, hold advance, mods runtime (11 cases,
+2,006), cheat rates, continuations, input bindings, package, gaialabs_asm;
+launcher 1,205 + updater 135 + soundtrack 47 + activation 9 + mod settings 32.
+Native equals interpreter (WRAM) on the release build in Freejia and Mt. Kress.
+
+- **Launcher:** a real GitHub update (beta 21 launcher to the published beta 22,
+  redirect and digest checked, all data carried, old folder removed); a UI
+  Automation click-through of every page (42/42, two defects fixed); Controls
+  with a mock controller (97/97; three fixes incl. 150-200% DPI); Wide view off
+  and `Widescreen = 0`; the launcher now falls back to its own game when the
+  saved engine path is gone. Physical controller: checklist in
+  `companion/VALIDATION.md` (needs a person with the pad).
+- **Achievements and cheats:** teapot by natural roll (13th re-entry), Solid
+  Arm by a real fight, native = interpreter for all nine secrets; browser by
+  keyboard and pad, chime, room reward on a real boss clear, the ending
+  achievement through Dark Gaia to END, title-screen and "unavailable" cases;
+  All Red Jewels through the menu (never past 50); NG+/Apocalypse blocks (the
+  Randomizer with a stand-in seed: the block is by mode); Gem and Crystal Ball
+  stacking; quick item selection (two fixes: no swaps in menus or dialogue,
+  Select as modifier no longer opens the inventory); cheats changed in play.
+  Boss clears now multiply room rewards (loads/rewinds never do).
+- **Gameplay mods:** Kress (Psycho Slider, dying, title load, every form
+  through $A8, Select while blocked; Earthquaker impossible there: no ledge
+  tiles), Freejia (stacked-jewel inventory, $59 clear line, NG+), Minimal HUD
+  (snake game, kidnapper, bosses, run-ahead), hold to advance through the real
+  rewind panel with run-ahead, auto-run on slopes/ladders/bosses (no ice in
+  the game), auto-use at all 27 other spots, the save flush before a load,
+  Reset and the end-of-game return. Fixed: auto-use under button Type 2; NG+
+  carried stacked jewels/herbs.
+- **Picture:** state loads made mid room change crashed and stayed 4:3 (fixed:
+  the bridge resume address follows the load); one 4:3 frame after a load
+  (camera step, mosaic sprite upload) fixed; Babel F2 sprites past 128 slots;
+  last-row sprite parts; classroom bottom rows; Great Wall bands in all eight
+  rooms (0 of 115 frames differ, was up to 9,200 px); Itory sky; the world
+  map's east edge on the GPU; the Original 4:3 castle floor slide (HDMA table
+  taken at frame start, as the console does; Classic too). Checked against the
+  original: Babel F2/F3/F5/F6, Viper kill, comet flight, Vampires' bomb wire,
+  prison route, edge HUD in fights/scrolls/shakes/fades, GPU, OpenGL ES, Dual,
+  Flip. The 4:3 runs right after a checkpoint load are forced-blank frames.
+- **Campaign:** one continuous input-only chain from a cold boot through the
+  prologue, South Cape, Edward's Castle and the prison dungeon (780 chunks,
+  every one native = interpreter); the ten "no-warp rooms" are not rooms (no
+  scene record). Native set `ext8` adopted: interpreted instructions on the
+  chain 90,460 -> 665. Next: Freedan's first transformation in the bot
+  (`agents/campaign/HANDOFF.md`), then onward; `ext9g` (verified to chunk 573)
+  and an `ext10g` from chunks 574-780 are ready for the next build.
+
+Still open after beta 23: a few pixels at the status/title-card edges in Itory
+$1C; the ship's dark night sky is never selected by the game's scripts (dusk
+checked); the left 24 columns in $15/$1A/$1B/$16 are filled from the map by
+decision; the campaign beyond the prison; physical-controller presses.
 
 ## Beta 22 (November 27): launcher Update and Controls, secret achievements
 

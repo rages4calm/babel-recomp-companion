@@ -213,14 +213,7 @@ public static class NativeModSettings
             File.Move(temp, path, true);
         } finally { if (File.Exists(temp)) File.Delete(temp); }
     }
-    public static bool IsEngineRunning(string executable) {
-        var expected = Path.GetFullPath(executable);
-        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(expected))) {
-            using (process) { try { if (string.Equals(process.MainModule?.FileName, expected, StringComparison.OrdinalIgnoreCase)) return true; }
-                catch (Win32Exception) { return true; } catch (InvalidOperationException) { } }
-        }
-        return false;
-    }
+    public static bool IsEngineRunning(string executable) => RunningImage.IsRunning(executable);
     public static void Apply(string engineDirectory, IReadOnlyDictionary<string,JsonElement> values, string expectedRevision) {
         var executable = Path.Combine(Path.GetFullPath(engineDirectory), "babel-recomp.exe");
         if (!File.Exists(executable)) throw new FileNotFoundException("Set the game program on the Game page first.");
@@ -253,5 +246,41 @@ public static class NativeModSettings
             using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { stream.Write(encoding.GetPreamble().Concat(encoding.GetBytes(text)).ToArray()); stream.Flush(true); }
             File.Move(temp, path, true);
         } finally { if (File.Exists(temp)) File.Delete(temp); }
+    }
+}
+
+/// <summary>
+/// Whether a process is running a given program. Reads each candidate's image path with the least access
+/// Windows offers (PROCESS_QUERY_LIMITED_INFORMATION), so another copy of the game that is starting or exiting
+/// is not mistaken for this one: before, any process whose modules could not be read at that moment
+/// (Process.MainModule throws for one that is exiting) counted as "the game is running" and blocked Apply.
+/// A process that cannot be opened at all (another account's, protected) still counts, to stay safe.
+/// </summary>
+internal static class RunningImage
+{
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern bool QueryFullProcessImageNameW(IntPtr process, int flags, StringBuilder name, ref int size);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern bool GetExitCodeProcess(IntPtr process, out uint code);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
+
+    public static bool IsRunning(string executable)
+    {
+        var expected = Path.GetFullPath(executable);
+        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(expected)))
+            using (process) {
+                var handle = OpenProcess(0x1000, false, process.Id);
+                if (handle == IntPtr.Zero) {
+                    if (System.Runtime.InteropServices.Marshal.GetLastWin32Error() == 87) continue;   // ERROR_INVALID_PARAMETER: already gone
+                    return true;
+                }
+                try {
+                    var name = new StringBuilder(32768); int size = name.Capacity;
+                    if (QueryFullProcessImageNameW(handle, 0, name, ref size)) {
+                        if (string.Equals(Path.GetFullPath(name.ToString()), expected, StringComparison.OrdinalIgnoreCase)) return true;
+                    } else if (!(GetExitCodeProcess(handle, out var code) && code != 259)) return true;   // unreadable and still active (STILL_ACTIVE): be safe
+                } finally { CloseHandle(handle); }
+            }
+        return false;
     }
 }

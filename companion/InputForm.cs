@@ -45,6 +45,56 @@ internal sealed class InputForm : Form, IMessageFilter
     private bool smoke;
     protected override bool ShowWithoutActivation => smoke;
 
+    /// <summary>
+    /// Moved to a screen with a higher scale, Windows suggests the window's old size times the new scale,
+    /// which on a 1080p display at 150% or 200% runs under the taskbar and hides Save and Close. Keep it
+    /// inside that screen's working area (the content scrolls; the window can still be resized).
+    /// </summary>
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        RescaleFonts();
+        BeginInvoke(RescaleFonts);   // again once the child controls have had their own DPI messages
+        var work = Screen.FromRectangle(e.SuggestedRectangle).WorkingArea;
+        var size = new Size(Math.Min(Width, work.Width), Math.Min(Height, work.Height));
+        var at = new Point(Math.Clamp(Left, work.Left, work.Right - size.Width), Math.Clamp(Top, work.Top, work.Bottom - size.Height));
+        if (size != Size || at != Location) Bounds = new Rectangle(at, size);
+    }
+
+    // Every font in this window is set explicitly (captions, grid cells, combo boxes), and WinForms does not
+    // rescale all of those on a DPI change (grid cell styles never): grid text stayed at 100% on a 200% screen.
+    // Each font's size at 96 DPI is recorded once, and a DPI change sets every one to that size times the scale.
+    private readonly List<(Control control, float size)> designFonts = new();
+    private readonly List<(DataGridView grid, bool header, float size)> designStyles = new();
+    private void RecordFonts()
+    {
+        float f = DeviceDpi / 96f;
+        foreach (var c in Descend(this)) designFonts.Add((c, c.Font.Size / f));
+        foreach (var g in grids) { designStyles.Add((g, false, g.DefaultCellStyle.Font!.Size / f)); designStyles.Add((g, true, g.ColumnHeadersDefaultCellStyle.Font!.Size / f)); }
+    }
+    private void RescaleFonts()
+    {
+        if (IsDisposed) return;
+        float f = DeviceDpi / 96f;
+        SuspendLayout();
+        foreach (var (c, size) in designFonts)
+            if (!c.IsDisposed && Math.Abs(c.Font.Size - size * f) > 0.05f) c.Font = new Font(c.Font.FontFamily, size * f, c.Font.Style);
+        // After the controls: a grid's own font change can reset its cell styles.
+        foreach (var (grid, header, size) in designStyles) {
+            var style = header ? grid.ColumnHeadersDefaultCellStyle : grid.DefaultCellStyle;   // the grid may have replaced the object
+            if (style.Font is { } font && Math.Abs(font.Size - size * f) > 0.05f) {
+                var scaled = new DataGridViewCellStyle(style) { Font = new Font(font.FontFamily, size * f, font.Style) };
+                if (header) grid.ColumnHeadersDefaultCellStyle = scaled; else grid.DefaultCellStyle = scaled;
+            }
+        }
+        // A combo box takes its new height only once the font reaches its window; size it here, then lay out again.
+        foreach (var c in Descend(this).OfType<ComboBox>()) { c.MinimumSize = Size.Empty; c.Height = c.PreferredHeight + 4; c.MinimumSize = new Size(0, c.Height); }
+        int em = Font.Height; tabs.ItemSize = new Size(em * 9, em * 2 + em / 3); tabs.Padding = new Point(em, em / 3);   // tab headers are sized in pixels
+        ResumeLayout(true);
+        foreach (var panel in Descend(this).OfType<FlowLayoutPanel>()) panel.PerformLayout();
+        foreach (var g in grids) g.AutoResizeRows();
+    }
+
     internal InputForm(string engineExecutable, string prompts, float scale = 1f)
     {
         this.engineExecutable = Path.GetFullPath(engineExecutable);
@@ -139,6 +189,7 @@ internal sealed class InputForm : Form, IMessageFilter
         poll.Tick += (_, _) => Poll();
         Shown += (_, _) => { if (smoke) return; Application.AddMessageFilter(this); poll.Start(); grids[0].Focus(); };
         FormClosed += (_, _) => { poll.Stop(); Application.RemoveMessageFilter(this); };
+        Deactivate += (_, _) => { heldKeys.Clear(); pad.Invalidate(); };   // keys released in another window never reach this one
         FormClosing += (_, e) => {
             if (!Dirty || e.CloseReason != CloseReason.UserClosing) return;
             var answer = MessageBox.Show(this, "Save your changes to the game's key and controller settings?", "Unsaved changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
@@ -146,6 +197,7 @@ internal sealed class InputForm : Form, IMessageFilter
             else if (answer == DialogResult.Yes && !Save()) e.Cancel = true;
         };
         Reload();
+        RecordFonts();
     }
 
     // ---- launcher integration -------------------------------------------------------------
@@ -187,25 +239,7 @@ internal sealed class InputForm : Form, IMessageFilter
             form.DrawToBitmap(bmp, new Rectangle(Point.Empty, form.Size));
             var name = Path.Combine(outDir, $"input-{(int)(scale * 100)}-{i}.png");
             bmp.Save(name, System.Drawing.Imaging.ImageFormat.Png);
-            foreach (var c in Descend(form).Where(c => c.Visible && c is Label or System.Windows.Forms.Button or CheckBox)) {
-                // Wrapped text must fit the height it got at the width it got; a single line must fit its width.
-                bool wraps = c is Label { MaximumSize.Width: > 0 };
-                var want = TextRenderer.MeasureText(c.Text, c.Font, new Size(wraps ? c.ClientSize.Width : int.MaxValue, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
-                if (c.Text.Length > 0 && ((!wraps && want.Width > c.ClientSize.Width + 2) || want.Height > c.ClientSize.Height + 2))
-                    problems.Add($"{(int)(scale * 100)}% page {i}: '{c.Text}' needs {want}, has {c.ClientSize}");
-            }
-            // Siblings must not overlap, and nothing may stick out of a parent that does not scroll.
-            foreach (var parent in Descend(form).Prepend(form).Where(p => p.Visible)) {
-                var kids = parent.Controls.Cast<Control>().Where(k => k.Visible && k.Width > 0 && k.Height > 0).ToList();
-                for (int x = 0; x < kids.Count; x++) {
-                    for (int y = x + 1; y < kids.Count; y++)
-                        if (kids[x].Bounds.IntersectsWith(kids[y].Bounds) && parent is not TabControl)
-                            problems.Add($"{(int)(scale * 100)}% page {i}: '{kids[x].Text}{kids[x].AccessibleName}' overlaps '{kids[y].Text}{kids[y].AccessibleName}'");
-                    if (parent is not ScrollableControl { AutoScroll: true } && parent is not TabControl && parent is not DataGridView &&
-                        (kids[x].Right > parent.ClientSize.Width + 1 || kids[x].Bottom > parent.ClientSize.Height + 1))
-                        problems.Add($"{(int)(scale * 100)}% page {i}: '{kids[x].Text}{kids[x].AccessibleName}' extends past {parent.GetType().Name} '{parent.AccessibleName}'");
-                }
-            }
+            CheckLayout(form, $"{(int)(scale * 100)}% page {i}", problems);
             var grid = form.grids[i];
             foreach (DataGridViewColumn col in grid.Columns)
                 foreach (DataGridViewRow row in grid.Rows) {
@@ -218,6 +252,29 @@ internal sealed class InputForm : Form, IMessageFilter
         form.Close();
         File.WriteAllLines(Path.Combine(outDir, $"input-{(int)(scale * 100)}-layout.txt"), problems.DefaultIfEmpty("no clipped text"));
         return problems;
+    }
+    /// <summary>Text that does not fit, overlapping siblings, children sticking out of a parent that does not scroll.</summary>
+    internal static void CheckLayout(Control form, string where, List<string> problems)
+    {
+        foreach (var c in Descend(form).Where(c => c.Visible && c is Label or System.Windows.Forms.Button or CheckBox)) {
+            // Wrapped text must fit the height it got at the width it got; a single line must fit its width.
+            bool wraps = c is Label { MaximumSize.Width: > 0 };
+            var want = TextRenderer.MeasureText(c.Text, c.Font, new Size(wraps ? c.ClientSize.Width : int.MaxValue, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
+            if (c.Text.Length > 0 && ((!wraps && want.Width > c.ClientSize.Width + 2) || want.Height > c.ClientSize.Height + 2))
+                problems.Add($"{where}: '{c.Text}' needs {want}, has {c.ClientSize}");
+        }
+        // Siblings must not overlap, and nothing may stick out of a parent that does not scroll.
+        foreach (var parent in Descend(form).Prepend(form).Where(p => p.Visible)) {
+            var kids = parent.Controls.Cast<Control>().Where(k => k.Visible && k.Width > 0 && k.Height > 0).ToList();
+            for (int x = 0; x < kids.Count; x++) {
+                for (int y = x + 1; y < kids.Count; y++)
+                    if (kids[x].Bounds.IntersectsWith(kids[y].Bounds) && parent is not TabControl)
+                        problems.Add($"{where}: '{kids[x].Text}{kids[x].AccessibleName}' overlaps '{kids[y].Text}{kids[y].AccessibleName}'");
+                if (parent is not ScrollableControl { AutoScroll: true } && parent is not TabControl && parent is not DataGridView &&
+                    (kids[x].Right > parent.ClientSize.Width + 1 || kids[x].Bottom > parent.ClientSize.Height + 1))
+                    problems.Add($"{where}: '{kids[x].Text}{kids[x].AccessibleName}' extends past {parent.GetType().Name} '{parent.AccessibleName}'");
+            }
+        }
     }
     private static IEnumerable<Control> Descend(Control root) { foreach (Control c in root.Controls) { yield return c; foreach (var n in Descend(c)) yield return n; } }
 
@@ -486,12 +543,15 @@ internal sealed class InputForm : Form, IMessageFilter
 
     public bool PreFilterMessage(ref Message m)
     {
-        if (captureOpen || !ContainsFocus && Form.ActiveForm != this) return false;
         const int down = 0x100, up = 0x101, sysdown = 0x104, sysup = 0x105;
         if (m.Msg is not (down or up or sysdown or sysup)) return false;
         long lp = m.LParam.ToInt64(); int vk = (int)m.WParam.ToInt64();
         var key = KeyCatalog.FromScan((int)((lp >> 16) & 0xFF), ((lp >> 24) & 1) != 0, vk);
-        if (key != null) { if (m.Msg is down or sysdown) heldKeys.Add(key.Name); else heldKeys.Remove(key.Name); pad.Invalidate(); }
+        // A release always counts, even while a capture dialog has it: Enter opens capture on key-down,
+        // and its key-up arrives inside that dialog (the tester used to show Start held afterwards).
+        if (key != null && m.Msg is up or sysup && heldKeys.Remove(key.Name)) pad.Invalidate();
+        if (captureOpen || !ContainsFocus && Form.ActiveForm != this) return false;
+        if (key != null && m.Msg is down or sysdown) { heldKeys.Add(key.Name); pad.Invalidate(); }
         if (!tryKeys.Checked) return false;
         if (vk == 0x1B && m.Msg == down) { tryKeys.Checked = false; Report("Stopped trying keys."); }
         return true;   // keys light the pad instead of moving around the window
@@ -659,7 +719,9 @@ internal sealed class CaptureForm : Form
     private readonly HashSet<int>[] ignore = { new(), new(), new(), new() };
     private readonly HashSet<int>[] chord = { new(), new(), new(), new() };
     private readonly Label hint;
-    private int ticks;
+    // Timer ticks run late (16 ms asks for one, Windows delivers ~25-31 ms), so the countdown uses the clock.
+    private readonly System.Diagnostics.Stopwatch opened = new();
+    private int shownSeconds = -1;
     private string? pendingModifier;
     internal string? Binding { get; private set; }
 
@@ -683,14 +745,14 @@ internal sealed class CaptureForm : Form
         poll.Tick += (_, _) => Poll();
         Shown += (_, _) => {
             for (int s = 0; s < 4; s++) foreach (var b in XInputPad.Read(s, out _, out _) ?? Array.Empty<int>()) ignore[s].Add(b);   // the press that opened this
-            poll.Start();
+            opened.Restart(); poll.Start();
         };
         FormClosed += (_, _) => poll.Stop();
         UpdateHint();
     }
     private void UpdateHint()
     {
-        int left = Math.Max(0, 10 - ticks / 62);
+        int left = Math.Max(0, 10 - (int)opened.Elapsed.TotalSeconds); shownSeconds = left;
         hint.Text = (pad ? "Keyboard: " : "") + "Esc cancels · Backspace or Delete clears" + (pad ? "" : " · a controller's B cancels") + $" · closes in {left} s";
     }
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData) => HandleKey(ref msg) || base.ProcessCmdKey(ref msg, keyData);
@@ -724,8 +786,8 @@ internal sealed class CaptureForm : Form
     private readonly HashSet<int>[] previous = { new(), new(), new(), new() };
     private void Poll()
     {
-        if (++ticks % 62 == 0) UpdateHint();
-        if (ticks > 620) { DialogResult = DialogResult.Cancel; return; }
+        if (opened.Elapsed.TotalSeconds >= 10) { DialogResult = DialogResult.Cancel; return; }
+        if (10 - (int)opened.Elapsed.TotalSeconds != shownSeconds) UpdateHint();
         int trigger = PadCatalog.Index("L2");
         for (int s = 0; s < 4; s++) {
             var held = XInputPad.Read(s, out _, out _) ?? Array.Empty<int>();

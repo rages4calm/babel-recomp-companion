@@ -124,6 +124,14 @@ public static class UpdateService
     // ---------- feed ----------
 
     public static bool UsingTestFeed => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(FeedVariable));
+    /// <summary>
+    /// A test feed on another host may serve from anywhere (loopback, a fixture); one that is GitHub's own
+    /// HTTPS API keeps the production host policy, so a test run against GitHub proves where redirects land.
+    /// </summary>
+    public static bool RelaxedHosts => UsingTestFeed && !(Uri.TryCreate(Environment.GetEnvironmentVariable(FeedVariable), UriKind.Absolute, out var feed)
+        && feed.Scheme == Uri.UriSchemeHttps && feed.IsDefaultPort && string.Equals(feed.Host, "api.github.com", StringComparison.OrdinalIgnoreCase));
+    /// <summary>Test hook: each HTTP request as (requested URL, final URL after redirects, status).</summary>
+    public static Action<Uri, Uri?, int>? Trace;
 
     /// <summary>The newest non-draft release (pre-releases included) that carries this platform's zip.</summary>
     public static UpdateRelease? PickLatest(string feedJson)
@@ -185,10 +193,10 @@ public static class UpdateService
     {
         if (url.Scheme == Uri.UriSchemeHttps) {
             var host = url.Host.ToLowerInvariant();
-            if (UsingTestFeed) return;
+            if (RelaxedHosts) return;
             if (url.IsDefaultPort && (host is "api.github.com" or "github.com" || host.EndsWith(".githubusercontent.com", StringComparison.Ordinal))) return;
         }
-        if (UsingTestFeed && url.Scheme == Uri.UriSchemeHttp && url.IsLoopback) return;
+        if (RelaxedHosts && url.Scheme == Uri.UriSchemeHttp && url.IsLoopback) return;
         throw new UpdateException($"Refused to download from {url.Scheme}://{url.Host}: updates only come over HTTPS from GitHub.");
     }
 
@@ -217,8 +225,10 @@ public static class UpdateService
 
     private static async Task<HttpResponseMessage> Send(HttpClient client, HttpRequestMessage request, CancellationToken token, CancellationToken player)
     {
+        var requested = request.RequestUri!;   // HttpClient rewrites RequestUri when it follows a redirect
         try {
             var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+            Trace?.Invoke(requested, response.RequestMessage?.RequestUri, (int)response.StatusCode);
             if (response.RequestMessage?.RequestUri is { } final) RequireAllowed(final);
             return response;
         } catch (OperationCanceledException) when (!player.IsCancellationRequested) {
@@ -360,15 +370,7 @@ public static class UpdateService
 
     public static bool IsGameRunning(string installDirectory)
     {
-        var expected = Path.GetFullPath(Path.Combine(installDirectory, EngineName));
-        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(EngineName))) {
-            using (process) {
-                try { if (string.Equals(process.MainModule?.FileName, expected, StringComparison.OrdinalIgnoreCase)) return true; }
-                catch (System.ComponentModel.Win32Exception) { return true; }
-                catch (InvalidOperationException) { }
-            }
-        }
-        return false;
+        return RunningImage.IsRunning(Path.Combine(installDirectory, EngineName));
     }
 
     private sealed record PackageManifest(string Version, List<string> Files);

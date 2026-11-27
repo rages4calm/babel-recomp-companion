@@ -49,7 +49,7 @@ static struct {
     bool copy_reference;
     bool source_packet,mode7,mode7_perspective,absent_secondary,sky_field,stock_actor_field;
     bool hud_layered; /* the status plane was left out of `output` for the presenter */
-    bool awaiting_restore,restored_actor_field,fixed_plate;
+    bool awaiting_restore,restored_actor_field,fixed_plate,restored_pairing;
     int mode7_split;
     IogMode7PerspectiveParameters mode7_parameters;
     int width, height, extent_quarters, epoch_count;
@@ -474,11 +474,23 @@ static bool RestoredLiveCamera(const Ppu *p,const uint8_t *ram,int physical,
     /* The saved raster can still be at the previous camera for the first
      * restored frame. Use its position only for verified stock layouts
      * with an unchanged camera throughout the raster. */
-    if(!s.restored_actor_field || s.epoch_count!=1 || Word(ram,0x692)!=1280 ||
-       Word(ram,0x696)!=1024 || p->bgmode!=9 || p->mosaic ||
-       p->screenEnabled[0]!=0x17 || p->cgwsel!=0x82)
+    /* The first frame after a load: restored field, or the loaded upload
+     * paired with the loaded RAM (IogWorldAfterNmi). */
+    if(!(s.restored_actor_field || s.restored_pairing) || s.epoch_count!=1 || p->bgmode!=9 || p->mosaic)
         return false;
-    switch(Word(ram,0x644)) {
+    unsigned scene=Word(ram,0x644);
+    if(scene!=0x15 && scene!=0x78) {
+        /* Any other room: a state saved while the camera moved restores RAM
+         * one camera step past the saved raster (South Cape $01 and the
+         * castle $0A while walking, one lit 4:3 frame after each load). The
+         * raster's own scroll is the picture; accept a step of at most one
+         * tile on each axis with the scroll unchanged down the raster. */
+        int dx=live_x-camera_x,dy=live_y-camera_y;
+        if(dx<-16 || dx>16 || dy<-16 || dy>16) return false;
+    } else if(Word(ram,0x692)!=1280 ||
+       Word(ram,0x696)!=1024 || p->screenEnabled[0]!=0x17 || p->cgwsel!=0x82)
+        return false;
+    switch(scene) {
     case 0x15: /* Itory departure, one tile column behind. */
         if(Word(ram,0x6EE)!=5 || Word(ram,0x694)!=512 || Word(ram,0x698)!=256 ||
            p->bgXsc[0]!=0x11 || p->bgXsc[1]!=0x19 || p->screenEnabled[1]!=3 ||
@@ -492,7 +504,7 @@ static bool RestoredLiveCamera(const Ppu *p,const uint8_t *ram,int physical,
            live_x!=camera_x || live_y!=camera_y+1) return false;
         break;
     default:
-        return false;
+        break;
     }
     for(unsigned line=0;line<=224;line++) {
         const uint8_t *registers=s.lines[line].registers;
@@ -685,6 +697,7 @@ void IogWorldReset(void)
     s.published_valid=s.repeated=false;
     s.fixed_plate=false;
     s.awaiting_restore=true;
+    s.restored_pairing=false;
     s.pan.valid=false;s.good.valid=false;
     s.publish_sequence=0;
     s.reason="reset_or_unpaired_upload";
@@ -757,6 +770,11 @@ void IogWorldCaptureAfterCompose(const CpuState *cpu,uint32_t pc)
     s.composed=true;
     WakeVisibleActors(cpu->ram);
 }
+static bool UploadIsRamStaging(void)
+{
+    for(unsigned i=0;i<256;i++) if(g_ppu->oam[i]!=Word(g_snes->ram,0x422+i*2)) return false;
+    return true;
+}
 void IogWorldBeforeNmi(void)
 { if(s.enabled && g_ppu) s.nmi_oam_writes=g_ppu->oamWriteCount; }
 void IogWorldAfterNmi(void)
@@ -771,6 +789,18 @@ void IogWorldAfterNmi(void)
         memcpy(s.published,s.staging,sizeof(s.published));
         s.published_valid=true; s.repeated=false;
         s.active=true; s.publish_sequence=s.compose_sequence;
+        s.restored_pairing=false;
+    } else if(s.awaiting_restore && !s.publish_sequence && !s.composed && !s.pending && g_snes &&
+              !memcmp(g_ppu->highOam,g_snes->ram+0x622,32) && UploadIsRamStaging()) {
+        /* The first NMI after a state load uploads the loaded staging buffer
+         * before the frame's logic composes anything: pair it with the loaded
+         * RAM (a state saved during the Angkor vision's mosaic showed one 4:3
+         * frame, because the restored-field rule refuses an active mosaic). */
+        memcpy(s.active_ram,g_snes->ram,sizeof(s.active_ram));
+        memcpy(s.published,g_snes->ram+0x422,sizeof(s.published));
+        s.published_valid=true; s.repeated=false;
+        s.active=true; s.publish_sequence=s.compose_sequence;
+        s.restored_pairing=true;
     } else {
         /* The same objects as the last paired frame are on screen again:
          * active_ram still describes exactly what was uploaded. */
@@ -2383,6 +2413,9 @@ static bool RenderWorld(void)
         }
     }
     bool flat_horizon_tail=horizon&&HorizonFlatTail(first,p);
+    /* With a flat first row the plate can stay registered to the original
+     * field and continue that row above it. */
+    bool flat_horizon_head=horizon&&BackdropFlatHead(first,p);
     bool raster_anchored=RasterAnchoredBackdrop(scene,first->ram,
         tracked_effect?&effect_camera:NULL);
     bool wall_approach=authored && !authored_bounds.left &&
@@ -2393,7 +2426,13 @@ static bool RenderWorld(void)
          (scene==0x88 && Word(first->ram,0x692)==1024 &&
           Word(first->ram,0x696)==768 && authored_bounds.right==1024 &&
           !authored_bounds.top && authored_bounds.bottom==256));
-    bool wall_field_phase=wall_bands && (wall_approach || scene==0x8A || scene==0x8B);
+    /* Every Great Wall room keeps its desert bands registered to the
+     * original field and continues them into the margins at the field's own
+     * phase. Projected from the wide view's left edge, the bands of the pit
+     * and the far rooms ($85-$88) slid against the original field by whole
+     * dunes (up to 9,200 pixels a frame). */
+    bool wall_field_phase=wall_bands;
+    (void)wall_approach;
     /* The captured backdrop can be from the next camera publication. */
     int wall_source_camera=wall_field_phase?wall_model.source_camera_x:camera_x;
     /* On the underside of Sky Garden, the real BG2 ring wraps as the
@@ -2512,7 +2551,9 @@ static bool RenderWorld(void)
         bool castle_marker=CastleMapMarker(e);
         /* Objects were decoded from the exact composition/OAM publication
          * pair. Recolor the one visible row with this raster's palette. */
-        const bool stock_bottom_edge = native_y == 223 && (scene == 0x54 || scene == 0x67);
+        /* The writer's test (part Y + 17 below $F0) is the same in every
+         * room: measured first in 54 and 67, then in the Babel F6 rematch. */
+        const bool stock_bottom_edge = native_y == 223;
         size_t count=0;
         for(unsigned i=0;i<s.visual.part_count;i++) {
             const IogVisualPart *part=&s.visual.parts[i];
@@ -2607,7 +2648,13 @@ static bool RenderWorld(void)
                     /* This finite sky/mountain plate has its own screen row.
                      * Use the actual producer's fractional phase and band,
                      * not the foreground's clamped native_y. */
-                    wy=camy+row;
+                    /* With a flat first row, every row keeps the plate row
+                     * the original field shows it at (Itory $15/$1A/$1C:
+                     * hung from the picture's top, the plate put mountains
+                     * where the original shows sky, up to 2,800 pixels a
+                     * frame) and the rows above continue the sky. */
+                    wy=flat_horizon_head?camy+native_y:camy+row;
+                    if(wy<0&&flat_horizon_head)wy=0;
                     if(wy>=255&&flat_horizon_tail)wy=254;
                     uint16_t phase;
                     if(IogRasterParallaxSample(&horizon_model,wy+1,s.view.world_x,&phase))
@@ -2631,29 +2678,37 @@ static bool RenderWorld(void)
                      * same band, or the band's own value when none of that
                      * band is in the field. */
                     unsigned scroll=p->hScroll[physical];
-                    int first_row,end_row,plane_y=camy+native_y+1;
+                    int first_row,end_row,plane_y=camy+native_y+1,row_y=plane_y;
+                    int walls=ScrollWorld(e->ram,0x68A,Word(line->registers,offsetof(Ppu,hScroll)+(physical^1)*2));
+                    bool sampled=false;
                     if((native_y<0 || native_y>=224) &&
                        IogRasterParallaxBandRows(&band_model,plane_y,&first_row,&end_row)) {
                         int low=first_row>camy+1?first_row:camy+1;
                         int high=end_row-1<camy+224?end_row-1:camy+224;
                         uint16_t phase;
-                        if(low<=high)
-                            scroll=Word(s.lines[Clamp(plane_y,low,high)-camy].registers,
-                                offsetof(Ppu,hScroll)+physical*2);
-                        else if(IogRasterParallaxSample(&band_model,plane_y,
-                                band_model.source_camera_x,&phase))
-                            scroll=phase;
+                        if(low<=high) {
+                            row_y=Clamp(plane_y,low,high);
+                            scroll=Word(s.lines[row_y-camy].registers,offsetof(Ppu,hScroll)+physical*2);
+                        } else if(IogRasterParallaxSample(&band_model,plane_y,walls,&phase)) {
+                            scroll=phase;sampled=true;
+                        }
                     }
                     /* The game writes the wall layer's scroll during vertical
-                     * blank and reads these bands from memory at the top of the
-                     * frame. This runner has finished the frame's game logic by
-                     * then, so the bands are one camera step ahead of the walls
-                     * and a floor drawn on this plane slides under them while
-                     * the camera moves. Register each band to the camera the
-                     * walls are shown at. */
-                    int walls=ScrollWorld(e->ram,0x68A,Word(line->registers,offsetof(Ppu,hScroll)+(physical^1)*2));
+                     * blank; the bands come from a double-buffered table the
+                     * band thinker rebuilds and rebinds during the frame's
+                     * logic. The console's HDMA takes the copy bound at the top
+                     * of the frame, built from the camera the walls show, and
+                     * the frame driver now does the same (game_rtl.c latches
+                     * the channel addresses after the NMI). A raster captured
+                     * by a driver that read the table after the logic is one
+                     * camera step ahead and a floor on this plane slides under
+                     * the walls: recognise that row by its value and register
+                     * it to the walls. */
                     int ahead=(int)band_model.source_camera_x-walls;
-                    if(ahead && ahead>=-16 && ahead<=16) {
+                    uint16_t at_source;
+                    if(!sampled && ahead && ahead>=-16 && ahead<=16 &&
+                       IogRasterParallaxSample(&band_model,row_y,band_model.source_camera_x,&at_source) &&
+                       (scroll&1023u)==at_source) {
                         band_shift=IogRasterParallaxBandShift(&band_model,plane_y,walls);
                         scroll=(unsigned)((int)scroll+band_shift);
                     }
@@ -2821,7 +2876,10 @@ static bool RenderWorld(void)
                 if(map_bottom>stock_bottom) map_bottom=stock_bottom;
                 bool inside=(bounded||authored)?(native_pixel || (!authored_window_pan && worldx>=bounds.left && worldx<bounds.right &&
                    worldy>=bounds.top && worldy<picture_bottom)):
-                   classroom?OriginalClassroomPixel(e,worldx,worldy):
+                   /* The classroom's void cells are masked in the margins only:
+                    * the original field shows them (the hall below the room
+                    * with the camera on the right half, 11,776 pixels). */
+                   classroom?(native_pixel || OriginalClassroomPixel(e,worldx,worldy)):
                    (native_pixel||(worldx>=0&&worldx<(int)Word(e->ram,0x692)&&
                    worldy>=0&&worldy<map_bottom));
                 if(castle_marker && !native_pixel && worldx>=480 && worldy>=735)

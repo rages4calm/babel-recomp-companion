@@ -170,7 +170,7 @@ until you press **Update**.
 
 ## Development status
 
-**Current build:** `0.2.0-beta.22`, Windows x64, pre-release for
+**Current build:** `0.2.0-beta.23`, Windows x64, pre-release for
 playtesting. Automated routes reach the ending and the credits; a full
 playthrough by a person is under way.
 

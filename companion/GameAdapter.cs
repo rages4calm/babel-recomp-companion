@@ -59,9 +59,38 @@ public sealed class GameAdapter : JsonGameAdapterBase
         new[] { new ProfileDescriptor("original", "Original USA", "original") }, dataRoot ??
         Environment.GetEnvironmentVariable("COMPANION_DATA_ROOT") ?? CompanionDataPaths.DesktopRoot()) { }
 
+    /// <summary>This launcher's own game program, when the launcher sits in an installed release folder.</summary>
+    internal static string? OwnEngine(string? baseDirectory = null)
+    {
+        var own = Path.Combine(baseDirectory ?? AppContext.BaseDirectory, EngineName);
+        return File.Exists(own) ? Path.GetFullPath(own) : null;
+    }
+    internal string? OwnEngineOverride { get; init; }   // tests: stands in for the launcher's own folder
+
+    /// <summary>
+    /// The saved launcher preferences. A saved game program that is missing, not a full path, or no longer
+    /// exists (an install folder deleted after a new one was unzipped beside it) is replaced by the
+    /// babel-recomp.exe next to this launcher, and that is saved, so Play works again. The ROM path is kept.
+    /// </summary>
+    private SettingsSnapshot Stored(ProfileDescriptor profile)
+    {
+        var stored = base.ReadSettings(profile);
+        var own = OwnEngineOverride ?? OwnEngine();
+        if (own == null) return stored;
+        var saved = stored.Values.TryGetValue("engine.path", out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        if (saved == null && !stored.Values.ContainsKey("engine.path")) return stored;   // never chosen: the default already is this folder's
+        if (saved is { Length: > 0 } && Path.IsPathFullyQualified(saved) && File.Exists(saved)) return stored;
+        var repaired = stored.Values.ToDictionary(pair => pair.Key, pair => pair.Value.Clone());
+        repaired["engine.path"] = OptionValue.From(own);
+        try { Store(profile).Write(repaired, stored.Revision); return base.ReadSettings(profile); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) {   // includes SettingsConflictException
+            return new(repaired, stored.Revision);   // use it now; saving is tried again next start
+        }
+    }
+
     public override SettingsSnapshot ReadSettings(ProfileDescriptor profile)
     {
-        var paths = base.ReadSettings(profile);
+        var paths = Stored(profile);
         foreach (var option in Definition.Options.Where(x => !NativeSettings.IsNative(x.Id)))
             paths.Values.TryAdd(option.Id, option.DefaultValue.Clone());
         var read = NativeSettings.Read(paths);
@@ -80,7 +109,7 @@ public sealed class GameAdapter : JsonGameAdapterBase
 
     public override AchievementSnapshot ReadAchievements(ProfileDescriptor profile)
     {
-        var preferences = base.ReadSettings(profile);
+        var preferences = Stored(profile);
         var executable = DefaultEngine;
         if (preferences.Values.TryGetValue("engine.path", out var configured))
         {

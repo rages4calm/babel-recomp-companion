@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Window tests: the Controls window with a mock XInput source, its layout at forced
+       per-monitor DPI, and a UI Automation click-through of the real launcher.
+       Run them on a hidden desktop (see companion/VALIDATION.md); they never show a window
+       on the player's screen and never open a message box of their own. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Gaia.Companion.UiTests</AssemblyName>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Companion.Launcher.Core" Version="[0.2.0]" />
+    <PackageReference Include="Companion.Launcher.Windows" Version="[0.2.0]" />
+    <Compile Include="../../*.cs" Exclude="../../Program.cs" />
+    <!-- UseWPF drops these implicit usings (they clash with WPF names); the launcher sources need them. -->
+    <Using Include="System.IO" /><Using Include="System.Net.Http" />
+    <EmbeddedResource Include="../../soundtrack-catalog.json" LogicalName="soundtrack-catalog.json" />
+  </ItemGroup>
+</Project>

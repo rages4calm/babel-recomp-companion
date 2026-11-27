@@ -55,6 +55,43 @@ int main(int argc,char **argv)
         }
         CHECK(!IogCheatRateStep(&t,&s,8).extra);
     }
+    /* A boss clear's catch-up: several rooms set in one frame during play
+     * (the old case 8, now with the stock table). Each room's stat rise is
+     * multiplied; a mismatch, a non-reward room, or the same flags arriving
+     * with a load (generation change) are refused. */
+    {
+        static uint8_t tiers[256];
+        tiers[0x10]=2;tiers[0x11]=2;tiers[0x12]=3;tiers[0x18]=1;
+        for(int mult=1;mult<=8;mult++){
+            t=(IogCheatRateTracker){0};s=seed(2);s.tiers=tiers;IogCheatRateStep(&t,&s,mult);
+            s.cleared[2]=0x07;s.cleared[3]=0x01;            /* rooms $10 $11 $12 $18 */
+            s.stats[0]+=1;s.stats[1]+=2;s.stats[2]+=1;s.hp+=1;
+            a=IogCheatRateStep(&t,&s,mult);
+            CHECK(a.extras[0]==(unsigned)(mult-1)&&a.extras[1]==2u*(mult-1)&&a.extras[2]==(unsigned)(mult-1));
+            CHECK(a.extra==4u*(mult-1));
+            for(int i=0;i<3;i++)s.stats[i]+=a.extras[i];s.hp+=a.extras[0];
+            CHECK(!IogCheatRateStep(&t,&s,mult).extra);
+        }
+        /* The stats follow a frame later: still the same award. */
+        t=(IogCheatRateTracker){0};s=seed(2);s.tiers=tiers;IogCheatRateStep(&t,&s,3);
+        s.cleared[2]=0x03;CHECK(!IogCheatRateStep(&t,&s,3).extra);
+        s.stats[1]+=2;a=IogCheatRateStep(&t,&s,3);CHECK(a.extras[1]==4&&a.extra==4);
+        /* Old case 8 without the table, or with one stat too few: refused. */
+        t=(IogCheatRateTracker){0};s=seed(2);IogCheatRateStep(&t,&s,8);
+        s.cleared[2]=3;s.stats[1]+=2;CHECK(!IogCheatRateStep(&t,&s,8).extra);
+        t=(IogCheatRateTracker){0};s=seed(2);s.tiers=tiers;IogCheatRateStep(&t,&s,8);
+        s.cleared[2]=3;s.stats[1]+=1;CHECK(!IogCheatRateStep(&t,&s,8).extra);
+        for(int i=0;i<3;i++)CHECK(!IogCheatRateStep(&t,&s,8).extra);
+        /* A room with no stock reward among the new flags: refused. */
+        t=(IogCheatRateTracker){0};s=seed(2);s.tiers=tiers;IogCheatRateStep(&t,&s,8);
+        s.cleared[2]=0x03;s.cleared[4]=0x01;s.stats[1]+=2;CHECK(!IogCheatRateStep(&t,&s,8).extra);
+        /* A state load, rewind or reset that brings the flags and stats:
+         * the generation changes, which only takes a new baseline. */
+        t=(IogCheatRateTracker){0};s=seed(2);s.tiers=tiers;IogCheatRateStep(&t,&s,8);
+        s.generation++;s.cleared[2]=0x07;s.cleared[3]=0x01;
+        s.stats[0]+=1;s.stats[1]+=2;s.stats[2]+=1;s.hp+=1;
+        CHECK(!IogCheatRateStep(&t,&s,8).extra);CHECK(!IogCheatRateStep(&t,&s,8).extra);
+    }
     /* Backward flags, spending/refunds and current-HP changes alone never arm. */
     t=(IogCheatRateTracker){0};s=seed(1);s.cleared[2]=1;IogCheatRateStep(&t,&s,8);
     s.cleared[2]=0;s.stats[0]++;CHECK(!IogCheatRateStep(&t,&s,8).extra);

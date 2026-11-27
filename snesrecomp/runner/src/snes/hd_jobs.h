@@ -63,6 +63,10 @@ typedef struct SnesHdLine {
   uint8_t perspective, composition; /* composition: direct=1, EXTBG=2 */
   int32_t map_offset_x, map_offset_y;
   uint16_t tilemap; /* zero: hardware map; otherwise owned map index + 1 */
+  /* Nonzero: a texel past the edge of a map that does not repeat (M7SEL
+   * outside mode "transparent") shows palette index outside - 1 instead of
+   * the backdrop. Index 0 inside the map stays the backdrop, as on hardware. */
+  uint16_t outside;
 } SnesHdLine;
 typedef struct SnesHdPicture {
   uint64_t hash;

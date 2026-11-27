@@ -348,6 +348,57 @@ static int CastothDefeatTail(const IogVisualSource *s, unsigned actor,
     return first <= 126 ? first : -1;
 }
 
+/* The stock writer (ComposeAllSprites) gives one of the 128 OAM slots to
+ * each part it draws on its own screen: first the compose buffer ($7F3100),
+ * then the actors of the depth-sorted render list ($0C00), and it stops when
+ * the slots run out. Parts after that point are never drawn by the original
+ * (Babel F2: the dead wing totems behind Castoth's explosions). A part takes
+ * a slot when its screen position passes the writer's own tests: an actor
+ * part's Y + 17 below $F0 and X + 16 below $110 (16-pixel margin), a compose
+ * record's Y below $F0 and X below $110; the player's parts stop at the first
+ * one that fails. Fills, per actor slot, how many of its parts (in record
+ * order) the stock drew: 0xffff when the actor is not in the stock list or
+ * all its parts fit. *manual_cut is the same for the compose records. */
+enum { kStockOamSlots = 128 };
+static void StockSlotCuts(const IogVisualSource *s, uint16_t *manual_cut,
+    uint16_t cut[kIogVisualMaxActors])
+{
+    const uint8_t *ram = s->ram;
+    const unsigned bg = Word(ram, 0x68a), mv = Word(ram, 0x68e);
+    unsigned slots = 0;
+    bool full = false;
+    *manual_cut = 0xffff;
+    for (unsigned i = 0; i < kIogVisualMaxActors; i++) cut[i] = 0xffff;
+    for (unsigned n = 0; n < 128 && !full; n++) {
+        unsigned at = 0x13100 + n * 6, x = Word(ram, at);
+        if (x & 0x8000) break;
+        if (((Word(ram, at + 2) - mv) & 0xffff) < 0xf0 && ((x - bg) & 0xffff) < 0x110 &&
+            ++slots == kStockOamSlots) { *manual_cut = (uint16_t)(n + 1); full = true; }
+    }
+    for (unsigned k = 0; k < kIogVisualMaxActors; k++) {
+        unsigned actor = Word(ram, 0xc00 + 2 * k);
+        if (!ActorAddress(actor)) break;
+        unsigned idx = (actor - 0x1000) / 0x30, ext = 0x10000 + actor;
+        if (full) { cut[idx] = 0; continue; }
+        uint8_t bank = ram[ext + 8], count;
+        uint16_t ptr = Word(ram, ext + 0xc), mask = Word(ram, actor + 0xe);
+        /* A stale open-bus frame (the Castoth defeat) fills every slot left. */
+        if (!Byte(s, bank, (uint16_t)(ptr + 8), &count) || !count) { full = true; continue; }
+        const unsigned sx0 = (Word(ram, actor + 0x14) - Word(ram, actor + 0x18) - bg + 16) & 0xffff;
+        const unsigned sy0 = (Word(ram, actor + 0x16) - Word(ram, actor + 0x1a) - mv + 16) & 0xffff;
+        const bool player = (Word(ram, actor + 0x10) & 0x8000) != 0;
+        for (unsigned i = 0; i < count; i++) {
+            uint16_t record = (uint16_t)(ptr + 9 + i * 7);
+            uint8_t xoff, yoff;
+            if (!Byte(s, bank, (uint16_t)(record + 1 + !!(mask & 0x4000)), &xoff) ||
+                !Byte(s, bank, (uint16_t)(record + 3 + !!(mask & 0x8000)), &yoff)) break;
+            bool on = ((yoff + sy0) & 0xffff) < 0xf0 && ((xoff + sx0) & 0xffff) < 0x110;
+            if (!on) { if (player) break; continue; }
+            if (++slots == kStockOamSlots) { cut[idx] = (uint16_t)(i + 1); full = true; break; }
+        }
+    }
+}
+
 static IogVisualStatus BuildLayout(const IogVisualSource *s,
     const IogVisualViewport *view, IogVisualFrame *out, bool received, uint32_t prefix)
 {
@@ -374,11 +425,15 @@ static IogVisualStatus BuildLayout(const IogVisualSource *s,
      * (which is reset during composition and can be zero on render-only
      * paths). Bound the scan explicitly; an absent sentinel refuses rather
      * than silently truncating clipped source records. */
+    uint16_t manual_cut = 0xffff, stock_cut[kIogVisualMaxActors];
+    if (!received) StockSlotCuts(s, &manual_cut, stock_cut);
+    else for (unsigned i = 0; i < kIogVisualMaxActors; i++) stock_cut[i] = 0xffff;
     bool manual_end = false;
     for (unsigned n = 0; n < 128; n++) {
         unsigned at = 0x13100 + n * 6;
         unsigned x = Word(s->ram, at);
         if (x & 0x8000) { manual_end = true; break; }
+        if (n >= manual_cut) continue;
         status = Add(s, out, 0, 0, n, Word(s->ram, at + 4), x,
             WorldPosition(Word(s->ram, at + 2), Word(s->ram, 0x68e)),
             8, true, false, 0, 0, -1, &order);
@@ -418,7 +473,9 @@ static IogVisualStatus BuildLayout(const IogVisualSource *s,
         uint16_t queue_base = graphics_base;
         bool pending = player && !received && !(Word(s->ram, 0x9ae) & 0x8000) &&
             PlayerSheetStale(s, graphics_bank, graphics_base, 0xd974, &queue_base);
+        const unsigned stock_parts = stock_cut[(actor - 0x1000) / 0x30];
         for (unsigned i = 0; i < count; i++) {
+            if (i >= stock_parts) break;   /* the stock writer ran out of OAM slots */
             uint16_t record = (uint16_t)(ptr + 9 + i * 7), attr;
             uint8_t size, xoff, yoff;
             if (!Byte(s, bank, record, &size) ||

@@ -12,8 +12,17 @@ static bool Overlap(const void *a,size_t an,const void *b,size_t bn)
     uintptr_t x=(uintptr_t)a,y=(uintptr_t)b;
     return an && bn && (x<=y?y-x<an:x-y<bn);
 }
+/* The game's MulDivide: (factor low byte x camera) / factor high byte, with
+ * the product kept to its low 16 bits before the divide (the carry and the
+ * second partial product's high byte are dropped). Past a camera of 65536 /
+ * multiplier the band phase wraps: the Great Wall's far end ($86 at camera
+ * 1792, multiplier $30) shows the wrapped phase, and the model followed the
+ * untruncated line, putting the desert bands off by whole dunes. A host
+ * camera left of the map (negative) has no game value; it continues the
+ * line. */
 static unsigned Project(unsigned factor,int x)
 {
+    if(x>=0) return (((factor&255u)*(unsigned)x)&65535u)/(factor>>8);
     return (unsigned)FloorDivide((int64_t)(factor&255u)*x,factor>>8);
 }
 static const IogRasterParallaxBand *Band(const IogRasterParallax *m,unsigned row)
@@ -78,8 +87,7 @@ bool IogRasterParallaxPrepare(const uint8_t *rom,size_t size,bool verified,
         unsigned accumulator=Word(rom,at+2),factor=Word(rom,at+4),speed=Word(rom,at+6);
         if(!height || height>1024 || rows+height>2048 ||
            accumulator<0x720 || accumulator>0x75E || (accumulator&1) ||
-           (factor && (!(factor>>8) ||
-            (factor&255u)*base.source_camera_x>65535u)))return false;
+           (factor && (!(factor>>8) ))) return false;
         IogRasterParallaxBand *b=&base.bands[i];
         b->first_row=(uint16_t)rows;b->end_row=(uint16_t)(rows+height);
         b->factor=(uint16_t)factor;b->fixed_phase=(uint16_t)Word(ram,accumulator);
@@ -104,7 +112,7 @@ bool IogRasterParallaxPrepare(const uint8_t *rom,size_t size,bool verified,
             IogRasterParallaxBand *b=&trial.bands[i];
             if(previous) {
                 if(b->factor) {
-                    if(old_x<0 || (b->factor&255u)*(unsigned)old_x>65535u){ok=false;break;}
+                    if(old_x<0){ok=false;break;}
                     b->fixed_phase=(uint16_t)(Project(b->factor,old_x)+speeds[i]);
                 } else {
                     unsigned delta=Word(ram,0x6E4)*base.delta_scale;
@@ -172,8 +180,7 @@ bool IogRasterParallaxPrepareBands(const uint8_t *rom,size_t size,bool verified,
         n=65536u-n;
         unsigned accumulator=Word(rom,at+2),factor=Word(rom,at+4),speed=Word(rom,at+6);
         if(n>4096 || accumulator<0x720 || accumulator>0x75E || (accumulator&1) ||
-           (factor && (!(factor>>8) ||
-            (factor&255u)*base.source_camera_x>65535u)))return false;
+           (factor && (!(factor>>8) ))) return false;
         IogRasterParallaxBand *b=&base.bands[i];
         b->first_row=(uint16_t)rows;b->end_row=(uint16_t)(rows+n);
         b->factor=(uint16_t)factor;
@@ -201,12 +208,18 @@ bool IogRasterParallaxPrepareWall(const uint8_t *rom,size_t size,bool verified,
      * Keep their distinct finite allocations: the tall pit's spare rows are
      * not grounds to repeat or expose another room's scenery. */
     switch(scene) {
-    case 0x82: case 0x87: case 0x8B:height=1024;break;
-    case 0x83: case 0x86: case 0x88:height=2048;break;
-    case 0x85:height=768;index=0x21;break;
-    case 0x8A:height=768;index=0x1F;break;
+    case 0x82: case 0x83: case 0x86: case 0x87: case 0x88: case 0x8B:break;
+    case 0x85:index=0x21;break;
+    case 0x8A:index=0x1F;break;
     default:return false;
     }
+    /* The plate's height is the room's own second-map allocation. Fixed
+     * per-room heights missed the rooms whose allocation differs by entry
+     * (the Great Wall pit $85 at 2048 rows, $86 at 768): the model was
+     * refused and their desert bands drew at the plain register scroll,
+     * up to 9,200 pixels off in the original field. */
+    height=Word(ram,0x698);
+    if(height!=768 && height!=1024 && height!=2048)return false;
     if((ram[0x6EE]&128) || (ram[0x6EF]&8) ||
        Word(ram,0x694)!=256 || Word(ram,0x698)!=height ||
        Word(ram,0x690)>height-224 || Word(ram,0x68A)>2048)return false;
@@ -226,8 +239,7 @@ bool IogRasterParallaxPrepareWall(const uint8_t *rom,size_t size,bool verified,
         n=65536u-n;
         unsigned accumulator=Word(rom,at+2),factor=Word(rom,at+4);
         if(!n || n>4096 || rows+n>8192 || accumulator<0x720 ||
-           accumulator>0x75E || (accumulator&1) || !factor || !(factor>>8) ||
-           (factor&255u)*base.source_camera_x>65535u)return false;
+           accumulator>0x75E || (accumulator&1) || !factor || !(factor>>8))return false;
         IogRasterParallaxBand *b=&base.bands[i];
         b->first_row=(uint16_t)rows;b->end_row=(uint16_t)(rows+n);
         b->factor=(uint16_t)factor;speeds[i]=(uint16_t)Word(rom,at+6);

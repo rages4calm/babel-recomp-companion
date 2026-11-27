@@ -25,12 +25,16 @@ uint64_t RtlStateGeneration(void);
 ''',
 "snes/cart.h":'''#pragma once
 #include <stdint.h>
-typedef struct Cart {uint8_t *rom;unsigned romSize;} Cart;
+typedef struct Cart {uint8_t *rom;unsigned romSize;uint8_t *ram;unsigned ramSize;} Cart;
 ''',
 "snes/snes.h":'''#pragma once
 #include <stdint.h>
 #include "cart.h"
 typedef struct Snes {uint8_t *ram;Cart *cart;uint32_t input1_currentState;} Snes;
+''',
+"snes_host_prompt.h":'''#pragma once
+void snes_host_request_prompt(const char *,const char *,const char *,void (*)(int));
+void snes_host_request_reset(void);
 ''',
 "present_filter.h":'''#pragma once
 enum {kPresentFilter_Config,kPresentFilter_Sharp,kPresentFilter_Smooth};
@@ -70,9 +74,13 @@ def main():
         '-I',str(include),'-I',str(ROOT/'src'),str(ROOT/'scripts/test_iog_mods_runtime.c'),
         str(ROOT/'src/iog_cheat_rates.c'),'-o',str(exe)]
     subprocess.run(command,check=True)
+    ngp=out/'test_iog_ngplus_runtime.exe'
+    subprocess.run([args.compiler,'-std=c11','-O2','-Wall','-Wextra','-Werror','-I',str(include),'-I',str(ROOT/'src'),
+        str(ROOT/'scripts/test_iog_ngplus_runtime.c'),'-o',str(ngp)],check=True)
     cases=[]
-    for name in ['rewards','taint-hp','taint-dp','taint-stats','taint-room','taint-toggle','taint-api','live-cheats','run']:
-        result=subprocess.run([str(exe),name],capture_output=True,text=True,check=True)
+    for name in ['rewards','taint-hp','taint-dp','taint-stats','taint-room','taint-toggle','taint-api','live-cheats','run','auto-use','ngplus']:
+        result=subprocess.run([str(ngp if name=='ngplus' else exe),name],capture_output=True,text=True)
+        if result.returncode: raise SystemExit('FAILED %s: %s%s'%(name,result.stdout,result.stderr))
         print(result.stdout.strip())
         assertions=int(re.search(r'PASS (\d+)',result.stdout).group(1))
         cases.append({'case':name,'assertions':assertions,'passed':True})
@@ -81,7 +89,7 @@ def main():
         'framework_execution_emulated':False,'natural_reward_qualified':False,
         'assertions':sum(c['assertions']for c in cases),'cases':cases,
         'source_sha256':{str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in [ROOT/'src/iog_mods.c',ROOT/'src/iog_cheat_rates.c',ROOT/'src/iog_cheat_rates.h',
+            for path in [ROOT/'src/iog_mods.c',ROOT/'src/iog_ngplus.c',ROOT/'scripts/test_iog_ngplus_runtime.c',ROOT/'src/iog_cheat_rates.c',ROOT/'src/iog_cheat_rates.h',
                          ROOT/'scripts/test_iog_mods_runtime.c',Path(__file__).resolve()]}}
     (out/'receipt.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps({'passed':True,'assertions':report['assertions'],'cases':len(cases),'receipt':str(out/'receipt.json')}))

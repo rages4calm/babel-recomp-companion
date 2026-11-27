@@ -141,7 +141,12 @@ static void wall_bands(void){
  wall_fixture(0x86,32,0);rom[0x18004]=4;snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
  wall_fixture(0x86,32,0);word(rom,0x18005+4,0);snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
  wall_fixture(0x86,32,0);word(ram,0x644,0x84);snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
- wall_fixture(0x86,32,0);word(ram,0x698,1024);snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
+ wall_fixture(0x86,32,0);word(ram,0x698,1000);snapshot();CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out));immutable();
+ /* The plate is the room's own allocation: $86 entered at 768 rows. */
+ wall_fixture(0x86,32,0);word(ram,0x698,768);snapshot();CHECK(IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,&out)&&out.height==768);immutable();
+ /* MulDivide keeps the low 16 bits of the product: camera 1792 x $30. */
+ {IogRasterParallax m={0};m.valid=1;m.width=256;m.height=768;m.band_count=1;m.bands[0].end_row=768;m.bands[0].factor=0x0130;m.source_camera_x=1792;uint16_t h=0;
+  CHECK(IogRasterParallaxSample(&m,10,1792,&h)&&h==0);CHECK(IogRasterParallaxSample(&m,10,1793,&h)&&h==(uint16_t)((((0x30u*1793)&65535u)-((0x30u*1792)&65535u))>>4&1023u));}
  CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,false,ram,sizeof ram,captured,225,&out));
  CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,224,&out));
  CHECK(!IogRasterParallaxPrepareWall(rom,sizeof rom,true,ram,sizeof ram,captured,225,(IogRasterParallax*)ram));
@@ -257,8 +262,8 @@ def main():
     assert fault.returncode!=0 and 'previous?418:420' in fault.stderr
     # Isolate the new cluster binding: removing only scene83 must fail its
     # source-driven phase/finite-allocation contract while85/86 remain intact.
-    profile_mutant=out/'without-cluster-profile.c';profile_text=files[0].read_text();profile_needle='case 0x83: case 0x86: case 0x88:';assert profile_text.count(profile_needle)==1
-    profile_mutant.write_text(profile_text.replace(profile_needle,'case 0x86: case 0x88:'))
+    profile_mutant=out/'without-cluster-profile.c';profile_text=files[0].read_text();profile_needle='case 0x82: case 0x83: case 0x86: case 0x87: case 0x88: case 0x8B:break;';assert profile_text.count(profile_needle)==1
+    profile_mutant.write_text(profile_text.replace(profile_needle,'case 0x82: case 0x86: case 0x87: case 0x88: case 0x8B:break;'))
     profile_exe=out/'without-cluster-profile.exe';profile_cmd=cmd.copy();profile_cmd[profile_cmd.index(str(files[0]))]=str(profile_mutant);profile_cmd[-1]=str(profile_exe)
     profile_build=subprocess.run(profile_cmd,capture_output=True,text=True,timeout=60);(out/'profile-fault-build.log').write_text(profile_build.stdout+profile_build.stderr);profile_build.check_returncode()
     profile_fault=subprocess.run([str(profile_exe)],env=env,capture_output=True,text=True,timeout=60);(out/'profile-fault-run.log').write_text(profile_fault.stdout+profile_fault.stderr)

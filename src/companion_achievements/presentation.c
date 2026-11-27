@@ -73,9 +73,28 @@ static uint32_t Directions(uint32_t pad) {
            ((pad & SNES_PAD_B) ? CA_UI_CLOSE : 0);
 }
 
+/* Test builds only (IOG_ACHIEVEMENT_TEST_TRACE=<dir>, audit.h): log each
+ * browser change and write the next picture of it to <dir>. */
+static bool trace_picture;
+static void Trace(const char *what) {
+    if (!IogAchievementAuditTestOption("IOG_ACHIEVEMENT_TEST_TRACE")) return;
+    fprintf(stderr, "[achievement_ui] %s open=%d selected=%zu page=%zu/%zu\n", what, (int)ui.open,
+            ui.selected, ui.selected / 5 + 1, (ui.count + 4) / 5);
+    trace_picture = ui.open;
+}
+static void TraceChange(const char *what, bool was_open, size_t was_selected) {
+    if (was_open != ui.open || was_selected != ui.selected) Trace(what);
+}
+
+static void KeyApply(int key);
+
 void IogAchievementUiOpen(uint32_t held) {
     Initialize();
-    if (!initialized) return;
+    const char *refuse = IogAchievementAuditTestOption("IOG_ACHIEVEMENT_TEST_REFUSE_BROWSER");
+    if (!initialized || (refuse && !strcmp(refuse, "1"))) {
+        Trace("refused");
+        return;
+    }
     Refresh();
     pointer_down = false;
     ca_ui_open(&ui, Directions(held));
@@ -86,17 +105,31 @@ void IogAchievementUiOpen(uint32_t held) {
         const long n = strtol(row, NULL, 0);
         if (n >= 0 && (size_t)n < ui.count) ui.selected = (size_t)n;
     }
+    Trace("open");
 }
 
-void IogAchievementUiClose(void) { ca_ui_close(&ui); }
+void IogAchievementUiClose(void) {
+    const bool was = ui.open;
+    ca_ui_close(&ui);
+    if (was) Trace("close");
+}
 bool IogAchievementUiIsOpen(void) { return ui.open; }
 
 void IogAchievementUiNav(uint32_t buttons, uint32_t ticks) {
-    if (ui.open) ca_ui_tick(&ui, Directions(buttons), ticks, true);
+    if (!ui.open) return;
+    const size_t was = ui.selected;
+    ca_ui_tick(&ui, Directions(buttons), ticks, true);
+    TraceChange("pad", true, was);
 }
 
 void IogAchievementUiKey(int key) {
     if (!ui.open) return;
+    const size_t was = ui.selected;
+    KeyApply(key);
+    TraceChange("key", true, was);
+}
+
+static void KeyApply(int key) {
     switch (key) {
     case SDLK_ESCAPE: case SDLK_i: ca_ui_close(&ui); break;
     case SDLK_UP: ca_ui_command_apply(&ui, CA_UI_PREVIOUS_ROW); break;
@@ -108,7 +141,15 @@ void IogAchievementUiKey(int key) {
     }
 }
 
+static void PointerApply(int x, int y, int pressed);
 void IogAchievementUiPointer(int x, int y, int pressed) {
+    const bool was_open = ui.open;
+    const size_t was = ui.selected;
+    PointerApply(x, y, pressed);
+    if (was_open) TraceChange("pointer", true, was);
+}
+
+static void PointerApply(int x, int y, int pressed) {
     const bool edge = pressed && !pointer_down;
     pointer_down = pressed != 0;
     x /= grid_scale;
@@ -284,6 +325,23 @@ bool IogAchievementUiImage(const uint32_t **pixels, int *width, int *height) {
     *pixels = browser;
     *width = W * grid_scale;
     *height = GridH * grid_scale;
+    const char *trace = IogAchievementAuditTestOption("IOG_ACHIEVEMENT_TEST_TRACE");
+    if (trace && trace_picture) {
+        static int pictures;
+        char path[1024];
+        trace_picture = false;
+        snprintf(path, sizeof(path), "%s/browser-%02d.ppm", trace, pictures++);
+        FILE *f = fopen(path, "wb");
+        if (f) {
+            fprintf(f, "P6\n%d %d\n255\n", *width, *height);
+            for (int i = 0; i < *width * *height; ++i) {
+                const uint32_t p = browser[i];
+                fputc(p >> 16 & 255, f); fputc(p >> 8 & 255, f); fputc(p & 255, f);
+            }
+            fclose(f);
+            fprintf(stderr, "[achievement_ui] picture %s\n", path);
+        }
+    }
     return true;
 }
 
@@ -291,7 +349,15 @@ static void PlayChime(void) {
     const char *option = SDL_getenv("IOG_ACHIEVEMENT_CHIME");
     const int volume = g_config.volume > 100 ? 100 : g_config.volume;
     if (!g_config.enable_audio || volume <= 0 || (option && !strcmp(option, "0")) ||
-        !(SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO)) return;
+        !(SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO)) {
+        if (IogAchievementAuditTestOption("IOG_ACHIEVEMENT_TEST_TRACE"))
+            fprintf(stderr, "[achievement_ui] chime skipped (audio=%d volume=%d option=%s)\n",
+                    g_config.enable_audio, volume, option ? option : "-");
+        return;
+    }
+    if (IogAchievementAuditTestOption("IOG_ACHIEVEMENT_TEST_TRACE"))
+        fprintf(stderr, "[achievement_ui] chime: %d samples at %d Hz, volume %d\n",
+                (int)CA_CHIME_FRAMES, (int)CA_CHIME_RATE, volume);
 #if SNESRECOMP_SDL3
     SDL_AudioSpec spec = {.format = SDL_AUDIO_S16, .channels = 1, .freq = CA_CHIME_RATE};
     if (!audio) audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);

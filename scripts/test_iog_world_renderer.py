@@ -167,7 +167,9 @@ void PpuDrawDetachedLine(Ppu*p,int line){
   unsigned y=wall_calls/3,start=(wall_calls%3)*224;wall_calls++;
   int wy=s.view.world_y+(int)y;
   unsigned sample=(unsigned)(wy+1),rate=(sample<96||(sample>=256&&sample<336)||(sample>=512&&sample<592))?2:1;
-  CHECK(p->hScroll[1]==(((unsigned)s.view.world_x/rate+start)&1023));
+  /* Registered to the original field (camera 400) and continued at the
+   * field's own phase into the margins. */
+  CHECK(p->hScroll[1]==((400u/rate+start-s.view.native_x)&1023));
   CHECK(p->vScroll[1]==((unsigned)wy&1023));
  }
  if(horizon_probe){
@@ -1623,6 +1625,32 @@ static void field_window_rebase(void){
  RebaseFieldWindows(&p,0,false);
  CHECK(p.window1left==255&&p.window1right==0&&p.window2left==255&&p.window2right==0);
 }
+/* A state loaded where the game composes no objects that frame (the Angkor
+ * vision mosaic): the NMI uploads the loaded staging buffer unchanged. That
+ * upload pairs with the loaded RAM; a different upload, or none, does not. */
+static void restored_upload_without_composition(void){
+ fixture();g_ppu->inidisp=15;g_ppu->screenEnabled[0]=0x17;
+ for(unsigned n=0;n<544;n++)ram[0x422+n]=(uint8_t)(n*7+11);
+ IogWorldReset();
+ IogWorldBeginRaster();CHECK(!s.valid&&!s.active);
+ IogWorldReset();IogWorldBeforeNmi();
+ for(unsigned n=0;n<256;n++)g_ppu->oam[n]=(uint16_t)Word(ram,0x422+n*2);
+ memcpy(g_ppu->highOam,ram+0x622,32);g_ppu->oamWriteCount++;IogWorldAfterNmi();
+ CHECK(s.active&&!memcmp(s.active_ram,ram,sizeof(s.active_ram)));
+ IogWorldBeginRaster();CHECK(s.valid&&!s.restored_actor_field&&s.restored_pairing);
+ /* The loaded RAM can be one camera step past the saved raster. */
+ word(0x644,0x01);word(0x6ee,5);word(0x68a,256);word(0x68e,408);word(0x692,768);word(0x694,768);
+ word(0x696,1024);word(0x698,1024);g_ppu->bgmode=9;
+ g_ppu->hScroll[0]=g_ppu->hScroll[1]=256;g_ppu->vScroll[0]=g_ppu->vScroll[1]=406;
+ IogWorldReset();IogWorldBeforeNmi();g_ppu->oamWriteCount++;IogWorldAfterNmi();
+ IogWorldBeginRaster();CHECK(s.valid&&s.restored_pairing);
+ for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);CHECK(s.complete&&s.view.world_y+s.view.native_y==406);
+ IogWorldReset();IogWorldBeforeNmi();g_ppu->oam[5]^=1;g_ppu->oamWriteCount++;IogWorldAfterNmi();
+ CHECK(!s.active);g_ppu->oam[5]^=1;
+ IogWorldReset();IogWorldBeforeNmi();g_ppu->oamWriteCount++;
+ IogWorldCaptureAtCompose(&g_cpu,0x83c714);IogWorldAfterNmi();CHECK(!s.active); /* a pending composition decides */
+}
 static void restored_actor_field_before_first_upload(void){
  static uint8_t dst[598*336*4];
  fixture();g_ppu->inidisp=15;g_ppu->screenEnabled[0]=0x17;
@@ -1760,6 +1788,32 @@ static void itory_restore_camera(void){
  CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
  g_snesrecomp_last_hdmaen=0;
 }
+/* South Cape ($01): a state saved while walking restores RAM one camera step
+ * past the saved raster (campaign chunk 15: one lit 4:3 frame after the
+ * load). Accepted up to one tile on each axis with a uniform raster. */
+static void generic_restore_camera_step(void){
+ fixture();word(0x644,0x01);word(0x6ee,5);
+ word(0x68a,256);word(0x68e,408);word(0x692,768);word(0x694,768);
+ word(0x696,1024);word(0x698,1024);
+ g_ppu->bgmode=9;g_ppu->screenEnabled[0]=0x17;
+ g_ppu->hScroll[0]=g_ppu->hScroll[1]=256;g_ppu->vScroll[0]=g_ppu->vScroll[1]=406;
+ IogWorldReset();IogWorldCaptureAtCompose(&g_cpu,0x83c714);
+ IogWorldCaptureAfterCompose(&g_cpu,0x83c789);
+ IogWorldBeginRaster();CHECK(s.valid&&s.restored_actor_field);
+ for(int line=0;line<=224;line++) IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);
+ CHECK(s.complete&&!strcmp(s.reason,"ready_restored_actor_field"));
+ CHECK(s.view.world_y+s.view.native_y==406);
+ s.lines[120].registers[offsetof(Ppu,vScroll)]^=1;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ s.lines[120].registers[offsetof(Ppu,vScroll)]^=1;
+ s.restored_actor_field=false;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+ for(int line=0;line<=224;line++)
+  {uint16_t v=(uint16_t)(406-40);memcpy(s.lines[line].registers+offsetof(Ppu,vScroll),&v,2);memcpy(s.lines[line].registers+offsetof(Ppu,vScroll)+2,&v,2);}
+ g_ppu->vScroll[0]=g_ppu->vScroll[1]=406-40;s.restored_actor_field=true;
+ CHECK(!RenderWorld()&&!strcmp(s.reason,"camera_publication_mismatch"));
+}
 static void watermia_restore_camera(void){
  fixture();word(0x644,0x78);word(0x6ee,0x0085);
  word(0x68a,512);word(0x68e,778);word(0x692,1280);word(0x694,1280);
@@ -1827,8 +1881,8 @@ static void mode7_lifecycle_and_packet(const char*base){
  late_story_mosaics();
  story_sky_after_unpaired_upload();
  stock_actor_field_after_unpaired_upload();
- restored_actor_field_before_first_upload();
- itory_restore_camera();
+ restored_actor_field_before_first_upload();restored_upload_without_composition();
+ itory_restore_camera();generic_restore_camera_step();
  watermia_restore_camera();
  finite_room_backdrop();
  IogWorldReset();
@@ -1966,7 +2020,26 @@ static void mode7_producer_validated_extension(const char*base){
    for(int x=0;x<598;x++)CHECK(s.output[y*598+x]==0);
  }
 }
+/* The classroom ($08) masks its void cells in the margins only; the original
+ * field keeps every row it shows (the hall below the room, camera on the
+ * right half: 11,776 pixels were masked inside the field). */
+static void classroom_field_unmasked(void){
+ fixture();word(0x644,8);word(0x68a,256);word(0x68e,0);
+ word(0x692,512);word(0x696,256);word(0x694,512);word(0x698,512);
+ word(0x69e,0xa000);word(0x6ae,0x2000);
+ for(unsigned n=0;n<4;n++)word(0x2000+0x6e*8+n*2,0x1c01);
+ for(unsigned i=0;i<0x200;i++)ram[0xa000+i]=0x6e;
+ g_ppu->hScroll[0]=g_ppu->hScroll[1]=256;g_ppu->vScroll[0]=g_ppu->vScroll[1]=0;
+ publication();IogWorldBeginRaster();
+ for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
+ IogWorldEndRaster(0,225,0);CHECK(s.complete);
+ for(int y=0;y<224;y+=37)for(int x=0;x<256;x+=51)
+  CHECK(s.output[(s.view.native_y+y)*s.width+s.view.native_x+x]>>24);
+ CHECK(s.view.native_x>0&&!s.output[(s.view.native_y+100)*s.width+s.view.native_x-1]);
+}
 static void preserve_stock_bottom_object_edge(void){
+ /* The writer's test is the same in every room (Babel F6 showed it outside
+  * 54 and 67): the part's first row is clear inside the original field. */
  const unsigned scenes[]={0x54,0x67,1};
  for(unsigned n=0;n<sizeof scenes/sizeof scenes[0];n++){
   fixture();word(0x644,scenes[n]);bottom_edge_object_probe=true;
@@ -1975,7 +2048,7 @@ static void preserve_stock_bottom_object_edge(void){
   IogWorldEndRaster(0,225,0);CHECK(s.complete);
   const uint32_t*bottom=s.output+(s.view.native_y+223)*s.width+s.view.native_x;
   CHECK(bottom[-1]==0xfff00df0u);
-  CHECK((bottom[0]==0xfff00df0u)==(scenes[n]==1));
+  CHECK(bottom[0]!=0xfff00df0u);
   CHECK(bottom[13]==0xfff00df0u&&bottom[29]==0xfff00df0u);
   CHECK(bottom[s.width]==0xfff00df0u);
  }
@@ -2109,7 +2182,7 @@ int main(int argc,char**argv){CHECK(argc==2);
   * world-map presentation is covered by test_iog_mode7_plane.py and
   * test_iog_mode7_perspective.py. */
  putenv("IOG_WORLD_MAP_FILTER=0");
- phase_queue();epochs_and_read_only();field_window_rebase();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();stock_camera_bottom_rows();stair_pan_between_floors();held_star_ring_rows();preserve_stock_bottom_object_edge();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);ring_strip_past_map_edge();hud_fixed_color_math();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+ phase_queue();epochs_and_read_only();field_window_rebase();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();stock_camera_bottom_rows();stair_pan_between_floors();held_star_ring_rows();preserve_stock_bottom_object_edge();classroom_field_unmasked();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);ring_strip_past_map_edge();hud_fixed_color_math();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 
@@ -2170,6 +2243,32 @@ def main():
     assert Path(perspective_prefix+'.mode7.plane.bgrx').stat().st_size==598*336*4
     assert Path(perspective_prefix+'.mode7.field.bgra').read_bytes()==bytes((i*13+7)&255 for i in range(256*224*4))
 
+
+    # A state load resets the world publication (IogWorldReset) and must hand
+    # the loaded parking place to the interpreter bridge too: a stale bridge
+    # resume PC was put back by the first NMI after a load made during a room
+    # change, the guest ran off the rails and no object publication paired
+    # again (unpaired_object_publication for the rest of the run).
+    rtl=(ROOT/'src/game_rtl.c').read_text(encoding='utf-8')
+    load=rtl[rtl.index('static void GameStateLoad('):]
+    load=load[:load.index('\n}\n')]
+    assert 'interp_bridge_set_lle_resume_pc(st.resume_pc);' in load and 'IogWorldReset();' in load
+    assert load.index('g_resume_pc = st.resume_pc;')<load.index('interp_bridge_set_lle_resume_pc(st.resume_pc);')
+    assert 'g_hdma_latch[ch].valid = false;' in load
+    # HDMA reads each channel's table address at the top of the frame: the
+    # frame driver latches the channel set-up right after the NMI, before the
+    # frame's logic rebinds double-buffered tables (Edward's Castle floor
+    # slid two pixels under the walls in the Original picture), and the
+    # raster draws from that latch.
+    rtl_run=rtl[rtl.index('void GameRunOneFrame(void)'):]
+    rtl_run=rtl_run[:rtl_run.index('\n}\n')]
+    assert rtl_run.index('IogWorldAfterNmi();')<rtl_run.index('GameLatchHdmaChannels();')<rtl_run.index('interp_bridge_run_until_quiescent(')
+    rtl_draw=rtl[rtl.index('void GameDrawPpuFrame(void)'):]
+    rtl_draw=rtl_draw[:rtl_draw.index('\n}\n')]
+    assert 'g_hdma_latch[ch]' in rtl_draw and 'SimpleHdma_Init(&hdma_chans[ch], &at_start);' in rtl_draw
+    # The wide view registers a band row to the walls only when the row is
+    # still one camera step ahead (a raster read after the logic).
+    assert 'IogRasterParallaxSample(&band_model,row_y,band_model.source_camera_x,&at_source)' in (ROOT/'src/iog_world_renderer.c').read_text(encoding='utf-8')
 
     # Removing only the late-patch identity refresh must reproduce the stale
     # stock-eligibility failure with the very same synthetic patch and input.

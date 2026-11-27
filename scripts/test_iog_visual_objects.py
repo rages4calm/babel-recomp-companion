@@ -204,6 +204,26 @@ static void castoth_defeat_tail(void){
     for(unsigned k=0;k<128;k++){ppu.oam[2*k]=0x3740;ppu.oam[2*k+1]=0x3000;} /* The stock fill from this actor's first slot drops later actors. */
     CHECK(run(v)==kIogVisualReady&&frame.part_count==1&&frame.parts[0].actor==0x1030);
 }
+/* The stock writer stops at 128 OAM slots (Babel F2's defeat: 132-137 parts,
+ * the last ones never drawn). Parts off its own screen take no slot. */
+static void stock_oam_slots(void){
+    fixture();IogVisualViewport v={0,0,600,336};
+    actor(0x1000,0,0x1030,100,100,0,0x4000);actor(0x1030,0x1000,0,100,100,0,0x5000);wr(0x58,0x1030);
+    ram[0x4008]=70;for(unsigned n=0;n<70;n++)record(0x4000,n,0,0,0,0,0,0x3802);
+    ram[0x5008]=70;for(unsigned n=0;n<70;n++)record(0x5000,n,0,n<10?200:0,0,0,0,0x3802);
+    CHECK(run(v)==kIogVisualReady&&frame.part_count==140); /* no stock render list: no cut */
+    wr(0xc00,0x1000);wr(0xc02,0x1030);wr(0xc04,0);
+    CHECK(run(v)==kIogVisualReady&&frame.part_count==138);
+    unsigned last=0;for(unsigned i=0;i<frame.part_count;i++)if(frame.parts[i].actor==0x1030&&frame.parts[i].source_index>last)last=frame.parts[i].source_index;
+    CHECK(last==67);
+    ram[0x5008]=58;CHECK(run(v)==kIogVisualReady&&frame.part_count==128);
+    ram[0x5008]=70;
+    for(unsigned n=0;n<128;n++){wr(0x13100+n*6,50);wr(0x13102+n*6,60);wr(0x13104+n*6,0x3802);}
+    wr(0x13100+128*6,0xffff);
+    CHECK(run(v)==kIogVisualCapacity); /* the record loop reads 128 records at most */
+    wr(0x13100+127*6,0xffff);
+    CHECK(run(v)==kIogVisualReady&&frame.part_count==128); /* 127 records: one slot left, for the first actor's first part */
+}
 static void exact_room_selection(void){
     for(unsigned room=0;room<65536;room++){
         bool expected=false;
@@ -228,7 +248,7 @@ static void exact_room_selection(void){
         CHECK(IogVisualObjectsSupportsScene((uint16_t)room)==expected);
     }
 }
-int main(void){geometry_and_pixels();orders_and_manual();all_planar_colors();player_rom_pixels();refusals_and_capacity();castoth_defeat_tail();exact_room_selection();printf("%u visual-object assertions passed\n",checks);return 0;}
+int main(void){geometry_and_pixels();orders_and_manual();all_planar_colors();player_rom_pixels();refusals_and_capacity();castoth_defeat_tail();stock_oam_slots();exact_room_selection();printf("%u visual-object assertions passed\n",checks);return 0;}
 '''
 
 

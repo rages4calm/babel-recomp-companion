@@ -193,6 +193,34 @@ static void game_run_interrupt(uint32_t vector, uint64_t frame_end, bool nmi_edg
     }
 }
 
+/* HDMA takes each channel's table address when the frame starts (line 0),
+ * after the vertical-blank NMI and before most of the frame's logic, which on
+ * the console runs while the picture is drawn. This host runs all the logic
+ * first and draws afterwards, so the frame read whatever the logic bound last:
+ * a double-buffered table rebuilt and rebound during the logic (the band
+ * scroll of Edward's Castle $0A and the Gold Ship $2B/$2C) was shown one
+ * camera step ahead of the wall layer the NMI scrolled, and the floor slid
+ * under the walls in the Original picture. The channel set-up seen right
+ * after the NMI is what line 0 uses; the table contents are still read live. */
+typedef struct { bool valid; uint8_t bAdr, aBank, indBank, mode; bool indirect; uint16_t aAdr; } HdmaLatch;
+static HdmaLatch g_hdma_latch[8];
+/* IOG_HDMA_LIVE=1: the old reading after the logic, for comparison runs. */
+static bool getenv_hdma_live(void)
+{
+    static int live = -1;
+    if (live < 0) { const char *v = getenv("IOG_HDMA_LIVE"); live = v && *v == '1'; }
+    return live != 0;
+}
+static void GameLatchHdmaChannels(void)
+{
+    const Dma *dma = g_snes ? g_snes->dma : NULL;
+    for (int ch = 0; ch < 8; ch++) {
+        if (!dma) { g_hdma_latch[ch].valid = false; continue; }
+        const DmaChannel *c = &dma->channel[ch];
+        g_hdma_latch[ch] = (HdmaLatch){true, c->bAdr, c->aBank, c->indBank, c->mode, c->indirect, c->aAdr};
+    }
+}
+
 void GameRunOneFrame(void)
 {
 #ifndef IOG_RECEIVED_REFERENCE
@@ -258,6 +286,7 @@ void GameRunOneFrame(void)
 #endif
         }
     }
+    GameLatchHdmaChannels();
 
     /* Run the guest until it parks on a read-only poll (its vblank wait) or
      * the frame's clock runs out. A single call is not enough: the guest
@@ -308,7 +337,17 @@ void GameDrawPpuFrame(void)
      * during the NMI just run. The framework records it for exactly this. */
     dma_startDma(dma, g_snesrecomp_last_hdmaen, true);
     for (ch = 0; ch < 8; ch++)
-        SimpleHdma_Init(&hdma_chans[ch], &dma->channel[ch]);
+    {
+        /* The set-up latched at the top of this frame (GameLatchHdmaChannels);
+         * enable comes from HDMAEN as before. */
+        DmaChannel at_start = dma->channel[ch];
+        const HdmaLatch *l = &g_hdma_latch[ch];
+        if (l->valid && !getenv_hdma_live()) {
+            at_start.bAdr = l->bAdr; at_start.aBank = l->aBank; at_start.indBank = l->indBank;
+            at_start.mode = l->mode; at_start.indirect = l->indirect; at_start.aAdr = l->aAdr;
+        }
+        SimpleHdma_Init(&hdma_chans[ch], &at_start);
+    }
 
     /* Mid-frame raster split, if the guest programmed the V comparator. */
     trigger = g_snes->vIrqEnabled ? (int)g_snes->vTimer : -1;
@@ -415,6 +454,18 @@ static void GameStateLoad(SaveLoadInfo *sli, uint32_t version)
     if (st.magic != kStateMagic)
         return;
     g_resume_pc = st.resume_pc;
+    /* The bridge's own resume PC is host state too. Left from before the
+     * load, the first NMI after it (game_run_interrupt) put the OLD parking
+     * place back into g_resume_pc: a load made while the game was changing
+     * rooms resumed inside that room loader over the loaded RAM (Will's
+     * house $06 into South Cape: BRK at $00:0001, no composition for the
+     * rest of the run, the wide view fell back to 4:3). Rollback loads
+     * restore the bridge exactly from their own residue. */
+    if (!RtlIsRollbackLoad())
+        interp_bridge_set_lle_resume_pc(st.resume_pc);
+    /* The HDMA set-up latched before the load belongs to the old timeline;
+     * the next frame latches its own after the NMI. */
+    for (int ch = 0; ch < 8; ch++) g_hdma_latch[ch].valid = false;
     g_cpu.A = st.A, g_cpu.X = st.X, g_cpu.Y = st.Y, g_cpu.S = st.S, g_cpu.D = st.D;
     g_cpu.DB = st.DB, g_cpu.PB = st.PB, g_cpu.P = st.P, g_cpu.emulation = st.emulation;
     cpu_p_to_mirrors(&g_cpu);

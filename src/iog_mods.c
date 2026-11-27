@@ -248,16 +248,50 @@ void IogTextSpeedSet(int v)
  * stores the effect in $06F8 for the next NMI). */
 static uint16_t g_swap_mod = kPadX, g_swap_prev;
 
+static bool SwapBlocked(void);
+
+/* Select as the modifier: Select opens the game's inventory, so every swap
+ * opened it too. While Select is held it is kept from the game; released
+ * without L or R in between, it is handed over as a press then (the menu
+ * opens on release). SwapFrame reads the pad as it was before this. */
+static uint16_t g_swap_raw;
+static bool g_swap_select_held, g_swap_chord;
+static int g_swap_select_tap;
+
+static uint32_t SwapFilter(uint32_t in)
+{
+    if (!g_snes || g_swap_mod != kPadSelect)
+        return in;
+    g_swap_raw = (uint16_t)(in & 0x0FFF);
+    if (in & kPadSelect) {
+        if (!g_swap_select_held && SwapBlocked())
+            return in;   /* a menu or message: Select is the game's own */
+        g_swap_select_held = true;
+        if (in & (kPadL | kPadR)) g_swap_chord = true;
+        return in & ~(uint32_t)kPadSelect;
+    }
+    if (g_swap_select_held) {
+        g_swap_select_held = false;
+        if (!g_swap_chord) g_swap_select_tap = 3;
+        g_swap_chord = false;
+    }
+    if (g_swap_select_tap > 0) {
+        g_swap_select_tap--;
+        in |= kPadSelect;
+    }
+    return in;
+}
+
 static void SwapFrame(void)
 {
     if (!g_snes)
         return;
-    const uint16_t pad = Pad(), pressed = pad & ~g_swap_prev;
+    const uint16_t pad = g_swap_mod == kPadSelect ? g_swap_raw : Pad(), pressed = pad & ~g_swap_prev;
     g_swap_prev = pad;
     if (!(pad & g_swap_mod) || !(pressed & (kPadL | kPadR)))
         return;
-    if (!Rd(0x09AA) || (Rd(0x09EC) & 0x4000))
-        return;   /* no player, or a menu/message is up */
+    if (SwapBlocked())
+        return;
     const uint8_t *slots = &g_snes->ram[0x0AB4];
     int slot = (int16_t)Rd(0x0AC4);
     if (pressed & kPadR) {
@@ -276,13 +310,26 @@ static void SwapFrame(void)
     g_snes->ram[0x06F8] = 0x10;
 }
 
+static bool SwapBlocked(void)
+{
+    /* No player, the pause menu (scene $FF), a message or choice ($09EC bit
+     * $2000, dialogue mode) or the HUD switched off (bit $4000). Bit $4000
+     * alone let the swap change the equipped item under an open inventory
+     * and during dialogue. */
+    return !Rd(0x09AA) || Rd(0x0644) == 0x00FF || (Rd(0x09EC) & 0x6000);
+}
+
 static void ActivateSwap(void)
 {
     char v[16] = "X";
     snes_mod_runtime_feature_option_value_c("iog.enhancements", "hotswap", "modifier", v, sizeof(v));
     g_swap_mod = !strcmp(v, "Y") ? kPadY : !strcmp(v, "Select") ? kPadSelect : kPadX;
-    g_swap_prev = 0;
+    g_swap_prev = g_swap_raw = 0;
+    g_swap_select_held = g_swap_chord = false;
+    g_swap_select_tap = 0;
     snes_mod_register_frame_callback(SwapFrame);
+    if (g_swap_mod == kPadSelect)
+        snes_mod_register_input_filter(SwapFilter);
 }
 
 /* ---- test-only boss hunter (IOG_TEST_HUNT=1; never set in play) ------------
@@ -360,13 +407,16 @@ static void RoomRewardFrame(void)
         (g_snes->ram[0x0B54]&0x7F)!=0;
     if(sample.scene<256&&sample.supported)
         sample.reward_kind=g_snes->cart->rom[0x01AADE + sample.scene];
+    /* The whole table: a boss clear grants the dungeon's untaken rooms. */
+    if(sample.supported) sample.tiers=g_snes->cart->rom+0x01AADE;
     IogCheatRateAward award=IogCheatRateStep(&g_room_reward_tracker,&sample,g_room_reward_multiplier);
     if(!award.extra) return;
     static const uint16_t stat_at[]={0x0ACA,0x0ADE,0x0ADC};
-    Wr(stat_at[award.kind-1],sample.stats[award.kind-1]+award.extra);
-    if(award.kind==1) {
-        unsigned hp=(unsigned)sample.hp+award.extra;
-        unsigned maximum=(unsigned)sample.stats[0]+award.extra;
+    for(unsigned i=0;i<3;i++)
+        if(award.extras[i]) Wr(stat_at[i],sample.stats[i]+award.extras[i]);
+    if(award.extras[0]) {
+        unsigned hp=(unsigned)sample.hp+award.extras[0];
+        unsigned maximum=(unsigned)sample.stats[0]+award.extras[0];
         Wr(0x0ACE,(uint16_t)(hp>maximum?maximum:hp));
     }
 }
@@ -557,7 +607,7 @@ void IogHoldAdvanceSet(int v)
 
 /* ---- auto-use key items ------------------------------------------------------ */
 
-/* After andrewclunn's Gaia and Time (auto-use-items/*.patch.asm, the GaiaLabs
+/* After andrewclunn's Gaia and Time (the auto-use-items patches, the GaiaLabs
  * line of work), done differently: no actor or code is added to the game.
  * Pressing the talk button (A) where a key item you carry does something
  * hands the game an item-button press (B) with that item equipped, for the
@@ -569,7 +619,8 @@ void IogHoldAdvanceSet(int v)
  * room ($0644) and the player's tile ($09A6 x, $09A8 y), start inclusive and
  * end exclusive (a subset of the game's area where it is inclusive). The
  * melodies and the hieroglyphs are left out: those are played or chosen on
- * purpose. Default button type only (B is the item button). */
+ * purpose. The talk and item buttons are the ones the game's button type
+ * maps (PadForLogical): A and B with Type 1, B and Y with Type 2. */
 typedef struct AutoUseSpot { uint8_t item, scene, x0, y0, x1, y1; } AutoUseSpot;
 static const AutoUseSpot kAutoUse[] = {
     {0x02, 0x0B, 14, 16, 16, 17}, {0x02, 0x0B, 10, 23, 12, 24},   /* Prison Key, Edward's Castle */
@@ -593,7 +644,7 @@ static const AutoUseSpot kAutoUse[] = {
     {0x1D, 0xAE, 10, 6, 11, 8},
 };
 static bool g_auto_use;
-static bool g_au_latched;          /* A held since a press was handed over as B */
+static bool g_au_latched;          /* talk held since a press was handed over as the item button */
 static int16_t g_au_prev_slot = -1; /* what was equipped before, to restore */
 static uint8_t g_au_prev_item, g_au_item;
 static bool g_au_restore;
@@ -617,22 +668,46 @@ static int AutoUseSlot(void)
     return -1;
 }
 
+/* The physical button the game's button type makes produce a logical bit:
+ * the remap words at $0DA6 (R, L, B, A, Y, X; the diary's Snd/Buttons tab
+ * sets them). Logical $8000 is attack/talk, $4000 item/cancel. Type 1 gives
+ * A = $8000 and B = $4000; Type 2 (after a boot) B = $8000, Y = $4000 and A
+ * nothing, so a fixed A-to-B swap attacked instead of using the item. */
+static uint32_t PadForLogical(uint16_t bit)
+{
+    static const struct { uint16_t at; uint32_t pad; } kRemap[] = {
+        {0x0DAC, kPadA}, {0x0DAA, kPadB}, {0x0DAE, kPadY}, {0x0DB0, kPadX},
+        {0x0DA8, kPadL}, {0x0DA6, kPadR},
+    };
+    for (size_t i = 0; i < sizeof(kRemap) / sizeof(kRemap[0]); i++)
+        if (Rd(kRemap[i].at) & bit)
+            return kRemap[i].pad;
+    return 0;
+}
+static uint32_t g_au_talk = kPadA, g_au_use = kPadB;   /* the latched pair */
+
 static uint32_t AutoUseFilter(uint32_t in)
 {
     if (!g_auto_use || !g_snes)
         return in;
-    if (!(in & kPadA)) {
-        g_au_latched = false;
-        return in;
+    if (g_au_latched) {
+        if (!(in & g_au_talk)) {
+            g_au_latched = false;
+            return in;
+        }
+        return (in & ~g_au_talk) | g_au_use;
     }
-    if (g_au_latched)
-        return (in & ~kPadA) | kPadB;
+    const uint32_t talk = PadForLogical(0x8000), use = PadForLogical(0x4000);
+    if (!talk || !use || talk == use || !(in & talk))
+        return in;
     /* Free to act: a player, no menu, no message, movement not locked. */
     if (!Rd(0x09AA) || Rd(0x0644) == 0x00FF || (Rd(0x09EC) & 0x6000) || (Rd(0x09AE) & 0x3800))
         return in;
     const int slot = AutoUseSlot();
     if (slot < 0)
         return in;
+    g_au_talk = talk;
+    g_au_use = use;
     if (!g_au_restore) {
         g_au_prev_slot = (int16_t)Rd(0x0AC4);
         g_au_prev_item = (uint8_t)Rd(0x0AC6);
@@ -642,7 +717,7 @@ static uint32_t AutoUseFilter(uint32_t in)
     Wr(0x0AC6, g_au_item);
     g_au_latched = true;
     g_au_restore = true;
-    return (in & ~kPadA) | kPadB;
+    return (in & ~talk) | use;
 }
 
 /* Once the item's message has closed, equip again what was equipped before

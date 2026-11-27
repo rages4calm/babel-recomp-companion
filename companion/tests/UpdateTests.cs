@@ -115,6 +115,13 @@ internal static class UpdateTests
         Environment.SetEnvironmentVariable(UpdateService.FeedVariable, "http://127.0.0.1:1/feed");
         UpdateService.RequireAllowed(new Uri("http://127.0.0.1:8080/x")); checks++;
         Refused(() => UpdateService.RequireAllowed(new Uri("http://192.168.1.5/x")), "test feed still refuses remote HTTP").Wait();
+        // A test run against GitHub's own feed keeps the production host policy (redirect targets are checked).
+        Environment.SetEnvironmentVariable(UpdateService.FeedVariable, UpdateService.DefaultFeed);
+        Check(UpdateService.UsingTestFeed && !UpdateService.RelaxedHosts, "GitHub test feed is not relaxed");
+        UpdateService.RequireAllowed(new Uri("https://release-assets.githubusercontent.com/a")); checks++;
+        Refused(() => UpdateService.RequireAllowed(new Uri("https://example.com/x.zip")), "GitHub test feed refuses other hosts").Wait();
+        Refused(() => UpdateService.RequireAllowed(new Uri("http://127.0.0.1:8080/x")), "GitHub test feed refuses loopback HTTP").Wait();
+        Environment.SetEnvironmentVariable(UpdateService.FeedVariable, null);
     }
 
     // ---------- packages ----------

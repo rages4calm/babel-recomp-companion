@@ -99,7 +99,7 @@ static const char *fragment_source =
   "bool cond(int m,bool inside){return m==3||(m==1&&!inside)||(m==2&&inside);}\n"
   "uint word(int address,int layer){return texelFetch(picture,ivec3(address&255,(address>>8)&127,layer),0).r;}\n"
   "uint fetch_index(ivec2 t,int control,int layer,ivec4 m,ivec4 o){bool outside=any(lessThan(t,ivec2(0)))||any(greaterThanEqual(t,ivec2(1024)));"
-  "if(outside&&(control&128)!=0&&(control&64)==0)return 0u;ivec2 p=t&1023;"
+  "if(outside&&(control&128)!=0&&(control&64)==0)return o.w>0?uint(o.w-1):0u;ivec2 p=t&1023;"
   "int tile=outside&&(control&128)!=0?0:int(word((p.y/8)*128+p.x/8,layer)&255u);"
   "if(m.x>0&&!(outside&&(control&128)!=0)){ivec2 cell=((t+o.xy)>>3)&(m.yz-1);tile=int(texelFetch(tilemaps,ivec3(cell,m.x-1),0).r);}"
   "return word(tile*64+(p.y&7)*8+(p.x&7),layer)>>8;}\n"
@@ -464,7 +464,7 @@ static bool HdDrawSamples(SnesHdGpu *g, const SnesHdFrame *frame, unsigned scale
            fabs(j->affine[3]) + fabs(j->affine[7]) < 65536)) m[19] = 1;
       if (scale > 64) m[19] = 0;
     }
-    m[20] = j->map_offset_x; m[21] = j->map_offset_y; m[22] = j->composition; m[23] = 0;
+    m[20] = j->map_offset_x; m[21] = j->map_offset_y; m[22] = j->composition; m[23] = j->outside;
   }
   if (affine && !g->fp64 && !hd_cpu_planes(g, &v, height, scale, sampling)) return false;
   HdState saved; hd_save(&saved); glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);

@@ -56,7 +56,12 @@ internal static class Program
         var revert = typeof(LauncherForm).GetMethod("Revert", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, Type.EmptyTypes);
         form.Activated += (_, _) => {
             if (controller.HasChanges) return;
-            try { if (revert != null) revert.Invoke(form, null); else controller.Reload(); }
+            try {
+                // Only when a file actually changed: rebuilding the page on every activation reset its
+                // scroll position and focus each time the player switched back to the launcher.
+                if (controller.Adapter.ReadSettings(controller.Profile).Revision == controller.Snapshot.Revision) return;
+                if (revert != null) revert.Invoke(form, null); else controller.Reload();
+            }
             catch (Exception) { /* a locked or half-written file: the next activation tries again */ }
         };
     }

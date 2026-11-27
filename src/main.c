@@ -328,7 +328,12 @@ static void IogWorldHdPublish(const uint8_t *dst, size_t pitch, int width, int h
             line.control = r.control; line.brightness = r.light;
             line.cgwsel = r.cgwsel; line.cgadsub = r.cgadsub; line.fixed_color = r.fixed;
             memcpy(line.palette, r.cgram, sizeof(line.palette));
-            if (r.edge >= 0) line.palette[0] = r.cgram[r.edge];
+            /* Past the map edge the software plane shows the open sea (the
+             * map's commonest texel); index 0 inside the map stays the
+             * backdrop, as the original field shows it (the black columns at
+             * the east edge, Angel Village). Recolouring palette entry 0 also
+             * turned those into sea on the GPU ground. */
+            if (r.edge >= 0) line.outside = (uint16_t)(r.edge + 1);
             line.screen_left = line.active_left = (int16_t)-left;
             line.active_right = (int16_t)(width - left);
             memcpy(line.affine, r.affine, sizeof(line.affine));

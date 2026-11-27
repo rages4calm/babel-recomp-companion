@@ -118,6 +118,17 @@ const char *IogAchievementAuditSnapshot(ca_state states[CA_MAX_ACHIEVEMENTS], ui
     return "Progress unavailable";
 }
 
+const char *IogAchievementAuditTestOption(const char *name)
+{
+#ifdef IOG_ACHIEVEMENT_TEST_INPUT
+    const char *value = getenv(name);
+    return value && *value ? value : NULL;
+#else
+    (void)name;
+    return NULL;
+#endif
+}
+
 void IogAchievementAuditShutdown(void)
 {
 #ifdef IOG_ACHIEVEMENT_STORAGE

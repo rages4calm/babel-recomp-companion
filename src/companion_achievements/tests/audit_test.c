@@ -109,6 +109,17 @@ int main(void)
     static const char *const owned[] = {"IOG_ACHIEVEMENT_AUDIT", "IOG_ACHIEVEMENT_PROGRESS",
         "SNESRECOMP_RUN_FRAMES", "SNESRECOMP_CAPTURE_OUT"};
     for (size_t i = 0; i < sizeof owned / sizeof *owned; ++i) CHECK(!getenv(owned[i]));
+    /* Developer test options exist only in IOG_ACHIEVEMENT_TEST_INPUT builds. */
+#ifdef _WIN32
+    CHECK(!_putenv("IOG_ACHIEVEMENT_TEST_REFUSE_BROWSER=1"));
+#else
+    CHECK(!setenv("IOG_ACHIEVEMENT_TEST_REFUSE_BROWSER", "1", 1));
+#endif
+#ifdef IOG_ACHIEVEMENT_TEST_INPUT
+    CHECK(IogAchievementAuditTestOption("IOG_ACHIEVEMENT_TEST_REFUSE_BROWSER"));
+#else
+    CHECK(!IogAchievementAuditTestOption("IOG_ACHIEVEMENT_TEST_REFUSE_BROWSER"));
+#endif
     char base[512], dir[600], file[700];
     snprintf(base, sizeof base, "test-audit-%d", (int)getpid());
     char *argv[] = {"game", NULL};

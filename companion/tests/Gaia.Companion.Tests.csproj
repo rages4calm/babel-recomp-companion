@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Companion.Launcher.Core" Version="[0.2.0]" />
+    <Compile Remove="ui/**" />
     <Compile Include="../GameAdapter.cs" Link="GameAdapter.cs" />
     <Compile Include="../NativeSettings.cs" Link="NativeSettings.cs" />
     <Compile Include="../NativeModSettings.cs" Link="NativeModSettings.cs" />
