@@ -468,12 +468,20 @@ static void ActivateRoomRewards(void)
  * already held must be released before it counts again. */
 static uint8_t g_advance_period;   /* 0: off */
 static uint16_t g_adv_latched;     /* buttons held since a generated press */
+/* Bit 15: an advance button is down; low byte: the game's frame counter ($36)
+ * when it went down or at the last generated press. */
+static uint16_t g_adv_held;
 static bool g_adv_rearm;           /* a timeline jump: latch whatever is held */
 
+/* Each page stays up a whole period: the next generated press comes a full
+ * period after the button went down or after the previous generated press,
+ * counted on the game's own frame counter. A tap (often 4-8 frames) never
+ * lasts a period, so it turns one page, as on the console. */
 static uint32_t HoldAdvanceFilter(uint32_t in)
 {
     if (!g_advance_period || !g_snes) {
         g_adv_latched = 0;
+        g_adv_held = 0;
         g_adv_rearm = false;
         return in;
     }
@@ -483,18 +491,30 @@ static uint32_t HoldAdvanceFilter(uint32_t in)
         g_adv_rearm = false;
     }
     g_adv_latched &= (uint16_t)adv;            /* released: free again */
+    const uint8_t now = g_snes->ram[0x36];
+    if (!adv)
+        g_adv_held = 0;
+    else if (!(g_adv_held & 0x8000))
+        g_adv_held = (uint16_t)(0x8000 | now);  /* just went down */
     const bool paging = Rd(0x09AA) && (Rd(0x09EC) & 0x2000) && Rd(0x065C) == 0;
     if (!paging)
         return in & ~(uint32_t)g_adv_latched;
-    if (adv && (g_snes->ram[0x36] % g_advance_period) == 0) {
+    if (adv && (uint8_t)(now - (uint8_t)g_adv_held) >= g_advance_period) {
         in &= ~adv;                            /* next frame is a generated press */
         g_adv_latched |= (uint16_t)adv;
+        g_adv_held = (uint16_t)(0x8000 | now);
     }
     return in;
 }
 
+/* Saved with the game state (game_rtl.c): latched buttons and the hold time. */
 uint16_t IogHoldAdvanceStateSave(void) { return g_adv_latched; }
-void IogHoldAdvanceStateLoad(uint16_t latched) { g_adv_latched = latched & (kPadA | kPadB | kPadY); }
+uint16_t IogHoldAdvanceHeldSave(void) { return g_adv_held; }
+void IogHoldAdvanceStateLoad(uint16_t latched, uint16_t held)
+{
+    g_adv_latched = latched & (kPadA | kPadB | kPadY);
+    g_adv_held = held;
+}
 void IogHoldAdvanceTimelineJump(void) { g_adv_rearm = true; }
 
 static void ActivateHoldAdvance(void)

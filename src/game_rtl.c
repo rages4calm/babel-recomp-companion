@@ -368,10 +368,11 @@ typedef struct GameState {
  * filter latches (iog_mods.c hold to advance). Optional on load, so states
  * made before it existed still load. */
 enum { kStateTailMagic = 0x32474F49u /* "IOG2" */ };
-typedef struct GameStateTail { uint32_t magic; uint16_t hold_advance_latched, pad; } GameStateTail;
+typedef struct GameStateTail { uint32_t magic; uint16_t hold_advance_latched, hold_advance_held; } GameStateTail;
 #ifndef IOG_RECEIVED_REFERENCE
 uint16_t IogHoldAdvanceStateSave(void);
-void IogHoldAdvanceStateLoad(uint16_t latched);
+uint16_t IogHoldAdvanceHeldSave(void);
+void IogHoldAdvanceStateLoad(uint16_t latched, uint16_t held);
 void IogHoldAdvanceTimelineJump(void);
 #else   /* the reference build has no input filters and keeps its old format */
 static void IogHoldAdvanceTimelineJump(void) {}
@@ -390,7 +391,7 @@ static void GameStateSave(SaveLoadInfo *sli)
     st.DB = g_cpu.DB, st.PB = g_cpu.PB, st.P = tmp.P, st.emulation = g_cpu.emulation;
     sli->func(sli, &st, sizeof(st));
 #ifndef IOG_RECEIVED_REFERENCE
-    GameStateTail tail = {kStateTailMagic, IogHoldAdvanceStateSave(), 0};
+    GameStateTail tail = {kStateTailMagic, IogHoldAdvanceStateSave(), IogHoldAdvanceHeldSave()};
     sli->func(sli, &tail, sizeof(tail));
 #endif
 }
@@ -414,7 +415,7 @@ static void GameStateLoad(SaveLoadInfo *sli, uint32_t version)
         memset(&tail, 0, sizeof(tail));
         sli->func(sli, &tail, sizeof(tail));
         if (tail.magic == kStateTailMagic)
-            IogHoldAdvanceStateLoad(tail.hold_advance_latched);
+            IogHoldAdvanceStateLoad(tail.hold_advance_latched, tail.hold_advance_held);
     }
 #endif
 #ifndef IOG_RECEIVED_REFERENCE
