@@ -138,6 +138,29 @@ on the launcher's Game page to **Open the setup screen**.
 | Achievements | Your local progress |
 | Soundtrack | Import an optional MSU-1 music pack. Off until you import one; the game plays the original SNES music |
 | Cheats and Mods | Cheats, and the conveniences: **Enhanced world map**, **Status display at the screen edges**, run (auto-run or hold), text speed, use key items on the spot, Red Jewel sparkles, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
+| Update | Finds the newest test build, shows what's new and its size, and installs it when you press **Update** |
+
+### Updating
+
+Builds from 0.2.0-beta.22 on update themselves; from beta 21 or earlier, download
+once by hand. The launcher checks GitHub when it starts (turn this off in the Update
+window) and the **Update** button then reads *Update available*. Nothing is installed
+until you press **Update**.
+
+- The new build goes into a folder next to the current one, named after its version
+  (for example `Games\Illusion of Gaia Companion\v0.2.0-beta.22`). The download is
+  checked against the checksums GitHub publishes for it and refused if it does not match.
+- Your data comes along: `saves`, `UserData` (achievements), `msu1` (an imported
+  soundtrack is moved, not copied), `screenshots`, `diagnostics`, `logs`, `config.ini`,
+  `keybinds.ini`, `rom.cfg`, your mod choices, a ROM kept in the folder and any other
+  file you added. Paths that pointed into the old folder are updated, and so is a
+  desktop or Start-menu shortcut to the launcher.
+- If anything fails, the update is undone and the current build keeps working.
+- The launcher then restarts from the new folder and removes the old one, but only if
+  everything left in it is part of the old download or an identical copy. Otherwise it
+  stays and the launcher lists what it kept. Close the game before updating.
+- Updates never need administrator rights. If the game sits in a folder you cannot
+  write to (such as Program Files), move it to one you own first.
 
 | Display page | Input page |
 | --- | --- |
@@ -145,7 +168,7 @@ on the launcher's Game page to **Open the setup screen**.
 
 ## Development status
 
-**Current build:** `0.2.0-beta.21`, Windows x64, pre-release for
+**Current build:** `0.2.0-beta.22`, Windows x64, pre-release for
 playtesting. Automated routes reach the ending and the credits; a full
 playthrough by a person is under way.
 

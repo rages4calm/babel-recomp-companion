@@ -1,12 +1,51 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 27,
-2026 (tester build `v0.2.0-beta.19`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.22`; later sections are dated by the beta
+they describe, and a later entry supersedes an earlier one on the same
+point). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
+
+## Beta 22 (November 27): launcher Update and Controls, secret achievements
+
+Build identities are in the release's `.sha256`; suites on the release build:
+world renderer 22,857,535, visual objects 107,116, widescreen 82,292, scene
+view 325,491, Minimal HUD 13 cases, hold advance, continuations, input
+bindings, package, gaialabs_asm 2,347 routines, achievements (observer
+1,019, progress, audit 96), launcher 1,193 + updater 131 + soundtrack 47 +
+activation 9 + mod settings 32.
+
+- **Update button:** proven end to end on synthetic packages from a local
+  feed (carry-over of every player-data kind, BOM-free state.toml, msu1
+  moved, shortcut retargeted, old folder removed, rollback at five failure
+  points) and clicked through once; a read-only GitHub query found beta 21
+  with the matching digest. Not exercised: a real GitHub download, a real
+  700 MB soundtrack, pinned taskbar and all-users shortcuts. Players on
+  beta 21 or earlier download beta 22 by hand once.
+- **Controls window:** writes keybinds.ini (one key per SNES button, SDL
+  names) and config.ini [KeyMap]/[GamepadMap] (controller remap, chords,
+  shortcuts) and [Controller] sources. Runner fix: a controller shortcut
+  named in [GamepadMap] now replaces its LT default. Proven by the runner's
+  own parsers (45/45) and the game's `SNESRECOMP_PAD_PROBE` on the virtual
+  pad: every key, button, trigger, stick and remapped shortcut arrived.
+  Not done: choosing which physical pad is player 1 or 2 (the game seats
+  pads by SDL index; one-player game), physical capture with real
+  hardware, real Windows DPI, a full click-through.
+- **Secret achievements** (catalog 2, 15 entries): teapot $D7, hedge
+  stranger $E1, buried laborer $D9, Ann's apples $E5, hidden house $A6,
+  Life Medicine $F0, stone girl $E6, snake game $E7, Solid Arm (leaving
+  $EA for $E3 after seeing him standing). Each flag has one writer off the
+  story path; each unlocked from real input in a disposable profile
+  (test-input build). Solid Arm was beaten with the `IOG_TEST_HUNT` helper
+  and the teapot's 1-in-16 roll was forced; not compared native vs
+  interpreter. `latesweep/flag-presets.json` lists $D9 as story from
+  before_sky_garden (marked INFERRED; the owner's playthrough contradicts
+  it). Two older titles were shortened to fit the toast; a test now caps
+  titles at 16 characters.
 
 ## GaiaLabs options (betas 18 to 20, November 26 and 27)
 
@@ -93,6 +132,18 @@ and interpreter; scripts in `.local/batch-001/gaiamods`):
     $0030,$008E; locked with the option off) and both slavers are gone.
     Native WRAM equals interpreter in every case. Not played: the
     full-inventory line, and $8D set without $B6 (slavers still there).
+    Beta 21 crashed Freejia with the option on whenever $5A, $B6 and $107
+    were all clear (the first visit included): the door and slavers jumped
+    from bank $07 into stock code that yields, and the actor resumed in bank
+    $07 (BRK, no actors). Fixed the same day (`b25769c`, download replaced):
+    each jump sets the resume bank first. Then played with $B6 clear, native
+    and interpreter: full inventory shows the pockets-full line and pays
+    nothing; Discard frees a slot, the retry pays exactly one, a further
+    talk and re-entry pay nothing; the harborer, door and both slavers are
+    stock before and changed after; telling the slaver pays his jewel and
+    removes the laborer. From a consistent history the total is exactly 50.
+    Known edge: taking the laborer's jewel and then switching the option off
+    lets the stock slaver pay as well (51); the option cannot prevent that.
   Found and fixed by playing them: names and GaiaLabs' speaker themes are
   commands of the Retranslation's own text engine (the stock one froze or
   drew garbage), questions need the stock $CA terminator, the box must open
@@ -123,7 +174,24 @@ and interpreter; scripts in `.local/batch-001/gaiamods`):
     clear leaves the spirit waiting; Will's ability tiles (name table 0)
     byte-identical with and without the pack while attacking; native WRAM
     equals interpreter. Earlier "talking did not start" was the test
-    standing too far away. Not played: the charged abilities next to it.
+    standing too far away.
+    Beta 22 resource check (option on, off and interpreter; native WRAM,
+    VRAM, OAM, CGRAM and framebuffer equal to the interpreter at every
+    dump): Psycho Dash, Spin Dash, Dark Friar and Aura Barrier fired
+    beside it (A held 160-170 frames), inventory and pause, a save state
+    loaded in the room, the round trip through $A8 (fire sprites and
+    Yorricks: VRAM, CGRAM and picture identical to option off) and the Yes
+    warp to $A0 (stock enemy art). Name table 0 and the rest of table 1
+    equal option off throughout; the spirit's tiles and cache slot are
+    right after every reload. Closing the inventory used to take one frame
+    longer (the close composes sprites twice with NMI off, and the spirit's
+    five sub-sprites pushed that past vblank, losing one NMI); fixed in
+    beta 22: a thinker hides the spirit on the frame Select opens the
+    inventory and the spirit shows itself again on its next tick, so $0036
+    and CGRAM equal option off after the close. Untested: Select while the
+    inventory is blocked by something the thinker does not check (the
+    spirit would vanish for a frame). Not run: Psycho Slider, Earthquaker, dying in $A9,
+    loading a file from the title, Freedan through $A8.
 
 **Not done:** title screens (new actor code and HDMA thinkers), borderless epilogue/adrift text
 (font changes by direct DMA), plain borders (changes the native dialogue
@@ -139,6 +207,12 @@ Great Wall to the Sand Fanger lair and back; Dao's snake game lifting the
 lock shows the HUD the next frame; save/load. Below the HUD rows every
 frame is pixel-identical on vs off. Not played: the lock set mid-scene by
 game code (only by poke), the Freejia kidnapper, boss rooms, run-ahead.
+Beta 22: a word the game writes to the hidden rows during the draw (zero
+included) is kept, through the runner's VRAM write log; before, a guest
+clear would have had the old HUD put back. No game path does this (every
+BG3 upload is NMI work inside the frame step, there is no raster IRQ and
+no HDMA to the VRAM port), so it was never visible; 13 cases in
+`scripts/test_iog_minimal_hud.py` (5 failed before).
 Debug menu, dungeon map, minimap, widescreen
 and walkable world map are not taken over: this port has its own.
 
@@ -176,6 +250,9 @@ interpreter and WRAM is compared at the end.
   ordinary enemies die with it, these bosses do not). Their defeats were
   covered by earlier controller replays, before ext6. Sand Fanger's run left
   the lair through its entrance corridor and never started the fight.
+  (Superseded for seven fights by "Boss fights to victory" below, which won
+  them with the game's own fight logic; Babel F2, F3, F5, F6 and the comet
+  flight are still not run to victory, and no connected campaign was played.)
 - **Not covered:** rooms with no warp entrance (`$84 $9E $9F $AA $AB $AF $C1
   $C2 $CA $CB`), the prologue/ending cutscenes, and full story order (the
   flags are staged, not earned).
@@ -530,7 +607,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.18`)
+## The tester build (beta 18; still true of beta 21)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot
@@ -612,8 +689,9 @@ launcher. Still open or untested:
   run-ahead 2 gives identical timelines. The earlier "keeps reopening" loop
   did not reproduce in the current build in 24 setups (town, dungeon, three
   forms, three speeds, four phases); its evidence folder no longer exists.
-  Not tested: a real state load or rewind with a button held (the script
-  runner releases buttons on the load frame), netplay.
+  A held button across a real state load, rewind and reset was tested in
+  beta 21 (see "Held button across a load" at the top). Still not tested:
+  the rewind panel operated by hand, run-ahead in the real game, netplay.
 - **All Red Jewels cheat** (fixed November 27): it gave 50 minus those
   given, so later finds pushed the total past 50 (the owner's save held 54,
   which the achievement observer refuses). It now collects exactly the
@@ -650,8 +728,13 @@ launcher. Still open or untested:
   switches the form to Will but never uploads his tiles before the map
   change, and the renderer read the player from ROM by the live form. It now
   decodes the player from VRAM while VRAM holds another form's sheet: 38 of
-  71 frames differed from the original before, none after. Still different:
-  the wide view's status display does not fade with the white-out.
+  71 frames differed from the original before, none after. The wide view's status
+  display now fades too (beta 22, `HudColorMath`: the defeat script's
+  fixed-colour add/subtract covers BG3, and the HUD plane was captured
+  before colour math); its pixels equal the original's from frame 9700 to
+  10232 except two low-brightness frames (at most 9/255 on up to 1,110
+  pixels). The black margins beside this narrow arena stay black, per the
+  narrow-room decision.
 - **Castoth's defeat** (fixed in beta 19): 9 frames fell back to the
   original picture (a stale metasprite fills the rest of OAM, which was
   accepted only for the last actor, as in Babel F2); now 0, and the 20 frames
@@ -661,7 +744,14 @@ launcher. Still open or untested:
 - **Not staged at all:** the pause menu's status page; state loads in the
   mosaic-revealed rooms other than Luke's house (`5A`, `7D`, the Gem rooms),
   which the fix covers by inference.
-- **Diamond Mine:** a line at world x of about 438. Open.
+- **Diamond Mine line** (scene $41, beta 22 check): not a renderer fault.
+  It is a real cable in the room's BG2 (a 1024-px column at layer x
+  648-655, scrolling at 3/2 of the camera, so it moves across the world);
+  with the camera brought to 376 the original 4:3 picture shows the same
+  cable and the wide field matches it outside the HUD. 19 Diamond Mine
+  room entries and 9 walks in $41: no field differences. Caveat: that
+  camera position was reached by poking Will's position; on foot the
+  camera went no further left than 472.
 - **Classic 16:9 picture** (fixed in beta 19, evidence in
   `.local/batch-001/agents/renderfix`): the Great Wall's green strip (the
   margin ran to the declared map width, past the art), Itory losing both side
@@ -675,8 +765,17 @@ launcher. Still open or untested:
 - **Walkable world map with Enhanced off, wide view:** the streaks are the
   original's coarse 1x ground, which this setting deliberately shows; the
   help text now says so. Classic and Original smooth it either way.
-- **Euro arrival:** black corners. Open.
-- **Prison entry** is still a fallback to the original picture in the audit.
+- **Euro arrival corners** (fixed in beta 22): while the scripted camera
+  runs past the map's edge (frames 378-504, up to x 856) the original
+  field shows the hardware tilemap ring there; the wide view now continues
+  that ring above and below the field (plain one-to-one layers on a 32-row
+  ring only). 16 of 16 sampled frames had black corners, none after; field
+  equal in all 139 compared frames; every other frame byte-identical.
+- **Prison entry** (beta 22 check): the authentic route from the throne
+  room ($0A) shows no lit fallback frame (the arrival wave is a supported
+  transition, field equal in 50 frames), and the cell scene stays wide to
+  frame 4623 (the cell's examine flags were poked to run the cutscene). The
+  old seed with the flat-blue phase is gone; that route is unchecked.
 - **Single lit fallback frames** once reported in scenes `58`, `06`, `68` and
   `FE` did not reproduce in the 413,000-frame census. Not explained.
 - **Walkable world map on the GPU path has no before/after pixel comparison.**
@@ -729,9 +828,9 @@ launcher. Still open or untested:
   in `650c757`, the map canvas of `bb17cdf`, stubs for this fork's
   `SnesRa_Idle` and `FrameSkipNext`); no assertion was loosened. The two
   received-ROM tests ran against the pinned GaiaLabs reference ROM, kept
-  apart from the Original build. Not covered: the WRAM-copy native path in
-  `test_native_continuations`. pytest is not installed; the upstream host
-  tests ran through a small stand-in runner.
+  apart from the Original build. The WRAM-copy native path is covered in
+  `test_native_continuations` since beta 21, and the stand-in host test
+  runner (pytest is not installed) now fails on any skip or missing case.
 - **Upstream's new hi-res (512-dot) surface is unused here.** The game owns
   `draw_frame` and does not provide `draw_hires_frame`.
 - **`build-tree.py` and `build-play.py`** still exist and link against the

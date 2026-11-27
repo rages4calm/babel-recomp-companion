@@ -312,7 +312,7 @@ ground uses it. The smooth (xBR) present filter in
 `runner/src/present_filter.*` and `desktop/opengl.c` is also local and
 absent upstream.
 
-The current public tester build is `v0.2.0-beta.21` (November 27, pre-release; beta 21 adds the GaiaLabs Freejia laborer return (actor records pointed at code in bank $07), the Mt. Kress shortcut (its spirit draws from OBJ name table 1 and copies its own tiles in that combat room) and Minimal HUD (presentation only, off by default), a held button masked across state loads, rewinds and resets, the Angkor shortcut and vision mosaics in the wide view, achievement pause reasons in the view, and stricter continuation and host test runners; beta 20 adds five GaiaLabs script options (Freejia and Angkor shortcuts, South Cape welcome back, Thankful Flower, Blue Journal) assembled by `scripts/gaialabs_asm.py` into free space and reached by moving the stock script's data pointer, so they run in the interpreter, and the hold-to-advance per-page timing; beta 19 adds the GaiaLabs JP Viper, Crystal Ring palette, Pyramid moving floors 2x and Shira's dream without the spotlight (the first option run as relocated script code in the interpreter), the hold-to-advance release latch saved in the state's game chunk, the achievement audit's block of automated runs (`IOG_ACHIEVEMENT_TEST_INPUT` for developer test builds only), the All Red Jewels cheat that never passes 50, three dialogue corrections, and the Classic 16:9, Dark Gaia white-out and Castoth defeat renderer fixes; beta 18 adds the GaiaLabs options package `iog.gaialabs` (JP backgrounds and palettes as in-place ROM data from `i18n/gaialabs-mods.bin`, built by `scripts/build_gaialabs_mods.py`; full-heal herbs; Pyramid portal exit); beta 17 builds with the ext6 native set from the late-game sweep, `sdk-update/ext6/effects/native_continuations.c`, and fixes Native Village falling back while running; beta 16 lets the Jeweler take every stacked Red Jewel at once; beta 15 adds Red Jewel sparkles drawn by the host; beta 14 adds using key items on the spot with A; beta 13 adds auto-run and a text speed setting after andrewclunn's Gaia and Time, with his permission; beta 12 fixes the owner's beta 11 marks: the plane at the 4:3 edges, black blocks on stairs entered mid-pan, stale edge columns under Mu's water wave and the item counter's font; beta 11 fixes the owner's beta 10 marks, listed in OPEN-WORK.md, and its dialogue pack was regenerated from a fresh clone of the pinned Retranslation revision in `.local/iogr-src`; beta 10 makes MSU-1 off by default; beta 9 fixed the sliding basement floor in Edward's Castle and adds the passive diagnostics; beta 8 added interrupt grants for the Mode 7 scroll routine; beta 7 was the first download with the compiled native game code, by the owner's decision, packaged with `--native` from `sdk-update/build`; beta 6 added the optional status display at the screen edges, `iog.graphics/edge_hud`; beta 5 removed the paused Companion menu: Start opens the map, achievements open from the settings; it carries the fixes from the owner's first playtest,
+The current public tester build is `v0.2.0-beta.22` (November 27, pre-release; beta 22 adds nine secret achievements (one flag each, set only by that secret; Solid Arm by leaving his lair after seeing him standing), the launcher's Update button (GitHub releases, digest-checked, side-by-side install carrying player data, shortcut retarget, old folder removed) and Controls window (keyboard, controller and shortcut remapping onto keybinds.ini and config.ini [KeyMap]/[GamepadMap]), the Euro arrival ring strip and the HUD following fixed-colour math (Dark Gaia's white-out), Minimal HUD keeping guest writes, the Kress spirit hiding during the inventory close (no lost frame), and the Freejia crash fix also re-uploaded into beta 21; beta 21 adds the GaiaLabs Freejia laborer return (actor records pointed at code in bank $07), the Mt. Kress shortcut (its spirit draws from OBJ name table 1 and copies its own tiles in that combat room) and Minimal HUD (presentation only, off by default), a held button masked across state loads, rewinds and resets, the Angkor shortcut and vision mosaics in the wide view, achievement pause reasons in the view, and stricter continuation and host test runners; beta 20 adds five GaiaLabs script options (Freejia and Angkor shortcuts, South Cape welcome back, Thankful Flower, Blue Journal) assembled by `scripts/gaialabs_asm.py` into free space and reached by moving the stock script's data pointer, so they run in the interpreter, and the hold-to-advance per-page timing; beta 19 adds the GaiaLabs JP Viper, Crystal Ring palette, Pyramid moving floors 2x and Shira's dream without the spotlight (the first option run as relocated script code in the interpreter), the hold-to-advance release latch saved in the state's game chunk, the achievement audit's block of automated runs (`IOG_ACHIEVEMENT_TEST_INPUT` for developer test builds only), the All Red Jewels cheat that never passes 50, three dialogue corrections, and the Classic 16:9, Dark Gaia white-out and Castoth defeat renderer fixes; beta 18 adds the GaiaLabs options package `iog.gaialabs` (JP backgrounds and palettes as in-place ROM data from `i18n/gaialabs-mods.bin`, built by `scripts/build_gaialabs_mods.py`; full-heal herbs; Pyramid portal exit); beta 17 builds with the ext6 native set from the late-game sweep, `sdk-update/ext6/effects/native_continuations.c`, and fixes Native Village falling back while running; beta 16 lets the Jeweler take every stacked Red Jewel at once; beta 15 adds Red Jewel sparkles drawn by the host; beta 14 adds using key items on the spot with A; beta 13 adds auto-run and a text speed setting after andrewclunn's Gaia and Time, with his permission; beta 12 fixes the owner's beta 11 marks: the plane at the 4:3 edges, black blocks on stairs entered mid-pan, stale edge columns under Mu's water wave and the item counter's font; beta 11 fixes the owner's beta 10 marks, listed in OPEN-WORK.md, and its dialogue pack was regenerated from a fresh clone of the pinned Retranslation revision in `.local/iogr-src`; beta 10 makes MSU-1 off by default; beta 9 fixed the sliding basement floor in Edward's Castle and adds the passive diagnostics; beta 8 added interrupt grants for the Mode 7 scroll routine; beta 7 was the first download with the compiled native game code, by the owner's decision, packaged with `--native` from `sdk-update/build`; beta 6 added the optional status display at the screen edges, `iog.graphics/edge_hud`; beta 5 removed the paused Companion menu: Start opens the map, achievements open from the settings; it carries the fixes from the owner's first playtest,
 Windows x64). It is the interpreter-only build from
 `.local/batch-001/release/build`, packaged by `scripts/package_release.py`
 with `--companion` and `--gaialabs`: the Companion launcher, the generated
@@ -329,6 +329,13 @@ build on the hidden desktop with no developer variables.
 One more local delta to the vendored runner (November 26): `SNESRECOMP_INTERP_RESIDUAL=<file>`
 in `runner/src/snes/interp_bridge.c` logs each instruction the interpreter itself runs.
 Off unless set; carry it across SDK updates.
+
+Local delta to the vendored runner (November 27, beta 22): the VRAM write-log
+hook (`ppu_note_vram_write_log()` in `runner/src/snes/ppu.c`/`ppu.h`) now also
+fires for `WriteVramWord`'s 16-bit stores in `runner/src/common_rtl.c` (the
+hook's own comment promised every CPU write through $2118/$2119). Minimal HUD
+uses it to keep the game's own writes to the hidden HUD rows. Carry it across
+SDK updates.
 
 Local deltas to the vendored runner from the owner's first playtest
 (November 26); carry them across any SNESRecomp update:
@@ -347,6 +354,19 @@ Local deltas to the vendored runner from the owner's first playtest
 - `snes_overlay_draw.c/.h`: `snes_ovl_set_button_draw` (`SnesOvlButtonFn`)
   lets the game draw the overlay's button glyphs, and
   `snes_ovl_frame_layer_peek` lets it edit the frame layer.
+- Input editor (November 27, the launcher's Controls window):
+  `desktop/mmx_config.c` sets `has_pad_keynameid` when `[GamepadMap]` names a
+  controller shortcut (it was declared and read but never set, so
+  `SettingsMenu = R3` added R3 and kept LT+R3, and a built-in LT shortcut
+  could not be moved or cleared; files that name none behave as before) and
+  adds `ConfigCommandName` (declared in `desktop/config.h`).
+  `desktop/host_main.c` adds the diagnostic `SNESRECOMP_PAD_PROBE=<frame>[,seat]`
+  (`PadProbeKeys`, `PadProbeTick`, `g_pad_probe*`; off unless set): it prints
+  each keybinds.ini binding and the guest bits it makes, every `[KeyMap]`
+  shortcut, then presses each control of the self-test virtual pad seated as
+  that player and prints what reached the guest and which command it resolved
+  to, never running a shortcut. ROM-free check of the parsers:
+  `scripts/test_input_bindings.py`.
 
 The game side of the same fixes: `GameSnapshotPreflight`, `GameStateLoaded`
 and `GameHardwareReset` in `src/game_rtl.c` keep the live battery save across
@@ -2245,6 +2265,19 @@ pre-credit/pre-PB candidates remain failed; see its detailed note.
 python scripts/test_package_release.py
 python scripts/package_release.py build windows-x86_64 --companion companion/bin/Release/net8.0-windows
 ```
+
+Release steps for the launcher's updater (November 27): `package_release.py` now
+writes `dist/<zip>.sha256` (`<hex> *<zip name>`) next to the zip. Attach **both**
+files to the GitHub release (`gh release upload <tag> dist/<zip> dist/<zip>.sha256`),
+keep the asset name `babel-recomp-<VERSION>-windows-x86_64.zip` with its single top
+folder of the same name, and tag `v<VERSION>`: the updater only offers a release whose
+tag parses as SemVer and whose zip name matches it, and refuses a download that has
+neither GitHub's asset digest nor the `.sha256`. Build the launcher from the release
+`VERSION` (it is stamped into the assembly and compared with the feed). Drafts are
+never offered; pre-releases are. Updater tests: `companion/build.ps1 -Test`
+(`--update-tests`); the end-to-end scratch proof is
+`.local/batch-001/agents/updater/e2e.py` (two synthetic packages built from the
+beta.21 zip, loopback feed, unattended launcher run).
 
 The shared launcher package feed is the sibling CompanionLauncher checkout.
 The compiled engine is `build/babel-recomp.exe`, currently the selected private
