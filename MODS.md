@@ -31,6 +31,10 @@ play stays the stock USA ROM (the launcher verifies it).
 | | Pyramid portals | Portals lead to the entrance hall's lower area |
 | | Pyramid moving floors 2x | The Pyramid's moving floors travel twice as fast |
 | | Shira's dream: no spotlight | Will's dream of his mother stays fully lit (off by default) |
+| | Shortcuts | Sam takes you from the Diamond Mine to Freejia; a voice in Angkor Wat takes you back to its entrance |
+| | South Cape: welcome back | South Cape's people greet you when you return later in the story |
+| | Thankful Flower | The aqueduct flower thanks you once you have played the melody |
+| | Blue Journal | Lance's father gives you his journal when you visit him |
 | *(any data-only package)* | HD graphics | Replacement art, see `snesrecomp/docs/HD_PACKS.md` |
 
 ## MSU-1 soundtrack
@@ -155,18 +159,33 @@ the launcher's Mods page (GaiaLabs section).
   dream of his mother on the Gold Ship the room stays lit while they talk.
   Her lines open with the same short pause as before, so the Retranslation
   text still applies.
+- **Shortcut: Mines to Freejia**: once he has given you the melody, Sam
+  offers to take you straight to Freejia. GaiaLabs plays a world-map trip on
+  the way; here he takes you directly, because the mine room has no
+  world-map name in the original game.
+- **Shortcut: Angkor Wat**: after the Gorgon Flower, a voice offers to take
+  you back to the temple's entrance.
+- **South Cape: welcome back**: once you have reached Watermia, South Cape's
+  people (17 of them, in the town and its houses) greet you instead of their
+  old lines.
+- **Thankful Flower**: the flower in the aqueduct doorway thanks you once
+  you have played the melody.
+- **Blue Journal**: Lance's father gives you his journal when you have read
+  his letter (or when you return), if you have room for it. The journal's
+  own text is the Retranslation's.
 
 GaiaLabs' patches change game code, which the native build cannot take
 over; these three do the same to the game's state from the host instead,
-and Shira's talk handler is a copy without the spotlight cue, placed in free
-space and run by the interpreter.
+and the script options (Shira, the shortcuts, South Cape, the flower, the
+journal) are GaiaLabs' own script code, assembled for the original game
+(`scripts/gaialabs_asm.py`), placed in free space and run by the
+interpreter; their new lines are spelled for the original text engine.
 Options that overlap this port's own features (map, minimap, widescreen,
 walkable world map, run button, text speed) are not taken over. Not yet
-available: the title screens, the
-shortcuts (Mines to Freejia, Mt. Kress, Angkor Wat), the cut content (Sky
-Delivery Man, Blue Journal) and extras (borderless epilogue and adrift text,
-Thankful Flower, South Cape return, Freejia slave return,
-minimal HUD, plain borders) and the Portuguese translation.
+available: the title screens, the Mt. Kress shortcut (its spirit cannot be
+drawn in that room), the Sky Delivery Man, the borderless epilogue and
+adrift text, the Freejia slave return, minimal HUD, plain borders and the
+Portuguese translation.
 
 ## Apocalypse Gaia
 

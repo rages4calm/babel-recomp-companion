@@ -59,7 +59,9 @@ window's resolution; the others use the optional HD Mode 7 setting.
   Itory and Great Wall backgrounds, red fountain, church cross, prologue
   palettes and recoloured Crystal Ring (and, optionally, the purple Diamond
   Mine and the JP Viper), herbs that heal fully, Pyramid portals that lead to
-  the lower hall, Pyramid moving floors at twice the speed, and (optionally)
+  the lower hall, Pyramid moving floors at twice the speed, shortcuts from
+  the Diamond Mine to Freejia and back to Angkor Wat's entrance, South Cape's
+  welcome back, the Thankful Flower, the Blue Journal, and (optionally)
   Shira's dream without the spotlight. The JP art loads through the
   game's own code, so it works natively and in the wide view.
 - **Achievements**, saved on your PC, with a controller-friendly browser in
@@ -140,7 +142,7 @@ on the launcher's Game page to **Open the setup screen**.
 
 ## Development status
 
-**Current build:** `0.2.0-beta.19`, Windows x64, pre-release for
+**Current build:** `0.2.0-beta.20`, Windows x64, pre-release for
 playtesting. Automated routes reach the ending and the credits; a full
 playthrough by a person is under way.
 

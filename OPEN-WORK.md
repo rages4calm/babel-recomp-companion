@@ -8,7 +8,7 @@ Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
 
-## GaiaLabs options (betas 18 and 19, November 26 and 27)
+## GaiaLabs options (betas 18 to 20, November 26 and 27)
 
 The optional modules of GaiaLabs' Retranslated patcher (gaiahack.ing,
 IOGRetranslation `1bedfbad`, manifest "1.45"), package `iog.gaialabs`.
@@ -55,12 +55,47 @@ and interpreter; scripts in `.local/batch-001/gaiamods`):
 - Save states made with the other setting: the art they hold is swapped in
   VRAM/WRAM/CGRAM within half a second (all four directions, Great Wall).
 
-**Not done:** title screens (new actor code and HDMA thinkers), shortcuts
-(Freejia, Mt. Kress, Angkor Wat), Sky Delivery Man, Blue Journal, borderless
-epilogue/adrift text, Thankful Flower, South Cape return, Freejia slave
-return, plain borders, Portuguese. The Shira route (relocated script code
-reached through a data pointer) is the way to most of them; they also need
-new dialogue strings in the game's text encoding.
+- Script options (beta 20, evidence in `.local/batch-001/agents/play-sc`,
+  `play-sh`, `play-bj`): GaiaLabs' module code assembled for the original
+  game by `scripts/gaialabs_asm.py` (which reassembles 2,347 stock routines
+  byte for byte, `test_gaialabs_asm.py`), placed in free space in the bank
+  of the stock script that reaches it, and that script's data pointer moved
+  there; it runs in the interpreter. Each was played on native and
+  interpreter with identical WRAM:
+  - Freejia shortcut: Sam's second talk asks, "Go" lands in the Freejia
+    hotel ($39 at $0048,$01C0), "Stay" keeps him. No world-map trip: the
+    mine room ($47) has no world-map name, so GaiaLabs' trip hung there.
+  - Angkor shortcut: after the Gorgon Flower (also on the full-inventory
+    path) the voice asks, "Yes" lands at the temple entrance ($B0). The
+    vision routine, which reaches the replaced one by falling through, is
+    copied byte for byte from the ROM. The arrival title card shows 145
+    frames of 4:3 mosaic fallback; the room's stock vision warp shows the
+    same kind (70 frames), but a stock arrival into $B0 was not compared.
+  - South Cape: five of the 17 people (town, Erik's, Seth's, the chef's,
+    the church) say "Welcome back Will!" once flag $8D is set, in their own
+    colours; stock lines otherwise. The other 12 were not talked to.
+  - Thankful Flower: thanks you once flag $113 is set (the flag $02 path
+    could not be staged).
+  - Blue Journal: all branches (letter, return, already held, full
+    inventory, neither) and reading the journal.
+  Found and fixed by playing them: names and GaiaLabs' speaker themes are
+  commands of the Retranslation's own text engine (the stock one froze or
+  drew garbage), questions need the stock $CA terminator, the box must open
+  before the speaker colour, and Sam's map trip hung.
+- Hold to advance (beta 20): a tap now turns exactly one page (a 4-8 frame
+  tap could turn two and flash the second past), and a held button gives
+  each page a full period. Tested on the journal's full-inventory branch
+  and the earlier cases, run-ahead included.
+
+**Not done:** title screens (new actor code and HDMA thinkers), Mt. Kress
+shortcut (built and tested: the spirit spawns and the room's camera works,
+but scene $A9 is a combat room whose sprite tiles hold Will's abilities, so
+the spirit drew as garbage, and talking to it did not start), Freejia slave
+return (its routines fall through into stock code, one string jumps into
+another, and it gives a 51st Red Jewel), borderless epilogue/adrift text
+(font changes by direct DMA), plain borders (changes the native dialogue
+renderer), Sky Delivery Man (part of GaiaLabs' base, not a module),
+Portuguese.
 **Minimal HUD:** not done. The game's own per-scene HUD-off bit (display
 preset byte +7) cannot express it as data: 10 of the presets are shared by
 combat and non-combat rooms and only 3 preset slots are free. It needs the
