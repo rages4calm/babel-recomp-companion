@@ -1,12 +1,58 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 26,
-2026 (tester build `v0.2.0-beta.17`). Read `HANDOFF.md` for
+2026 (tester build `v0.2.0-beta.18`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
 and no tool has looked. "Not played" means automated replays ran but no person
 played it.
+
+## GaiaLabs options (beta 18, November 26)
+
+The optional modules of GaiaLabs' Retranslated patcher (gaiahack.ing,
+IOGRetranslation `1bedfbad`, manifest "1.45"), package `iog.gaialabs`.
+GaiaLabs ships them as assembly patches and art for its own ROM rebuild;
+code patches cannot run on the native build, so each was redone.
+
+**Done and tested** (each room through a real doorway, option on and off,
+native and interpreter; reports in `.local/batch-001/gaiamods/r4`):
+
+- JP Edward Castle, Itory (six rooms) and Great Wall (four) backgrounds, the
+  church cross (four South Cape rooms), purple mines (two rooms), red
+  fountain (scene $5D with flag $70 clear) and the prologue palettes (the
+  title's attract demo through $8C-$8F). The art is GaiaLabs' module data,
+  recompressed (minimum-bit QuintetLZ) into the stock spans after the
+  startup identity checks; one tilemap goes to the $FF padding at the end of
+  bank $06, and the two longer JP parallax tables to the end of bank $01 or
+  the stock slots they free. Native = interpreter WRAM in every room; no new
+  renderer fallback; the wide view, its margins and the 4:3 picture all show
+  the JP art. Compared with GaiaLabs' own preview images: Great Wall, Itory,
+  Edward, church, mines and fountain match.
+- Save states made with the other setting: the stock (or JP) art they hold is
+  swapped in VRAM/WRAM/CGRAM within half a second, including the palette copy
+  the game keeps in WRAM and uploads again (all four directions tested in the
+  Great Wall, art and palette). Without this the JP palette landed on stock
+  art (blue bands at the Great Wall) until the area was left, or stock
+  colours stayed on JP art after loading a state with no room change.
+- Herbs heal fully (5 -> 40 HP; stock 13), native = interpreter.
+- Pyramid portal exit: lands in the lower hall ($01F8,$0380) from room $CE,
+  native = interpreter. Tested with the portal's request written directly,
+  not by walking into a portal.
+
+**Not done:** Pyramid elevator 2x (written, but the floor never started in a
+test, so it was taken out), title screens, JP Viper (needs a spritemap
+rebuild), crystal ring palette (needs a new sprite loader), shortcuts
+(Freejia, Mt. Kress, Angkor Wat), Sky Delivery Man, Blue Journal, borderless
+epilogue/adrift text, Thankful Flower, South Cape return, Freejia slave
+return, Shira spotlight, minimal HUD, plain borders, Portuguese. Most need a
+host way to add dialogue choices and warps to existing people; that is the
+next piece of work. Debug menu, dungeon map, minimap, widescreen and walkable
+world map are not taken over: this port has its own.
+
+**Not played** by a person. No in-game settings rows: the options are on the
+launcher's Mods page (GaiaLabs section); a data option shows the next time
+its room loads.
 
 ## Late-game sweep, Great Wall to Dark Gaia (beta 17, November 26)
 
@@ -392,7 +438,7 @@ after a crash (the half-minute rewrite is the fallback).
   - **Reported upstream** as RetroPortingToolKit/snesrecomp#323 with a
     game-free test. No reply yet; a PR was offered, not sent.
 
-## The tester build (`v0.2.0-beta.17`)
+## The tester build (`v0.2.0-beta.18`)
 
 - **Not played by a person.** It was checked from a clean unzipped folder
   with no developer variables: a room, the walkable world map and a cold boot

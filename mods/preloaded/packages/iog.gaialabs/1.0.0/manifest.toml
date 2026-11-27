@@ -1,0 +1,113 @@
+format_version = 1
+id = "iog.gaialabs"
+version = "1.0.0"
+name = "GaiaLabs options"
+author = "GaiaLabs (Azarem and contributors); Companion port"
+description = "Options from the GaiaLabs Illusion of Gaia: Retranslated patcher (gaiahack.ing), on the original game. The JP backgrounds and palettes are GaiaLabs' module data (GPL-3.0) laid into the game's own art; the gameplay options do what GaiaLabs' patches do. Defaults follow GaiaLabs."
+license = "GPL-3.0-or-later"
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "illusionofgaiausa-usa"
+rom_sha256 = "32adc048fd89228a4310c03df243e83de7d436cdb2460b4cc83ade20d359b2bd"
+
+[[feature]]
+id = "jp_edward"
+name = "Edward Castle background: JP"
+description = "The Japanese release's mountains behind Edward Castle, with its own parallax layers. Off: the North American background."
+group = "JP content"
+default_enabled = true
+
+[[plugin]]
+feature = "jp_edward"
+id = "iog.gaialabs.jp_edward"
+
+[[feature]]
+id = "jp_itory"
+name = "Itory background: JP"
+description = "The Japanese release's mountains around Itory, with its own parallax layers. Off: the North American background."
+group = "JP content"
+default_enabled = true
+
+[[plugin]]
+feature = "jp_itory"
+id = "iog.gaialabs.jp_itory"
+
+[[feature]]
+id = "jp_wall"
+name = "Great Wall background: JP"
+description = "The Japanese release's dunes behind the Great Wall. Off: the North American background."
+group = "JP content"
+default_enabled = true
+
+[[plugin]]
+feature = "jp_wall"
+id = "iog.gaialabs.jp_wall"
+
+[[feature]]
+id = "red_fountain"
+name = "Fountain colour: JP (red)"
+description = "The fountain shimmers red as in the Japanese release. Off: the North American brown."
+group = "JP content"
+default_enabled = true
+
+[[plugin]]
+feature = "red_fountain"
+id = "iog.gaialabs.red_fountain"
+
+[[feature]]
+id = "jp_church"
+name = "Church cross: JP"
+description = "The Japanese release's cross in the church instead of the North American statue."
+group = "JP content"
+default_enabled = true
+
+[[plugin]]
+feature = "jp_church"
+id = "iog.gaialabs.jp_church"
+
+[[feature]]
+id = "jp_mines"
+name = "Diamond Mine colours: JP (purple)"
+description = "The Japanese release's purple Diamond Mine. Off: the North American brown."
+group = "JP content"
+default_enabled = false
+
+[[plugin]]
+feature = "jp_mines"
+id = "iog.gaialabs.jp_mines"
+
+[[feature]]
+id = "jp_prologue"
+name = "Prologue palettes: JP (dark)"
+description = "The Japanese release's darker palettes for the prologue's legends. Off: the lighter North American ones."
+group = "JP content"
+default_enabled = true
+
+[[plugin]]
+feature = "jp_prologue"
+id = "iog.gaialabs.jp_prologue"
+
+[[feature]]
+id = "full_herb"
+name = "Herbs heal fully"
+description = "A herb refills all of Will's HP instead of 8."
+group = "Quality of life"
+default_enabled = true
+
+[[plugin]]
+feature = "full_herb"
+id = "iog.gaialabs.full_herb"
+
+[[feature]]
+id = "portal_exit"
+name = "Pyramid portals: lower hall"
+description = "The portals in the Pyramid's rooms take you to the lower main area of the entrance hall instead of its top; the hall's own lower portal still takes you to the top."
+group = "Quality of life"
+default_enabled = true
+
+[[plugin]]
+feature = "portal_exit"
+id = "iog.gaialabs.portal_exit"
+

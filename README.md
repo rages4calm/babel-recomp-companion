@@ -54,6 +54,12 @@ window's resolution; the others use the optional HD Mode 7 setting.
   higher camera, place markers and a minimap.
 - **GaiaLabs Retranslation**, included: 1,133 retranslated dialogue entries,
   all 124 approved menu strings and all 64 named room titles.
+- **GaiaLabs options**, from the Retranslated patcher at
+  [gaiahack.ing](https://gaiahack.ing): the Japanese release's Edward Castle,
+  Itory and Great Wall backgrounds, red fountain, church cross and prologue
+  palettes (and an optional purple Diamond Mine), herbs that heal fully, and
+  Pyramid portals that lead to the lower hall. The JP art loads through the
+  game's own code, so it works natively and in the wide view.
 - **Achievements**, saved on your PC, with a controller-friendly browser in
   the in-game settings.
 - **Optional MSU-1 orchestral soundtrack**, imported and verified on the
@@ -132,7 +138,7 @@ on the launcher's Game page to **Open the setup screen**.
 
 ## Development status
 
-**Current build:** `0.2.0-beta.17`, Windows x64, pre-release for
+**Current build:** `0.2.0-beta.18`, Windows x64, pre-release for
 playtesting. Automated routes reach the ending and the credits; a full
 playthrough by a person is under way.
 
@@ -211,8 +217,10 @@ This port stands on the work of many people. Thank you all.
   **[recomp-ui](https://github.com/RetroPortingToolKit/recomp-ui)**.
 - **[GaiaLabs Retranslation](https://github.com/Azarem/IOGRetranslation)** by
   Azarem and contributors (GPL-3.0) — the retranslated script and the walkable
-  world map. Release builds include a dialogue pack and map data generated
-  from that source; see `i18n/GAIALABS-NOTICE.md` in the download.
+  world map, and the optional JP content and quality-of-life modules
+  (gaiahack.ing). Release builds include a dialogue pack, map data and the
+  options' art generated from that source; see `i18n/GAIALABS-NOTICE.md` in
+  the download.
 - **[GaiaLabs](https://github.com/Azarem/GaiaLabs)** by Azarem — the Illusion
   of Gaia ROM-hacking toolkit, disassembly and database: symbols, text format,
   and the reference patches behind the run button, New Game+, music transitions

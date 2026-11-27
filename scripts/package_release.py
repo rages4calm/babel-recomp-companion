@@ -86,7 +86,7 @@ def package(build: Path, tag: str, root: Path = ROOT, companion: Path | None = N
         if gaialabs is not None:
             # Generated from the public GPL-3.0 Retranslation source; shipped
             # as separate data with its notice and license.
-            for filename in ("gaialabs-dialogue.tsv", "gaialabs-world-map.bin"):
+            for filename in ("gaialabs-dialogue.tsv", "gaialabs-world-map.bin", "gaialabs-mods.bin"):
                 source = gaialabs / filename
                 if source.is_symlink() or not source.is_file():
                     raise ValueError(f"Missing or linked GaiaLabs data: {filename}")
