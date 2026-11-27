@@ -20,6 +20,13 @@ def waiter(request, tmp_path_factory):
     body = source[begin:end].replace("#ifdef _WIN32", "#if TEST_WINDOWS")
     if "static void CloseDeadlineTimer(" not in body:
         body += "static void CloseDeadlineTimer(void) {}\n"
+    extra = ""
+    if "static bool FrameSkipNext(" in body:
+        # The fork's frame-skip pacer sits between WaitUntil and DisplayRefresh,
+        # so it is compiled here too: give it its one config field and keep it
+        # from tripping -Werror=unused-function. It is not under test here.
+        extra = ("static struct { bool frame_skip; } g_config;\n"
+                 "__attribute__((unused)) static bool FrameSkipNext(bool paced, double frame_start);\n")
     out = tmp_path_factory.mktemp("waiter-" + str(request.param))
     prelude = r'''
 #include <assert.h>
@@ -117,7 +124,7 @@ int main(int argc, char **argv) {
   return 0;
 }
 '''
-    cfile = out / "waiter.c"; cfile.write_text(prelude + body + main)
+    cfile = out / "waiter.c"; cfile.write_text(prelude + extra + body + main)
     exe = out / ("waiter.exe" if os.name == "nt" else "waiter")
     unused = [] if "static bool WaitUntilNative(" in body else ["-Wno-unused-function", "-Wno-unused-variable"]
     subprocess.run([cc, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", *unused,

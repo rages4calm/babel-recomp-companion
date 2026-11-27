@@ -55,7 +55,12 @@ int main(int argc,char**argv){
  IogMapHostNav(0,132);IogMapHostNav(SNES_PAD_RIGHT,148);C(!ui.radar&&preferences_saved);
  IogMapHostControlSet(IOG_MAP_BACK,5);C(controls[IOG_MAP_BACK]==5&&preferences_saved);
  const uint32_t *image=NULL;int width=0,height=0;
- C(IogMapHostImage(&image,&width,&height)&&image&&width==598&&height==336);
+ /* The paused canvas is the host overlay size: twice the last presented frame
+  * (stock 256x224 until a frame is noted, so 512x448; 384x224 wide -> 768x448). */
+ int ow=0,oh=0;IogMapHostOverlaySize(&ow,&oh);C(ow==512&&oh==448);
+ C(IogMapHostImage(&image,&width,&height)&&image&&width==ow&&height==oh);
+ IogMapHostDrawRadar(NULL,0,384,224);IogMapHostOverlaySize(&ow,&oh);C(ow==768&&oh==448);
+ C(IogMapHostImage(&image,&width,&height)&&image&&width==768&&height==448);
  IogMapHostShutdown();C(IogMapHostControlGet(IOG_MAP_BACK)==5&&!IogMapHostRadarEnabled());
  sha256_compute(ram,sizeof(ram),after);C(!memcmp(before,after,32)&&g_cpu.master_cycles==123456);
  IogMapHostShutdown();free(rom);g_snes=NULL;

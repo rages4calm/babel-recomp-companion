@@ -178,6 +178,9 @@ static void SetAudioPaused(bool paused) { (void)paused; }
 static void ResetAudioTimeline(void) {}
 static uint64_t RtlStateGeneration(void) { return 0; }
 static void OverlayNoteClosed(void) {}
+/* The fork's rewind loop keeps RetroAchievements serviced while it owns the
+ * screen (achievements/snes_ra.h); nothing to service here. */
+static void SnesRa_Idle(void) {}
 static void GameReset(void) {}
 static void PresentFrozenWithOverlay(void) {}
 static int snes_rewind_is_open(void) { return rewind_open; }
