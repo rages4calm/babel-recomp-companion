@@ -123,6 +123,61 @@ feature = "no_shira"
 id = "iog.gaialabs.no_shira"
 
 [[feature]]
+id = "freejia_shortcut"
+name = "Shortcut: Mines to Freejia"
+description = "Sam offers to take you straight to Freejia from the Diamond Mine, skipping the walk back."
+group = "Quality of life"
+default_enabled = true
+
+[[plugin]]
+feature = "freejia_shortcut"
+id = "iog.gaialabs.freejia_shortcut"
+
+[[feature]]
+id = "angkor_shortcut"
+name = "Shortcut: Angkor Wat"
+description = "A voice in Angkor Wat offers to take you back to its entrance."
+group = "Quality of life"
+default_enabled = true
+
+[[plugin]]
+feature = "angkor_shortcut"
+id = "iog.gaialabs.angkor_shortcut"
+
+[[feature]]
+id = "south_cape_return"
+name = "South Cape: welcome back"
+description = "When you return to South Cape later in the story, its people greet you."
+group = "Extras"
+default_enabled = true
+
+[[plugin]]
+feature = "south_cape_return"
+id = "iog.gaialabs.south_cape_return"
+
+[[feature]]
+id = "thankful_flower"
+name = "Thankful Flower"
+description = "The flower in the aqueduct doorway thanks you once you have played the melody."
+group = "Extras"
+default_enabled = true
+
+[[plugin]]
+feature = "thankful_flower"
+id = "iog.gaialabs.thankful_flower"
+
+[[feature]]
+id = "blue_journal"
+name = "Blue Journal"
+description = "Lance's father gives you his journal when you return, and the journal reads with GaiaLabs' text."
+group = "Extras"
+default_enabled = true
+
+[[plugin]]
+feature = "blue_journal"
+id = "iog.gaialabs.blue_journal"
+
+[[feature]]
 id = "full_herb"
 name = "Herbs heal fully"
 description = "A herb refills all of Will's HP instead of 8."

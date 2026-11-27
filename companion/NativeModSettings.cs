@@ -54,6 +54,11 @@ public static class NativeModSettings
         Toggle("gaialabs.jp-viper", "GaiaLabs", "Viper: JP", "iog.gaialabs", "jp_viper", "The Japanese release's Viper boss sprites (GaiaLabs). Off: the North American Viper."),
         Toggle("gaialabs.crystal-ring", "GaiaLabs", "Crystal Ring: new palette", "iog.gaialabs", "crystal_ring", "GaiaLabs' recoloured Crystal Ring in the inventory.", true),
         Toggle("gaialabs.no-shira", "GaiaLabs", "Shira's dream: no spotlight", "iog.gaialabs", "no_shira", "In Will's dream of his mother, the picture does not close in to a spotlight while she talks (GaiaLabs)."),
+        Toggle("gaialabs.freejia-shortcut", "GaiaLabs", "Shortcut: Mines to Freejia", "iog.gaialabs", "freejia_shortcut", "Sam offers to take you straight to Freejia from the Diamond Mine, skipping the walk back (GaiaLabs).", true),
+        Toggle("gaialabs.angkor-shortcut", "GaiaLabs", "Shortcut: Angkor Wat", "iog.gaialabs", "angkor_shortcut", "A voice in Angkor Wat offers to take you back to its entrance (GaiaLabs).", true),
+        Toggle("gaialabs.south-cape-return", "GaiaLabs", "South Cape: welcome back", "iog.gaialabs", "south_cape_return", "When you return to South Cape later in the story, its people greet you (GaiaLabs).", true),
+        Toggle("gaialabs.thankful-flower", "GaiaLabs", "Thankful Flower", "iog.gaialabs", "thankful_flower", "The flower in the aqueduct doorway thanks you once you have played the melody (GaiaLabs).", true),
+        Toggle("gaialabs.blue-journal", "GaiaLabs", "Blue Journal", "iog.gaialabs", "blue_journal", "Lance's father gives you his journal when you return, and the journal reads with GaiaLabs' text (GaiaLabs).", true),
         Toggle("gaialabs.full-herb", "GaiaLabs", "Herbs heal fully", "iog.gaialabs", "full_herb", "A herb refills all of Will's HP instead of 8 (GaiaLabs).", true),
         Toggle("gaialabs.portal-exit", "GaiaLabs", "Pyramid portals: lower hall", "iog.gaialabs", "portal_exit", "The portals in the Pyramid's rooms take you to the lower main area of the entrance hall instead of its top (GaiaLabs).", true),
         Toggle("gaialabs.elevator", "GaiaLabs", "Pyramid moving floors: 2x", "iog.gaialabs", "elevator", "The Pyramid's moving floors travel twice as fast, over the same distance (GaiaLabs).", true)

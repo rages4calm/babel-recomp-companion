@@ -122,6 +122,7 @@ def compact(src):
 class Sources:
     def __init__(self, retranslation, commit, baserom, rom):
         self.re, self.commit, self.rom = retranslation, commit, rom
+        self.baserom = baserom
         head = subprocess.run(["git", "-C", retranslation, "rev-parse", commit + "^{commit}"],
                               capture_output=True, text=True, check=True).stdout.strip()
         if head != commit: raise SystemExit("commit %s is not a full commit id" % commit)
@@ -276,7 +277,7 @@ def no_shira(src, pack):
             not re.search(r"COP \[BE\] \( #02, #01, &code_list_059491 \)", patch):
         raise SystemExit("no-shira-spotlight: the module is not the expected change")
     stock = bytes.fromhex("02cc0e02bfb89402be02019194")      # SetFlagByte #0E; print; options
-    handler, operand, at = 0x059484, 0x05947D, 0x05FEF0
+    handler, operand, at = 0x059484, 0x05947D, 0x05FFE4
     if src.rom[handler:handler + len(stock)] != stock or src.rom[operand - 2:operand + 2] != b"\x02\xc0\x84\x94":
         raise SystemExit("no-shira-spotlight: stock handler differs")
     code = stock[3:]                                            # print + options, without the flag
@@ -284,6 +285,291 @@ def no_shira(src, pack):
         raise SystemExit("no-shira-spotlight: bank $05 padding is not free")
     pack.write("no_shira", at, code)
     pack.write("no_shira", operand, struct.pack("<H", at & 0xFFFF))
+
+
+# ---- script options: GaiaLabs code rebuilt in free space ----------------------
+
+# Free $FF padding per bank, split between options so any combination can be
+# on at once (bank $05: freejia_shortcut, then no_shira's handler at $05:FFE4).
+SCRIPT_SPACE = {
+    "thankful_flower": [(0x09F700, 0x09F900)],
+    "south_cape_return": [(0x04FB40, 0x04FFF0)],
+    "blue_journal": [(0x07E930, 0x07EF00), (0x03F210, 0x03F600)],
+    "freejia_shortcut": [(0x05FED4, 0x05FFDC)],
+    "angkor_shortcut": [(0x08FD20, 0x08FFF0)],
+}
+SCRIPT_MODULES = {
+    "thankful_flower": "thankful-flower",
+    "south_cape_return": "south-cape-return",
+    "blue_journal": "blue-journal",
+    "freejia_shortcut": "freejia-shortcut",
+    "angkor_shortcut": "angkor-shortcut",
+}
+
+
+# Changes to a module's text before assembly, each matched exactly once:
+#   freejia_shortcut: Sam's mine room ($47) has no world-map place name, so the
+#     world-map trip GaiaLabs stages (COP $65) hung on the travel screen; Sam
+#     takes Will straight to Freejia with the module's own scene change.
+SCRIPT_FIXUPS = {
+    "freejia_shortcut": [("    COP [65] ( #$0334, #$0334, #00, #0B )\n", "")],
+}
+# Stock routines rebuilt with an option because native code reaches the
+# replaced routine by falling through, not through data:
+#   angkor_shortcut: code_089AD4 (the Gorgon Flower vision, reached through
+#     BranchOnFlagByte's operand) falls through into code_089B1F, the routine
+#     GaiaLabs replaces; so is it, cut where code_089B1F begins and followed by
+#     the new code_089B1F, and the two jewel/herb branches that jump back into
+#     it (reached through BranchIfHasItem's operands) come along.
+SCRIPT_PULL = {
+    "angkor_shortcut": ("awBF_spirit_guide.asm", [("code_089AD4", "code_089B1F:"), ("code_089B31", None), ("code_089B54", None)]),
+}
+
+
+def pull_stock(src, feature):
+    """Stock routines from the disassembly, as '!' blocks of module text."""
+    fname, wanted = SCRIPT_PULL[feature]
+    path = next((Path(src.baserom) / "extracted").rglob(fname))
+    text = path.read_text(encoding="utf-8")
+    consts = "".join("!%s %s\n" % m for m in re.findall(r"^!(\w+)\s+([0-9A-Fa-f]+)\s*$", text, re.M))
+    out = []
+    for name, cut in wanted:
+        m = re.search(r"^%s\s*\{(.*?)^\}" % name, text, re.M | re.S)
+        if not m: raise SystemExit("%s: %s not in %s" % (feature, name, fname))
+        body = m.group(1)
+        if cut:
+            if cut not in body: raise SystemExit("%s: %s has no %s" % (feature, name, cut))
+            body = body[:body.index(cut)]
+        out.append("%s! {%s}\n" % (name, body))
+    return consts, out
+
+
+def learn_stock(src, db, consts, block_text, name):
+    """Assemble a copied stock routine at its own address. Labels the
+    disassembly gives no address for (`file.entry`) are read from the ROM's
+    bytes at their operand; every other byte must equal the ROM, so the copy
+    is checked as well as resolved. Returns {label: ROM offset}."""
+    import gaialabs_asm as ga
+    unknown = []
+
+    class Learn(ga.Assembler):
+        def addr(self, label):
+            try:
+                return super().addr(label)
+            except ga.AsmError:
+                if label not in unknown: unknown.append(label)
+                return 0x400000            # the same placeholder the copy is built with
+
+    _, blocks = ga.parse(block_text)
+    asm = Learn(db, consts, blocks)
+    at = db.stock(name)
+    asm.place(at, [name])
+    got = asm.emit(name)
+    rom = src.rom[at:at + len(got)]
+    # The baserom disassembly is not the stock game byte for byte: its
+    # transforms rewrite some constants for GaiaLabs' base (LDA #$FFF0 reads
+    # #$FFFC there), and some labels have no address. Every byte that differs
+    # is taken from the ROM in the copy; instruction lengths must agree (a
+    # handful of differing bytes, never a different layout).
+    patch = {k: rom[k] for k in range(len(got)) if got[k] != rom[k]}
+    if len(patch) > 16:
+        raise SystemExit("%s: %d bytes differ from the ROM; not a faithful copy" % (name, len(patch)))
+    return {label: 0x400000 for label in unknown}, patch
+
+
+def stock_refs(src, db, label):
+    """Every place in the stock game that reaches `label` through data: COP
+    operands (`COP [Name] ( ... &label ... )`) and pointer lists. Returns ROM
+    offsets of the 16-bit words to rewrite, found in the ROM and counted
+    against the disassembly so nothing is missed or guessed."""
+    import gaialabs_asm as ga
+    target = db.stock(label)
+    word = struct.pack("<H", target & 0xFFFF)
+    want, sites = 0, []
+    ex = Path(src.baserom) / "extracted"
+    for f in ex.rglob("*.asm"):
+        t = f.read_text(encoding="utf-8", errors="ignore")
+        if ("&" + label) not in t and ("@" + label) not in t:
+            continue
+        for m in re.finditer(r"^\s*(JSR|JSL|JMP|JML|BRA|BRL)\b[^\n]*[&@$]%s\b" % re.escape(label), t, re.M):
+            raise SystemExit("%s is reached by an instruction (%s): its new body would not run" % (label, f.name))
+        for m in re.finditer(r"^\s*COP \[(\w+)\] \((.*)\)\s*$", t, re.M):
+            args = [a.strip() for a in m.group(2).split(",")]
+            if "&" + label not in args:
+                continue
+            want += 1
+            cid = db.cop_id[m.group(1)]; parts = db.cop[cid]
+            k = args.index("&" + label)
+            size = {"Byte": 1, "@dma-channel": 1, "Word": 2, "&Code": 2, "&&Code": 2, "&DialogString": 2}
+            off = 2 + sum(size.get(p, 3) for p in parts[:k])
+            bank = target & 0xFF0000
+            for p in range(bank, bank + 0x10000 - off - 2):
+                if src.rom[p] == 0x02 and src.rom[p + 1] == cid and src.rom[p + off:p + off + 2] == word:
+                    if p + off not in sites: sites.append(p + off)
+        for m in re.finditer(r"^(\w+)\s*\[(.*?)^\]", t, re.M | re.S):
+            body = [l.split(";")[0].strip() for l in m.group(2).splitlines()]
+            if not all(re.fullmatch(r"[&@]\w+", l) for l in body if l):
+                continue   # not a pointer list (an actor definition, a table)
+            entries = re.findall(r"[&@](\w+)", m.group(2))
+            for i, e in enumerate(entries):
+                if e == label:
+                    want += 1
+                    at = db.stock(m.group(1)) + 2 * i
+                    if src.rom[at:at + 2] != word: raise SystemExit("%s: list %s does not hold it" % (label, m.group(1)))
+                    sites.append(at)
+    if len(sites) != want or not want:
+        raise SystemExit("%s: %d references in the disassembly, %d found in the ROM" % (label, want, len(sites)))
+    return sites
+
+
+def gaia_names(src):
+    """GaiaLabs' English name table ([NAM:n]), read as the dialogue importer
+    reads it."""
+    import import_gaialabs_dialogue as imp
+    return imp.load_names(src.re)
+
+
+def gaia_themes(src):
+    """GaiaLabs' speaker themes ($16-$24): text colours and voice."""
+    import import_gaialabs_dialogue as imp, gaia_authored_dialogue as g
+    return g.load_themes(imp.read_source(src.re, "modules/base/asm/dialog_template_table.asm"))
+
+
+def script_option(src, pack, feature):
+    """A GaiaLabs module whose changes are script code and dialogue: its
+    blocks are assembled into the option's free space (one bank per group),
+    and every stock pointer to a replaced routine or string is moved there."""
+    import gaialabs_asm as ga
+    db = ga.Db(src.baserom, src.rom, gaia_names(src), gaia_themes(src))
+    text = ""
+    module = SCRIPT_MODULES[feature]
+    for name in subprocess.run(["git", "-C", src.re, "ls-tree", "--name-only", src.commit, "modules/%s/" % module],
+                               capture_output=True, text=True, check=True).stdout.split():
+        if name.endswith(".asm"):
+            text += src.module(name[len("modules/"):]).decode("utf-8") + "\n"
+    text = text.replace("\r\n", "\n")
+    for old, new in SCRIPT_FIXUPS.get(feature, []):
+        if text.count(old) != 1: raise SystemExit("%s: fixup %r does not match once" % (feature, old))
+        text = text.replace(old, new)
+    follows, learned, rom_bytes = {}, {}, {}
+    if feature in SCRIPT_PULL:
+        stock_consts, pulled = pull_stock(src, feature)
+        sc, _ = ga.parse(stock_consts)
+        for (name, cut), block in zip(SCRIPT_PULL[feature][1], pulled):
+            # the copy as it stands in the stock ROM (uncut), checked byte for byte
+            full = re.search(r"^%s\s*\{(.*?)^\}" % name, next((Path(src.baserom) / "extracted").rglob(
+                SCRIPT_PULL[feature][0])).read_text(encoding="utf-8"), re.M | re.S).group(1)
+            lab, patch = learn_stock(src, db, sc, "%s {%s}\n" % (name, full), name)
+            learned.update(lab)
+            rom_bytes[name] = patch
+        text = stock_consts + "".join(pulled) + text
+        follows = {name: cut.rstrip(":") for name, cut in SCRIPT_PULL[feature][1] if cut}
+    consts, blocks = ga.parse(text)
+    blocks = [b for b in blocks if not (b.mode == "+" and not b.body.strip())]
+    # a routine cut where it falls through is placed right before the block it
+    # falls into, so the fall-through lands on the new code
+    for name, nxt in follows.items():
+        order = [b.name for b in blocks]
+        if nxt not in order: raise SystemExit("%s: %s falls into %s, which the module lacks" % (feature, name, nxt))
+        moved = blocks.pop(order.index(nxt))
+        blocks.insert([b.name for b in blocks].index(name) + 1, moved)
+    # A replaced stock string is used only by this module's own new code: stock
+    # references keep the stock address, where the dialogue pack puts its text
+    # (moving them would bypass it). A replaced string nothing new uses is dropped.
+    code = "\n".join(b.body for b in blocks if b.kind != "string")
+    blocks = [b for b in blocks if not (b.kind == "string" and b.mode == "!"
+              and not re.search(r"[&@]%s\b" % re.escape(b.name), code))]
+    for b in blocks:
+        if b.kind == "string" and b.mode == "!":
+            b.mode = ""          # placed as a new string; stock references stay
+    for b in blocks:
+        if b.mode in "+-" and b.mode:
+            raise SystemExit("%s: %s%s is not supported" % (feature, b.name, b.mode))
+    asm = ga.Assembler(db, consts, blocks, stock_override=learned)
+    # group blocks by the bank they must live in: a replaced routine or
+    # string in the bank of the stock code that reaches it; new blocks with
+    # the replaced routine that uses them
+    spaces = {r[0] >> 16: list(r) for r in SCRIPT_SPACE[feature]}
+    groups = {}
+    for b in blocks:
+        bank = (db.stock(b.name) >> 16) if b.mode == "!" else None
+        groups.setdefault(bank, []).append(b.name)
+    if None in groups:
+        users = {db.stock(b.name) >> 16 for b in blocks if b.mode == "!" and b.kind == "code"}
+        if len(users) != 1:
+            raise SystemExit("%s: new blocks used from banks %s" % (feature, sorted(users)))
+        groups[users.pop()] += groups.pop(None)
+    for bank, names in groups.items():
+        if bank not in spaces: raise SystemExit("%s: no free space reserved in bank $%02X" % (feature, bank))
+        lo, hi = spaces[bank]
+        end = asm.place(lo, names)
+        if end > hi: raise SystemExit("%s: %d bytes do not fit bank $%02X's %d" % (feature, end - lo, bank, hi - lo))
+    for bank, names in groups.items():
+        lo = spaces[bank][0]
+        parts = []
+        for n in names:
+            piece = bytearray(asm.emit(n))
+            for k, v in rom_bytes.get(n, {}).items():
+                if k < len(piece): piece[k] = v       # the ROM's own byte (see learn_stock)
+            parts.append(bytes(piece))
+        blob = b"".join(parts)
+        if any(x != 0xFF for x in src.rom[lo:lo + len(blob)]): raise SystemExit("%s: space not free" % feature)
+        pack.write(feature, lo, blob)
+    for b in blocks:
+        if b.mode == "!":
+            new = struct.pack("<H", asm.addr(b.name) & 0xFFFF)
+            for site in stock_refs(src, db, b.name):
+                pack.write(feature, site, new)
+    return asm
+
+
+KRESS_SPACE = (0x07EF00, 0x07F600)
+KRESS_LIST = 0x0CCA02          # scene $A9's actor list (Mountain Temple, top)
+
+
+def kress_shortcut(src, pack):
+    """Mt. Kress: a spirit at the top of the Mountain Temple (scene $A9) that
+    offers to take Will to the bottom once flag $223 is set. GaiaLabs appends
+    a spawn record to the room's actor list; bank $0C, where the lists live,
+    has no free space, so the room's camera actor record (the same 7 bytes)
+    is pointed at a wrapper instead: it has the camera actor's own header, so
+    it starts as the camera did, spawns the spirit where GaiaLabs places it
+    with the flags its header would give, and goes on as the stock camera."""
+    import gaialabs_asm as ga
+    db = ga.Db(src.baserom, src.rom)
+    text = src.module("kress-shortcut/KressShortcut.patch.asm").decode("utf-8")
+    m = re.search(r"actor-def\s*<\s*#(\w\w),\s*#(\w\w),\s*#(\w\w),\s*\{(.*)\n\}\s*\n-+\s*\n\?INCLUDE 'scene_actors'",
+                  text, re.S)
+    spawn = re.search(r"actor-spawn\s*<\s*#(\w\w),\s*#(\w\w),\s*#(\w\w),\s*@KressShortcut\s*>", text)
+    if not m or not spawn:
+        raise SystemExit("kress-shortcut: the module is not the expected shape")
+    header = bytes(int(m.group(k), 16) for k in (1, 2, 3))
+    tx, ty, attr = (int(spawn.group(k), 16) for k in (1, 2, 3))
+    if attr & 1:
+        raise SystemExit("kress-shortcut: spawn parameter records are not handled")
+    record = KRESS_LIST + 7                         # record 1: camera_scroll_controller
+    if src.rom[record + 3:record + 6] != bytes([0xED, 0xEA, 0x80]) or src.rom[KRESS_LIST + 21] != 0xFF:
+        raise SystemExit("kress-shortcut: scene $A9's actor list is not the stock one")
+    camera = 0x00EAED
+    cam_header = src.rom[camera:camera + 3]
+    flags = (header[1] | header[2] << 8) | 0x4000
+    wrapper = ("kress_wrapper {\n    COP [A0] ( @kress_shortcut_main, #$%04X, #$%04X, #$%04X )\n"
+               "    COP [C7] ( @CameraScrollUpdate )\n}\n" % (tx * 16, ty * 16, flags))
+    consts, blocks = ga.parse(m.group(4) + "\n" + wrapper)
+    asm = ga.Assembler(db, consts, blocks, stock_override={
+        "CameraScrollUpdate": camera + 3, "spriteset_npc_props": 0x0EDA00})
+    lo, hi = KRESS_SPACE
+    names = [b.name for b in blocks if b.name != "kress_wrapper"]
+    whead = asm.place(lo + 3, names)                # the spirit's header, then its code
+    end = asm.place(whead + 3, ["kress_wrapper"])   # the wrapper's header, then its code
+    if end > hi:
+        raise SystemExit("kress-shortcut: does not fit")
+    blob = header + b"".join(asm.emit(n) for n in names) + cam_header + asm.emit("kress_wrapper")
+    if len(blob) != end - lo or any(x != 0xFF for x in src.rom[lo:end]):
+        raise SystemExit("kress-shortcut: layout or space check failed")
+    pack.write("kress_shortcut", lo, blob)
+    bank, addr = ga.hiroms(whead)
+    pack.write("kress_shortcut", record + 3, struct.pack("<HB", addr, bank))
 
 
 def words(block):
@@ -362,6 +648,12 @@ def main():
     spritemap(src, pack, "jp_viper", "jp-viper", "spm_viper.spm", relocated)
     crystal_ring(src, pack)
     no_shira(src, pack)
+    for feature in SCRIPT_MODULES:
+        script_option(src, pack, feature)
+    # kress_shortcut(src, pack): not shipped. Scene $A9 is a combat room, which
+    # never loads the props sprite sheet the spirit is drawn from (those tiles
+    # hold Will's ability art), so the spirit showed as garbage; and talking to
+    # it did not start. Kept for when that is solved.
     # stock words must be replaced one for one
     for kind, feature, offset, data, _ in pack.records:
         if kind == b"W" and offset + len(data) > len(rom): raise SystemExit("record past the ROM")

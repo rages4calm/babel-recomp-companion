@@ -177,6 +177,11 @@ def encode_string(db, text, resolve):
             raise AsmError("no glyph for %r" % c)
         out.append(db.glyph[c])
         i += 1
+    # A string that does not end in a halt ([END], [RET], [JMP]) ends at the
+    # stock terminator $CA, like the question before a choice menu; without
+    # it the engine runs on into whatever follows.
+    if not re.search(r"\[(END|RET|JMP:[^\]]*)\]$", text):
+        out.append(db.cmds["RET"][0])
     return bytes(out)
 
 
@@ -270,6 +275,7 @@ OPS = {
     "PHA": {"imp": 0x48}, "PLA": {"imp": 0x68}, "PHX": {"imp": 0xDA}, "PLX": {"imp": 0xFA},
     "PHP": {"imp": 0x08}, "PLP": {"imp": 0x28}, "CLC": {"imp": 0x18}, "SEC": {"imp": 0x38},
     "XBA": {"imp": 0xEB}, "ASL": {"imp": 0x0A}, "LSR": {"imp": 0x4A}, "NOP": {"imp": 0xEA},
+    "SED": {"imp": 0xF8}, "CLD": {"imp": 0xD8},
 }
 
 

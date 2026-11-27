@@ -44,7 +44,7 @@ enum {
     /* Free space for longer parallax tables: the end of bank $01 after the
      * dialogue pack's 24 bytes at $01:FF6C (iog_text.c GaiaShortTitle). */
     kBank1Free = 0x1FF8C, kBank1End = 0x20000,
-    kMaxRecords = 128,
+    kMaxRecords = 512,
 };
 
 typedef struct {
@@ -58,6 +58,7 @@ typedef struct {
 static const char *const kFeatures[] = {
     "jp_edward", "jp_itory", "jp_wall", "red_fountain", "jp_church", "jp_mines", "jp_prologue",
     "jp_viper", "crystal_ring", "no_shira",
+    "freejia_shortcut", "angkor_shortcut", "south_cape_return", "thankful_flower", "blue_journal",
 };
 enum { kNumFeatures = sizeof(kFeatures) / sizeof(kFeatures[0]) };
 
@@ -585,6 +586,11 @@ DATA_PLUGIN(jp_mines)
 DATA_PLUGIN(jp_viper)
 DATA_PLUGIN(crystal_ring)
 DATA_PLUGIN(no_shira)
+DATA_PLUGIN(freejia_shortcut)
+DATA_PLUGIN(angkor_shortcut)
+DATA_PLUGIN(south_cape_return)
+DATA_PLUGIN(thankful_flower)
+DATA_PLUGIN(blue_journal)
 DATA_PLUGIN(jp_prologue)
 
 static void ActivateHerb(void) { g_full_herb = true; g_herbs = 0xFFFF; }
@@ -641,6 +647,11 @@ SNES_MOD_CONSTRUCTOR(register_iog_gaialabs)
     snes_mod_register_activation_plugin("iog.gaialabs.jp_viper", Activate_jp_viper);
     snes_mod_register_activation_plugin("iog.gaialabs.crystal_ring", Activate_crystal_ring);
     snes_mod_register_activation_plugin("iog.gaialabs.no_shira", Activate_no_shira);
+    snes_mod_register_activation_plugin("iog.gaialabs.freejia_shortcut", Activate_freejia_shortcut);
+    snes_mod_register_activation_plugin("iog.gaialabs.angkor_shortcut", Activate_angkor_shortcut);
+    snes_mod_register_activation_plugin("iog.gaialabs.south_cape_return", Activate_south_cape_return);
+    snes_mod_register_activation_plugin("iog.gaialabs.thankful_flower", Activate_thankful_flower);
+    snes_mod_register_activation_plugin("iog.gaialabs.blue_journal", Activate_blue_journal);
     snes_mod_register_activation_plugin("iog.gaialabs.full_herb", ActivateHerb);
     snes_mod_register_activation_plugin("iog.gaialabs.portal_exit", ActivatePortal);
     snes_mod_register_activation_plugin("iog.gaialabs.elevator", ActivateElevator);
