@@ -56,9 +56,11 @@ window's resolution; the others use the optional HD Mode 7 setting.
   all 124 approved menu strings and all 64 named room titles.
 - **GaiaLabs options**, from the Retranslated patcher at
   [gaiahack.ing](https://gaiahack.ing): the Japanese release's Edward Castle,
-  Itory and Great Wall backgrounds, red fountain, church cross and prologue
-  palettes (and an optional purple Diamond Mine), herbs that heal fully, and
-  Pyramid portals that lead to the lower hall. The JP art loads through the
+  Itory and Great Wall backgrounds, red fountain, church cross, prologue
+  palettes and recoloured Crystal Ring (and, optionally, the purple Diamond
+  Mine and the JP Viper), herbs that heal fully, Pyramid portals that lead to
+  the lower hall, Pyramid moving floors at twice the speed, and (optionally)
+  Shira's dream without the spotlight. The JP art loads through the
   game's own code, so it works natively and in the wide view.
 - **Achievements**, saved on your PC, with a controller-friendly browser in
   the in-game settings.
@@ -138,7 +140,7 @@ on the launcher's Game page to **Open the setup screen**.
 
 ## Development status
 
-**Current build:** `0.2.0-beta.18`, Windows x64, pre-release for
+**Current build:** `0.2.0-beta.19`, Windows x64, pre-release for
 playtesting. Automated routes reach the ending and the credits; a full
 playthrough by a person is under way.
 

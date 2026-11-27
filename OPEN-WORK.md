@@ -1,7 +1,7 @@
 # Open work
 
-What is still to do, and what was not fixed or not tested, as of November 26,
-2026 (tester build `v0.2.0-beta.18`). Read `HANDOFF.md` for
+What is still to do, and what was not fixed or not tested, as of November 27,
+2026 (tester build `v0.2.0-beta.19`). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
 
 Each item says what is known, not what is assumed. "Not tested" means nobody
@@ -492,8 +492,12 @@ after a crash (the half-minute rewrite is the fallback).
 - **Wide view off was not tested** on the public build (the setting
   `iog.graphics/wide_view` disabled). The setting needs a restart and has no
   in-game row yet.
-- **"Babel 16:9 widescreen"** in the launcher does nothing while the wide view
-  is on. It should be hidden or explained.
+- **Picture settings** (November 27): Wide view, Classic 16:9 and Original
+  4:3 are one launcher choice that needs a restart; the refusal message no
+  longer claims the in-game settings change it; "Status display at the screen
+  edges" is greyed out unless Picture is Wide view; Classic now opens at
+  1280x720 like the wide view (checked), Original at 960x720. Enhanced world
+  map applies live. The launcher pages were not clicked by hand.
 - **Windows x64 only.** The tag also started the workflow builds for Linux,
   macOS, Android, 3DS and Vita; their results were not looked at and nothing
   from them was published.
@@ -547,19 +551,44 @@ launcher. Still open or untested:
 
 ## Widescreen and renderer
 
-- **Dark Gaia's defeat white-out:** for about 74 frames the player sprite is
-  olive in the wide picture and blue in the original. Not fixed.
-- **Vampires' circle window:** it uses the same code as the Dark Gaia entrance
-  fix (`RebaseFieldWindows`) but was never seen, because the kill could not be
-  staged.
-- **Not staged at all:** the kills of Castoth and Sand Fanger; the pause
-  menu's status page; state loads in the mosaic-revealed rooms other than
-  Luke's house (`5A`, `7D`, the Gem rooms), which the fix covers by inference.
+- **Boss fights to victory** (November 27, bounded fixtures, not a connected
+  campaign; evidence in `.local/batch-001/agents/bosses`): Vampires, Dark
+  Gaia, Sand Fanger, Castoth, Mummy Queen, Solid Arm and the Babel F4 rematch
+  were each won by the game's own fight logic (exact preset flags, warp into
+  the arena, player HP and stats raised, nothing written to a boss). Victory
+  state, rewards and exits came from the game; native = interpreter at every
+  compared snapshot (2,332 in all). The attack button is A; the beta 17
+  sweep attacked with Y, which is why it defeated nothing.
+- **Vampires' circle window:** seen live in the fight; the wide field matched
+  the original pixel for pixel in all 23 compared frames, through the victory.
+- **Dark Gaia's defeat white-out** (fixed in beta 19): the death script
+  switches the form to Will but never uploads his tiles before the map
+  change, and the renderer read the player from ROM by the live form. It now
+  decodes the player from VRAM while VRAM holds another form's sheet: 38 of
+  71 frames differed from the original before, none after. Still different:
+  the wide view's status display does not fade with the white-out.
+- **Castoth's defeat** (fixed in beta 19): 9 frames fell back to the
+  original picture (a stale metasprite fills the rest of OAM, which was
+  accepted only for the last actor, as in Babel F2); now 0, and the 20 frames
+  around it match the original.
+- **Not run:** the Babel F2, F3, F5 and F6 rematches, the comet flight, the
+  Viper kill (only the live fight), and the Vampires' bomb puzzle afterwards.
+- **Not staged at all:** the pause menu's status page; state loads in the
+  mosaic-revealed rooms other than Luke's house (`5A`, `7D`, the Gem rooms),
+  which the fix covers by inference.
 - **Diamond Mine:** a line at world x of about 438. Open.
-- **Classic 16:9 picture** (wide view off, `Widescreen = 1`): at the Great Wall
-  (route `fanger`, frame 1462) a solid green strip fills the right edge.
-  Seen in a capture on November 26; not investigated.
-- **Walkable world map with Enhanced off:** streaks in the picture. Open.
+- **Classic 16:9 picture** (fixed in beta 19, evidence in
+  `.local/batch-001/agents/renderfix`): the Great Wall's green strip (the
+  margin ran to the declared map width, past the art), Itory losing both side
+  margins (the sky's own scroll cancelled the frame) and the walkable world
+  map's streaks (a stale HUD split stopped HD Mode 7) are gone, through the
+  GPU path; wide view and Original 4:3 frames are byte-identical before and
+  after on the same routes. The right margin at the Great Wall is now black
+  where the 256-wide sky ends; it could repeat the dunes instead (owner's
+  choice).
+- **Walkable world map with Enhanced off, wide view:** the streaks are the
+  original's coarse 1x ground, which this setting deliberately shows; the
+  help text now says so. Classic and Original smooth it either way.
 - **Euro arrival:** black corners. Open.
 - **Prison entry** is still a fallback to the original picture in the audit.
 - **Single lit fallback frames** once reported in scenes `58`, `06`, `68` and
