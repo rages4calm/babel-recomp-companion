@@ -178,6 +178,40 @@ feature = "blue_journal"
 id = "iog.gaialabs.blue_journal"
 
 [[feature]]
+id = "slave_return"
+name = "Freejia: the runaway laborer returns"
+description = "If you keep the runaway laborer's secret in Freejia, he thanks you later with the Red Jewel the slaver would have paid, and the people in that house have new lines."
+group = "Extras"
+default_enabled = true
+
+[[plugin]]
+feature = "slave_return"
+id = "iog.gaialabs.slave_return"
+
+[[feature]]
+id = "kress_shortcut"
+name = "Shortcut: Mt. Kress"
+description = "At the top of Mt. Kress, once you have been there, a spirit offers to take you back to the bottom."
+group = "Extras"
+default_enabled = true
+
+[[plugin]]
+feature = "kress_shortcut"
+id = "iog.gaialabs.kress_shortcut"
+
+[[feature]]
+id = "minimal_hud"
+name = "Minimal HUD"
+description = "The status display (PLAYER, DP, ENEMY) shows only where you can fight; it is hidden in towns and cutscene rooms. Herbs, healing and the game itself are unchanged."
+group = "Quality of life"
+default_enabled = false
+
+[[plugin]]
+feature = "minimal_hud"
+id = "iog.gaialabs.minimal_hud"
+
+
+[[feature]]
 id = "full_herb"
 name = "Herbs heal fully"
 description = "A herb refills all of Will's HP instead of 8."

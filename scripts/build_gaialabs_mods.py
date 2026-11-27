@@ -523,8 +523,223 @@ def script_option(src, pack, feature):
     return asm
 
 
+SLAVE_SPACE = (0x07F600, 0x07FF00)
+SCENE_ACTORS = 0x0C8000            # 256 word pointers into bank $0C, one per scene
+
+
+def scene_record(rom, scene, index):
+    """ROM offset of record `index` in a scene's actor list: 7-byte spawns,
+    9-byte enemies (a nonzero byte +6), ended by $FF."""
+    p = 0x0C0000 | struct.unpack_from("<H", rom, SCENE_ACTORS + 2 * scene)[0]
+    for i in range(index):
+        if rom[p] == 0xFF: raise SystemExit("scene $%02X has no record %d" % (scene, index))
+        p += 9 if rom[p + 6] else 7
+    return p
+
+
+def slave_return(src, pack):
+    """Freejia slave return (GaiaLabs freejia-slave-return). If you do not
+    give the runaway laborer away, the stock game never pays the Red Jewel
+    the slaver does when you do (flag $5A); GaiaLabs has the laborer pay it
+    later instead (flag $107), so either way there are 50. The harborer's
+    door opens, the laborer and the harborer get new lines, and the slavers
+    leave, as in the module.
+
+    Bank $05, where these actors live, has no free space left, so their new
+    code is in bank $07: each actor's record in its room list (a 24-bit
+    pointer, data) points at a copy of its header followed by the module's
+    checks; a talk handler (stored as 16 bits and run in the actor's current
+    bank) sits in the same bank as the code that sets it; the stock paths are
+    reached with long jumps. The module's text is used as written (its one
+    [JMP] into another string is expanded)."""
+    import gaialabs_asm as ga
+    db = ga.Db(src.baserom, src.rom, gaia_names(src), gaia_themes(src))
+    module = src.module("freejia-slave-return/FreejiaSlaveReturn.patch.asm").decode("utf-8").replace("\r\n", "\n")
+    strings = dict(re.findall(r"^(freejia_\w+_str)\s+`([^`]*)`", module, re.M))
+    need = ["freejia_slave_return_str", "freejia_slave_recognize_str", "freejia_slave_inv_full_str",
+            "freejia_slave_farewell_str", "freejia_harborer_return_str", "freejia_harborer_escaped_str",
+            "freejia_harborer_rumor_str"]
+    if any(n not in strings for n in need): raise SystemExit("freejia-slave-return: strings changed")
+    # [JMP:freejia_slave_recognize_str+M] continues at the [::] marker
+    rec = strings["freejia_slave_recognize_str"]
+    if "[::]" not in rec or not strings["freejia_slave_return_str"].endswith("[JMP:freejia_slave_recognize_str+M]"):
+        raise SystemExit("freejia-slave-return: [JMP] layout changed")
+    tail = rec[rec.index("[::]") + 4:]
+    strings["freejia_slave_return_str"] = strings["freejia_slave_return_str"].replace(
+        "[JMP:freejia_slave_recognize_str+M]", "[TPL:A]" + tail)
+    strings["freejia_slave_recognize_str"] = rec.replace("[::]", "")
+    # the module's flags and checks (constants as the module names them)
+    for name, value in (("slave_captured_flag", "5A"), ("return_flag", "8D"), ("dao_return_flag", "B6"),
+                        ("slave_reward_flag", "0107")):
+        if not re.search(r"^!%s\s+%s\s*$" % (name, value), module, re.M):
+            raise SystemExit("freejia-slave-return: %s changed" % name)
+    # where things are in the stock ROM
+    door_rec, sym_rec = scene_record(src.rom, 0x32, 0x0A), scene_record(src.rom, 0x3A, 0x03)
+    harb_rec = scene_record(src.rom, 0x3A, 0x04)
+    sl1_rec, sl2_rec = scene_record(src.rom, 0x32, 0x22), scene_record(src.rom, 0x32, 0x23)
+    def ptr(r): return ((src.rom[r + 5] & 0x3F) << 16) | struct.unpack_from("<H", src.rom, r + 3)[0]
+    expect = {door_rec: 0x05CFBC, sym_rec: 0x05C30E, harb_rec: 0x05BC56, sl1_rec: 0x05B816, sl2_rec: 0x05B852}
+    for r, a in expect.items():
+        if ptr(r) != a: raise SystemExit("freejia-slave-return: record at %x points at %x, not %x" % (r, ptr(r), a))
+    # town_door's address, from a stock record the disassembly names
+    # (scene $01, record 3: actor-spawn < #20, #0E, #00, @town_door >)
+    td_rec = scene_record(src.rom, 0x01, 0x03)
+    town_door = ptr(td_rec)
+    if src.rom[town_door:town_door + 3] != bytes([0x01, 0x00, 0x10]):
+        raise SystemExit("freejia-slave-return: town_door header not at %x" % town_door)
+    code = r"""
+sr_door {
+    COP [D0] ( #5A, #01, &sr_door_open )
+    COP [D0] ( #B6, #01, &sr_door_open )
+    COP [D1] ( #$0107, #01, &sr_door_open )
+    JML @code_05CFBF
+  sr_door_open:
+    LDA #&town_door+3
+    STA $00
+    LDA #*town_door
+    STA $02
+    JML @town_door+3
+}
+sr_slave {
+    COP [D0] ( #5A, #01, &sr_die )
+    COP [D1] ( #$0107, #01, &sr_die )
+    LDA #$0200
+    TSB $12
+    COP [0B]
+    COP [C0] ( &sr_slave_talk )
+    COP [C1]
+    RTL
+}
+sr_die {
+    COP [E0]
+}
+sr_slave_talk {
+    COP [D1] ( #$0107, #01, &sr_slave_farewell )
+    COP [D0] ( #8D, #01, &sr_slave_return )
+    JML @code_05C327
+  sr_slave_return:
+    COP [D0] ( #59, #01, &sr_slave_recognize )
+    COP [BF] ( &freejia_slave_return_str )
+    BRA sr_slave_give
+  sr_slave_recognize:
+    COP [BF] ( &freejia_slave_recognize_str )
+  sr_slave_give:
+    COP [D4] ( #01, &sr_slave_full )
+    COP [CD] ( #$0107 )
+    RTL
+  sr_slave_full:
+    COP [BF] ( &freejia_slave_inv_full_str )
+    RTL
+  sr_slave_farewell:
+    COP [BF] ( &freejia_slave_farewell_str )
+    RTL
+}
+sr_harborer {
+    COP [D0] ( #B6, #01, &sr_harborer_stay )
+    COP [D0] ( #5A, #01, &sr_die )
+  sr_harborer_stay:
+    COP [C0] ( &sr_harborer_talk )
+    COP [0B]
+    COP [C1]
+    RTL
+}
+sr_harborer_talk {
+    COP [D0] ( #5A, #01, &sr_harborer_escaped )
+    COP [D0] ( #B6, #01, &sr_harborer_rumor )
+    COP [D1] ( #$0107, #00, &sr_harborer_default )
+    COP [D0] ( #8D, #01, &sr_harborer_return )
+  sr_harborer_default:
+    JML @code_05BC6A
+  sr_harborer_return:
+    COP [BF] ( &freejia_harborer_return_str )
+    RTL
+  sr_harborer_escaped:
+    COP [BF] ( &freejia_harborer_escaped_str )
+    RTL
+  sr_harborer_rumor:
+    COP [BF] ( &freejia_harborer_rumor_str )
+    RTL
+}
+sr_slaver1 {
+    COP [D0] ( #5A, #01, &sr_die )
+    COP [D0] ( #B6, #01, &sr_die )
+    COP [D1] ( #$0107, #01, &sr_die )
+    COP [0B]
+    COP [C0] ( &code_05B83B )
+    JML @code_05B825
+}
+sr_slaver2 {
+    COP [D0] ( #5A, #01, &sr_die )
+    COP [D0] ( #B6, #01, &sr_die )
+    COP [D1] ( #$0107, #01, &sr_die )
+    COP [0B]
+    COP [C0] ( &code_05B880 )
+    COP [DA] ( #07 )
+    JML @code_05B864
+}
+"""
+    code += "".join("%s `%s`\n" % (n, strings[n]) for n in need)
+    consts, blocks = ga.parse(code)
+    asm = ga.Assembler(db, consts, blocks, stock_override={"town_door": town_door})
+    # each actor: a copy of its stock header, then its code
+    order = [("sr_door", 0x05CFBC), ("sr_slave", 0x05C30E), ("sr_harborer", 0x05BC56),
+             ("sr_slaver1", 0x05B816), ("sr_slaver2", 0x05B852)]
+    lo, hi = SLAVE_SPACE
+    at, heads = lo, {}
+    for name, stock in order:
+        heads[name] = at
+        at = asm.place(at + 3, [name])
+    rest = [b.name for b in blocks if b.name not in dict(order)]
+    end = asm.place(at, rest)
+    if end > hi: raise SystemExit("freejia-slave-return: does not fit")
+    blob = bytearray()
+    for name, stock in order:
+        blob += src.rom[stock:stock + 3] + asm.emit(name)
+    blob += b"".join(asm.emit(n) for n in rest)
+    if len(blob) != end - lo or any(x != 0xFF for x in src.rom[lo:end]):
+        raise SystemExit("freejia-slave-return: layout or space check failed")
+    pack.write("slave_return", lo, bytes(blob))
+    for (name, stock), rec in zip(order, (door_rec, sym_rec, harb_rec, sl1_rec, sl2_rec)):
+        bank, addr = ga.hiroms(heads[name])
+        pack.write("slave_return", rec + 3, struct.pack("<HB", addr, bank))
+
+
 KRESS_SPACE = (0x07EF00, 0x07F600)
 KRESS_LIST = 0x0CCA02          # scene $A9's actor list (Mountain Temple, top)
+
+
+SPIRIT_TILES = (0x45, 0x5B)       # tiles of npc_props animation $04 (all four frames)
+FX_SOURCE = "misc_fx_1CD580"      # uploaded to tile $40 in non-combat scenes
+NAME_TABLE_1 = 0x5000             # VRAM word address of OBJ tile $100 (OBSEL = $02)
+CACHE_SLOT_BG_D = 0x0675          # scene-art source cache for VRAM page $50 (mode 1)
+
+# exact edits to the module text, each matched once
+UPLOAD = ("    COP [4F] ( @%s+%X, #$%04X, #$%04X )\n"
+          "    STZ $%04X\n") % (FX_SOURCE, (SPIRIT_TILES[0] - 0x40) * 32, NAME_TABLE_1 + SPIRIT_TILES[0] * 16,
+                               (SPIRIT_TILES[1] - SPIRIT_TILES[0]) * 32, CACHE_SLOT_BG_D + 1)
+KRESS_FIXUPS = [
+    # name table 1 for every sub-sprite, before the first frame is staged
+    ("    COP [88] ( @spriteset_npc_props )\n",
+     "    COP [88] ( @spriteset_npc_props )\n    LDA #$0100\n    TSB $0E\n"),
+    # idle loop, every frame: when the scene's sprite art has been loaded since
+    # the last upload (the cache slot holds a source again: entering the room,
+    # or the room reloaded after the inventory screen), upload the tiles;
+    # AdhocVramDma yields until the NMI has run it and leaves the entry point
+    # on itself, so the loop head is set again afterwards
+    ("    COP [C1]\n    COP [C1]\n    COP [89]\n",
+     "  kress_upload:\n    COP [C1]\n    LDA $%04X\n    BEQ kress_anim\n" % (CACHE_SLOT_BG_D + 1) + UPLOAD
+     + "    BRA kress_upload\n  kress_anim:\n    COP [89]\n"),
+    # stand as the stock spirit guide does (awBF_spirit_guide): solid on two
+    # tiles and drawn between them, so Will stops beside it instead of
+    # walking half into it (GaiaLabs marks one tile and does not nudge). The
+    # guide is met from below and leans right; Will comes along the vine from
+    # the right here, so the spirit leans left (onto the end of the vine) and
+    # Will's stop, and the talk distance from it, stay as they were
+    ("    COP [0B]\n    COP [C0] ( &shortcut_interact )\n",
+     "    COP [0B]\n    COP [0D] ( #FF, #00 )\n    COP [BC] ( #F8, #00 )\n    COP [C0] ( &shortcut_interact )\n"),
+]
+
+
 
 
 def kress_shortcut(src, pack):
@@ -534,10 +749,22 @@ def kress_shortcut(src, pack):
     has no free space, so the room's camera actor record (the same 7 bytes)
     is pointed at a wrapper instead: it has the camera actor's own header, so
     it starts as the camera did, spawns the spirit where GaiaLabs places it
-    with the flags its header would give, and goes on as the stock camera."""
+    with the flags its header would give, and goes on as the stock camera.
+
+    $A9 is a combat room, which never loads the props sprite sheet the spirit
+    is drawn from (those name-table-0 tiles hold effect and ability art). So
+    the spirit draws from OBJ name table 1 instead (bit 8 of its OAM word),
+    which in $A9 holds only the Kress enemies' art and the room has none, and
+    copies its own tiles there from the stock ROM with the game's
+    AdhocVramDma whenever the scene's sprite art has just been (re)loaded;
+    it clears that VRAM's scene-art cache slot so the next room reloads its
+    enemies. Will's ability tiles are never touched."""
     import gaialabs_asm as ga
-    db = ga.Db(src.baserom, src.rom)
-    text = src.module("kress-shortcut/KressShortcut.patch.asm").decode("utf-8")
+    db = ga.Db(src.baserom, src.rom, gaia_names(src), gaia_themes(src))
+    text = src.module("kress-shortcut/KressShortcut.patch.asm").decode("utf-8").replace("\r\n", "\n")
+    for old, new in KRESS_FIXUPS:
+        if text.count(old) != 1: raise SystemExit("kress-shortcut: fixup %r does not match once" % old)
+        text = text.replace(old, new)
     m = re.search(r"actor-def\s*<\s*#(\w\w),\s*#(\w\w),\s*#(\w\w),\s*\{(.*)\n\}\s*\n-+\s*\n\?INCLUDE 'scene_actors'",
                   text, re.S)
     spawn = re.search(r"actor-spawn\s*<\s*#(\w\w),\s*#(\w\w),\s*#(\w\w),\s*@KressShortcut\s*>", text)
@@ -547,9 +774,13 @@ def kress_shortcut(src, pack):
     tx, ty, attr = (int(spawn.group(k), 16) for k in (1, 2, 3))
     if attr & 1:
         raise SystemExit("kress-shortcut: spawn parameter records are not handled")
-    record = KRESS_LIST + 7                         # record 1: camera_scroll_controller
+    record = KRESS_LIST + 7
     if src.rom[record + 3:record + 6] != bytes([0xED, 0xEA, 0x80]) or src.rom[KRESS_LIST + 21] != 0xFF:
         raise SystemExit("kress-shortcut: scene $A9's actor list is not the stock one")
+    # the tiles are copied from the stock ROM at run time; check they are the spirit's
+    fx = db.stock(FX_SOURCE)
+    if src.files.get(FX_SOURCE, {}).get("start") != fx or src.files[FX_SOURCE]["end"] - fx < SPIRIT_TILES[1] * 32 - 0x40 * 32:
+        raise SystemExit("kress-shortcut: %s is not where the database puts it" % FX_SOURCE)
     camera = 0x00EAED
     cam_header = src.rom[camera:camera + 3]
     flags = (header[1] | header[2] << 8) | 0x4000
@@ -560,8 +791,8 @@ def kress_shortcut(src, pack):
         "CameraScrollUpdate": camera + 3, "spriteset_npc_props": 0x0EDA00})
     lo, hi = KRESS_SPACE
     names = [b.name for b in blocks if b.name != "kress_wrapper"]
-    whead = asm.place(lo + 3, names)                # the spirit's header, then its code
-    end = asm.place(whead + 3, ["kress_wrapper"])   # the wrapper's header, then its code
+    whead = asm.place(lo + 3, names)
+    end = asm.place(whead + 3, ["kress_wrapper"])
     if end > hi:
         raise SystemExit("kress-shortcut: does not fit")
     blob = header + b"".join(asm.emit(n) for n in names) + cam_header + asm.emit("kress_wrapper")
@@ -648,12 +879,10 @@ def main():
     spritemap(src, pack, "jp_viper", "jp-viper", "spm_viper.spm", relocated)
     crystal_ring(src, pack)
     no_shira(src, pack)
+    slave_return(src, pack)
     for feature in SCRIPT_MODULES:
         script_option(src, pack, feature)
-    # kress_shortcut(src, pack): not shipped. Scene $A9 is a combat room, which
-    # never loads the props sprite sheet the spirit is drawn from (those tiles
-    # hold Will's ability art), so the spirit showed as garbage; and talking to
-    # it did not start. Kept for when that is solved.
+    kress_shortcut(src, pack)
     # stock words must be replaced one for one
     for kind, feature, offset, data, _ in pack.records:
         if kind == b"W" and offset + len(data) > len(rom): raise SystemExit("record past the ROM")

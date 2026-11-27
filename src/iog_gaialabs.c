@@ -58,7 +58,7 @@ typedef struct {
 static const char *const kFeatures[] = {
     "jp_edward", "jp_itory", "jp_wall", "red_fountain", "jp_church", "jp_mines", "jp_prologue",
     "jp_viper", "crystal_ring", "no_shira",
-    "freejia_shortcut", "angkor_shortcut", "south_cape_return", "thankful_flower", "blue_journal",
+    "freejia_shortcut", "angkor_shortcut", "south_cape_return", "thankful_flower", "blue_journal", "slave_return", "kress_shortcut",
 };
 enum { kNumFeatures = sizeof(kFeatures) / sizeof(kFeatures[0]) };
 
@@ -591,6 +591,8 @@ DATA_PLUGIN(angkor_shortcut)
 DATA_PLUGIN(south_cape_return)
 DATA_PLUGIN(thankful_flower)
 DATA_PLUGIN(blue_journal)
+DATA_PLUGIN(slave_return)
+DATA_PLUGIN(kress_shortcut)
 DATA_PLUGIN(jp_prologue)
 
 static void ActivateHerb(void) { g_full_herb = true; g_herbs = 0xFFFF; }
@@ -652,6 +654,8 @@ SNES_MOD_CONSTRUCTOR(register_iog_gaialabs)
     snes_mod_register_activation_plugin("iog.gaialabs.south_cape_return", Activate_south_cape_return);
     snes_mod_register_activation_plugin("iog.gaialabs.thankful_flower", Activate_thankful_flower);
     snes_mod_register_activation_plugin("iog.gaialabs.blue_journal", Activate_blue_journal);
+    snes_mod_register_activation_plugin("iog.gaialabs.slave_return", Activate_slave_return);
+    snes_mod_register_activation_plugin("iog.gaialabs.kress_shortcut", Activate_kress_shortcut);
     snes_mod_register_activation_plugin("iog.gaialabs.full_herb", ActivateHerb);
     snes_mod_register_activation_plugin("iog.gaialabs.portal_exit", ActivatePortal);
     snes_mod_register_activation_plugin("iog.gaialabs.elevator", ActivateElevator);
