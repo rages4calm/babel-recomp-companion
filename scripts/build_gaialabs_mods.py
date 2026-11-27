@@ -550,7 +550,11 @@ def slave_return(src, pack):
     pointer, data) points at a copy of its header followed by the module's
     checks; a talk handler (stored as 16 bits and run in the actor's current
     bank) sits in the same bank as the code that sets it; the stock paths are
-    reached with long jumps. The module's text is used as written (its one
+    reached with long jumps, and an actor that jumps into stock code which
+    yields first sets its resume bank ($02) to that code's bank (the runner
+    resumes at $00 in bank $02: left at $07, the locked door and both
+    slavers crashed the room whenever none of the flags was set). The
+    module's text is used as written (its one
     [JMP] into another string is expanded)."""
     import gaialabs_asm as ga
     db = ga.Db(src.baserom, src.rom, gaia_names(src), gaia_themes(src))
@@ -592,6 +596,8 @@ sr_door {
     COP [D0] ( #5A, #01, &sr_door_open )
     COP [D0] ( #B6, #01, &sr_door_open )
     COP [D1] ( #$0107, #01, &sr_door_open )
+    LDA #*code_05CFBF
+    STA $02
     JML @code_05CFBF
   sr_door_open:
     LDA #&town_door+3
@@ -666,6 +672,8 @@ sr_slaver1 {
     COP [D1] ( #$0107, #01, &sr_die )
     COP [0B]
     COP [C0] ( &code_05B83B )
+    LDA #*code_05B825
+    STA $02
     JML @code_05B825
 }
 sr_slaver2 {
@@ -675,6 +683,8 @@ sr_slaver2 {
     COP [0B]
     COP [C0] ( &code_05B880 )
     COP [DA] ( #07 )
+    LDA #*code_05B864
+    STA $02
     JML @code_05B864
 }
 """
