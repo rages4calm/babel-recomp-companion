@@ -71,6 +71,11 @@ Still open after beta 23: a few pixels at the status/title-card edges in Itory
 $1C; the ship's dark night sky is never selected by the game's scripts (dusk
 checked); the left 24 columns in $15/$1A/$1B/$16 are filled from the map by
 decision; the campaign beyond the prison; physical-controller presses.
+Owner report (after beta 23): the Mt. Kress shortcut's spirit ride (the
+warp after "Yes", $A9 to $A0) shows 4:3 until the ride ends, then wide.
+Find the audit reason over the ride and admit that exact layout (as the
+Angkor $B0 mosaic row did). Also queued: widen Dark Gaia's arena ($E8) by
+extending its backdrop sideways, if the seams look right in both phases.
 
 ## Beta 22 (November 27): launcher Update and Controls, secret achievements
 
