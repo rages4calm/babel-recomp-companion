@@ -18,6 +18,10 @@ HARNESS = r'''
 #include <stdlib.h>
 #include <string.h>
 #include "iog_world_renderer.c"
+/* Minimal HUD is presentation around the raster (iog_minimal_hud.c, its
+   own checks are played); here it is off. */
+void IogMinimalHudBeginDraw(void){}
+void IogMinimalHudEndDraw(void){}
 /* No presenter here: the status plane is composed into the frame. */
 int snes_ovl_frame_layer_available(void) { return 0; }
 int snesrecomp_exe_dir_path(const char *leaf, char *out, size_t max_len) { (void)leaf;(void)out;(void)max_len; return 0; }
@@ -1460,6 +1464,29 @@ static void mode7_angkor_neighbor_mosaic(void){
  IogWorldBeginRaster();CHECK(s.valid);IogWorldCaptureLine(0);
  g_ppu->mosaic=0x53;IogWorldCaptureLine(1);CHECK(!s.valid);
  word(0x644,0xBE);CHECK(!AngkorVisionMosaic(g_ppu,ram));
+ /* The temple's current second map is 256 wide; other widths still fall back. */
+ word(0x644,0xBF);word(0x694,256);g_ppu->mosaic=0x63;CHECK(AngkorVisionMosaic(g_ppu,ram));
+ word(0x694,512);CHECK(!AngkorVisionMosaic(g_ppu,ram));
+ word(0x694,256);word(0x698,512);CHECK(!AngkorVisionMosaic(g_ppu,ram));
+}
+static void angkor_entrance_arrival_mosaic(void){
+ /* The GaiaLabs shortcut reveals the entrance ($B0) through a mosaic over
+  * the display its stock world-map arrival uses. */
+ fixture();word(0x644,0xB0);word(0x6ee,5);
+ word(0x692,1024);word(0x694,1024);word(0x696,1280);word(0x698,1280);
+ g_ppu->bgmode=9;g_ppu->mosaic=0x93;g_ppu->mosaicStartLine=1;
+ g_ppu->screenEnabled[0]=0x17;g_ppu->screenEnabled[1]=0x02;
+ g_ppu->cgwsel=0x82;g_ppu->cgadsub=0x41;g_snesrecomp_last_hdmaen=0;
+ CHECK(StockMosaicLayout(g_ppu,ram));
+ publication();IogWorldBeginRaster();CHECK(s.valid&&!s.mode7);
+ IogWorldCaptureLine(0);IogWorldCaptureLine(1);CHECK(s.valid);
+ g_ppu->cgadsub=0x43;IogWorldCaptureLine(2);CHECK(!s.valid);
+ g_ppu->cgadsub=0x41;CHECK(StockMosaicLayout(g_ppu,ram));
+ g_ppu->screenEnabled[1]=0;CHECK(!StockMosaicLayout(g_ppu,ram));
+ g_ppu->screenEnabled[1]=2;g_snesrecomp_last_hdmaen=2;CHECK(!StockMosaicLayout(g_ppu,ram));
+ g_snesrecomp_last_hdmaen=0;word(0x696,1024);CHECK(!StockMosaicLayout(g_ppu,ram));
+ word(0x696,1280);g_ppu->mosaic=0x97;CHECK(!StockMosaicLayout(g_ppu,ram));
+ g_ppu->mosaic=0x93;word(0x644,0xB1);CHECK(!StockMosaicLayout(g_ppu,ram));
 }
 static void late_story_mosaics(void){
  fixture();word(0x644,0xC3);word(0x6EE,0x0485);
@@ -1808,6 +1835,7 @@ static void mode7_lifecycle_and_packet(const char*base){
  south_cape_house_mosaic();
  dark_space_and_coast_mosaics();
  mode7_angkor_neighbor_mosaic();
+ angkor_entrance_arrival_mosaic();
  mode7_menu_dismissal();
  mode7_menu_panel_scale();
  mode7_fixture();memcpy(before_ram,ram,sizeof(ram));CpuState cpu=g_cpu;

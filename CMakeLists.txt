@@ -109,6 +109,7 @@ set(IOG_SOURCES
     src/iog_inventory.c
     src/iog_sparkle.c
     src/iog_gaialabs.c
+    src/iog_minimal_hud.c
     src/iog_ips.c
     src/iog_ngplus.c
     src/iog_randomizer.c

@@ -13,6 +13,7 @@
 #include "iog_scene_view.h"
 #include "iog_randomizer.h"
 #include "iog_sparkle.h"
+#include "iog_minimal_hud.h"   /* minimal HUD: begin/end around the raster */
 #include "snes_overlay_draw.h"
 #include "common_cpu_infra.h"
 #include "common_rtl.h"
@@ -308,11 +309,13 @@ static bool AngkorVisionMosaic(const Ppu *p,const uint8_t *ram)
 {
     /* The Spirit Guide's transition into the Mode 7 vision mosaics the
      * ordinary temple picture. Only the known stock background grid is
-     * supported; unrelated effects retain their normal fallback. */
+     * supported; unrelated effects retain their normal fallback. The
+     * temple's second map is 256 wide in the current room data (768 when
+     * this was first measured); BG2 is on neither screen here. */
     return Word(ram,0x644)==0xBF && p->bgmode==9 && (p->mosaic&15)==3 &&
         !p->windowsel && p->screenEnabled[0]==21 && !p->screenEnabled[1] &&
         Word(ram,0x692)==512 && Word(ram,0x696)==512 &&
-        Word(ram,0x694)==768 && Word(ram,0x698)==1024;
+        (Word(ram,0x694)==768 || Word(ram,0x694)==256) && Word(ram,0x698)==1024;
 }
 
 static bool DaoVillageMosaic(const Ppu *p,const uint8_t *ram)
@@ -579,6 +582,10 @@ static bool RoomTransitionMosaic(const Ppu *p,const uint8_t *ram)
         {0x7B,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,512,256,512,256},
         {0x7D,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256},
         {0x9B,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256},
+        /* Angkor Wat's entrance after the GaiaLabs shortcut, which leaves
+         * through the vision's mosaic. The stock world-map arrival shows
+         * this same display without the mosaic. */
+        {0xB0,{0x11,0x19},0x17,0x02,0x82,0x41,0x00,0x0005,1024,1280,1024,1280},
     };
     if(p->bgmode!=9 || (p->mosaic&15)!=3 || p->windowsel) return false;
     for(unsigned i=0;i<sizeof(rooms)/sizeof(rooms[0]);i++) {
@@ -787,6 +794,7 @@ void IogWorldAfterNmi(void)
 
 void IogWorldBeginRaster(void)
 {
+    IogMinimalHudBeginDraw();   /* minimal HUD (iog_minimal_hud.c); undone in IogWorldEndRaster */
     if(!s.enabled || !g_ppu || !g_snes) return;
     bool awaiting_restore=s.awaiting_restore;
     s.awaiting_restore=false;
@@ -2901,7 +2909,14 @@ static void PlayLog(void)
     last_scene=scene;last_reason=reason;last_width=s.width;last_mark=g_snesrecomp_diag_mark;
 }
 
+static void WorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count);
+/* minimal HUD (iog_minimal_hud.c): the raster is finished, put the HUD rows back. */
 void IogWorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count)
+{
+    WorldEndRaster(resume_pc,hdma_lines,irq_count);
+    IogMinimalHudEndDraw();
+}
+static void WorldEndRaster(uint32_t resume_pc,unsigned hdma_lines,unsigned irq_count)
 {
     if(!s.enabled && !s.audit) return;
     ++s.frame;s.complete=s.enabled && (s.fixed_plate || RenderWorld());
