@@ -4208,6 +4208,11 @@ void ppu_set_vram_write_log_hook(PpuVramWriteLogHook hook) {
   s_vram_write_log_hook = hook;
 }
 
+void ppu_note_vram_write_log(uint32_t byte_addr, uint8_t value) {
+  if (s_vram_write_log_hook)
+    s_vram_write_log_hook(byte_addr, value);
+}
+
 /* An NTSC field has 357368 master clocks. Even counting one journaled
  * access per minimum six-clock CPU bus slot fits below this bound; DMA
  * slots are slower. This includes upload bytes and read-side port steps. */

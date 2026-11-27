@@ -21,6 +21,16 @@
  *    ClearBg3TilemapBuffer_Full writes). Right after the raster the original
  *    words are put back, so WRAM, VRAM between frames, save states, rewind
  *    and the native/interpreter comparison all see the stock game.
+ *  - A word the game stores into those rows during the raster is the
+ *    game's and is kept, whatever its value (a clear writes the same $0000
+ *    as the blank): for the length of the raster the PPU's VRAM write log
+ *    hook marks each word written through the data port ($2118/$2119 byte
+ *    and word stores, DMA and HDMA), and only unmarked words get the saved
+ *    HUD back. A word the hook did not see but that no longer holds the
+ *    blank (a host write) is kept too. In this game nothing can store there
+ *    mid-raster (no IRQ is ever enabled, no HDMA channel targets the VRAM
+ *    port); the game draws the HUD during the NMI and main loop, between
+ *    rasters, when the rows hold the stock words.
  *  - The draw is shared by every picture: Original 4:3 and Classic 16:9
  *    rasterise from VRAM, and the wide view copies VRAM into its picture
  *    epochs and captures the BG3 plane during the same raster, so all three
@@ -64,8 +74,8 @@ enum {
 static bool g_on;
 static bool g_blanked;
 static uint16_t g_base;         /* VRAM word address of the BG3 map */
-static uint32_t g_writes;       /* vramWriteCount right after blanking */
 static uint16_t g_saved[kHudWords];
+static uint8_t g_written[kHudWords];    /* stored by the game during the raster */
 
 /* LoadHudTilemap's fixed tiles, expanded from the ROM's HudTilemapData. */
 enum {
@@ -126,9 +136,19 @@ static bool HudInVram(const uint16_t *map)
            (row1[15] & 0x3ff) == 0x01E;
 }
 
+/* PPU VRAM write log hook, installed only between BeginDraw and EndDraw. */
+static void NoteVramWrite(uint32_t byte_addr, uint8_t value)
+{
+    (void)value;
+    uint16_t off = (uint16_t)(((byte_addr >> 1) & 0x7fff) - g_base);
+    if (off < kHudWords) g_written[off] = 1;
+}
+
+void IogMinimalHudEndDraw(void);
+
 void IogMinimalHudBeginDraw(void)
 {
-    g_blanked = false;
+    if (g_blanked) IogMinimalHudEndDraw();      /* never lose the saved rows */
     if (!g_on || !g_ppu || !g_snes || !g_snes->ram) return;
     if (!(g_snes->ram[kPlayerFlags] & kCombatLock)) return;
     if ((g_ppu->bgmode & 7) != 1) return;
@@ -137,27 +157,23 @@ void IogMinimalHudBeginDraw(void)
     uint16_t *map = &g_ppu->vram[base];
     if (!HudInVram(map)) return;
     memcpy(g_saved, map, sizeof(g_saved));
+    memset(g_written, 0, sizeof(g_written));
     for (int i = 0; i < kHudWords; i++) map[i] = kBlankWord;
     /* Host-only change counter: lets frame caches see the different map. */
     g_ppu->vramWriteCount++;
-    g_writes = g_ppu->vramWriteCount;
     g_base = base;
     g_blanked = true;
+    ppu_set_vram_write_log_hook(NoteVramWrite);
 }
 
 void IogMinimalHudEndDraw(void)
 {
     if (!g_blanked || !g_ppu) return;
     g_blanked = false;
+    ppu_set_vram_write_log_hook(NULL);
     uint16_t *map = &g_ppu->vram[g_base];
-    if (g_ppu->vramWriteCount == g_writes) {
-        memcpy(map, g_saved, sizeof(g_saved));
-    } else {
-        /* The guest stored to VRAM during the raster: keep any word it wrote
-         * there and put back only the ones still blanked. */
-        for (int i = 0; i < kHudWords; i++)
-            if (map[i] == kBlankWord) map[i] = g_saved[i];
-    }
+    for (int i = 0; i < kHudWords; i++)
+        if (!g_written[i] && map[i] == kBlankWord) map[i] = g_saved[i];
     g_ppu->vramWriteCount++;
 }
 

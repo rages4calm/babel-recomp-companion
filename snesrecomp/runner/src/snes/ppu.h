@@ -673,6 +673,9 @@ void ppu_write(Ppu* ppu, uint8_t adr, uint8_t val);
  * watchpoints cannot do on the interp816 path. Unset by default. */
 typedef void (*PpuVramWriteLogHook)(uint32_t byte_addr, uint8_t value);
 void ppu_set_vram_write_log_hook(PpuVramWriteLogHook hook);
+/* Lets the CPU's atomic 16-bit $2118 store (common_rtl.c WriteVramWord),
+ * which bypasses ppu_write, reach the same hook (one call per byte). */
+void ppu_note_vram_write_log(uint32_t byte_addr, uint8_t value);
 
 /* Raster journal — per-line replay of mid-field PPU register writes for
  * frame-model hosts. See the block comment in ppu.c. The beam cuts it into
