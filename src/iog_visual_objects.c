@@ -177,11 +177,82 @@ static bool PlayerGraphics(const IogVisualSource *s, unsigned actor,
         Byte(s, 0x81, (uint16_t)(lookup + 2 + offset), bank);
 }
 
+/* The player's characters reach VRAM through a DMA queue at $06FE: one bank
+ * byte, then a 16-bit source per metasprite part (0 ends it). Part k of the
+ * queue lands in OBJ characters slot(k) and slot(k)+16 (two rows of two). */
+enum { kPlayerQueue = 0x6fe, kPlayerQueueParts = 16 };
+static unsigned PlayerSlot(unsigned k) { return k < 8 ? 2 * k : 0x20 + 2 * (k - 8); }
+
+/* OBJ slot 0 (two characters, 64 bytes) holds these sheet bytes. */
+static bool SlotZeroHolds(const IogVisualSource *s, uint8_t bank, uint16_t src)
+{
+    unsigned adr = PPU_objTileAdr1(s->ppu);
+    for (unsigned i = 0; i < 32; i++) {
+        uint16_t w;
+        if (!BusWord(s, bank, (uint16_t)(src + 2 * i), &w) ||
+            w != s->ppu->vram[(adr + i) & 0x7fff]) return false;
+    }
+    return true;
+}
+
+/* Whether VRAM still holds another form's sheet than the live one: the first
+ * queued part is not in OBJ slot 0, but the same part of another form's sheet
+ * is. Dark Gaia's death script sets Will's form ($0AD4 = 0) and rebuilds the
+ * queue for Will's sheet, but the map changes before it is uploaded, so the
+ * original keeps drawing Shadow's characters for some 86 frames. Decoding
+ * the live form's sheet drew Will's characters in Shadow's frame layout. An
+ * ordinary animation step that is queued but not yet uploaded is not this:
+ * VRAM then holds the same form's sheet, which the sheet decode matches.
+ * *queue_base receives the sheet base the queued sources are relative to. */
+static bool PlayerSheetStale(const IogVisualSource *s, uint8_t bank, uint16_t base,
+    uint16_t lookup, uint16_t *queue_base)
+{
+    uint8_t qbank = s->ram[kPlayerQueue];
+    uint16_t src = Word(s->ram, kPlayerQueue + 1);
+    if (!src) return false;
+    uint16_t bases[3]; uint8_t banks[3];
+    for (unsigned form = 0; form < 3; form++)
+        if (!BusWord(s, 0x81, (uint16_t)(lookup + form * 6), &bases[form]) ||
+            !Byte(s, 0x81, (uint16_t)(lookup + 2 + form * 6), &banks[form])) return false;
+    /* The queue still names another form's sheet (the first frame after the
+     * form changes, before the queue is rebuilt) and VRAM holds it. Each
+     * form's sheet is 16KB from its base. */
+    if (qbank != bank || (uint16_t)(src - base) >= 0x4000) {
+        for (unsigned form = 0; form < 3; form++)
+            if (banks[form] == qbank && (uint16_t)(src - bases[form]) < 0x4000 &&
+                SlotZeroHolds(s, qbank, src)) { *queue_base = bases[form]; return true; }
+        return false;
+    }
+    /* The queue was rebuilt for the live form, VRAM still holds another's. */
+    if (SlotZeroHolds(s, bank, src)) return false;
+    for (unsigned form = 0; form < 3; form++) {
+        if (banks[form] == bank && bases[form] == base) continue;
+        if (SlotZeroHolds(s, banks[form], (uint16_t)(bases[form] + (uint16_t)(src - base)))) {
+            *queue_base = base; return true;
+        }
+    }
+    return false;
+}
+
+/* The queue slot whose source is this part's sheet character, or -1. */
+static int PlayerQueueSlot(const IogVisualSource *s, uint16_t base, unsigned tile)
+{
+    uint16_t src = (uint16_t)(base + tile * 32);
+    for (unsigned k = 0; k < kPlayerQueueParts; k++) {
+        uint16_t q = Word(s->ram, kPlayerQueue + 1 + 2 * k);
+        if (!q) break;
+        if (q == src) return (int)PlayerSlot(k);
+    }
+    return -1;
+}
+
 static bool Pixels(const IogVisualSource *s, IogVisualPart *part,
-    bool player, uint8_t bank, uint16_t base)
+    bool player, uint8_t bank, uint16_t base, int slot)
 {
     unsigned attr = part->tile_attributes;
     unsigned tile = attr & 0x1ff;
+    /* A player part whose upload is still pending: its live characters. */
+    if (player && slot >= 0) { player = false; tile = (unsigned)slot; }
     for (unsigned y = 0; y < part->height; y++) {
         unsigned sy = part->vflip ? part->height - 1 - y : y;
         for (unsigned x = 0; x < part->width; x++) {
@@ -219,7 +290,7 @@ static bool Pixels(const IogVisualSource *s, IogVisualPart *part,
 static IogVisualStatus Add(const IogVisualSource *s, IogVisualFrame *out,
     unsigned actor, unsigned frame, unsigned index, uint16_t attr,
     int32_t wx, int32_t wy, unsigned size, bool manual, bool player,
-    uint8_t bank, uint16_t base, uint32_t *order)
+    uint8_t bank, uint16_t base, int slot, uint32_t *order)
 {
     uint32_t rank = ++*order;
     int64_t x = (int64_t)wx - out->viewport.world_x;
@@ -237,34 +308,44 @@ static IogVisualStatus Add(const IogVisualSource *s, IogVisualFrame *out,
     p->palette = (uint8_t)((attr >> 9) & 7); p->priority = (uint8_t)((attr >> 12) & 3);
     p->math = p->palette >= 4; p->hflip = !!(attr & 0x4000); p->vflip = !!(attr & 0x8000);
     p->manual = manual; p->player = player;
-    if (!Pixels(s, p, player, bank, base)) return kIogVisualMalformedSource;
+    if (!Pixels(s, p, player, bank, base, slot)) return kIogVisualMalformedSource;
     out->part_count++;
     return kIogVisualReady;
 }
 
-static bool CastothDefeatTail(const IogVisualSource *s, unsigned actor,
+/* The stock defeat of a Castoth head (scene $29) and of its Babel rematch
+ * ($F2) changes the sprite bank before the old WRAM frame pointer is retired:
+ * the head's stale metasprite 8E:5955 reads an open-bus part count, and the
+ * OAM writer fills every remaining slot with copies of one overlapping
+ * tile-0 character, so later actors get no slots at all. Returns the first
+ * OAM slot of that fill (a run of identical slots through slot 127, at
+ * least two long), or -1 when this is not that signature. The tile is live
+ * VRAM and can contain visible pixels. */
+static int CastothDefeatTail(const IogVisualSource *s, unsigned actor,
     uint8_t bank, uint16_t frame)
 {
     const uint8_t *ram = s->ram;
     const Ppu *ppu = s->ppu;
-    /* The stock Babel defeat changes the sprite bank before the old WRAM
-     * frame pointer is retired. The final actor fills the rest of the
-     * published OAM with copies of a single, overlapping character.
-     * The tile is live VRAM and can contain visible pixels. */
-    if (Word(ram, 0x644) != 0xf2 || !(Word(ram, 0x9ae) & 0x20) ||
-        bank != 0x8e || frame != 0x5955 || Word(ram, actor) != 0xdbdd ||
-        ram[actor + 2] != 0x80 || Word(ram, actor + 0x10) != 0x0141)
-        return false;
+    unsigned scene = Word(ram, 0x644), pc = Word(ram, actor), flags = Word(ram, actor + 0x10);
+    /* The head ($DBDD, flags $0141) and, for the first four frames after the
+     * Castoth kill, a second part ($DF15, flags $0302) carry the stale frame. */
+    if ((scene != 0xf2 && scene != 0x29) || !(Word(ram, 0x9ae) & 0x20) ||
+        bank != 0x8e || frame != 0x5955 || ram[actor + 2] != 0x80 ||
+        !((pc == 0xdbdd && flags == 0x0141) || (pc == 0xdf15 && flags == 0x0302)))
+        return -1;
     int x = (int16_t)(Word(ram, actor + 0x14) - Word(ram, 0x68a)) -
         (int16_t)Word(ram, actor + 0x18);
     int y = (int16_t)(Word(ram, actor + 0x16) - Word(ram, 0x68e)) -
         (int16_t)Word(ram, actor + 0x1a) - 1;
-    if (x < 0 || x >= 256 || y < 0 || y >= 223 || (ppu->highOam[31] & 0xf0))
-        return false;
-    unsigned xy = (unsigned)y * 256 + (unsigned)x;
     unsigned attr = Word(ram, actor + 0xe);
-    return attr == 0x3000 && ppu->oam[252] == xy && ppu->oam[254] == xy &&
-        ppu->oam[253] == attr && ppu->oam[255] == attr;
+    /* The copies are character 0 with the actor's own attribute mask. */
+    if (x < 0 || x >= 256 || y < 0 || y >= 223 || (attr & 0x1ff)) return -1;
+    unsigned xy = (unsigned)y * 256 + (unsigned)x;
+    int first = 128;
+    while (first > 0 && ppu->oam[2 * (first - 1)] == xy && ppu->oam[2 * (first - 1) + 1] == attr &&
+           !((ppu->highOam[(first - 1) >> 2] >> (((first - 1) & 3) * 2)) & 3))
+        first--;
+    return first <= 126 ? first : -1;
 }
 
 static IogVisualStatus BuildLayout(const IogVisualSource *s,
@@ -300,7 +381,7 @@ static IogVisualStatus BuildLayout(const IogVisualSource *s,
         if (x & 0x8000) { manual_end = true; break; }
         status = Add(s, out, 0, 0, n, Word(s->ram, at + 4), x,
             WorldPosition(Word(s->ram, at + 2), Word(s->ram, 0x68e)),
-            8, true, false, 0, 0, &order);
+            8, true, false, 0, 0, -1, &order);
         if (status != kIogVisualReady) goto done;
     }
     if (!manual_end) { status = kIogVisualCapacity; goto done; }
@@ -313,12 +394,18 @@ static IogVisualStatus BuildLayout(const IogVisualSource *s,
         int32_t x0 = ax - (int16_t)Word(s->ram, actor + 0x18);
         int32_t y0 = ay - (int16_t)Word(s->ram, actor + 0x1a) - 1;
         if (!Byte(s, bank, (uint16_t)(ptr + 8), &count) || !count) {
+            int tail = received ? -1 : CastothDefeatTail(s, actor, bank, ptr);
+            /* A last actor's fill is its own. Before other actors, the fill
+             * may start no later than the parts composed before this actor
+             * (the Castoth kill: slot 34 after 42 parts, slot 28 after 36);
+             * a later run means OAM simply ran out, and later actors would
+             * be lost without the stock having dropped them. */
             bool last = n + 1 == kIogVisualMaxActors || !actors[n + 1].actor;
-            if (!received && last && CastothDefeatTail(s, actor, bank, ptr)) {
+            if (tail >= 0 && (last || (uint32_t)tail <= order - prefix)) {
                 status = Add(s, out, actor, Word(s->ram, actor + 0x28), 0,
-                    Word(s->ram, actor + 0xe), x0, y0, 8, false, false, 0, 0, &order);
+                    Word(s->ram, actor + 0xe), x0, y0, 8, false, false, 0, 0, -1, &order);
                 if (status != kIogVisualReady) goto done;
-                continue;
+                break;
             }
             status = kIogVisualMalformedSource;
             goto done;
@@ -328,6 +415,9 @@ static IogVisualStatus BuildLayout(const IogVisualSource *s,
         bool player = (flags & 0x8000) != 0;
         uint8_t graphics_bank = 0; uint16_t graphics_base = 0;
         if (player && !PlayerGraphics(s, actor, &graphics_bank, &graphics_base, received ? 0xf179 : 0xd974)) { status = kIogVisualUnsupportedFormat; goto done; }
+        uint16_t queue_base = graphics_base;
+        bool pending = player && !received && !(Word(s->ram, 0x9ae) & 0x8000) &&
+            PlayerSheetStale(s, graphics_bank, graphics_base, 0xd974, &queue_base);
         for (unsigned i = 0; i < count; i++) {
             uint16_t record = (uint16_t)(ptr + 9 + i * 7), attr;
             uint8_t size, xoff, yoff;
@@ -335,9 +425,13 @@ static IogVisualStatus BuildLayout(const IogVisualSource *s,
                 !Byte(s, bank, (uint16_t)(record + 1 + !!(mask & 0x4000)), &xoff) ||
                 !Byte(s, bank, (uint16_t)(record + 3 + !!(mask & 0x8000)), &yoff) ||
                 !BusWord(s, bank, (uint16_t)(record + 5), &attr)) { status = kIogVisualMalformedSource; goto done; }
+            int slot = -1;
+            if (pending && (slot = PlayerQueueSlot(s, queue_base, (attr ^ mask) & 0x1ff)) < 0) {
+                status = kIogVisualUnsupportedFormat; goto done;
+            }
             status = Add(s, out, actor, Word(s->ram, actor + 0x28), i,
                 (uint16_t)((attr ^ mask) | blink), x0 + xoff, y0 + yoff,
-                size & 1 ? 16 : 8, false, player, graphics_bank, graphics_base, &order);
+                size & 1 ? 16 : 8, false, player, graphics_bank, graphics_base, slot, &order);
             if (status != kIogVisualReady) goto done;
         }
     }
@@ -431,7 +525,7 @@ IogVisualStatus IogVisualReceivedBuild(const IogVisualReceivedSource *s,
         picture.tile_attributes=Word(p,2);picture.width=picture.height=16;
         picture.palette=(picture.tile_attributes>>9)&7;picture.priority=(picture.tile_attributes>>12)&3;
         picture.hflip=!!(picture.tile_attributes&0x4000);picture.vflip=!!(picture.tile_attributes&0x8000);
-        if(!Pixels(&world,&picture,false,0,0)) {
+        if(!Pixels(&world,&picture,false,0,0,-1)) {
             out->world.part_count=0;return out->status=kIogVisualMalformedSource;
         }
         IogVisualScreenPart *part=&out->screen[n];

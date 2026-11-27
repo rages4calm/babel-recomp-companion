@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 import subprocess
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(r"C:\Users\crono\Desktop\Projects\Illusion of Gaia")
 HARNESS = r'''
 #include <assert.h>
 #include <stdio.h>
@@ -185,6 +185,60 @@ static void check_native_edges(void) {
         }
     }
 }
+/* Map cell byte of logical layer i at world (x,y), as MapTile addresses it. */
+static void cell(int i, unsigned x, unsigned y, unsigned value) {
+    unsigned width=readword(0x692+i*2);
+    g_snes->ram[0xa000+i*0x2000+((((y>>8)*(width>>8)+(x>>8))<<8)+(((y>>4)&15)<<4)+((x>>4)&15))]=value;
+}
+static void blank_cell_zero(void) {
+    for (int i=0;i<2;i++) for (int q=0;q<4;q++) word(0x2000+i*0x800+q*2,0);
+}
+static void check_art_bounds(void) {
+    /* A second layer whose raster scroll leaves its camera words (a sky with
+     * its own HDMA scroll) cannot cancel the main layer's frame. */
+    setup(false); IogWidescreenBeginFrame(); IogWidescreenBeforeDraw();
+    word(0x68c,0); g_ppu->hScroll[1]=1000;
+    IogWidescreenBeforeLine(64);
+    CHECK(WsShadowLayerActive(0) && g_ppu->extraLeftCur==43 && g_ppu->extraRightCur==43);
+    /* Not a repeating width (768 on a 512 tilemap): keyed far away, so its
+     * margins are blank while its native edge cells keep the real entry. */
+    {unsigned base=PPU_bgTilemapAdr(g_ppu,1), ty=(64+64)>>3, tx=(1000+255)>>3;
+     unsigned last=base+((ty&31)<<5)+(tx&31)+((tx&32)?0x400:0);
+     g_ppu->vram[last]=0x6789; IogWidescreenBeforeLine(64); uint16_t e;
+     CHECK(WsShadowLookupWorldTile(1,(24576+1000+255)>>3,(64+64)>>3,&e) && e==0x6789);
+     CHECK(WsShadowTile(1,300,64+64,1000,0x1000,0x4321)==0);}
+    g_ppu->hScroll[0]=1000; word(0x68a,0); IogWidescreenBeforeLine(65);
+    CHECK(!WsShadowLayerActive(0) && !g_ppu->extraLeftCur && !g_ppu->extraRightCur);
+    /* A repeating width (512 on a 512 tilemap) continues the hardware repeat. */
+    setup(false); word(0x694,512); word(0x69c,2048); word(0x68c,0);
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw();
+    g_ppu->hScroll[1]=532; IogWidescreenBeforeLine(64);
+    {unsigned y=64+64, x=532+256+8, mx=x%512; uint16_t e;
+     unsigned byte=g_snes->ram[0xc000+((((y>>8)*2+(mx>>8))<<8)+(((y>>4)&15)<<4)+((mx>>4)&15))];
+     CHECK(WsShadowLookupWorldTile(1,x>>3,y>>3,&e) && e==readword(0x2800+byte*8+((y>>3)&1)*4+((mx>>3)&1)*2));
+     CHECK(WsShadowLayerActive(0) && g_ppu->extraRightCur==43);}
+    /* Declared width is storage: empty columns past the art end the margin. */
+    setup(false); blank_cell_zero();
+    for (int i=0;i<2;i++) for (unsigned y=0;y<1024;y+=16) for (unsigned x=368;x<768;x+=16) cell(i,x,y,0);
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(64);
+    CHECK(g_ppu->extraLeftCur==43 && g_ppu->extraRightCur==8);
+    /* Art in the second layer alone keeps the margin open. */
+    setup(false); blank_cell_zero();
+    for (unsigned y=0;y<1024;y+=16) for (unsigned x=368;x<768;x+=16) cell(0,x,y,0);
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(64);
+    CHECK(g_ppu->extraRightCur==43);
+    /* A fixed 256px second layer (camera 0) cannot fill the margin: lines
+     * where the main layer has no art there stay black, others keep it. */
+    setup(false); blank_cell_zero();
+    word(0x694,256); word(0x69c,1024); word(0x68c,0); g_ppu->hScroll[1]=0;
+    for (unsigned y=0;y<128;y+=16) for (unsigned x=352;x<768;x+=16) cell(0,x,y,0);
+    IogWidescreenBeginFrame(); IogWidescreenBeforeDraw();
+    IogWidescreenBeforeLine(10);
+    CHECK(WsShadowLayerActive(0) && WsShadowLayerActive(1));
+    CHECK(g_ppu->extraLeftCur==43 && g_ppu->extraRightCur==0);
+    IogWidescreenBeforeLine(100);
+    CHECK(g_ppu->extraLeftCur==43 && g_ppu->extraRightCur==43);
+}
 int main(void) {
     g_snes=calloc(1,sizeof(*g_snes)); g_ppu=calloc(1,sizeof(*g_ppu));
     g_snes->ram=calloc(1,0x20000);
@@ -197,6 +251,7 @@ int main(void) {
     check_layers(false); check_layers(true);
     check_reset_pairing();
     check_native_edges();
+    check_art_bounds();
     setup(false); g_ppu->extraLeftRight=0;
     IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(12);
     CHECK(!WsShadowLayerActive(0) && !WsShadowLayerActive(1));
@@ -217,6 +272,12 @@ int main(void) {
     CHECK(!WsShadowLayerActive(0) && !g_ppu->extraLeftCur && !g_ppu->extraRightCur);
     setup(false); g_ppu->bgmode=7; IogWidescreenBeforeDraw(); IogWidescreenBeforeLine(12);
     CHECK(!WsShadowLayerActive(0) && g_ppu->extraLeftCur==43 && g_ppu->extraRightCur==43);
+    /* A Mode 7 frame never anchors a HUD from a stale BG3 tilemap: the split
+     * would refuse the host's HD Mode 7 capture on every line. */
+    setup(false); g_ppu->bgmode=7;
+    {unsigned row=PPU_bgTilemapAdr(g_ppu,2)+32;
+     g_ppu->vram[row+11]=0x0ef;g_ppu->vram[row+20]=0x0ef;g_ppu->vram[row+15]=0x01e;}
+    IogWidescreenBeforeDraw(); CHECK(hud_height==0 && !hud_always);
     /* Clearing margins never touches the central256 pixel columns. */
     setup(false); g_ppu->renderPitch=342*4;
     uint32_t *pixels=malloc(240*g_ppu->renderPitch);

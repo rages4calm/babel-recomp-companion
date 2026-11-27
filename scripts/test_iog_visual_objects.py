@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 import subprocess
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(r"C:\Users\crono\Desktop\Projects\Illusion of Gaia")
 HARNESS = r'''
 #include <stdio.h>
 #include <stdlib.h>
@@ -197,10 +197,12 @@ static void castoth_defeat_tail(void){
     ppu.oam[253]=0x3001;CHECK(run(v)==kIogVisualMalformedSource);
     ppu.oam[253]=0x3000;ppu.highOam[31]=0x80;CHECK(run(v)==kIogVisualMalformedSource);
     ppu.highOam[31]=0;wr(0x9ae,0);CHECK(run(v)==kIogVisualMalformedSource);
-    wr(0x9ae,0x20);wr(0x644,0x29);CHECK(run(v)==kIogVisualMalformedSource);
+    wr(0x9ae,0x20);wr(0x644,0x29);CHECK(run(v)==kIogVisualReady&&frame.part_count==2);wr(0x644,0x28);CHECK(run(v)==kIogVisualMalformedSource);
     wr(0x644,0xf2);wr(0x1010,1);wr(0x56,0x1030);wr(0x58,0x1000);
     wr(0x1004,0x1030);wr(0x1006,0);wr(0x1034,0);wr(0x1036,0x1000);
     CHECK(run(v)==kIogVisualMalformedSource); /* OAM may have cut off the next actor. */
+    for(unsigned k=0;k<128;k++){ppu.oam[2*k]=0x3740;ppu.oam[2*k+1]=0x3000;} /* The stock fill from this actor's first slot drops later actors. */
+    CHECK(run(v)==kIogVisualReady&&frame.part_count==1&&frame.parts[0].actor==0x1030);
 }
 static void exact_room_selection(void){
     for(unsigned room=0;room<65536;room++){

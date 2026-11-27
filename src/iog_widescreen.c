@@ -36,6 +36,9 @@
 enum {
     kWramCameraX    = 0x068A,  /* logical map-layer camera X */
     kWramMapBoundsX = 0x0692,  /* logical map-layer world width, px */
+    /* Shadow world X past every map (the store holds 32768px): nothing is
+     * captured or prefilled there, so margins keyed there read blank. */
+    kFarWorldX      = 24576,
 };
 
 static uint16_t WramWord(uint32_t addr)
@@ -140,23 +143,117 @@ static int PhysicalMapLayer(void)
     return (g_snes->ram[0x06EE] >> 7) & 1;
 }
 
+static bool LayerEnabled(int physical)
+{
+    return ((g_ppu->screenEnabled[0] | g_ppu->screenEnabled[1]) & (1 << physical)) != 0;
+}
+
+/* The 8x8 cell of a map layer at world (x, y) draws something: it lies
+ * inside the layer's world and is not the verified transparent character. */
+static bool MapArt(const MapLayer *layer, int x, int y)
+{
+    return x >= 0 && y >= 0 && x < layer->width && y < layer->height &&
+        (int)(MapTile(layer, (unsigned)x, (unsigned)y) & 0x3FF) != layer->blank;
+}
+
+/* World span [s_art_left, s_art_right) of the main layer that the margins may
+ * show this frame. The declared width ($0692) is storage, not art: the Great
+ * Wall declares 1024px while every cell from x 800 is empty, so a margin
+ * running to the declared edge showed the backdrop colour (green). Each side
+ * stops at the last 8px column that has art in the visible rows of either
+ * layer, measured at the frame's starting scroll. */
+static int s_art_left, s_art_right;
+
+static int ArtReach(const MapLayer *layer, int wx, int wy, int budget, int side)
+{
+    if (!layer->valid || !LayerEnabled(layer->physical) || wx < 0 || wy < 0 || budget <= 0) return 0;
+    /* Walk the margin's 8px columns from the outermost one inwards. */
+    int inner = side > 0 ? wx + 256 : wx - 1;
+    int outer = side > 0 ? wx + 256 + budget - 1 : wx - budget;
+    for (int column = outer & ~7, n = 0; n <= (abs(outer - inner) >> 3) + 1; n++, column -= side * 8) {
+        if (side > 0 ? column + 8 <= inner : column > inner) break;
+        for (int y = wy & ~7; y < wy + 224; y += 8)
+            if (MapArt(layer, column, y))
+                return side > 0 ? Clamp(column + 8 - inner, 0, budget)
+                                : Clamp(wx - column, 0, budget);
+    }
+    return 0;
+}
+
+static void MeasureArt(int cam, int budget, int bounds)
+{
+    s_art_left = 0;
+    s_art_right = bounds;
+    if (!s_map_frame) return;
+    int reach[2] = {0, 0};
+    for (int i = 0; i < 2; i++) {
+        const MapLayer *layer = &s_map_layers[i];
+        int wx = ScrollWorld(0x068A + i * 2, g_ppu->hScroll[layer->physical]);
+        int wy = ScrollWorld(0x068E + i * 2, g_ppu->vScroll[layer->physical]);
+        for (int side = 0; side < 2; side++) {
+            int r = ArtReach(layer, wx, wy, budget, side ? 1 : -1);
+            if (r > reach[side]) reach[side] = r;
+        }
+    }
+    /* Art narrows the main layer's world bounds; it never widens them. */
+    if (cam - reach[0] > s_art_left) s_art_left = cam - reach[0];
+    if (cam + 256 + reach[1] < s_art_right) s_art_right = cam + 256 + reach[1];
+}
+
+/* One line's margin on one side (side < 0: left). Where the second layer has
+ * art at the native edge but cannot continue past it (a fixed 256px sky,
+ * camera 0), only the main layer's art may fill the margin on this line;
+ * past that the line stays black instead of the backdrop colour. */
+static int LineMargin(int line, int cam, int margin, int side, bool placed)
+{
+    const MapLayer *main = &s_map_layers[0], *second = &s_map_layers[1];
+    if (!margin || !placed || !second->valid || !LayerEnabled(second->physical)) return margin;
+    int wx = ScrollWorld(0x068C, g_ppu->hScroll[second->physical]);
+    int wy = ScrollWorld(0x0690, g_ppu->vScroll[second->physical]);
+    if (wx < 0 || wy < 0) return margin;
+    /* Whether the margin fill (which reads only x inside the layer) has
+     * nothing for this side: its world span misses [0, width) entirely. */
+    bool fixed = side > 0 ? wx + 256 >= second->width
+                          : wx <= 0 || wx - margin >= second->width;
+    /* The native edge column. A layer exactly as wide as its tilemap repeats
+     * in hardware: the Great Wall sky scrolls to 256 and 512 by HDMA and
+     * still shows x 0..255 natively. */
+    int edge = side > 0 ? wx + 255 : wx;
+    if (second->width == (PPU_bgTilemapWider(g_ppu, second->physical) ? 512 : 256))
+        edge %= second->width;
+    if (!fixed || !MapArt(second, edge, wy + line)) return margin;
+    int y = ScrollWorld(0x068E, g_ppu->vScroll[main->physical]);
+    if (y < 0) return 0;
+    for (int k = margin - 1; k >= 0; k--)
+        if (MapArt(main, side > 0 ? cam + 256 + k : cam - 1 - k, y + line)) return k + 1;
+    return 0;
+}
+
 /* Refresh after simulation, and again after each line's HDMA/IRQ. A frame
  * sample cannot stand in for a parallax layer's current scanline scroll. */
 void IogWidescreenBeforeLine(int line)
 {
     if (!g_ppu || !g_snes || !g_ppu->extraLeftRight) return;
+    /* Per logical layer: its live descriptors still match the frame's
+     * (shaped), and its live scroll can also be placed in its world. */
+    bool shaped[2] = {false, false}, placed[2] = {false, false};
     if (s_map_frame) {
         bool current = WramWord(0x0644) == s_map_scene && (g_ppu->bgmode & 7) == 1;
         for (int i = 0; i < 2 && current; i++) {
             const MapLayer *layer = &s_map_layers[i];
             MapLayer live;
             bool valid = ReadMapLayer(i, &live);
-            bool enabled = ((g_ppu->screenEnabled[0] | g_ppu->screenEnabled[1]) &
-                            (1 << live.physical)) != 0;
-            if (enabled && (!valid || !layer->valid || live.physical != layer->physical ||
-                live.width != layer->width || live.height != layer->height ||
-                ScrollWorld(0x068A + i * 2, g_ppu->hScroll[live.physical]) < 0 ||
-                ScrollWorld(0x068E + i * 2, g_ppu->vScroll[live.physical]) < 0)) current = false;
+            bool enabled = LayerEnabled(live.physical);
+            shaped[i] = valid && layer->valid && live.physical == layer->physical &&
+                live.width == layer->width && live.height == layer->height;
+            placed[i] = shaped[i] &&
+                ScrollWorld(0x068A + i * 2, g_ppu->hScroll[live.physical]) >= 0 &&
+                ScrollWorld(0x068E + i * 2, g_ppu->vScroll[live.physical]) >= 0;
+            /* Only the main map layer decides the frame. The second layer is
+             * often a backdrop (sky, distant cliffs) whose raster scroll is
+             * its own and need not follow its camera words; cancelling the
+             * whole map frame for it blacked both of Itory's margins. */
+            if (i == 0 && enabled && !placed[0]) current = false;
         }
         if (!current) {
             WsShadowReset();
@@ -165,31 +262,57 @@ void IogWidescreenBeforeLine(int line)
     }
     int budget = g_ppu->extraLeftRight;
     int cam = ScrollWorld(0x068A, g_ppu->hScroll[PhysicalMapLayer()]);
-    int left = Clamp(cam, 0, budget);
-    int right = Clamp((int)WramWord(0x0692) - cam - 256, 0, budget);
+    int left = Clamp(cam - s_art_left, 0, budget);
+    int right = Clamp(s_art_right - cam - 256, 0, budget);
     if ((g_ppu->bgmode & 7) == 7) {
         left = right = budget;
     } else if (!s_map_frame || (g_ppu->bgmode & 7) != 1) {
         left = right = 0;
+    } else {
+        left = LineMargin(line, cam, left, -1, placed[1]);
+        right = LineMargin(line, cam, right, 1, placed[1]);
     }
     PpuSetExtraSideSpace(g_ppu, left, right, 0);
     if (!s_map_frame) return;
     for (int i = 0; i < 2; i++) {
         const MapLayer *layer = &s_map_layers[i];
-        if (!layer->valid) continue;
+        if (!layer->valid || (i == 1 && !shaped[1])) continue;
         int physical = layer->physical;
         int wx = ScrollWorld(0x068A + i * 2, g_ppu->hScroll[physical]);
         int wy = ScrollWorld(0x068E + i * 2, g_ppu->vScroll[physical]);
+        int wrap = 0;
+        bool fill = true;
+        if (i == 1 && !placed[1]) {
+            /* The second layer's raster scroll has left its camera words (Itory's
+             * cliffs scroll to 532 by HDMA with the camera word at 0). A layer
+             * exactly as wide as its tilemap repeats in hardware, so its world
+             * is the scroll modulo that width; the margins continue the repeat.
+             * Otherwise it is keyed far past every map: its margins read the
+             * transparent tile, and only the two edge cells (below) keep their
+             * real entries so the native columns are untouched. */
+            int span = PPU_bgTilemapWider(g_ppu, physical) ? 512 : 256;
+            if (layer->width == span && wy >= 0) {
+                wrap = span;
+                wx = (g_ppu->hScroll[physical] & (span - 1)) + span;
+            } else if (layer->width > kFarWorldX) {
+                continue;
+            } else {
+                fill = false;
+                wx = kFarWorldX + (g_ppu->hScroll[physical] & 0x3FF);
+                wy = g_ppu->vScroll[physical] & 0x3FF;
+            }
+        }
         if (wx < 0 || wy < 0) continue;
         WsShadowSetWorld(physical, (uint32_t)wx, (uint32_t)wy);
         WsShadowSetScroll(physical, g_ppu->hScroll[physical], g_ppu->vScroll[physical]);
         int y = (wy + line) & ~7;
         int begin = (wx - budget) & ~7;
         int end = (wx + 256 + budget + 7) & ~7;
-        for (int x = begin; x < end; x += 8) {
-            if (x >= 0 && x < layer->width && y >= 0 && y < layer->height)
+        for (int x = begin; fill && x < end; x += 8) {
+            int mx = wrap ? x % wrap : x;
+            if (x >= 0 && mx < layer->width && y >= 0 && y < layer->height)
                 WsShadowPrefillTile(physical, (uint32_t)x >> 3, (uint32_t)y >> 3,
-                                   MapTile(layer, (unsigned)x, (unsigned)y));
+                                   MapTile(layer, (unsigned)mx, (unsigned)y));
         }
         /* The tile renderer asks for a whole 8px cell. Fine scroll can put
          * its first/last cell partly inside the authentic viewport, including
@@ -221,6 +344,8 @@ void IogWidescreenBeforeDraw(void)
         WsShadowReset();
     s_reset_for_draw = false;
     s_map_frame = false;
+    s_art_left = 0;
+    s_art_right = 256;
     if (!g_ppu || !g_snes || g_ppu->extraLeftRight == 0)
         return;
     const int budget = g_ppu->extraLeftRight;
@@ -277,6 +402,10 @@ void IogWidescreenBeforeDraw(void)
             if (!s_map_frame) {
                 WsShadowReset();
                 left = right = 0;
+            } else {
+                MeasureArt(cam, budget, bounds);
+                left = Clamp(cam - s_art_left, 0, budget);
+                right = Clamp(s_art_right - (cam + 256), 0, budget);
             }
         } else left = right = 0;
     } else left = right = 0;
@@ -289,7 +418,13 @@ void IogWidescreenBeforeDraw(void)
      * label is blank for a while after a scene loads. */
     const uint16_t *map = &g_ppu->vram[PPU_bgTilemapAdr(g_ppu, 2) & 0x7fff];
     const uint16_t *row1 = map + 32;
-    if ((row1[11] & 0x3ff) == 0x0EF && (row1[20] & 0x3ff) == 0x0EF &&
+    /* A frame that starts in Mode 7 has no BG3 at the top, whatever the stale
+     * BG3 tilemap still holds (the walkable world map keeps the town's HUD
+     * there). Leaving the split on there also marked every Mode 7 line as
+     * HUD-anchored, which refuses the host's HD Mode 7 capture: Classic
+     * 16:9 then showed the 1x raster's streaks while Original 4:3 did not. */
+    if ((g_ppu->bgmode & 7) != 7 &&
+        (row1[11] & 0x3ff) == 0x0EF && (row1[20] & 0x3ff) == 0x0EF &&
         (row1[15] & 0x3ff) == 0x01E) {
         PpuSetWidescreenHudSplit(g_ppu, 32, 88, 168);
         PpuSetWidescreenHudAlwaysVisible(g_ppu, true);
