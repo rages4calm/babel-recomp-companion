@@ -43,14 +43,25 @@ void IogAchievementAuditStart(int argc, char **argv)
     static const char *const diagnostics[] = {
         "SNESRECOMP_RUN_FRAMES", "SNESRECOMP_DEBUG_PORT", "SNESRECOMP_OVERLAY_SELFTEST_PAD",
         "SNESRECOMP_COMPANION_SELFTEST_PAD", "SNESRECOMP_CLASSROOM_PAD_ROUTE",
-        "SNES_NET_MENU_SELFTEST",
+        "SNES_NET_MENU_SELFTEST", "SNESRECOMP_CAPTURE_OUT",
     };
     for (size_t i = 0; i < sizeof(diagnostics) / sizeof(*diagnostics); ++i)
         if (getenv(diagnostics[i])) return;
+    /* Anything that plays, pauses or records the session for the player
+     * (host_args.c). Matched as prefixes so "--flag=value" counts too. */
+    static const char *const automation[] = {
+        "--script", "--paused", "--start-paused", "--resume-state", "--netplay",
+        "--framedump", "--capture-",
+#ifndef IOG_ACHIEVEMENT_TEST_INPUT
+        /* A developer build configured with IOG_ACHIEVEMENT_TEST_INPUT=ON (off
+         * by default, never set for releases) may drive a real unlock through
+         * these, to test unlocks, saving and restarts end to end. */
+        "--input-script", "--load-state", "--exit-at-frame",
+#endif
+    };
     for (int i = 1; i < argc; ++i)
-        if (!strcmp(argv[i], "--script") || !strcmp(argv[i], "--start-paused") ||
-            !strcmp(argv[i], "--resume-state") ||
-            !strncmp(argv[i], "--netplay", 9)) return;
+        for (size_t k = 0; k < sizeof(automation) / sizeof(*automation); ++k)
+            if (!strncmp(argv[i], automation[k], strlen(automation[k]))) return;
     save_progress = true;
 #else
     (void)argc;

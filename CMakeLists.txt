@@ -34,6 +34,7 @@ endif()
 # Must precede the include: runner.cmake reads it to add the loader sources.
 option(IOG_RECEIVED_REFERENCE "Private interpreted GaiaLabs received-content reference host" OFF)
 option(IOG_RECEIVED_MAIN_CONTENT "Private GaiaLabs integration preview with qualified native content corrections" OFF)
+option(IOG_ACHIEVEMENT_TEST_INPUT "Developer test builds only: let --input-script/--load-state/--exit-at-frame runs record achievement progress" OFF)
 if(IOG_RECEIVED_MAIN_CONTENT AND NOT IOG_RECEIVED_REFERENCE)
     message(FATAL_ERROR "Received main content requires the isolated received profile")
 endif()
@@ -147,6 +148,10 @@ if(NOT IOG_RECEIVED_REFERENCE AND (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL 
         src/companion_achievements/toolkit/companion_achievements.c)
     target_compile_features(IllusionOfGaiaUsaSNESRecomp PRIVATE cxx_std_17)
     set_property(SOURCE src/companion_achievements/audit.c APPEND PROPERTY COMPILE_DEFINITIONS IOG_ACHIEVEMENT_STORAGE=1)
+    if(IOG_ACHIEVEMENT_TEST_INPUT)
+        message(WARNING "IOG_ACHIEVEMENT_TEST_INPUT: automated input can record achievement progress; never package this build")
+        set_property(SOURCE src/companion_achievements/audit.c APPEND PROPERTY COMPILE_DEFINITIONS IOG_ACHIEVEMENT_TEST_INPUT=1)
+    endif()
     set_property(SOURCE src/companion_achievements/progress.cpp APPEND PROPERTY INCLUDE_DIRECTORIES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/companion_achievements/toolkit")
     target_link_libraries(IllusionOfGaiaUsaSNESRecomp PRIVATE Threads::Threads)

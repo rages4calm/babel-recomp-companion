@@ -23,6 +23,8 @@ FORBIDDEN_NAMES = {"rom.cfg", "config.ini", "config.local.ini", "ra.ini",
 
 def validate_build(build: Path, native: bool = False) -> Path:
     cache = (build / "CMakeCache.txt").read_text(encoding="utf-8")
+    if re.search(r"^IOG_ACHIEVEMENT_TEST_INPUT:BOOL=(ON|TRUE|1|YES)$", cache, re.M | re.I):
+        raise ValueError("This build lets automated input record achievements (IOG_ACHIEVEMENT_TEST_INPUT); never package it")
     interpreter = re.search(r"^SNESRECOMP_INTERPRETER_ONLY:BOOL=(ON|TRUE|1)$", cache, re.M)
     if native and interpreter:
         raise ValueError("--native needs a build with SNESRECOMP_INTERPRETER_ONLY=OFF")
