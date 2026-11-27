@@ -179,32 +179,79 @@ static void ActivateStacking(void)
 
 static void ActivateEquipped(void) { g_equipped = true; }
 
-/* Cheat (in-game settings): hold every red jewel not yet given to the Gem
- * Man, i.e. 50 minus $0AB0 (a BCD count). One visible jewel, the rest in
- * the stacking store ($0B56), so stacking is switched on too. Returns how
- * many are held after, or -1 if there is no free slot. */
+/* Cheat (in-game settings): collect every Red Jewel still out in the world.
+ *
+ * The game has exactly 50, each behind a one-time flag (flag n is bit n&7 of
+ * $0A00 + n/8; set = already collected): 21 chests (the game's chest table,
+ * $01:ADA8, contents $01, flag $0200 + byte 3), 16 hidden jewels ($0280 +
+ * index), and 13 given by people. The cheat sets the flag of each one still
+ * out and adds its jewel, so nothing can be collected twice and the count
+ * never passes 50 (it used to hand over 50 minus those given, and every jewel
+ * found afterwards pushed the total past 50). Left to be earned in play: the
+ * trapped slaves' 3 (their flag also clears the rubble) and the slaver's 1
+ * (his flag also steers the escaped laborers' story). Refused while a message
+ * is up, because a giver sets its flag only after its dialogue.
+ *
+ * One visible jewel, the rest in the stacking store ($0B56), so stacking is
+ * switched on too. Returns how many are held after, or -1 if refused. */
+static bool JewelFlag(unsigned n) { return (Ram()[0x0A00 + (n >> 3)] >> (n & 7)) & 1; }
+static void SetJewelFlag(unsigned n) { Ram()[0x0A00 + (n >> 3)] |= (uint8_t)(1u << (n & 7)); }
+
 int IogInventoryAllRedJewels(void)
 {
-    if (!g_snes || !Rd(0x09AA))
+    if (!g_snes || !Rd(0x09AA) || (Rd(0x09EC) & 0x6000))
         return -1;
-    const unsigned bcd = Rd(0x0AB0) & 0xFF;
-    const int given = (bcd >> 4) * 10 + (bcd & 15);
-    const int want = given < 50 ? 50 - given : 0;
+    const Cart *cart = g_snes->cart;
+    if (!cart || !cart->rom || cart->romImageSize < 0x20000)
+        return -1;
+    /* Givers: flag and jewels (disassembly: sc01_fisherman, ec0A_right_guard,
+     * gs2B_seth, fr32_creep, wa79_lance, eu95_ann, nvAE_stone_girl2, daC6
+     * snake game). */
+    static const struct { uint8_t flag, jewels; } kGivers[] = {
+        {0xD7, 1}, {0xD8, 1}, {0xE0, 1}, {0xE1, 1}, {0xE2, 1}, {0xE5, 1}, {0xE6, 1}, {0xE7, 2},
+    };
+    /* A slot for the visible jewel first: nothing is marked collected
+     * unless the jewels can be handed over. */
     uint8_t *slots = &Ram()[kSlots];
     int slot = -1;
     for (int i = 0; i < 16 && slot < 0; i++)
         if (slots[i] == 0x01) slot = i;
-    for (int i = 0; i < 16 && slot < 0 && want; i++)
+    for (int i = 0; i < 16 && slot < 0; i++)
         if (!slots[i]) slot = i;
-    if (want && slot < 0)
+    if (slot < 0)
         return -1;
+    int granted = 0;
+    /* chests: 255 word pointers into bank $01, each list ends at X >= $80 */
+    unsigned seen[64], nseen = 0;
+    for (unsigned s = 0; s < 255; s++) {
+        unsigned p = 0x10000u | (cart->rom[0x1ADA8 + 2 * s] | cart->rom[0x1ADA9 + 2 * s] << 8);
+        for (unsigned guard = 0; p + 4 <= 0x20000u && !(cart->rom[p] & 0x80) && guard < 64; p += 4, guard++) {
+            if (cart->rom[p + 2] != 0x01)
+                continue;
+            const unsigned flag = 0x200 + (cart->rom[p + 3] & 0x7F);
+            bool dup = false;
+            for (unsigned k = 0; k < nseen; k++) dup |= seen[k] == flag;
+            if (dup || nseen >= 64)
+                continue;
+            seen[nseen++] = flag;
+            if (!JewelFlag(flag)) { SetJewelFlag(flag); granted++; }
+        }
+    }
+    for (unsigned i = 0; i < 16; i++)
+        if (!JewelFlag(0x280 + i)) { SetJewelFlag(0x280 + i); granted++; }
+    for (size_t i = 0; i < sizeof(kGivers) / sizeof(kGivers[0]); i++)
+        if (!JewelFlag(kGivers[i].flag)) { SetJewelFlag(kGivers[i].flag); granted += kGivers[i].jewels; }
+    int held = Ram()[0x0B56];
+    for (int i = 0; i < 16; i++)
+        held += slots[i] == 0x01;
+    const int want = held + granted;
     for (int i = 0; i < 16; i++)   /* one visible jewel, the rest stacked */
         if (slots[i] == 0x01 && i != slot) slots[i] = 0;
     if (want) {
         slots[slot] = 0x01;
         Ram()[0x0B56] = (uint8_t)(want - 1);
     } else {
-        if (slot >= 0) slots[slot] = 0;
+        if (slots[slot] == 0x01) slots[slot] = 0;
         Ram()[0x0B56] = 0;
     }
     if (!g_stacking && !IogRandomizerActive()) {
@@ -215,7 +262,30 @@ int IogInventoryAllRedJewels(void)
     return want;
 }
 
-static void ResetInventoryMods(void) { g_stacking = g_equipped = false; }
+/* Test-only (IOG_TEST_ALL_JEWELS=<frame>; never set in play): run the All
+ * Red Jewels cheat once at that frame, as the in-game settings would, and
+ * log what it did, so the cheat can be checked without driving the menu. */
+static long g_test_jewels_frame = -1;
+static unsigned g_test_jewels_frames;
+static void TestJewelsFrame(void)
+{
+    if (g_test_jewels_frame < 0 || ++g_test_jewels_frames != (unsigned long)g_test_jewels_frame)
+        return;
+    const int held = IogInventoryAllRedJewels();
+    const unsigned bcd = Rd(0x0AB0) & 0xFF;
+    fprintf(stderr, "[test_all_jewels] frame=%u held=%d given=%u\n", g_test_jewels_frames, held,
+            (bcd >> 4) * 10 + (bcd & 15));
+}
+
+static void ResetInventoryMods(void)
+{
+    g_stacking = g_equipped = false;
+    const char *test = getenv("IOG_TEST_ALL_JEWELS");
+    g_test_jewels_frame = test ? strtol(test, NULL, 0) : -1;
+    g_test_jewels_frames = 0;
+    if (g_test_jewels_frame >= 0)
+        snes_mod_register_frame_callback(TestJewelsFrame);
+}
 
 /* ---- overlay ------------------------------------------------------------- */
 
