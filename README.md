@@ -98,7 +98,7 @@ window's resolution; the others use the optional HD Mode 7 setting.
 
 | What | How to reach it |
 | --- | --- |
-| In-game settings (display, audio, HD scaling, button prompts, enhanced world map) | **Esc**, or **LT + R3** on a pad |
+| In-game settings (display, audio, achievements, HD scaling, status display, language, text and run options) | **Esc**, or **LT + R3** on a pad |
 | Area map | **Start** wherever the area has a map; **L** / **R** zoom, Back returns to the game |
 | Achievements | In-game settings → **Achievements**; or **I**, or **LT + L3** |
 | Status display at the screen edges (optional, Wide view) | In-game settings → **Status display**; or the launcher's Cheats and Mods page |
@@ -111,6 +111,8 @@ window's resolution; the others use the optional HD Mode 7 setting.
 | Quick item selection | Hold **X** and press **L** / **R** |
 | Walkable world map | Leave a town; **Up** / **Down** walk, **Left** / **Right** turn, confirm to enter a place |
 | Fullscreen, pause, screenshot | **Alt + Enter**, **P**, **PrtSc** |
+
+![The in-game settings menu, opened with Esc: display, audio and the Illusion of Gaia options such as achievements, HD scaling, status display, language, hold to advance text, text speed and run](docs/images/settings-menu.png)
 
 LT is the left trigger (ZL on Nintendo pads, L2 on PlayStation). R3 and L3 are
 the stick clicks. Button names above are SNES buttons.
