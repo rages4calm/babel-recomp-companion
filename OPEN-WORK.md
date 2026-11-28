@@ -83,6 +83,10 @@ times per boss scene (Showcase sessions 12-17, plus the GPU path and Wide
 view), find the slow frames and their cause (renderer, interpreter
 fallback, effects), and fix them; Console CPU cost (span planning, render
 workers) below is related.
+Requested (owner, from a player): controller rumble when Will is hit
+(HP drop in play, scaled by damage; ignore loads/rewinds/resets), optionally
+on death and screen shakes; on/off + intensity in the in-game settings and
+the launcher.
 
 ## Beta 22 (November 27): launcher Update and Controls, secret achievements
 
