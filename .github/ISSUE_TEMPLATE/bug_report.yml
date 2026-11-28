@@ -1,0 +1,53 @@
+name: Bug report
+description: Something looks wrong, crashes, or doesn't work in Illusion of Gaia Companion.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Never attach a ROM, a save of someone else's, or anything with personal info.
+        Tip: put an empty `diagnostics\on.txt` next to `babel-recomp.exe` before playing, then press **PrtSc** when you see the problem. Attach that screenshot and the files from `diagnostics`.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in the launcher's Update window, or the folder name (for example 0.3.0).
+      placeholder: "0.3.0"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Where you were in the game (area or boss) and what you were doing.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again (if you know)
+  - type: dropdown
+    id: picture
+    attributes:
+      label: Picture setting
+      options:
+        - Wide view
+        - Classic 16:9
+        - Original 4:3
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: input
+    attributes:
+      label: Controller or keyboard
+      placeholder: "Xbox controller / 8BitDo in X-input / keyboard"
+  - type: input
+    id: mods
+    attributes:
+      label: Mods, cheats or soundtrack you have on (if any)
+  - type: textarea
+    id: files
+    attributes:
+      label: Screenshot and diagnostics files
+      description: Drag the PrtSc screenshot and the files from the diagnostics folder here.

@@ -86,13 +86,29 @@ window's resolution; the others use the optional HD Mode 7 setting.
 
 ## How to play
 
-1. Download the latest test build from the
+1. Download the latest release from the
    [Releases page](https://github.com/rages4calm/babel-recomp-companion/releases)
    and unzip the whole folder.
 2. Install the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
    if the launcher does not start.
 3. Run `illusion-of-gaia.Companion.exe`, choose your USA ROM on the **Game**
    page, press **Apply**, then **Play**.
+
+### If something doesn't start
+
+- **"Windows protected your PC":** the programs aren't code-signed (that costs
+  money every year), so Windows warns about any new download like this. Click
+  **More info**, then **Run anyway**. Only download the game from this
+  repository's Releases page.
+- **Your antivirus removed a file:** restore it and add the game's folder as an
+  exception. Unsigned new programs are sometimes flagged by mistake.
+- **The launcher doesn't open at all:** install the
+  [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0).
+- **"ROM not recognised":** it must be the **USA** Illusion of Gaia ROM. A
+  512-byte copier header is fine; European and Japanese ROMs are not the base
+  game (European ones can be added as a language, see below).
+- **Unzip first:** run it from a normal folder you can write to, not from
+  inside the zip and not from Program Files.
 
 ### Where everything is
 
@@ -237,10 +253,18 @@ data out of commits. [Build and toolchain notes](scripts/toolchains/README.md)
 
 ## Reporting a problem
 
-Report Companion bugs on the [Illusion of Gaia Companion issue tracker](https://github.com/rages4calm/babel-recomp-companion/issues).
-Include the build or commit, the area or scene, what you were doing and your
-controller, display and mod settings. Attach any relevant log excerpt with
-personal paths removed.
+Report bugs on the [issue tracker](https://github.com/rages4calm/babel-recomp-companion/issues/new/choose)
+(the bug form asks for everything below). To give the most useful report:
+
+1. Before playing, make a folder named `diagnostics` next to `babel-recomp.exe`
+   and put an empty file named `on.txt` in it. The game then keeps a small log
+   of where the picture changed and what you marked.
+2. When you see something wrong, press **PrtSc**. That saves a screenshot and
+   marks the moment in the log.
+3. In the report, say where you were and what you were doing, your **Picture**
+   setting (Wide view, Classic 16:9 or Original 4:3) and your controller, and
+   attach the screenshot and the files from `diagnostics`. Remove anything
+   personal (like your Windows user name in a path) first.
 
 ## Community and contact
 

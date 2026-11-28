@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: First launch help (Windows warning, .NET, ROM)
+    url: https://github.com/rages4calm/babel-recomp-companion#if-something-doesnt-start
+    about: Most first-launch problems are answered here.
+  - name: Chat with the community (R.A.I.D. Discord)
+    url: https://discord.gg/Ad9BwSzctP
+    about: Questions, feedback and discussion.

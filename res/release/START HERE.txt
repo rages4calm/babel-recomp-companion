@@ -1,7 +1,7 @@
-ILLUSION OF GAIA COMPANION - TEST BUILD
-=======================================
+ILLUSION OF GAIA COMPANION
+==========================
 
-This is a test build. Things will be wrong. Please report what you find:
+Found a problem? Please report it (see WHEN YOU REPORT A PROBLEM below):
 https://github.com/rages4calm/babel-recomp-companion/issues
 
 WHAT YOU NEED
@@ -16,6 +16,14 @@ HOW TO START
 2. Run illusion-of-gaia.Companion.exe.
 3. On the Game page, choose your ROM, press Apply, then Play.
 
+IF WINDOWS SAYS "Windows protected your PC"
+The programs are not code-signed (signing costs money every year), so
+Windows warns about any new download like this. Click "More info", then
+"Run anyway". Only download the game from the GitHub Releases page.
+If your antivirus removes a file, restore it and add the folder as an
+exception. If the launcher does not open at all, install the .NET 8
+Desktop Runtime (link above).
+
 WHAT IS ON BY DEFAULT
 - Wide view: more of each area around the original picture.
 - The GaiaLabs Retranslation script.
@@ -28,12 +36,10 @@ The game plays its original SNES music. To use an MSU-1 orchestral pack,
 open the launcher's Soundtrack page and import the pack's ZIP or folder;
 that turns it on. "Use original audio" on the same page turns it off.
 
-UPDATING TO A NEWER TEST BUILD
-Unzip the new build into its own folder, then copy these from the old
-folder into the new one before you start it: the saves folder, the msu1
-folder (if you imported music), config.ini and mods\preloaded\state.toml.
-If the Soundtrack page then shows no pack, select it there and press
-"Use imported" once.
+UPDATING
+Click Update in the launcher. It downloads the newest release, keeps your
+saves, settings, keybinds, soundtrack and achievements, and moves your
+shortcut to the new folder.
 
 IN THE GAME
 - Esc (or Left Trigger + Right Stick click): settings
@@ -45,7 +51,12 @@ IN THE GAME
 - Alt+Enter: fullscreen
 
 WHEN YOU REPORT A PROBLEM
-Say where you were, what you were doing, and your display and controller
-setup. A screenshot helps. Logs are in the logs folder next to the game.
+1. Before playing, make a folder named diagnostics next to
+   babel-recomp.exe and put an empty file named on.txt in it.
+2. When you see something wrong, press PrtSc (the screenshot key). That
+   saves a picture and marks the moment in the diagnostics log.
+3. Open an issue (link at the top), say where you were and what you were
+   doing, your Picture setting (Wide / Classic 16:9 / Original 4:3) and
+   controller, and attach the screenshot and the files from diagnostics.
 
 Based on Babel Recomp by mr0ta. Full credits are in README.md.
