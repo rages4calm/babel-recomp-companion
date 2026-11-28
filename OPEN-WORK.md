@@ -92,6 +92,8 @@ iog.languages manifest says "choose your Illusion of Time ROM below"; the
 in-game Language row cannot change without one. Add a Language choice to
 the launcher (pick the Spain/France/Germany ROM, verify it, store it as the
 package expects) and have the in-game row say how to add a language.
+When done, add a short, easy README section "Playing in Spanish, French or
+German" (what you need, where to choose it, Ctrl+L), plus README.es.md.
 
 ## Beta 22 (November 27): launcher Update and Controls, secret achievements
 
