@@ -70,7 +70,10 @@ Native equals interpreter (WRAM) on the release build in Freejia and Mt. Kress.
 Still open after beta 23: a few pixels at the status/title-card edges in Itory
 $1C; the ship's dark night sky is never selected by the game's scripts (dusk
 checked); the left 24 columns in $15/$1A/$1B/$16 are filled from the map by
-decision; the campaign beyond the prison; physical-controller presses.
+decision; physical-controller presses. The automated campaign bot is
+stopped by the owner's decision (November 27): testers' play covers it, and
+native coverage now comes from their diagnostics logs (collect_diagnostics.py
+residuals, then extend.py/grant.py).
 Owner report (after beta 23): the Mt. Kress shortcut's spirit ride (the
 warp after "Yes", $A9 to $A0) shows 4:3 until the ride ends, then wide.
 Find the audit reason over the ride and admit that exact layout (as the
