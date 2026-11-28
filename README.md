@@ -208,7 +208,7 @@ until you press **Update**.
 
 ## Development status
 
-**Current build:** `0.3.1`, Windows x64. Automated routes reach the ending and
+**Current build:** `0.3.2`, Windows x64. Automated routes reach the ending and
 the credits, and players are testing it; please report anything you find.
 
 - **Native code.** The game's 65816 code is recompiled ahead of time to
