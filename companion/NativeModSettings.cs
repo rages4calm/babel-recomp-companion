@@ -11,7 +11,7 @@ public sealed record NativeModField(string Package, string Feature, string? Valu
 public sealed record NativeModSnapshot(Dictionary<string, JsonElement> Values, string Revision, IReadOnlySet<string> Available);
 
 /// <summary>Game-specific projection of Babel's authoritative native mod state.</summary>
-public static class NativeModSettings
+public static partial class NativeModSettings
 {
     private static NativeModField Toggle(string id, string section, string label, string package, string feature, string help, bool fallback = false) =>
         new(package, feature, null, new(id, section, label, OptionKind.Boolean, OptionValue.From(fallback), help));
@@ -42,6 +42,10 @@ public static class NativeModSettings
         Toggle("mod.equipped", "Convenience", "Mark the equipped item", "iog.enhancements", "equipped", "Draw the equipped-item frame in the original inventory."),
         Toggle("mod.hotswap", "Convenience", "Quick item selection", "iog.enhancements", "hotswap", "Hold the configured modifier and press L/R. Existing modifier mapping is preserved (default X)."),
         Toggle("mod.advance", "Convenience", "Hold to advance dialogue", "iog.enhancements", "hold_advance", "Hold a confirm button through dialogue. Questions still require a fresh press; existing speed choice is preserved."),
+        // Off is the feature disabled (the strength it had is kept); the game reads the strength.
+        new("iog.enhancements", "rumble", "strength", new("mod.rumble", "Convenience", "Controller rumble", OptionKind.Choice, OptionValue.From("normal"),
+            "Player 1's controller rumbles when Will is hit (harder hits rumble harder), longer when he falls, and lightly when the ground shakes. Keyboard play has no rumble; loading a state, rewinding or resetting never rumbles. Can also be changed in the in-game settings.",
+            Choices: new[] { new ChoiceItem("off", "Off"), new ChoiceItem("low", "Low"), new ChoiceItem("normal", "Normal"), new ChoiceItem("strong", "Strong") })),
         Toggle("mod.edge-hud", "Convenience", "Status display at the screen edges", "iog.graphics", "edge_hud", "In the wide view: your life at the left edge of the picture, the enemy's at the right edge, the DP ornament in the centre. Off keeps the original status display as one block in the centre. Can also be changed in the in-game settings."),
         Toggle("mod.world-map", "Convenience", "Enhanced world map", "iog.enhancements", "world_map", "On the walkable world map: smoother map picture, higher camera, markers over the places you can visit, a small map and a clearer entry prompt. Off shows the original walking view; in Wide view that includes the original's coarse ground with its horizontal streaks (Classic 16:9 and Original 4:3 smooth the ground with HD Mode 7 either way).", true),
         Toggle("gaialabs.jp-edward", "GaiaLabs", "Edward Castle background: JP", "iog.gaialabs", "jp_edward", "The Japanese release's mountains behind Edward Castle, with its own parallax layers (GaiaLabs). Off: the North American background.", true),
@@ -138,6 +142,8 @@ public static class NativeModSettings
                 var raw = feature == null ? null : Value(SplitValues(feature.Body).Values, field.ValueKey);
                 value = raw == null ? field.Option.DefaultValue.Clone() : field.Option.Kind == OptionKind.Integer && int.TryParse(raw, out var number) ? OptionValue.From(number) : OptionValue.From(raw);
                 if (field.Option.Id == "cheat.room-rewards" && !Enabled(feature)) value = OptionValue.From("1");
+                // Rumble is on in the game's catalog until the state file turns it off.
+                if (field.Option.Id == "mod.rumble" && feature != null && !Enabled(feature)) value = OptionValue.From("off");
             }
             if (OptionValidation.ValidateValue(field.Option, value) is { } error) throw new InvalidDataException(error);
             values[field.Option.Id] = value;
@@ -233,6 +239,11 @@ public static class NativeModSettings
             if (field.ValueKey == null) text = Upsert(text, "feature", identity, "enabled", values[field.Option.Id].GetBoolean() ? "true" : "false", newline);
             else {
                 if (field.Option.Id == "cheat.room-rewards") text = Upsert(text, "feature", identity, "enabled", values[field.Option.Id].GetString() == "1" ? "false" : "true", newline);
+                else if (field.Option.Id == "mod.rumble") {
+                    var off = values[field.Option.Id].GetString() == "off";
+                    text = Upsert(text, "feature", identity, "enabled", off ? "false" : "true", newline);
+                    if (off) continue;   // not a strength the game knows: keep the last one
+                }
                 else if (Find(text, "feature", identity) == null) text = Upsert(text, "feature", identity, "enabled", "false", newline);
                 var raw = field.Option.Kind == OptionKind.Integer ? values[field.Option.Id].GetInt32().ToString(CultureInfo.InvariantCulture) : values[field.Option.Id].GetString()!;
                 text = Upsert(text, "feature", identity, field.ValueKey, JsonSerializer.Serialize(raw), newline, nested: true);

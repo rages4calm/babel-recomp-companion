@@ -178,6 +178,10 @@ static void AutoUseSet(void *ud, int v) { (void)ud; IogAutoUseSet(v != 0); }
 static int SparkleGet(void *ud) { (void)ud; return IogSparkleGet(); }
 static void SparkleSet(void *ud, int v) { (void)ud; IogSparkleSet(v != 0); }
 static int RunGet(void *ud) { (void)ud; return IogRunGet(); }
+#include "iog_rumble.h"
+static const char *const kRumbleLevels[] = {"OFF", "LOW", "NORMAL", "STRONG"};
+static int RumbleGet(void *ud) { (void)ud; return IogRumbleGet(); }
+static void RumbleSet(void *ud, int v) { (void)ud; IogRumbleSet(v); }
 static void RunSet(void *ud, int v) { (void)ud; IogRunSet(v); }
 
 static int AdvanceGet(void *ud) { (void)ud; return IogHoldAdvanceGet(); }
@@ -203,13 +207,23 @@ static int EdgeHudGet(void *ud) { (void)ud; return IogEdgeHudGet(); }
 static void EdgeHudSet(void *ud, int v) { (void)ud; IogEdgeHudSet(v != 0); }
 
 /* ---- language (iog.languages/language) ------------------------------------ */
-static const char *const kLangNames[] = {"ENGLISH", "ESPAÑOL", "FRANÇAIS", "DEUTSCH"};
+/* The first entry is rewritten by LangGet: with no European ROM the row
+ * says where to add one instead of offering choices that cannot be taken. */
+static const char *kLangNames[] = {"ENGLISH", "ESPAÑOL", "FRANÇAIS", "DEUTSCH"};
 static const char *const kLangCodes[] = {"original", "es", "fr", "de"};
 static int g_lang_choice = -1;
+#if defined(__SWITCH__) || defined(__3DS__) || defined(__vita__) || defined(__ANDROID__)
+static const char *const kLangNoRom = "ENGLISH (ROM IN LANGUAGES FOLDER)";   /* no launcher there */
+#else
+static const char *const kLangNoRom = "ENGLISH (ADD ROM IN LAUNCHER)";
+#endif
 
 static int LangGet(void *ud)
 {
     (void)ud;
+    /* Read at draw time: the mod runtime (ROMs chosen in the launcher) is up by then. */
+    kLangNames[0] = IogI18nAvailable("es") || IogI18nAvailable("fr") || IogI18nAvailable("de")
+                        ? "ENGLISH" : kLangNoRom;
     if (g_lang_choice >= 0)
         return g_lang_choice;
     const char *cur = IogI18nLanguage();
@@ -278,8 +292,10 @@ static const char *const kEs[][2] = {
     {"SYSTEM", "SISTEMA"}, {"SAVE STATES", "ESTADOS GUARDADOS"}, {"RESET GAME", "REINICIAR JUEGO"},
     {"QUIT GAME", "SALIR DEL JUEGO"}, {"HD SCALING", "ESCALADO HD"}, {"ORIGINAL", "ORIGINAL"},
     {"SHARP PIXELS", "PÍXELES NÍTIDOS"}, {"SMOOTH (XBR)", "SUAVE (XBR)"}, {"LANGUAGE", "IDIOMA"},
+    {"ENGLISH (ADD ROM IN LAUNCHER)", "ENGLISH (AÑADE ROM EN EL LANZADOR)"},
+    {"ENGLISH (ROM IN LANGUAGES FOLDER)", "ENGLISH (ROM EN LA CARPETA LANGUAGES)"},
     {"HOLD TO ADVANCE TEXT", "MANTENER PARA AVANZAR"}, {"SLOW", "LENTO"}, {"NORMAL", "NORMAL"},
-    {"FAST", "RÁPIDO"}, {"MSU-1 MUSIC (NEXT LAUNCH)", "MÚSICA MSU-1 (AL REINICIAR)"},
+    {"FAST", "RÁPIDO"}, {"CONTROLLER RUMBLE", "VIBRACIÓN DEL MANDO"}, {"LOW", "BAJA"}, {"STRONG", "FUERTE"}, {"MSU-1 MUSIC (NEXT LAUNCH)", "MÚSICA MSU-1 (AL REINICIAR)"},
     {"MAP / RADAR (SNES BUTTONS)", "MAPA / RADAR (BOTONES SNES)"}, {"RADAR", "RADAR"},
     {"MAP ZOOM IN", "MAPA: ACERCAR"}, {"MAP ZOOM OUT", "MAPA: ALEJAR"}, {"MAP CENTER", "MAPA: CENTRAR"},
     {"MAP RADAR TOGGLE", "MAPA: RADAR"}, {"MAP BACK", "MAPA: VOLVER"},
@@ -416,6 +432,16 @@ void IogSettingsInstall(void)
     it.count = 3;
     it.get = RunGet;
     it.set = RunSet;
+    snes_settings_menu_add(&it);
+
+    /* Player 1's gamepad only; keyboard play has nothing to shake. */
+    memset(&it, 0, sizeof(it));
+    it.kind = kSnesSetting_Choice;
+    it.label = "CONTROLLER RUMBLE";
+    it.choices = kRumbleLevels;
+    it.count = 4;
+    it.get = RumbleGet;
+    it.set = RumbleSet;
     snes_settings_menu_add(&it);
 
     memset(&it, 0, sizeof(it));

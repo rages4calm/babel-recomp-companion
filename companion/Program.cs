@@ -16,6 +16,7 @@ internal static class Program
             form.Icon = launcherIcon;
             AddSoundtrackButton(form, controller);
             AddCheatsModsButton(form, controller);
+            AddCheatsModsButton(form, controller, language: true);
             InputForm.AddLauncherButton(form, controller);
             UpdateFeature.Attach(form, controller);
             ReloadWhenReturning(form, controller);
@@ -115,22 +116,24 @@ internal static class Program
         rail.Controls.Add(button);
     }
 
-    private static void AddCheatsModsButton(LauncherForm form, LauncherController controller)
+    /// <summary>Cheats and Mods, or the same window opened on its Language tab (the Spanish, French and German ROM choice).</summary>
+    private static void AddCheatsModsButton(LauncherForm form, LauncherController controller, bool language = false)
     {
         var rail = Descendants(form).OfType<FlowLayoutPanel>().Single(panel => panel.Controls.OfType<Button>().Any(button => button.AccessibleName == "Play"));
         var incumbent = rail.Controls.OfType<Button>().First();
-        var button = new Button { Text = "Cheats and Mods", Name = "gaia.cheats-mods", AccessibleName = "Cheats and Mods", Width = incumbent.Width, Height = incumbent.Height,
+        var button = new Button { Text = language ? "Language" : "Cheats and Mods", Name = language ? "gaia.language" : "gaia.cheats-mods",
+            AccessibleName = language ? "Game language" : "Cheats and Mods", Width = incumbent.Width, Height = incumbent.Height,
             Margin = incumbent.Margin, Font = incumbent.Font, FlatStyle = FlatStyle.Flat, BackColor = rail.BackColor,
             ForeColor = ColorTranslator.FromHtml(controller.Definition.Theme.Muted), Cursor = Cursors.Hand, UseMnemonic = false };
         button.FlatAppearance.BorderColor = rail.BackColor; button.FlatAppearance.MouseOverBackColor = ColorTranslator.FromHtml(controller.Definition.Theme.Surface);
         button.Click += (_, _) => {
             try {
-                if (controller.HasChanges) throw new InvalidOperationException("Apply or Revert your settings before opening Cheats and Mods.");
+                if (controller.HasChanges) throw new InvalidOperationException("Apply or Revert your settings before opening " + (language ? "Language." : "Cheats and Mods."));
                 var engine = controller.Snapshot.Values["engine.path"].GetString() ?? "";
                 if (!Path.IsPathFullyQualified(engine) || !File.Exists(engine)) throw new InvalidOperationException("Set the game program on the Game page, then Apply.");
                 if (NativeModSettings.IsEngineRunning(engine)) throw new InvalidOperationException("Close the game before editing launcher mods. Use in-game settings for the live session.");
-                using var mods = new CheatsModsForm(Path.GetDirectoryName(engine)!) { Icon = form.Icon }; mods.ShowDialog(form);
-            } catch (Exception error) { MessageBox.Show(form, error.Message, "Could not open Cheats and Mods", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                using var mods = new CheatsModsForm(Path.GetDirectoryName(engine)!, language) { Icon = form.Icon }; mods.ShowDialog(form);
+            } catch (Exception error) { MessageBox.Show(form, error.Message, language ? "Could not open Language" : "Could not open Cheats and Mods", MessageBoxButtons.OK, MessageBoxIcon.Information); }
         };
         rail.Controls.Add(button);
     }

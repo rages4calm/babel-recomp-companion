@@ -197,6 +197,36 @@ feature = "text_speed"
 id = "iog.text_speed"
 
 [[feature]]
+id = "rumble"
+name = "Controller rumble"
+description = "Player 1's controller rumbles when Will is hit (harder hits rumble harder), longer when he falls, and lightly when the ground shakes. Keyboard play has no rumble. Loading a state, rewinding or resetting never rumbles."
+group = "Gameplay"
+default_enabled = true
+
+[[option]]
+feature = "rumble"
+id = "strength"
+label = "Strength"
+type = "choice"
+default = "normal"
+
+[[option.choice]]
+value = "low"
+label = "Low"
+
+[[option.choice]]
+value = "normal"
+label = "Normal"
+
+[[option.choice]]
+value = "strong"
+label = "Strong"
+
+[[plugin]]
+feature = "rumble"
+id = "iog.rumble"
+
+[[feature]]
 id = "auto_use"
 name = "Use key items on the spot"
 description = "Press A where a key item you carry does something (a statue on its pedestal, a key at its door, the Crystal Ball, the Purification Stone and the rest) and Will uses it, without equipping it first. Melodies and hieroglyphs still work as usual. After andrewclunn's Gaia and Time."

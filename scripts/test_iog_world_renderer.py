@@ -1490,6 +1490,63 @@ static void angkor_entrance_arrival_mosaic(void){
  word(0x696,1280);g_ppu->mosaic=0x97;CHECK(!StockMosaicLayout(g_ppu,ram));
  g_ppu->mosaic=0x93;word(0x644,0xB1);CHECK(!StockMosaicLayout(g_ppu,ram));
 }
+static void kress_shortcut_ride_mosaic(void){
+ /* The GaiaLabs Mt. Kress shortcut leaves $A9 (bound for $A0) and arrives
+  * in $A0 through a mosaic and fade over each room's own display. */
+ fixture();word(0x644,0xA9);word(0x642,0xA0);word(0x6ee,5);
+ word(0x692,512);word(0x696,1024);word(0x694,512);word(0x698,512);
+ g_ppu->bgmode=9;g_ppu->mosaic=0x63;g_ppu->mosaicStartLine=1;
+ g_ppu->screenEnabled[0]=0x17;g_ppu->screenEnabled[1]=0x02;
+ g_ppu->cgwsel=0x12;g_ppu->cgadsub=0x21;g_snesrecomp_last_hdmaen=0;
+ CHECK(StockMosaicLayout(g_ppu,ram));
+ publication();IogWorldBeginRaster();CHECK(s.valid&&!s.mode7);
+ IogWorldCaptureLine(0);IogWorldCaptureLine(1);CHECK(s.valid);
+ g_ppu->mosaic=0x73;IogWorldCaptureLine(2);CHECK(!s.valid);
+ g_ppu->mosaic=0x63;CHECK(StockMosaicLayout(g_ppu,ram));
+ /* Only the ride: no pending $A0, another pending room, other color math. */
+ word(0x642,0);CHECK(!StockMosaicLayout(g_ppu,ram));
+ word(0x642,0xA8);CHECK(!StockMosaicLayout(g_ppu,ram));
+ word(0x642,0xA0);g_ppu->cgwsel=0x82;CHECK(!StockMosaicLayout(g_ppu,ram));
+ g_ppu->cgwsel=0x12;g_ppu->cgadsub=0x41;CHECK(!StockMosaicLayout(g_ppu,ram));
+ g_ppu->cgadsub=0x21;g_snesrecomp_last_hdmaen=2;CHECK(!StockMosaicLayout(g_ppu,ram));
+ g_snesrecomp_last_hdmaen=0;word(0x696,512);CHECK(!StockMosaicLayout(g_ppu,ram));
+ /* Arrival in $A0 with nothing pending. */
+ fixture();word(0x644,0xA0);word(0x6ee,5);
+ word(0x692,768);word(0x696,512);word(0x694,512);word(0x698,512);
+ g_ppu->bgmode=9;g_ppu->mosaic=0xF3;g_ppu->mosaicStartLine=1;
+ g_ppu->screenEnabled[0]=0x17;g_ppu->screenEnabled[1]=0x02;
+ g_ppu->cgwsel=0x12;g_ppu->cgadsub=0x21;g_snesrecomp_last_hdmaen=0;
+ CHECK(StockMosaicLayout(g_ppu,ram));
+ publication();IogWorldBeginRaster();CHECK(s.valid&&!s.mode7);
+ IogWorldCaptureLine(0);IogWorldCaptureLine(1);CHECK(s.valid);
+ g_ppu->screenEnabled[1]=0;CHECK(!StockMosaicLayout(g_ppu,ram));
+ g_ppu->screenEnabled[1]=2;word(0x692,512);CHECK(!StockMosaicLayout(g_ppu,ram));
+ word(0x692,768);g_ppu->windowsel=2;CHECK(!StockMosaicLayout(g_ppu,ram));
+ g_ppu->windowsel=0;word(0x644,0xA1);CHECK(!StockMosaicLayout(g_ppu,ram));
+}
+static void comet_flight_starfield(void){
+ /* The comet flight's one BG1 starfield (256x256, wrapping in the ring)
+  * continues past the field; nothing else in $E7 or any other room does. */
+ static PictureEpoch e;memset(&e,0,sizeof e);fixture();
+ e.ram[0x644]=0xE7;e.ram[0x6EE]=5;e.ram[0x6EF]=4;
+ e.ram[0x692]=0;e.ram[0x693]=1;e.ram[0x696]=0;e.ram[0x697]=1;
+ g_ppu->bgmode=9;g_ppu->mosaic=0;g_ppu->windowsel=0;g_ppu->bgXsc[0]=0x11;
+ g_ppu->screenEnabled[0]=0x15;g_ppu->screenEnabled[1]=0;
+ g_ppu->cgwsel=0x02;g_ppu->cgadsub=0x31;g_snesrecomp_last_hdmaen=2;
+ CHECK(CometFlightStars(&e,g_ppu));
+ e.ram[0x644]=0xE8;CHECK(!CometFlightStars(&e,g_ppu));e.ram[0x644]=0xE7;
+ e.ram[0x697]=4;CHECK(!CometFlightStars(&e,g_ppu));e.ram[0x697]=1;
+ e.ram[0x693]=2;CHECK(!CometFlightStars(&e,g_ppu));e.ram[0x693]=1;
+ e.ram[0x6EE]=0x85;CHECK(!CometFlightStars(&e,g_ppu));e.ram[0x6EE]=5;
+ g_ppu->screenEnabled[0]=0x17;CHECK(!CometFlightStars(&e,g_ppu));g_ppu->screenEnabled[0]=0x15;
+ g_ppu->screenEnabled[1]=2;CHECK(!CometFlightStars(&e,g_ppu));g_ppu->screenEnabled[1]=0;
+ g_ppu->mosaic=0x13;CHECK(!CometFlightStars(&e,g_ppu));g_ppu->mosaic=0;
+ g_ppu->windowsel=2;CHECK(!CometFlightStars(&e,g_ppu));g_ppu->windowsel=0;
+ g_ppu->bgXsc[0]=0x10;CHECK(!CometFlightStars(&e,g_ppu));g_ppu->bgXsc[0]=0x11;
+ g_ppu->cgadsub=0x21;CHECK(!CometFlightStars(&e,g_ppu));g_ppu->cgadsub=0x31;
+ g_snesrecomp_last_hdmaen=0;CHECK(!CometFlightStars(&e,g_ppu));g_snesrecomp_last_hdmaen=2;
+ CHECK(CometFlightStars(&e,g_ppu));
+}
 static void late_story_mosaics(void){
  fixture();word(0x644,0xC3);word(0x6EE,0x0485);
  word(0x692,768);word(0x694,512);word(0x696,512);word(0x698,512);
@@ -1890,6 +1947,8 @@ static void mode7_lifecycle_and_packet(const char*base){
  dark_space_and_coast_mosaics();
  mode7_angkor_neighbor_mosaic();
  angkor_entrance_arrival_mosaic();
+ kress_shortcut_ride_mosaic();
+ comet_flight_starfield();
  mode7_menu_dismissal();
  mode7_menu_panel_scale();
  mode7_fixture();memcpy(before_ram,ram,sizeof(ram));CpuState cpu=g_cpu;

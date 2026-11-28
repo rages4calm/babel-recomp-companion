@@ -52,3 +52,49 @@ open Controls, press each face button, both bumpers, both triggers, Start, View,
 clicks and the d-pad on the "Try it" pad (each lights its SNES button); click Player 1's A
 controller cell and press RB (captures "RB"), then hold LT and press A (captures "LT + A");
 press B in a key capture (cancels); RB/LB switch pages; Close without saving.
+
+# Controller rumble — 2026-11-27
+
+Automated: `scripts/test_rumble.py` compiles the real `src/iog_rumble.c` with stubbed host
+and SDL calls (hit scaled by damage, HP gain, load/rewind/reset, run-ahead rollback, death,
+Off/Low/Normal/Strong, keyboard play, no pad, two pads, quake sound, the log writer); the
+launcher's `--mods-tests` round-trip the Off/Low/Normal/Strong choice. A Great Wall fight
+in the harness logs every request (`IOG_RUMBLE_LOG`) identically native, interpreter and
+native with run-ahead 2, and a Mummy Queen fight logs 57 hits and 27 quake-sound shake
+pulses identically native and interpreter. With `IOG_RUMBLE_LOG` set the game only logs and
+never calls the controller, and harness runs hide every pad from SDL.
+
+Physical controller (needs a person, about one minute, any rumble pad as player 1, HP
+Refill off): in a room with enemies, take a small hit (one short buzz) and a big one (a
+stronger, longer buzz); a herb gives none; walk into a lethal hit (one long rumble, nothing
+more through the game-over fade); in the in-game settings set CONTROLLER RUMBLE to LOW,
+then STRONG (the same hit feels weaker / stronger), then OFF (nothing at all); load a save
+state with less HP and rewind (no buzz); Freedan's Earthquaker landing or the Mummy Queen's
+roar gives a light rumble while the ground shakes; switch Player 1 to keyboard in the
+launcher (no rumble). Report any buzz that comes late, twice, or with no hit.
+
+# Game language (Spanish, French, German) — 2026-11-27
+
+Launcher: **Language** in the left column opens the Language tab of Cheats and Mods
+(`LanguageRoms.cs`, `CheatsModsForm.cs`). The ROM is identified by the game's own test
+(`IogTextRomLanguage`: copier header skipped, title `ILLUSION OF TIME ` + SPN/FRA/GRM at
+$FFC0); only the header is read and only the path is stored, as the iog.languages package
+reads it (feature `language`, value `code`, `[[resource]]` `rom_es`/`rom_fr`/`rom_de`).
+
+Automated: `build.ps1 -Test` runs `--language-tests` (38 checks on synthetic 64 KiB files
+with only a title: each release, copier header, USA/Italian/other/misplaced/tiny/text
+files refused, refusal writes nothing, game quoting without `\u` escapes for paths with an
+apostrophe and a plus, switching, English drops a European `language.txt`, a moved ROM,
+`languages/` one folder deep, a game-written selection updated in place).
+`tests/ui --language <fresh folder>` drives the tab (9 checks; with `GAIA_UI_SHOW=1` only
+on a hidden desktop, it also draws the tab to `language-tab.png`). A game run with the
+launcher-written state found the synthetic Spanish header (`[i18n] language available: es`)
+and its settings row read ENGLISH; without a European ROM the row reads
+ENGLISH (ADD ROM IN LAUNCHER).
+
+Not tested: playing in a European language from a real Illusion of Time ROM through the
+launcher (no European ROM on the test machine). Owner check, about two minutes: Language →
+Choose Illusion of Time ROM… → your ROM (the status names its language) → choose it →
+Apply changes → Play; the title screen and first dialogue are in that language; Ctrl+L
+cycles languages; back in the launcher choose English and Apply, and the game starts in
+English.

@@ -14,9 +14,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pthread.h>
 #endif
 
-enum { CacheRooms=8,PathCapacity=4096,SaveCapacity=8290,Cells=65536 };
+enum { CacheRooms=8,PathCapacity=4096,SaveCapacity=8290,Cells=65536,WriteJobs=CacheRooms*2 };
 typedef struct MapRoom {
     bool used,dirty;
     uint64_t age;
@@ -24,6 +25,28 @@ typedef struct MapRoom {
     IogMapDiscovery map;
     size_t count;
 } MapRoom;
+/* Discovery files are written by one background thread. A durable write
+ * (flush to disk, write-through rename) takes milliseconds, tens of them with
+ * a recorder writing video to the same disk, and the periodic flush and every
+ * room change used to stall the frame for it. */
+typedef struct WriteJob {
+    char path[PathCapacity];
+    uint8_t key[32];
+    uint8_t bytes[SaveCapacity];
+    size_t size;
+} WriteJob;
+typedef struct MapWriter {
+#ifdef _WIN32
+    CRITICAL_SECTION lock;CONDITION_VARIABLE wake,idle;HANDLE thread;
+#else
+    pthread_mutex_t lock;pthread_cond_t wake,idle;pthread_t thread;
+#endif
+    bool started,quit;
+    unsigned head,count;
+    unsigned failed;          /* failed writes not yet reported to the owner */
+    uint8_t failed_keys[WriteJobs][32];
+    WriteJob jobs[WriteJobs];
+} MapWriter;
 typedef struct CollisionLayers {
     bool secondary,art_secondary;
     unsigned map1,definitions1,flags1,size1,width1,height1;
@@ -48,6 +71,7 @@ struct IogMapRuntime {
     uint8_t hash_input[2*65536+2*2304+128];
     uint8_t *atlas;
     size_t atlas_capacity;
+    MapWriter writer;
 };
 static unsigned Word(const uint8_t*p,unsigned a){return p[a]|(unsigned)p[a+1]<<8;}
 static void Put32(uint8_t*p,uint32_t v){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(i*8));}
@@ -143,14 +167,118 @@ static bool AtomicWrite(IogMapRuntime*r,const char*path,const uint8_t*data,size_
     if(ok&&rename(temp,path))ok=false;if(!ok)unlink(temp);return ok;
 }
 #endif
+#ifdef _WIN32
+#define WriterLock(w) EnterCriticalSection(&(w)->lock)
+#define WriterUnlock(w) LeaveCriticalSection(&(w)->lock)
+#define WriterWait(w,c) SleepConditionVariableCS(&(w)->c,&(w)->lock,INFINITE)
+#define WriterSignal(w,c) WakeAllConditionVariable(&(w)->c)
+#else
+#define WriterLock(w) pthread_mutex_lock(&(w)->lock)
+#define WriterUnlock(w) pthread_mutex_unlock(&(w)->lock)
+#define WriterWait(w,c) pthread_cond_wait(&(w)->c,&(w)->lock)
+#define WriterSignal(w,c) pthread_cond_broadcast(&(w)->c)
+#endif
+static void WriterRun(IogMapRuntime*r)
+{
+    MapWriter*w=&r->writer;
+    WriterLock(w);
+    for(;;){
+        while(!w->count&&!w->quit)WriterWait(w,wake);
+        if(!w->count)break;
+        /* The head slot stays this thread's until count drops. */
+        WriteJob*job=&w->jobs[w->head];
+        WriterUnlock(w);
+        bool ok=AtomicWrite(r,job->path,job->bytes,job->size);
+        WriterLock(w);
+        if(!ok&&w->failed<WriteJobs)memcpy(w->failed_keys[w->failed++],job->key,32);
+        w->head=(w->head+1)%WriteJobs;w->count--;
+        WriterSignal(w,idle);
+    }
+    WriterUnlock(w);
+}
+#ifdef _WIN32
+static DWORD WINAPI WriterThread(LPVOID r){WriterRun((IogMapRuntime*)r);return 0;}
+#else
+static void*WriterThread(void*r){WriterRun((IogMapRuntime*)r);return NULL;}
+#endif
+static void WriterInit(MapWriter*w)
+{
+#ifdef _WIN32
+    InitializeCriticalSection(&w->lock);InitializeConditionVariable(&w->wake);InitializeConditionVariable(&w->idle);
+#else
+    pthread_mutex_init(&w->lock,NULL);pthread_cond_init(&w->wake,NULL);pthread_cond_init(&w->idle,NULL);
+#endif
+}
+static bool WriterStart(IogMapRuntime*r)
+{
+    MapWriter*w=&r->writer;if(w->started)return true;
+#ifdef _WIN32
+    w->thread=CreateThread(NULL,0,WriterThread,r,0,NULL);w->started=w->thread!=NULL;
+#else
+    w->started=pthread_create(&w->thread,NULL,WriterThread,r)==0;
+#endif
+    return w->started;
+}
+/* Returns once no queued file is the room's (key) file. */
+static void WriterDrainRoom(MapWriter*w,const uint8_t key[32])
+{
+    if(!w->started)return;
+    WriterLock(w);
+    for(;;){
+        bool pending=false;
+        for(unsigned i=0;i<w->count&&!pending;i++)
+            pending=!memcmp(w->jobs[(w->head+i)%WriteJobs].key,key,32);
+        if(!pending)break;
+        WriterWait(w,idle);
+    }
+    WriterUnlock(w);
+}
+/* Returns once every queued file is on disk (or has failed). */
+static void WriterDrain(MapWriter*w)
+{
+    if(!w->started)return;
+    WriterLock(w);while(w->count)WriterWait(w,idle);WriterUnlock(w);
+}
+static void WriterStop(MapWriter*w)
+{
+    if(w->started){
+        WriterLock(w);w->quit=true;WriterSignal(w,wake);WriterUnlock(w);
+#ifdef _WIN32
+        WaitForSingleObject(w->thread,INFINITE);CloseHandle(w->thread);
+#else
+        pthread_join(w->thread,NULL);
+#endif
+        w->started=false;
+    }
+#ifdef _WIN32
+    DeleteCriticalSection(&w->lock);
+#else
+    pthread_cond_destroy(&w->idle);pthread_cond_destroy(&w->wake);pthread_mutex_destroy(&w->lock);
+#endif
+}
+/* Hand a file to the writer; with no thread, write it here. */
+static bool WriterQueue(IogMapRuntime*r,const char*path,const uint8_t key[32],const uint8_t*bytes,size_t size)
+{
+    MapWriter*w=&r->writer;
+    if(!w->started)return AtomicWrite(r,path,bytes,size);
+    WriterLock(w);
+    while(w->count==WriteJobs)WriterWait(w,idle);
+    WriteJob*job=&w->jobs[(w->head+w->count)%WriteJobs];
+    snprintf(job->path,sizeof(job->path),"%s",path);memcpy(job->key,key,32);
+    memcpy(job->bytes,bytes,size);job->size=size;
+    w->count++;WriterSignal(w,wake);
+    WriterUnlock(w);
+    return true;
+}
 static bool Filename(const IogMapRuntime*r,const MapRoom*room,char path[PathCapacity])
 {
     char hex[65];for(unsigned i=0;i<32;i++)snprintf(hex+i*2,3,"%02x",room->key[i]);
     int n=snprintf(path,PathCapacity,"%s/%s.iogmap",r->directory,hex);
     return n>=0&&(unsigned)n<PathCapacity;
 }
-static bool Load(const IogMapRuntime*r,const MapRoom*room,IogMapDiscovery*out)
+static bool Load(IogMapRuntime*r,const MapRoom*room,IogMapDiscovery*out)
 {
+    WriterDrainRoom(&r->writer,room->key);   /* never read a file older than one queued */
     char path[PathCapacity];uint8_t bytes[SaveCapacity];size_t used=0;
     return Directory(r->directory,true)&&Filename(r,room,path)&&ReadFileBytes(path,bytes,sizeof(bytes),&used)&&
         IogMapDiscoveryDeserialize(out,bytes,used,&room->map.identity,room->map.width,room->map.height);
@@ -161,7 +289,8 @@ static bool Save(IogMapRuntime*r,MapRoom*room)
     IogMapDiscovery disk;
     if(Load(r,room,&disk))for(unsigned i=0;i<kIogMapDiscoveryBytes;i++)room->map.explored[i]|=disk.explored[i];
     room->count=Count(&room->map);uint8_t bytes[SaveCapacity];size_t size=0;char path[PathCapacity];
-    if(!Filename(r,room,path)||!IogMapDiscoverySerialize(&room->map,bytes,sizeof(bytes),&size)||!AtomicWrite(r,path,bytes,size))return false;
+    if(!Filename(r,room,path)||!IogMapDiscoverySerialize(&room->map,bytes,sizeof(bytes),&size)||
+       !WriterQueue(r,path,room->key,bytes,size))return false;
     room->dirty=false;r->writes++;return true;
 }
 IogMapRuntime *IogMapRuntimeCreate(const char*parent)
@@ -170,16 +299,38 @@ IogMapRuntime *IogMapRuntimeCreate(const char*parent)
     IogMapRuntime*r=calloc(1,sizeof(*r));if(!r)return NULL;
     int n=snprintf(r->directory,sizeof(r->directory),"%s/maps",parent);
     if(n<0||(size_t)n>=sizeof(r->directory)||!MakeDirectory(r->directory)){free(r);return NULL;}
+    /* Started here, at load: creating a thread runs every loaded DLL's thread
+     * attach (the GL driver's among them) and stalled one present by ~55 ms
+     * when it was first done mid-play. Without a thread, writes stay inline. */
+    WriterInit(&r->writer);(void)WriterStart(r);
     r->current=-1;r->reason="no_supported_frame";return r;
 }
-bool IogMapRuntimeFlush(IogMapRuntime*r)
+/* Rooms whose write the writer reported failed are dirty again. */
+static bool WriterFailures(IogMapRuntime*r)
 {
-    if(!r)return false;bool ok=true;
+    MapWriter*w=&r->writer;if(!w->started)return false;
+    uint8_t keys[WriteJobs][32];unsigned n;
+    WriterLock(w);n=w->failed;memcpy(keys,w->failed_keys,sizeof(keys));w->failed=0;WriterUnlock(w);
+    for(unsigned k=0;k<n;k++)for(unsigned i=0;i<CacheRooms;i++)
+        if(r->rooms[i].used&&!memcmp(r->rooms[i].key,keys[k],32))r->rooms[i].dirty=true;
+    return n>0;
+}
+static bool QueueDirty(IogMapRuntime*r)
+{
+    bool ok=true;
     for(unsigned i=0;i<CacheRooms;i++)if(!Save(r,&r->rooms[i]))ok=false;
     if(ok)r->last_flush=r->clock;return ok;
 }
+/* Everything dirty is on disk when this returns. */
+bool IogMapRuntimeFlush(IogMapRuntime*r)
+{
+    if(!r)return false;
+    bool ok=QueueDirty(r);WriterDrain(&r->writer);
+    if(WriterFailures(r))ok=false;
+    return ok;
+}
 void IogMapRuntimeDestroy(IogMapRuntime*r)
-{if(r){(void)IogMapRuntimeFlush(r);free(r->atlas);free(r);}}
+{if(r){(void)IogMapRuntimeFlush(r);WriterStop(&r->writer);free(r->atlas);free(r);}}
 static unsigned StaticCollision(const IogMapRuntimeFrame*f,unsigned flags,
     const CollisionLayers*l,unsigned index)
 {
@@ -353,7 +504,10 @@ bool IogMapRuntimeUpdate(IogMapRuntime*r,const IogMapRuntimeFrame*f)
     Reveal(r,f,room);r->atlas_dirty|=pixels_changed||changed||data_changed;
     if(changed||bank_changed||data_changed)r->last_atlas=0;
     r->visible=true;r->reason="ready_conservative_reachability";
-    if(r->clock-r->last_flush>=300&&!IogMapRuntimeFlush(r))r->reason="ready_storage_write_failed";
+    /* Periodic: queued, not waited for. A write that failed since makes its
+     * room dirty again and is reported here. */
+    if(WriterFailures(r))r->reason="ready_storage_write_failed";
+    else if(r->clock-r->last_flush>=300&&!QueueDirty(r))r->reason="ready_storage_write_failed";
     return true;
 }
 void IogMapRuntimeGetStatus(const IogMapRuntime*r,IogMapRuntimeStatus*out)

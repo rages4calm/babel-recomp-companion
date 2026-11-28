@@ -30,6 +30,7 @@
 #include "iog_widescreen.h"
 #include "iog_scene_view.h"
 #include "iog_world_renderer.h"
+#include "iog_perf.h"
 #include "iog_map_host.h"
 #include "iog_randomizer.h"
 #include "iog_inventory.h"
@@ -443,10 +444,15 @@ static void IogViewport(int fw, int fh, int dw, int dh, SnesDisplayViewport *out
 void IogSettingsInstall(void);   /* iog_settings.c */
 static void IogAfterRunFrame(const SnesDesktopHostFrameStats *st)
 {
+    double t0 = IOG_PERF_START();
     IogAchievementAuditFrame(st->frame);
+    IOG_PERF_END(kIogPerfAudit, t0); t0 = IOG_PERF_START();
     IogAchievementUiFrame(st->frame, (uint32_t)SDL_GetTicks(), IogCompanionAchievementQuiet() && !IogWalkableWorldActive());
+    IOG_PERF_END(kIogPerfToast, t0); t0 = IOG_PERF_START();
     IogMapHostFrame(IogWorldStockVerified()&&!IogRandomizerActive(),SNESRECOMP_ROM_EXPECTED_SHA256);
+    IOG_PERF_END(kIogPerfMap, t0); t0 = IOG_PERF_START();
     IogCompanionAfterFrame();
+    IOG_PERF_END(kIogPerfCompanion, t0);
 }
 
 static void IogShutdown(void)

@@ -10,13 +10,19 @@ internal sealed class CheatsModsForm : Form
     private readonly Button apply;
     private readonly Button revert;
     private bool syncing;
+    // Language tab: its own draft, applied with the rest (the iog.languages package).
+    private readonly ComboBox language = new();
+    private readonly Label languageRoms = new();
+    private readonly Dictionary<string, string> pickedRoms = new();
+    private NativeModSettings.LanguageState savedLanguage = new("original", Array.Empty<NativeModSettings.LanguageRom>());
+    internal const string LanguageTab = "Language";
     private static readonly Color Background = ColorTranslator.FromHtml("#101A23");
     private static readonly Color Surface = ColorTranslator.FromHtml("#1B2B37");
     private static readonly Color Accent = ColorTranslator.FromHtml("#D7B46A");
     private static readonly Color TextColor = ColorTranslator.FromHtml("#F2EBDD");
     private static readonly Color Muted = ColorTranslator.FromHtml("#A7B5BD");
 
-    internal CheatsModsForm(string engineDirectory)
+    internal CheatsModsForm(string engineDirectory, bool openLanguage = false)
     {
         this.engineDirectory = Path.GetFullPath(engineDirectory);
         Text = "Illusion of Gaia · Cheats and Mods"; BackColor = Background; ForeColor = TextColor;
@@ -68,6 +74,8 @@ internal sealed class CheatsModsForm : Form
             }
             tabs.TabPages.Add(tab);
         }
+        tabs.TabPages.Add(BuildLanguageTab());
+        if (openLanguage) tabs.SelectedIndex = tabs.TabCount - 1;
         layout.Controls.Add(tabs, 0, 1);
         status.ReadOnly = true; status.Multiline = true; status.Dock = DockStyle.Fill; status.BorderStyle = BorderStyle.None;
         status.BackColor = Background; status.ForeColor = Muted; status.AccessibleName = "Mods status"; status.Margin = new Padding(0, 12, 0, 8); layout.Controls.Add(status, 0, 2);
@@ -76,6 +84,66 @@ internal sealed class CheatsModsForm : Form
         footer.Controls.AddRange(new Control[] { close, apply, revert }); layout.Controls.Add(footer, 0, 3);
         Reload();
     }
+    private TabPage BuildLanguageTab()
+    {
+        var tab = new TabPage(LanguageTab) { BackColor = Background, ForeColor = TextColor, Padding = new Padding(12) };
+        var rows = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 2, Margin = Padding.Empty };
+        rows.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70)); rows.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+        rows.RowStyles.Add(new RowStyle(SizeType.Absolute, 150)); rows.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
+        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Background }; scroll.Controls.Add(rows); tab.Controls.Add(scroll);
+        Control Describe(string title, Control help) {
+            var description = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0, 0, 16, 10) };
+            description.RowStyles.Add(new RowStyle(SizeType.Absolute, 28)); description.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            description.Controls.Add(Label(title, 11, TextColor, FontStyle.Bold), 0, 0); description.Controls.Add(help, 0, 1); return description;
+        }
+        rows.Controls.Add(Describe("Game language", Label("Spanish, French and German come from your own copy of the official European release, Illusion of Time " +
+            "(Spain, France or Germany). Nothing is included: the game reads the text and font from your ROM, which is checked here and never copied. " +
+            "Untranslated lines stay in English. While you play, Ctrl+L switches language.", 9, Muted)), 0, 0);
+        language.DropDownStyle = ComboBoxStyle.DropDownList; language.Width = 206; language.FlatStyle = FlatStyle.Flat; language.BackColor = Surface; language.ForeColor = TextColor;
+        language.Margin = new Padding(0, 4, 0, 0); language.Name = "language.code"; language.AccessibleName = "Game language";
+        language.SelectedIndexChanged += (_, _) => RefreshDraft(); rows.Controls.Add(language, 1, 0);
+        languageRoms.Font = new Font("Segoe UI", 9); languageRoms.ForeColor = Muted; languageRoms.Dock = DockStyle.Fill; languageRoms.UseMnemonic = false;
+        languageRoms.Margin = Padding.Empty; languageRoms.AccessibleName = "Language ROMs found";
+        rows.Controls.Add(Describe("Illusion of Time ROM", languageRoms), 0, 1);
+        var choose = Button("Choose Illusion of Time ROM…", ChooseLanguageRom, 260); choose.Margin = new Padding(0, 4, 0, 0); choose.AccessibleName = "Choose Illusion of Time ROM";
+        rows.Controls.Add(choose, 1, 1);
+        return tab;
+    }
+    private string SelectedLanguage => language.SelectedItem is LanguageChoice choice ? choice.Code : "original";
+    /// <summary>The languages that have a ROM: saved ones, then ROMs chosen in this window and not yet applied.</summary>
+    private void ShowLanguages(string select)
+    {
+        var found = savedLanguage.Found.ToDictionary(x => x.Code, x => x.Path + (x.InLanguagesFolder ? " (languages folder)" : ""));
+        foreach (var (code, path) in pickedRoms) found[code] = path + " (not applied yet)";
+        bool was = syncing; syncing = true;
+        language.Items.Clear(); language.Items.Add(new LanguageChoice("original", "English"));
+        foreach (var item in NativeModSettings.Languages.Where(x => found.ContainsKey(x.Code))) language.Items.Add(new LanguageChoice(item.Code, item.Name));
+        // A language whose ROM has gone missing stays listed while selected, so it is not silently changed.
+        if (select != "original" && !found.ContainsKey(select) && NativeModSettings.Language(select) is { } missing)
+            language.Items.Add(new LanguageChoice(missing.Code, missing.Name + " (ROM missing)"));
+        language.SelectedItem = language.Items.Cast<LanguageChoice>().First(x => x.Code == select || x.Code == "original" && select == "original");
+        syncing = was;
+        languageRoms.Text = found.Count == 0
+            ? "None yet. Choose your ROM (.sfc or .smc), or put it in the languages folder beside babel-recomp.exe. The game takes it from where it is."
+            : string.Join(Environment.NewLine, NativeModSettings.Languages.Where(x => found.ContainsKey(x.Code)).Select(x => x.Name + ": " + found[x.Code]));
+    }
+    private void ChooseLanguageRom()
+    {
+        using var dialog = new OpenFileDialog { Title = "Choose your Illusion of Time ROM (Spain, France or Germany)", Filter = "SNES ROM (*.sfc;*.smc)|*.sfc;*.smc|All files (*.*)|*.*", CheckFileExists = true };
+        if (dialog.ShowDialog(this) == DialogResult.OK) UseLanguageRom(dialog.FileName);
+    }
+    /// <summary>Check a ROM the player chose and add its language to the draft (also the test entry point).</summary>
+    internal bool UseLanguageRom(string path)
+    {
+        var check = NativeModSettings.IdentifyLanguageRom(path);
+        if (check.Code == null) { Report(check.Message, true); return false; }
+        pickedRoms[check.Code] = Path.GetFullPath(path);
+        ShowLanguages(check.Code); RefreshDraft();
+        Report(check.Message + " Apply changes to play in " + NativeModSettings.Language(check.Code)!.Name + ".");
+        return true;
+    }
+    private bool LanguageDirty => pickedRoms.Count > 0 || SelectedLanguage != savedLanguage.Selected;
+    private sealed record LanguageChoice(string Code, string Label) { public override string ToString() => Label; }
     private static void DrawSectionTab(TabControl tabs, DrawItemEventArgs e)
     {
         bool selected = tabs.SelectedIndex == e.Index;
@@ -109,7 +177,7 @@ internal sealed class CheatsModsForm : Form
         ComboBox choice => OptionValue.From(((Choice)choice.SelectedItem!).Item.Value), _ => throw new InvalidOperationException("Unknown mod control.") });
     private void RefreshDraft() {
         if (syncing || saved == null) return;
-        var current = Values(); bool dirty = current.Any(pair => pair.Value.GetRawText() != saved.Values[pair.Key].GetRawText());
+        var current = Values(); bool dirty = LanguageDirty || current.Any(pair => pair.Value.GetRawText() != saved.Values[pair.Key].GetRawText());
         apply.Enabled = revert.Enabled = dirty;
         if (dirty) Report("Unapplied changes. Apply to use them on the next launch, or Revert to reload native settings.");
     }
@@ -128,14 +196,26 @@ internal sealed class CheatsModsForm : Form
                 else if (editor is NumericUpDown number) number.Value = value.GetInt32();
                 else if (editor is ComboBox choice) choice.SelectedItem = choice.Items.Cast<Choice>().Single(item => item.Item.Value == value.GetString());
             }
+            savedLanguage = NativeModSettings.ReadLanguage(engineDirectory); pickedRoms.Clear(); ShowLanguages(savedLanguage.Selected);
             saved = next; syncing = false; apply.Enabled = revert.Enabled = false;
             Report((next.Available.Count == NativeModSettings.Fields.Count ? "Native mod settings loaded. Changes apply on the next launch. All 50 Red Jewels remains an in-game action." :
                 "Some controls are unavailable in this engine's catalog. Build its matching engine and catalog to use those features.") +
                 (wideView ? "" : " Status display at the screen edges works in Wide view only; Picture is on the Display page."));
         } catch (Exception ex) { syncing = false; apply.Enabled = false; Report(ex.Message, true); }
     }
+    // Window tests (tests/ui --language) drive the form without showing it.
+    internal string StatusText => status.Text;
+    internal IReadOnlyList<string> LanguageChoices => language.Items.Cast<LanguageChoice>().Select(x => x.Label).ToList();
+    internal void SelectLanguage(string code) => language.SelectedItem = language.Items.Cast<LanguageChoice>().First(x => x.Code == code);
+    internal void ApplyChanges() => Apply();
     private void Apply() {
-        try { NativeModSettings.Apply(engineDirectory, Values(), saved.Revision); Reload(); Report("Native mod settings saved. Launch the game to use them. Existing saves, soundtrack and button bindings were preserved."); }
+        try {
+            var languageChanged = LanguageDirty;
+            // Refuse a language without its ROM before anything is written.
+            if (languageChanged) NativeModSettings.CheckLanguage(engineDirectory, SelectedLanguage, pickedRoms);
+            NativeModSettings.Apply(engineDirectory, Values(), saved.Revision);
+            if (languageChanged) NativeModSettings.ApplyLanguage(engineDirectory, SelectedLanguage, pickedRoms);
+            Reload(); Report("Native mod settings saved. Launch the game to use them. Existing saves, soundtrack and button bindings were preserved."); }
         catch (Exception ex) { Report(ex.Message, true); }
     }
     private sealed record Choice(ChoiceItem Item) { public override string ToString() => Item.Label; }

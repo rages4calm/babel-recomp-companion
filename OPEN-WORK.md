@@ -1,7 +1,7 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 27,
-2026 (tester build `v0.2.0-beta.23`; later sections are dated by the beta
+2026 (release `v0.3.0`; later sections are dated by the beta
 they describe, and a later entry supersedes an earlier one on the same
 point). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
@@ -13,6 +13,38 @@ played it.
 Play by a person is handled by testers the owner recruits (decided November
 27); it is no longer listed as a gap. What needs physical hardware (a real
 controller, real display scaling) says so, with a short checklist for testers.
+
+## 0.3.0 (November 27): first full release
+
+Suites on the release build: world renderer 23,253,810, visual objects
+107,133, widescreen 82,292, scene view 325,491, raster parallax, map runtime,
+Minimal HUD, hold advance, mods runtime 2,006, rumble 58, cheat rates,
+continuations, input bindings, package, gaialabs_asm; launcher 1,205 + updater
+135 + soundtrack 47 + activation 9 + mod settings 37 + languages 38. Native
+equals interpreter (WRAM) in Freejia and Mt. Kress on the release build.
+
+- **Rumble** (`iog.enhancements/rumble`, Off/Low/Normal/Strong, default
+  Normal): a hit scaled by damage, a long pulse on death, a light pulse on
+  the quake sound (#15) used by the game's screen shakes; never on loads,
+  rewinds, resets, NG+ or run-ahead rollbacks; goes to the pad in player 1's
+  seat. Native = interpreter rumble logs (Mummy Queen: 57 hits, 27 shakes).
+  `IOG_RUMBLE_LOG` is log-only; test runs hide physical pads. Physical feel:
+  checklist in `companion/VALIDATION.md` for testers.
+- **Languages:** a Language button and tab in the launcher (choose your
+  Illusion of Time ROM; same title check as the game; wrong files refused),
+  the in-game row explains how to add one, and README sections in English
+  and Spanish. Play in Spanish/French/German with a real European ROM is
+  untested here (no such ROM on this machine): checklist in VALIDATION.md.
+- **Wide view:** the Kress spirit ride's mosaic dissolve (145 fallback frames
+  -> 0) and the comet flight ($E7, starfield continued, asteroids in the
+  margins) are wide. Dark Gaia's arena ($E8) stays 4:3 by decision: its
+  backdrop is one 256-px painting whose horizon arc would notch at every
+  seam, and the phase-2 body touches both edges.
+- **Frame drops:** the area-map save stalled a frame (8-48 ms) every 5 s; it
+  now writes on a background thread (frame hashes identical). The rest of
+  the boss slowdown (Vampires 118 lag frames per 6,000) is the game's own
+  CPU lag, identical in 4:3 and wide; a "reduce slowdown" (CPU overclock)
+  option would change game timing and is the owner's call.
 
 ## Beta 23 (November 27): open gaps closed
 

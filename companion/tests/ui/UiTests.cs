@@ -3,6 +3,7 @@ using System.Text.Json;
 
 /// <summary>
 /// Window tests for the launcher. Modes:
+///   --language &lt;fresh scratch folder&gt;     Cheats and Mods Language tab, never shown: choose ROMs, apply, read back, render one PNG
 ///   --pad &lt;scratch game folder&gt;            mock XInput: every button, trigger and chord through capture and the Controls window
 ///   --dpi &lt;babel-recomp.exe&gt; &lt;out dir&gt;     Controls window and its dialogs at 96/144/192 DPI (WM_DPICHANGED, as dotnet/winforms' own DPI tests)
 ///   --click &lt;launcher.exe&gt; &lt;rom&gt; &lt;report&gt;  UI Automation click-through of the real launcher process
@@ -20,6 +21,7 @@ internal static class UiTests
         try {
             return args[0] switch {
                 "--pad" => PadTests.Run(args[1]),
+                "--language" => LanguageWindowTests.Run(args[1]),
                 "--dpi" => DpiTests.Run(args[1], args[2]),
                 "--probe" => Probe(),
                 "--invoke" => ClickThrough.Invoke(int.Parse(args[1]), args[2], args[3]),

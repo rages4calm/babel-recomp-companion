@@ -45,6 +45,7 @@
 #include "iog_native_continuations.h"
 #include "iog_world_renderer.h"
 #include "iog_i18n.h"
+#include "iog_perf.h"
 #ifndef IOG_RECEIVED_REFERENCE
 #include "iog_walkable_world.h"
 #include "companion_achievements/audit.h"
@@ -85,6 +86,7 @@ static bool g_world_observers_ready;
  * without a qualified publication pair rather than a partial observer. */
 void GameWorldObserveCompose(const CpuState *cpu, uint32_t pc24)
 {
+    if (IOG_PERF_ON) IogPerfCompose();
     if (g_world_observers_ready)
         IogWorldCaptureAtCompose(cpu, pc24);
 }
@@ -325,6 +327,7 @@ void GameDrawPpuFrame(void)
     int trigger;
     int line, ch;
     unsigned hdma_lines = 0, irq_count = 0;
+    double perf_t0;
 
 #ifndef IOG_RECEIVED_REFERENCE
     IogWidescreenBeforeDraw();
@@ -363,6 +366,7 @@ void GameDrawPpuFrame(void)
             SimpleHdma_DoLine(&hdma_chans[ch]);
         hdma_lines++;
         if (line == trigger) {
+            perf_t0 = IOG_PERF_START();
             g_snes->inIrq = true;
             cpu_push_interrupt_frame_at(&g_cpu, g_resume_pc);
             (void)interp_bridge_run_interrupt(&g_cpu, irq_vector());
@@ -374,17 +378,25 @@ void GameDrawPpuFrame(void)
                     g_resume_pc = resume;
             }
             trigger = g_snes->vIrqEnabled ? (int)g_snes->vTimer : -1;
+            IOG_PERF_END(kIogPerfIrq, perf_t0);
         }
+        perf_t0 = IOG_PERF_START();
 #ifndef IOG_RECEIVED_REFERENCE
         IogWidescreenBeforeLine(line);
         IogWorldCaptureLine(line);
 #else
         IogReceivedWorldCaptureLine(line);
 #endif
+        IOG_PERF_END(kIogPerfCapture, perf_t0);
+        perf_t0 = IOG_PERF_START();
         ppu_runLine(g_ppu, line);
+        IOG_PERF_END(kIogPerfLines, perf_t0);
     }
 #ifndef IOG_RECEIVED_REFERENCE
+    perf_t0 = IOG_PERF_START();
     IogWorldEndRaster(g_resume_pc, hdma_lines, irq_count);
+    IOG_PERF_END(kIogPerfEnd, perf_t0);
+    if (IOG_PERF_ON) IogPerfFrame((unsigned)snes_frame_counter);
 #else
     IogReceivedWorldEndRaster();
 #endif
@@ -582,3 +594,49 @@ void GameSessionReset(void)
     IogReceivedObserverReset();
 #endif
 }
+
+/* IOG_PERF=<file.csv>: see iog_perf.h (profiling builds only). */
+#if defined(IOG_PERF_TIMERS) && IOG_PERF_TIMERS
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+int g_iog_perf;
+static FILE *s_perf_file;
+static double s_perf_slot[kIogPerfCount];
+static unsigned s_perf_composes;
+double IogPerfNow(void)
+{
+#ifdef _WIN32
+    static double scale;
+    LARGE_INTEGER c;
+    if (!scale) { LARGE_INTEGER f; QueryPerformanceFrequency(&f); scale = 1000.0 / (double)f.QuadPart; }
+    QueryPerformanceCounter(&c);
+    return (double)c.QuadPart * scale;
+#else
+    return 0;
+#endif
+}
+void IogPerfAdd(int slot, double start) { s_perf_slot[slot] += IogPerfNow() - start; }
+void IogPerfCompose(void) { ++s_perf_composes; }
+static void IogPerfClose(void) { if (s_perf_file) fclose(s_perf_file); s_perf_file = NULL; }
+static void IogPerfOpen(void) __attribute__((constructor));
+static void IogPerfOpen(void)
+{
+    const char *path = getenv("IOG_PERF");
+    if (!path || !*path || !(s_perf_file = fopen(path, "w"))) return;
+    setvbuf(s_perf_file, NULL, _IOFBF, 1 << 20);
+    fprintf(s_perf_file, "frame,composes,lines_ms,irq_ms,capture_ms,end_ms,visual_ms,rows_ms,hud_ms,mode7_ms,audit_ms,toast_ms,map_ms,companion_ms\n");
+    atexit(IogPerfClose);
+    g_iog_perf = 1;
+}
+void IogPerfFrame(unsigned frame)
+{
+    if (!s_perf_file) return;
+    fprintf(s_perf_file, "%u,%u", frame, s_perf_composes);
+    for (int i = 0; i < kIogPerfCount; i++) fprintf(s_perf_file, ",%.4f", s_perf_slot[i]);
+    fputc('\n', s_perf_file);
+    memset(s_perf_slot, 0, sizeof(s_perf_slot));
+    s_perf_composes = 0;
+}
+#endif

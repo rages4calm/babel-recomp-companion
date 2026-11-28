@@ -777,6 +777,11 @@ static void ActivateHd(void)
     PresentFilter_Set(strcmp(v, "smooth") == 0 ? kPresentFilter_Smooth : kPresentFilter_Sharp);
 }
 
+/* A frame callback that must see each frame before anything here writes HP
+ * (the HP refill cheat): controller rumble (iog_rumble.c) sets it. */
+static SNESModFrameCallback g_hp_observer;
+void IogModsSetHpObserver(SNESModFrameCallback callback) { g_hp_observer = callback; }
+
 static void ResetHd(void)
 {
     /* The filter is always installed; it does nothing while the period is 0,
@@ -800,6 +805,7 @@ static void ResetHd(void)
     g_room_reward_multiplier=1;
     IogCheatRatesInvalidate();
     g_min_dp = 99;
+    if (g_hp_observer) snes_mod_register_frame_callback(g_hp_observer);
     snes_mod_register_frame_callback(InfiniteHpFrame);
     snes_mod_register_frame_callback(DpFrame);
     snes_mod_register_frame_callback(StatsFrame);

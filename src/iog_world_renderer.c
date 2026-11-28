@@ -14,6 +14,7 @@
 #include "iog_randomizer.h"
 #include "iog_sparkle.h"
 #include "iog_minimal_hud.h"   /* minimal HUD: begin/end around the raster */
+#include "iog_perf.h"
 #include "snes_overlay_draw.h"
 #include "common_cpu_infra.h"
 #include "common_rtl.h"
@@ -585,24 +586,32 @@ static bool RoomTransitionMosaic(const Ppu *p,const uint8_t *ram)
     static const struct {
         uint8_t scene,maps[2],main,sub,cgwsel,cgadsub,hdma;
         uint16_t layout,width,height,bg_width,bg_height;
+        uint16_t next; /* pending scene ($0642) when nonzero */
     } rooms[]={
-        {0x01,{0x11,0x19},0x17,0x02,0x82,0x01,0x00,0x0005,768,1024,768,1024},
-        {0x32,{0x18,0x11},0x17,0x16,0x82,0x01,0x02,0x0484,1280,1024,256,256},
-        {0x5A,{0x11,0x19},0x17,0x00,0x80,0xA2,0x06,0x0005,1024,1536,768,512},
-        {0x6B,{0x19,0x11},0x17,0x12,0x82,0x01,0x02,0x0085,1024,1024,1024,768},
-        {0x79,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256},
-        {0x7B,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,512,256,512,256},
-        {0x7D,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256},
-        {0x9B,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256},
+        {0x01,{0x11,0x19},0x17,0x02,0x82,0x01,0x00,0x0005,768,1024,768,1024,0},
+        {0x32,{0x18,0x11},0x17,0x16,0x82,0x01,0x02,0x0484,1280,1024,256,256,0},
+        {0x5A,{0x11,0x19},0x17,0x00,0x80,0xA2,0x06,0x0005,1024,1536,768,512,0},
+        {0x6B,{0x19,0x11},0x17,0x12,0x82,0x01,0x02,0x0085,1024,1024,1024,768,0},
+        {0x79,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256,0},
+        {0x7B,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,512,256,512,256,0},
+        {0x7D,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256,0},
+        {0x9B,{0x11,0x19},0x17,0x00,0x80,0xA3,0x02,0x0005,256,256,256,256,0},
         /* Angkor Wat's entrance after the GaiaLabs shortcut, which leaves
          * through the vision's mosaic. The stock world-map arrival shows
          * this same display without the mosaic. */
-        {0xB0,{0x11,0x19},0x17,0x02,0x82,0x41,0x00,0x0005,1024,1280,1024,1280},
+        {0xB0,{0x11,0x19},0x17,0x02,0x82,0x41,0x00,0x0005,1024,1280,1024,1280,0},
+        /* The GaiaLabs Mt. Kress shortcut: the spirit's ride leaves $A9
+         * through the same mosaic and fade (already bound for $A0), and
+         * arrives in $A0 at the stock vine's foot the same way. Both rooms
+         * keep their own color math; the stock door into $A0 has no mosaic. */
+        {0xA9,{0x11,0x19},0x17,0x02,0x12,0x21,0x00,0x0005,512,1024,512,512,0xA0},
+        {0xA0,{0x11,0x19},0x17,0x02,0x12,0x21,0x00,0x0005,768,512,512,512,0},
     };
     if(p->bgmode!=9 || (p->mosaic&15)!=3 || p->windowsel) return false;
     for(unsigned i=0;i<sizeof(rooms)/sizeof(rooms[0]);i++) {
         if(Word(ram,0x644)!=rooms[i].scene) continue;
         return Word(ram,0x6EE)==rooms[i].layout &&
+            (!rooms[i].next || Word(ram,0x642)==rooms[i].next) &&
             Word(ram,0x692)==rooms[i].width && Word(ram,0x696)==rooms[i].height &&
             Word(ram,0x694)==rooms[i].bg_width && Word(ram,0x698)==rooms[i].bg_height &&
             p->bgXsc[0]==rooms[i].maps[0] && p->bgXsc[1]==rooms[i].maps[1] &&
@@ -1216,6 +1225,22 @@ static bool BabelStarfieldLayout(const PictureEpoch *e,const Ppu *p)
        !PPU_bigTiles(p,1) && PPU_bgTilemapWider(p,1) && !PPU_bgTilemapHigher(p,1) &&
        ((p->screenEnabled[0]|p->screenEnabled[1])&2) &&
        p->cgwsel==0x02 && p->cgadsub==0x31;
+}
+
+/* The comet flight ($E7) is one plane: BG1 is a 256x256 starfield that the
+ * flight scrolls through vertically, wrapping in the ring (whose other half
+ * holds unrelated cells). Its HDMA channel
+ * only loads one scroll at the top of the field. Continue that map in both
+ * directions with its own period; the actors keep their own positions. */
+static bool CometFlightStars(const PictureEpoch *e,const Ppu *p)
+{
+    const uint8_t *ram=e->ram;
+    return Word(ram,0x644)==0xE7 && Word(ram,0x6EE)==0x0405 &&
+        Word(ram,0x692)==256 && Word(ram,0x696)==256 &&
+        p->bgmode==9 && !p->mosaic && !p->windowsel &&
+        p->bgXsc[0]==0x11 && !PPU_bigTiles(p,0) &&
+        p->screenEnabled[0]==0x15 && !p->screenEnabled[1] &&
+        p->cgwsel==0x02 && p->cgadsub==0x31 && g_snesrecomp_last_hdmaen==2;
 }
 
 /* Dark Space draws its stars from the same uploaded, repeating BG2 ring and
@@ -2261,7 +2286,7 @@ static bool Mode7DestinationPanel(const uint8_t *field,int map_rows)
 
 static bool RenderWorld(void)
 {
-    if(s.mode7) return RenderMode7Plane();
+    if(s.mode7) {double t0=IOG_PERF_START();bool ok=RenderMode7Plane();IOG_PERF_END(kIogPerfMode7,t0);return ok;}
     if(!s.valid || !s.epoch_count || s.width<256 || s.height<224) return false;
     PictureEpoch *first=&s.epochs[s.lines[1].epoch];
     bool live_actors=s.sky_field || s.stock_actor_field;
@@ -2380,6 +2405,7 @@ static bool RenderWorld(void)
     bool larai_mist=tracked_effect && s.epoch_count==1 && LaraiMist(first,p,&effect_camera);
     bool mansion_fog=tracked_effect && s.epoch_count==1 && MansionFog(first,p,&effect_camera);
     bool dark_space_stars=scene==0xE6 && s.epoch_count==1 && DarkSpaceStarfield(first,p);
+    bool comet_stars=scene==0xE7 && s.epoch_count==1 && CometFlightStars(first,p);
     bool babel_stars=babel_victory_wave || babel_victory_setup || dark_space_stars ||
         (babel_starfield_layout && CapturedHorizontalWave(p,1,RingWavePeriod,true));
     bool water_wave = WaterWave(first,p);
@@ -2485,9 +2511,11 @@ static bool RenderWorld(void)
     IogVisualSource source={s.active_ram,sizeof(s.active_ram),g_snes->cart->rom,
         g_snes->cart->romImageSize,&s.detached,true};
     s.visual.part_count=0;
+    double perf_t0=IOG_PERF_START();
     if(!live_actors && IogVisualObjectsBuild(&source,&viewport,&s.visual)!=kIogVisualReady) {
         s.reason="unsupported_visual_object";return false;
     }
+    IOG_PERF_END(kIogPerfVisual,perf_t0);
     *p=s.base;Detach(p);
     memcpy(p->vram,first->vram,sizeof(p->vram));
     int blank[2]={-1,-1};
@@ -2785,7 +2813,7 @@ static bool RenderWorld(void)
                         int repeat_width=finite_castle?band_model.width:finite_wall?wall_model.width:512;
                         sample_x%=repeat_width;if(sample_x<0)sample_x+=repeat_width;
                     }
-                    bool repeat=(adrift_ocean && logical==1) || story_sky || ((effect || (logical==1 && underside_backdrop)) &&
+                    bool repeat=(adrift_ocean && logical==1) || (comet_stars && !logical) || story_sky || ((effect || (logical==1 && underside_backdrop)) &&
                         !finite_horizon && !finite_wall && (!bounded || scene==0x85) && !classroom);
                     unsigned tile=MapTile(e,logical,sample_x,sample_y,repeat);
                     if(tile==0xFFFFFFFFu) tile=(unsigned)blank[logical];                    /* Overlapping authentic cells use the actual uploaded
@@ -2920,6 +2948,7 @@ static bool RenderWorld(void)
                 }
                 /* The classroom's own mask and the rest end at the same row. */
                 if(!native_pixel && worldy>=stock_bottom) inside=false;
+                if(comet_stars) inside=true;
                 if(inside || backdrop_only || story_sky)
                     s.output[row*s.width+start+x]=backdrop_only&&inside?composite[x]:s.row[x+skip];
                 else if(padding)
@@ -2936,7 +2965,9 @@ static bool RenderWorld(void)
     /* Keep HUD physical size while the world camera shows a larger extent.
      * It is an independently extracted original UI plane, not world terrain. */
     s.hud_layered=snes_ovl_frame_layer_available()!=0;
+    perf_t0=IOG_PERF_START();
     if(!s.hud_layered) CompositeHud((uint8_t *)s.output,s.width*4);
+    IOG_PERF_END(kIogPerfHud,perf_t0);
     s.reason=authored_window_pan?"ready_authored_window_pan":freejia_wave?"ready_freejia_wave":
         larai_mist?"ready_larai_mist":
         water_wave?"ready_water_wave":
@@ -2946,6 +2977,7 @@ static bool RenderWorld(void)
         babel_victory_setup?"ready_babel_victory_setup":
         mansion_fog?"ready_mansion_fog":
         dark_space_stars?"ready_dark_space_starfield":
+        comet_stars?"ready_comet_starfield":
         babel_stars?"ready_babel_starfield":
         band_plane?"ready_band_plane":
         deferred_raster_effect && !EffectPlaneScene(scene)?"ready_legacy_raster_effect":"ready";return true;

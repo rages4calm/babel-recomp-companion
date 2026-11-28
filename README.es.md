@@ -178,6 +178,24 @@ msu1/                       los .pcm de tu pack MSU-1 (opcional)
 shaders/                    shaders GLSL de RetroArch (opcional)
 ```
 
+### Jugar en castellano, francés o alemán
+
+El juego puede mostrar sus textos en castellano, francés o alemán, sacados de la
+versión europea oficial, *Illusion of Time*. No se incluye nada: necesitas tu
+propia ROM de España, Francia o Alemania (`.sfc` o `.smc`), además de tu ROM USA.
+
+1. En el lanzador de Windows, abre **Language** en la columna izquierda (es
+   también la pestaña **Language** de Cheats and Mods).
+2. Pulsa **Choose Illusion of Time ROM…** y elige tu ROM. El lanzador la
+   comprueba y dice de qué idioma es; solo recuerda dónde está el archivo y
+   nunca lo copia.
+3. Elige el idioma en la lista, pulsa **Apply changes** y luego **Play**.
+
+También puedes dejar la ROM en una carpeta `languages` junto al ejecutable
+(en consolas y Android es la única forma). Durante la partida, **Ctrl+L** cambia
+de idioma, y también la fila **IDIOMA** de los ajustes del juego (Esc). Las
+frases que la versión europea no tiene se quedan en inglés.
+
 ### Dónde va cada cosa
 
 | Plataforma | Carpeta del juego (ROM, `languages/`, `msu1/`, `mods/`, `shaders/`, `saves/`, `logs/`, `config.ini`) |

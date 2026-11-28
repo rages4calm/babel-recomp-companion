@@ -105,6 +105,7 @@ set(IOG_SOURCES
     src/iog_i18n.c
     src/iog_mods.c
     src/iog_cheat_rates.c
+    src/iog_rumble.c
     src/iog_msu.c
     src/iog_inventory.c
     src/iog_sparkle.c

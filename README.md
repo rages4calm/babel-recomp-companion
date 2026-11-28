@@ -139,8 +139,28 @@ on the launcher's Game page to **Open the setup screen**.
 | Input | Gamepad, deadzone, and **Button prompts**: Auto, SNES (classic) or Xbox |
 | Achievements | Your local progress |
 | Soundtrack | Import an optional MSU-1 music pack. Off until you import one; the game plays the original SNES music |
+| Language | English, or Spanish, French or German from your own Illusion of Time ROM (see below) |
 | Cheats and Mods | Cheats, and the conveniences: **Enhanced world map**, **Status display at the screen edges**, run (auto-run or hold), text speed, use key items on the spot, Red Jewel sparkles, item stacking, equipped-item marker, quick item selection, hold to advance dialogue |
 | Update | Finds the newest test build, shows what's new and its size, and installs it when you press **Update** |
+
+### Playing in Spanish, French or German
+
+The game can show its text in Spanish, French or German, taken from the
+official European release, *Illusion of Time*. Nothing is included: you need
+your own copy of the Spain, France or Germany ROM (`.sfc` or `.smc`), as well
+as your USA ROM.
+
+1. In the launcher, open **Language** in the left column (it is also the
+   **Language** tab of Cheats and Mods).
+2. Press **Choose Illusion of Time ROM…** and pick your ROM. The launcher checks
+   it and says which language it is; it only remembers where the file is and
+   never copies it.
+3. Choose the language in the list, press **Apply changes**, then **Play**.
+
+You can also put the ROM in a `languages` folder beside `babel-recomp.exe`
+instead. While you play, **Ctrl+L** switches language, and the **Language** row
+of the in-game settings (Esc) changes it too. Lines the European release does
+not have stay in English.
 
 ### Updating
 
@@ -170,9 +190,8 @@ until you press **Update**.
 
 ## Development status
 
-**Current build:** `0.2.0-beta.23`, Windows x64, pre-release for
-playtesting. Automated routes reach the ending and the credits; a full
-playthrough by a person is under way.
+**Current build:** `0.3.0`, Windows x64. Automated routes reach the ending and
+the credits, and players are testing it; please report anything you find.
 
 - **Native code.** The game's 65816 code is recompiled ahead of time to
   native code. In our replays of 142 routes through the game (the bosses, the

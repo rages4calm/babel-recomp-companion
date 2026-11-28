@@ -49,6 +49,18 @@ internal static class NativeModSettingsTests
             run = NativeModSettings.Read(root); run.Values["mod.run"] = OptionValue.From(true);
             NativeModSettings.Apply(root, run.Values, run.Revision);
             Check(NativeModSettings.Read(root).Values["mod.run"].GetBoolean(), "existing run feature can be reenabled from launcher");
+            var rumble = NativeModSettings.Read(root);
+            Check(rumble.Values["mod.rumble"].GetString() == "normal", "rumble the state never named reads Normal");
+            rumble.Values["mod.rumble"] = OptionValue.From("strong"); NativeModSettings.Apply(root, rumble.Values, rumble.Revision);
+            Check(NativeModSettings.Read(root).Values["mod.rumble"].GetString() == "strong" && File.ReadAllText(state).Contains("id = \"rumble\"\r\nenabled = true") &&
+                File.ReadAllText(state).Contains("strength = \"strong\""), "rumble strength enables the feature and is stored");
+            rumble = NativeModSettings.Read(root); rumble.Values["mod.rumble"] = OptionValue.From("off"); NativeModSettings.Apply(root, rumble.Values, rumble.Revision);
+            Check(NativeModSettings.Read(root).Values["mod.rumble"].GetString() == "off" && File.ReadAllText(state).Contains("id = \"rumble\"\r\nenabled = false") &&
+                File.ReadAllText(state).Contains("strength = \"strong\"") && !File.ReadAllText(state).Contains("strength = \"off\""), "rumble off disables the feature and keeps a strength the game knows");
+            rumble = NativeModSettings.Read(root); rumble.Values["mod.rumble"] = OptionValue.From("low"); NativeModSettings.Apply(root, rumble.Values, rumble.Revision);
+            Check(NativeModSettings.Read(root).Values["mod.rumble"].GetString() == "low" && File.ReadAllText(state).Contains("id = \"rumble\"\r\nenabled = true"), "rumble comes back on at the chosen strength");
+            rumble = NativeModSettings.Read(root); rumble.Values["mod.rumble"] = OptionValue.From("max");
+            Throws<SettingsValidationException>(() => NativeModSettings.Apply(root, rumble.Values, rumble.Revision), "reject unknown rumble strength");
             var stale = NativeModSettings.Read(root); File.AppendAllText(state, "# in-game change\r\n"); var external = File.ReadAllBytes(state);
             stale.Values["cheat.hp"] = OptionValue.From(false);
             Throws<SettingsConflictException>(() => NativeModSettings.Apply(root, stale.Values, stale.Revision), "reject stale in-game edit");

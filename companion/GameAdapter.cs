@@ -40,7 +40,7 @@ public sealed class GameAdapter : JsonGameAdapterBase
                 "The full path to babel-recomp.exe. It is already set when the launcher sits in the same folder. Saves, mods and settings live in that folder."),
             new OptionDefinition("rom.path", "Game", "Original USA ROM", OptionKind.Text,
                 OptionValue.From(Path.Combine(Project, "Illusion of Gaia (USA).sfc")),
-                "The full path to your own Illusion of Gaia (USA) ROM, .sfc or .smc. It is checked, never copied or uploaded."),
+                "The full path to your own Illusion of Gaia (USA) ROM, .sfc or .smc. It is checked, never copied or uploaded. To play in Spanish, French or German, also choose your Illusion of Time ROM under Language in the left column."),
             new OptionDefinition("launch.mode", "Game", "When you press Play", OptionKind.Choice, OptionValue.From("game"),
                 "Start the game is the normal choice. The setup screen is the game's own menu for changing keys and controller buttons and for the language and randomizer mods; start the game from there afterwards.",
                 Choices: new[] { new ChoiceItem("game", "Start the game"), new ChoiceItem("babel", "Open the setup screen (remapping)") })

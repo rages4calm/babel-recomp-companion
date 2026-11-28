@@ -623,6 +623,13 @@ static uint8 g_frame_stage[kSnesDesktopMaxFrameWidth * 8 * kSnesDesktopMaxFrameH
 #endif
 
 static GamepadInfo g_gamepad[kSnesHostPadSeats];
+/* The SDL joystick id of the gamepad seated as player `seat` (0-based), or -1
+ * when none is (empty seat, a raw joystick, keyboard play). Game code uses it
+ * to address that pad (Illusion of Gaia's controller rumble). */
+int snesrecomp_host_seat_gamepad_id(int seat) {
+  if (seat < 0 || seat >= kSnesHostPadSeats || g_gamepad[seat].raw_joystick) return -1;
+  return (int)g_gamepad[seat].joystick_id;
+}
 /* Device the launcher picked for each gamepad seat (SDL joystick id + 1, 0 =
  * any). Identical controllers - two DualSense - share a GUID, so the launcher
  * names the physical device; seats then follow that choice instead of the

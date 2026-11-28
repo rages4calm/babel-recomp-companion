@@ -4,6 +4,7 @@ using Companion.Launcher.Core;
 if (args.Contains("--engine")) { await EngineSmoke.Run(args); return; }
 if (InputBindingsTests.Command(args)) return;
 if (args.Contains("--mods-tests")) { NativeModSettingsTests.Run(); return; }
+if (args.Contains("--language-tests")) { LanguageRomTests.Run(); return; }
 if (args.Contains("--update-tests")) { await UpdateTests.RunAsync(); return; }
 if (args.Contains("--activation")) { ActivationTests.Run(); return; }
 if (args.Contains("--soundtrack-tests")) { await SoundtrackTests.RunAsync(); return; }
