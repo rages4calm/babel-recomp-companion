@@ -87,6 +87,11 @@ Requested (owner, from a player): controller rumble when Will is hit
 (HP drop in play, scaled by damage; ignore loads/rewinds/resets), optionally
 on death and screen shakes; on/off + intensity in the in-game settings and
 the launcher.
+Owner report: the launcher has no Languages section, although the
+iog.languages manifest says "choose your Illusion of Time ROM below"; the
+in-game Language row cannot change without one. Add a Language choice to
+the launcher (pick the Spain/France/Germany ROM, verify it, store it as the
+package expects) and have the in-game row say how to add a language.
 
 ## Beta 22 (November 27): launcher Update and Controls, secret achievements
 
