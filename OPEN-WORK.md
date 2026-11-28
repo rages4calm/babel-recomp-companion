@@ -1,7 +1,7 @@
 # Open work
 
 What is still to do, and what was not fixed or not tested, as of November 27,
-2026 (release `v0.3.0`; later sections are dated by the beta
+2026 (release `v0.3.1`; later sections are dated by the beta
 they describe, and a later entry supersedes an earlier one on the same
 point). Read `HANDOFF.md` for
 how things are built and where the evidence lives; this file is only the list.
@@ -13,6 +13,19 @@ played it.
 Play by a person is handled by testers the owner recruits (decided November
 27); it is no longer listed as a gap. What needs physical hardware (a real
 controller, real display scaling) says so, with a short checklist for testers.
+
+## 0.3.1 (November 28): ultrawide check
+
+Rendered at 5120x1440 and 3840x1080 (32:9), 3440x1440 and 2560x1080 (21:9) and
+1920x1080 across 15 areas, menus and transitions: no 4:3 fallback anywhere, no
+stretched characters, black only past a room's real edges; 32:9 (1194 game
+pixels wide at 1.5x) is the designed maximum, wider screens get side bars.
+Frame cost at 5120x1440 on an RTX 5070: rooms 6.6-7.3 ms typical, world map
+11.4 ms, ocean flight 12.9 ms; native = interpreter there. Fixed: the status
+display at the screen edges fell back to centred at 32:9 (HudWideMax 640 ->
+800; test `edge_hud_every_supported_width`). Display showcase with real
+frames: https://carl-prewitt.com/Illusion-of-Gaia-Showcase/ (source and
+captures in `.local/batch-001/showcase-web`).
 
 ## 0.3.0 (November 27): first full release
 

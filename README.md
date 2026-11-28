@@ -8,10 +8,12 @@ retranslation, achievements and optional orchestral MSU-1 music.
 [Features](#features) · [How to play](#how-to-play) · [Development status](#development-status) ·
 [Build from source](#build-from-source) · [Discord](#community-and-contact) · [Credits](#thanks)
 
-**Windows test builds are on the
-[Releases page](https://github.com/rages4calm/babel-recomp-companion/releases).**
-They are pre-releases for playtesting; please
-[report what you find](https://github.com/rages4calm/babel-recomp-companion/issues).
+**[Download the latest release](https://github.com/rages4calm/babel-recomp-companion/releases/latest)** (Windows) ·
+**[Watch the trailer](https://youtu.be/wTd_WI3gQ_g)** ·
+**[See every display setting in real frames, up to 32:9](https://carl-prewitt.com/Illusion-of-Gaia-Showcase/)**
+
+Found a problem? Please
+[report it](https://github.com/rages4calm/babel-recomp-companion/issues/new/choose).
 Bring your own unmodified **Illusion of Gaia (USA)** ROM; no game data is
 included. Maintained by
 [Carl Prewitt Jr. / rages4calm](https://github.com/rages4calm), based on
@@ -206,7 +208,7 @@ until you press **Update**.
 
 ## Development status
 
-**Current build:** `0.3.0`, Windows x64. Automated routes reach the ending and
+**Current build:** `0.3.1`, Windows x64. Automated routes reach the ending and
 the credits, and players are testing it; please report anything you find.
 
 - **Native code.** The game's 65816 code is recompiled ahead of time to

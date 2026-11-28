@@ -2170,8 +2170,11 @@ uint32_t IogWorldHdHaze(int x,unsigned light) { return WorldSkyPixel(x+hd.sky_tu
  * does not jump back to 4:3 at every small house.
  * Nothing is redrawn: each pixel of the game's plane moves whole. */
 int IogEdgeHudGet(void);
-/* The status art ends on row 38; a text box at the top starts on row 39. */
-enum { HudStatusRows=39, HudWideMax=640 };
+/* The status art ends on row 38; a text box at the top starts on row 39.
+ * HudWideMax holds the widest picture IogWorldGeometry makes: 32:9 (its
+ * aspect cap) is 796 plane columns at every view extent. At 640 a 32:9
+ * screen silently fell back to the centred display. */
+enum { HudStatusRows=39, HudWideMax=800 };
 static int HudPart(int x,int y)
 {
     if(y>=HudStatusRows) return 1;

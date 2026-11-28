@@ -101,7 +101,8 @@ void PpuSetExtraSpace(Ppu*p,uint16_t n){CHECK(p!=g_ppu&&!n);p->extraLeftRight=0;
 void PpuSetWidescreenHudSplit(Ppu*p,uint8_t h,uint8_t l,uint8_t r){CHECK(p!=g_ppu&&!h&&!l&&!r);}
 void PpuSetExtraObjects(Ppu*p,const PpuExtraObject*objects,size_t count){p->extraObjects=objects;p->extraObjectCount=count;}
 void IogSparkleDraw(uint8_t*d,size_t pitch,int w,int h,int x,int y){(void)d;(void)pitch;(void)w;(void)h;(void)x;(void)y;}
-int IogEdgeHudGet(void){return 0;}
+static int edge_hud_probe;
+int IogEdgeHudGet(void){return edge_hud_probe;}
 void PpuDrawDetachedLine(Ppu*p,int line){
  CHECK(p!=g_ppu&&(line==0||line==1));if(!line)return;detached_lines++;
  CHECK(p->renderPitch==1024&&!p->renderVram&&!p->hdFrame&&!p->overlayRenderBuffer[2]);
@@ -2191,6 +2192,26 @@ static void ring_strip_past_map_edge(void){
  publication();IogWorldBeginRaster();for(int line=0;line<=224;line++)IogWorldCaptureLine(line);
  IogWorldEndRaster(0x828051,225,0);CHECK(s.complete&&s.view.padding_right==0);
 }
+static void edge_hud_every_supported_width(void){
+ /* The status display at the screen edges must split at every picture
+  * width IogWorldGeometry can make, up to its 32:9 cap at all extents. */
+ const int drawables[][2]={{1920,1080},{2560,1080},{3440,1440},{3840,1080},{5120,1440},{7680,1440}};
+ for(int quarters=4;quarters<=6;quarters++)for(unsigned d=0;d<sizeof drawables/sizeof*drawables;d++){
+  fixture();s.extent_quarters=quarters;int w=0,h=0;
+  IogWorldGeometry(drawables[d][0],drawables[d][1],&w,&h);
+  memset(s.hud,0,sizeof s.hud);
+  for(int x=8;x<16;x++)s.hud[20*256+x]=0xff0000ffu;
+  for(int x=240;x<248;x++)s.hud[20*256+x]=0xff00ff00u;
+  s.hud[5*256+128]=0xffff0000u;
+  edge_hud_probe=1;int ww=0;const uint32_t*wide=HudWide(&ww);edge_hud_probe=0;
+  CHECK(wide!=NULL);if(!wide)continue;
+  CHECK(ww==w*224/h&&ww<=HudWideMax);
+  CHECK(wide[20*ww+8]==0xff0000ffu);                 /* left group at the left edge */
+  CHECK(wide[20*ww+ww-256+247]==0xff00ff00u);        /* right group at the right edge */
+  CHECK(wide[5*ww+(ww-256)/2+128]==0xffff0000u);     /* ornament centred */
+ }
+ fixture();
+}
 static void hud_fixed_color_math(void){
  /* Dark Gaia's defeat: COLDATA ramps to white with math on every layer,
   * BG3 included (CGADSUB $3F, CGWSEL $80, no colour window), then the
@@ -2241,7 +2262,7 @@ int main(int argc,char**argv){CHECK(argc==2);
   * world-map presentation is covered by test_iog_mode7_plane.py and
   * test_iog_mode7_perspective.py. */
  putenv("IOG_WORLD_MAP_FILTER=0");
- phase_queue();epochs_and_read_only();field_window_rebase();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();stock_camera_bottom_rows();stair_pan_between_floors();held_star_ring_rows();preserve_stock_bottom_object_edge();classroom_field_unmasked();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);ring_strip_past_map_edge();hud_fixed_color_math();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
+ phase_queue();epochs_and_read_only();field_window_rebase();geometry_and_canaries();fallback_constant_pixel_scale();stock_modal_plate_scale();stock_ending_plate();stock_opening_plate();live_effect_camera_models();actual_window_enable_gates();late_ips_identity(argv[1]);signed_camera_shake();repeating_secondary_samples();parallax_host_camera_and_static_upload();water_wave();babel_starfield();mansion_fog();village_heat();larai_mist();great_wall_authored_courses();clouds_outside_terrain_not_objects();calibrated_finite_horizon();generic_authored_window();stock_camera_bottom_rows();stair_pan_between_floors();held_star_ring_rows();preserve_stock_bottom_object_edge();classroom_field_unmasked();projected_source_row_seam();mode7_lifecycle_and_packet(argv[1]);mode7_producer_validated_extension(argv[1]);ring_strip_past_map_edge();hud_fixed_color_math();edge_hud_every_supported_width();real_map_edge_framing();identity_and_source_packet(argv[1]);printf("%u world-renderer assertions passed\n",checks);return 0;}
 '''
 
 
