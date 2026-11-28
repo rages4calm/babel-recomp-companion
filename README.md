@@ -6,7 +6,7 @@ area map that fills in as you explore, a walkable world map, the GaiaLabs
 retranslation, achievements and optional orchestral MSU-1 music.
 
 [Features](#features) · [How to play](#how-to-play) · [Development status](#development-status) ·
-[Build from source](#build-from-source) · [Credits](#thanks)
+[Build from source](#build-from-source) · [Discord](#community-and-contact) · [Credits](#thanks)
 
 **Windows test builds are on the
 [Releases page](https://github.com/rages4calm/babel-recomp-companion/releases).**
@@ -222,6 +222,14 @@ Report Companion bugs on the [Illusion of Gaia Companion issue tracker](https://
 Include the build or commit, the area or scene, what you were doing and your
 controller, display and mod settings. Attach any relevant log excerpt with
 personal paths removed.
+
+## Community and contact
+
+Discord: **Chrono.Trigger**
+
+Join [**R.A.I.D. — Retro AI Development**](https://discord.gg/Ad9BwSzctP)
+to follow development, share feedback and discuss retro ports, reverse-engineering
+and recompilation.
 
 ## Babel Recomp foundation
 
