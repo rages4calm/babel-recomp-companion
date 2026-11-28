@@ -45,6 +45,8 @@ equals interpreter (WRAM) in Freejia and Mt. Kress on the release build.
   the boss slowdown (Vampires 118 lag frames per 6,000) is the game's own
   CPU lag, identical in 4:3 and wide; a "reduce slowdown" (CPU overclock)
   option would change game timing and is the owner's call.
+- **Room-exit zoom jumps** (old issue #6, closed): the owner played many room
+  exits at 1.5x view extent on 0.3.0 and saw no zoom jump.
 
 ## Beta 23 (November 27): open gaps closed
 
