@@ -74,7 +74,7 @@ window's resolution; the others use the optional HD Mode 7 setting.
 - **Optional MSU-1 orchestral soundtrack**, imported and verified on the
   launcher's Soundtrack page. The original SNES music is the default.
 - **Conveniences you can switch on:** auto-run (walk to build speed; hold the
-  run button to start sooner) or hold to run, a text speed setting with the
+  run button to run at once) or hold to run, a text speed setting with the
   run button to hurry any line, using key items by pressing A on their
   spot, a twinkle over each Red Jewel still to be found, hold to advance
   dialogue,

@@ -30,7 +30,7 @@ public static partial class NativeModSettings
         Number("cheat.max-hp", "Minimum maximum HP", "stats", "max_hp", 0, 0, 40, "0 leaves maximum HP unchanged."),
         Toggle("mod.run", "Convenience", "Run", "iog.enhancements", "run", "Run with the configured run button (default Y). Uses the game's existing dash and preserves your button binding. Choose the style below."),
         new("iog.enhancements", "run", "style", new("mod.run-style", "Convenience", "Run style", OptionKind.Choice, OptionValue.From("auto"),
-            "Auto-run (after andrewclunn's Gaia and Time): walk to build speed, hold the run button to start sooner; turning sideways keeps it, reversing or stopping resets it. Hold: hold the run button with a direction to sprint at once.",
+            "Auto-run (after andrewclunn's Gaia and Time): walk to build speed, hold the run button to run at once; turning sideways keeps it, reversing or stopping resets it. Hold: hold the run button with a direction to sprint at once.",
             Choices: new[] { new ChoiceItem("auto", "Auto-run"), new ChoiceItem("hold", "Hold to run") })),
         Toggle("mod.text-speed", "Convenience", "Text speed", "iog.enhancements", "text_speed", "Choose how dialogue types out, and hold the run button to hurry any line (after andrewclunn's Gaia and Time). Off leaves the game's own pacing.", true),
         new("iog.enhancements", "text_speed", "speed", new("mod.text-speed-choice", "Convenience", "Dialogue speed", OptionKind.Choice, OptionValue.From("normal"),

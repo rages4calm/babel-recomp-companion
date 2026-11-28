@@ -14,6 +14,16 @@ Play by a person is handled by testers the owner recruits (decided November
 27); it is no longer listed as a gap. What needs physical hardware (a real
 controller, real display scaling) says so, with a short checklist for testers.
 
+## After 0.3.1 (November 28): auto-run on ramps
+
+Owner found: with auto-run on, Will could not take ramps even holding Y. Cause:
+auto-run wrote run speed 3 every frame, wiping the game's ramp booster (the
+Incan Ruins ir21 and Diamond Mine dm41 boosters raise the dash to 4 once at
+the ramp). Fixed: auto-run leaves a dash already going its way at 3 or faster,
+and holding the run button runs at once. Checked on the ir21 ramp, Y+left
+from the floor: auto now gives the same frames as hold (speed -4 at the
+booster, same height on the ramp); native = interpreter. Not released yet.
+
 ## 0.3.1 (November 28): ultrawide check
 
 Rendered at 5120x1440 and 3840x1080 (32:9), 3440x1440 and 2560x1080 (21:9) and

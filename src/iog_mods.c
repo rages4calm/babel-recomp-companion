@@ -62,8 +62,8 @@ static bool g_auto_run;   /* run style "auto": Drewish's build-up auto-run */
 
 /* Auto-run, after Drewish's Gaia and Time (RunButtonCore.patch.asm, used as
  * documentation; the code is this project's own). Each frame Will actually
- * moves with a direction held earns 1 point, or 8 with the run button held.
- * At 120 he runs in that direction for as long as he keeps moving. A sideways
+ * moves with a direction held earns 1 point; holding the run button fills it
+ * at once. At 120 he runs in that direction for as long as he keeps moving. A sideways
  * turn keeps the progress and redirects the run; reversing, stopping, a wall
  * or a lock resets it. Host-side state only: nothing is stored in the game. */
 enum { kAutoRunFull = 120 };
@@ -95,15 +95,28 @@ static void AutoRunTick(uint16_t pad)
         g_ar_progress = 0;
     }
     g_ar_dir = dir;
+    /* Holding the run button runs at once, as in the hold style. */
+    if (pad & g_run_mask)
+        g_ar_progress = kAutoRunFull;
     if (g_ar_progress < kAutoRunFull) {
-        g_ar_progress += (pad & g_run_mask) ? 8 : 1;
+        g_ar_progress += 1;
         if (g_ar_progress < kAutoRunFull)
             return;
     }
     g_ar_progress = kAutoRunFull;
-    const uint16_t speed = (dir & 1) ? 0xFFFD : 3;
-    if (dir & 2) { Wr(0x09B2, 0); Wr(0x09B4, speed); }
-    else         { Wr(0x09B4, 0); Wr(0x09B2, speed); }
+    /* Leave a dash the game already has going in this direction at run
+     * speed or faster: the Incan Ruins and Diamond Mine ramp boosters raise
+     * it from 3 to 4 once as Will reaches the ramp, and downhill slopes add
+     * to it. Rewriting 3 every frame took that away and the ramps failed. */
+    const uint16_t ew = Rd(0x09B2), ns = Rd(0x09B4);
+    const uint16_t along = (dir & 2) ? ns : ew, across = (dir & 2) ? ew : ns;
+    const int16_t v = (int16_t)along;
+    const bool same = (dir & 1) ? v <= -3 : v >= 3;
+    if (!(same && !across)) {
+        const uint16_t speed = (dir & 1) ? 0xFFFD : 3;
+        if (dir & 2) { Wr(0x09B2, 0); Wr(0x09B4, speed); }
+        else         { Wr(0x09B4, 0); Wr(0x09B2, speed); }
+    }
     Wr(0x09B8, 0);
 }
 

@@ -12,7 +12,7 @@ play stays the stock USA ROM (the launcher verifies it).
 | Package | Feature | What it does |
 |---|---|---|
 | Languages (`iog.languages`) | Game language | Spanish, French or German text and font from your own *Illusion of Time* ROM |
-| Gameplay enhancements (`iog.enhancements`) | Run button | Auto-run: walk to build speed, hold **Y** (or X) to start sooner; or Hold: hold the button with a direction to sprint |
+| Gameplay enhancements (`iog.enhancements`) | Run button | Auto-run: walk to build speed, hold **Y** (or X) to run at once; or Hold: hold the button with a direction to sprint |
 | | Text speed | Normal, Cinematic or Instant; hold the run button to hurry any line |
 | | Use key items on the spot | Press A where a key item you carry works and Will uses it, no equipping needed |
 | | Red Jewel sparkles | A twinkle over each hidden Red Jewel not found yet, and over the people who would give one |
@@ -92,10 +92,11 @@ written without accents.
 ## Run button, hotswapping, cheats
 
 - **Run**, two styles. *Auto-run* (the default, after andrewclunn's
-  *Gaia and Time*): every frame Will actually moves earns a point, or eight
-  with the run button (default Y) held; at 120 (two seconds of walking, or
-  about a quarter second holding the button) he runs in that direction for
-  as long as he keeps moving. Turning sideways keeps the speed; reversing,
+  *Gaia and Time*): every frame Will actually moves earns a point; at 120
+  (two seconds of walking) he runs in that direction for as long as he keeps
+  moving, and holding the run button (default Y) runs at once. A dash the
+  game speeds up itself (the Incan Ruins and Diamond Mine ramps, downhill
+  slopes) keeps its speed, so the ramps work the same as with *Hold*. Turning sideways keeps the speed; reversing,
   stopping or walking into a wall resets it. *Hold*: hold the run button and
   a direction and Will uses the game's own dash at once.
 - **Text speed** (after *Gaia and Time*): *Normal* keeps the game's pacing,
